@@ -1,0 +1,344 @@
+﻿using System;
+using System.Collections.Generic;
+using BoneVisQA.Repositories.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace BoneVisQA.Repositories.DBContext;
+
+public partial class BoneVisQADbContext : DbContext
+{
+    public BoneVisQADbContext(DbContextOptions<BoneVisQADbContext> options)
+        : base(options)
+    {
+    }
+
+    public virtual DbSet<AcademicClass> AcademicClasses { get; set; }
+
+    public virtual DbSet<Announcement> Announcements { get; set; }
+
+    public virtual DbSet<CaseAnnotation> CaseAnnotations { get; set; }
+
+    public virtual DbSet<CaseAnswer> CaseAnswers { get; set; }
+
+    public virtual DbSet<CaseViewLog> CaseViewLogs { get; set; }
+
+    public virtual DbSet<Category> Categories { get; set; }
+
+    public virtual DbSet<Citation> Citations { get; set; }
+
+    public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
+
+    public virtual DbSet<Document> Documents { get; set; }
+
+    public virtual DbSet<DocumentChunk> DocumentChunks { get; set; }
+
+    public virtual DbSet<ExpertReview> ExpertReviews { get; set; }
+
+    public virtual DbSet<LearningStatistic> LearningStatistics { get; set; }
+
+    public virtual DbSet<MedicalCase> MedicalCases { get; set; }
+
+    public virtual DbSet<MedicalImage> MedicalImages { get; set; }
+
+    public virtual DbSet<Quiz> Quizzes { get; set; }
+
+    public virtual DbSet<QuizAttempt> QuizAttempts { get; set; }
+
+    public virtual DbSet<QuizQuestion> QuizQuestions { get; set; }
+
+    public virtual DbSet<Role> Roles { get; set; }
+
+    public virtual DbSet<StudentQuestion> StudentQuestions { get; set; }
+
+    public virtual DbSet<StudentQuizAnswer> StudentQuizAnswers { get; set; }
+
+    public virtual DbSet<UserProfile> UserProfiles { get; set; }
+
+    public virtual DbSet<UserRole> UserRoles { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .HasPostgresEnum("answer_status", new[] { "Pending", "Approved", "Edited", "Rejected" })
+            .HasPostgresEnum("auth", "aal_level", new[] { "aal1", "aal2", "aal3" })
+            .HasPostgresEnum("auth", "code_challenge_method", new[] { "s256", "plain" })
+            .HasPostgresEnum("auth", "factor_status", new[] { "unverified", "verified" })
+            .HasPostgresEnum("auth", "factor_type", new[] { "totp", "webauthn", "phone" })
+            .HasPostgresEnum("auth", "oauth_authorization_status", new[] { "pending", "approved", "denied", "expired" })
+            .HasPostgresEnum("auth", "oauth_client_type", new[] { "public", "confidential" })
+            .HasPostgresEnum("auth", "oauth_registration_type", new[] { "dynamic", "manual" })
+            .HasPostgresEnum("auth", "oauth_response_type", new[] { "code" })
+            .HasPostgresEnum("auth", "one_time_token_type", new[] { "confirmation_token", "reauthentication_token", "recovery_token", "email_change_token_new", "email_change_token_current", "phone_change_token" })
+            .HasPostgresEnum("case_difficulty", new[] { "Easy", "Medium", "Hard" })
+            .HasPostgresEnum("image_modality", new[] { "X-Ray", "CT", "MRI" })
+            .HasPostgresEnum("question_language", new[] { "vi", "en" })
+            .HasPostgresEnum("quiz_question_type", new[] { "MultipleChoice", "SingleChoice", "TrueFalse", "ShortAnswer", "ImageAnnotation", "Matching" })
+            .HasPostgresEnum("realtime", "action", new[] { "INSERT", "UPDATE", "DELETE", "TRUNCATE", "ERROR" })
+            .HasPostgresEnum("realtime", "equality_op", new[] { "eq", "neq", "lt", "lte", "gt", "gte", "in" })
+            .HasPostgresEnum("review_action", new[] { "Approve", "Reject", "Edit" })
+            .HasPostgresEnum("storage", "buckettype", new[] { "STANDARD", "ANALYTICS", "VECTOR" })
+            .HasPostgresExtension("extensions", "pg_stat_statements")
+            .HasPostgresExtension("extensions", "pgcrypto")
+            .HasPostgresExtension("extensions", "uuid-ossp")
+            .HasPostgresExtension("graphql", "pg_graphql")
+            .HasPostgresExtension("vector")
+            .HasPostgresExtension("vault", "supabase_vault");
+
+        modelBuilder.Entity<AcademicClass>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("academic_classes_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Lecturer).WithMany(p => p.AcademicClasses)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("academic_classes_lecturer_id_fkey");
+        });
+
+        modelBuilder.Entity<Announcement>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("announcements_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.Announcements).HasConstraintName("announcements_class_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseAnnotation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("case_annotations_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Image).WithMany(p => p.CaseAnnotations).HasConstraintName("case_annotations_image_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseAnswer>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("case_answers_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.GeneratedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Question).WithMany(p => p.CaseAnswers).HasConstraintName("case_answers_question_id_fkey");
+
+            entity.HasOne(d => d.ReviewedBy).WithMany(p => p.CaseAnswers)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("case_answers_reviewed_by_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseViewLog>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("case_view_logs_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.IsCompleted).HasDefaultValue(false);
+            entity.Property(e => e.ViewedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.CaseViewLogs).HasConstraintName("case_view_logs_case_id_fkey");
+
+            entity.HasOne(d => d.Student).WithMany(p => p.CaseViewLogs).HasConstraintName("case_view_logs_student_id_fkey");
+        });
+
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("categories_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+        });
+
+        modelBuilder.Entity<Citation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("citations_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+
+            entity.HasOne(d => d.Answer).WithMany(p => p.Citations).HasConstraintName("citations_answer_id_fkey");
+
+            entity.HasOne(d => d.Chunk).WithMany(p => p.Citations).HasConstraintName("citations_chunk_id_fkey");
+        });
+
+        modelBuilder.Entity<ClassEnrollment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("class_enrollments_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.EnrolledAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_class_id_fkey");
+
+            entity.HasOne(d => d.Student).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_student_id_fkey");
+        });
+
+        modelBuilder.Entity<Document>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("documents_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Category).WithMany(p => p.Documents)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("documents_category_id_fkey");
+        });
+
+        modelBuilder.Entity<DocumentChunk>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("document_chunks_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+
+            entity.HasOne(d => d.Doc).WithMany(p => p.DocumentChunks).HasConstraintName("document_chunks_doc_id_fkey");
+        });
+
+        modelBuilder.Entity<ExpertReview>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("expert_reviews_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Answer).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_answer_id_fkey");
+
+            entity.HasOne(d => d.Expert).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_expert_id_fkey");
+        });
+
+        modelBuilder.Entity<LearningStatistic>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("learning_statistics_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.LastUpdated).HasDefaultValueSql("now()");
+            entity.Property(e => e.TotalCasesViewed).HasDefaultValue(0);
+            entity.Property(e => e.TotalQuestionsAsked).HasDefaultValue(0);
+
+            entity.HasOne(d => d.Class).WithMany(p => p.LearningStatistics)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("learning_statistics_class_id_fkey");
+
+            entity.HasOne(d => d.Student).WithMany(p => p.LearningStatistics).HasConstraintName("learning_statistics_student_id_fkey");
+        });
+
+        modelBuilder.Entity<MedicalCase>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("medical_cases_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Category).WithMany(p => p.MedicalCases)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("medical_cases_category_id_fkey");
+        });
+
+        modelBuilder.Entity<MedicalImage>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("medical_images_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.MedicalImages).HasConstraintName("medical_images_case_id_fkey");
+        });
+
+        modelBuilder.Entity<Quiz>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("quizzes_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.Quizzes).HasConstraintName("quizzes_class_id_fkey");
+        });
+
+        modelBuilder.Entity<QuizAttempt>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("quiz_attempts_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.StartedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Quiz).WithMany(p => p.QuizAttempts).HasConstraintName("quiz_attempts_quiz_id_fkey");
+
+            entity.HasOne(d => d.Student).WithMany(p => p.QuizAttempts).HasConstraintName("quiz_attempts_student_id_fkey");
+        });
+
+        modelBuilder.Entity<QuizQuestion>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("quiz_questions_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.QuizQuestions)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("quiz_questions_case_id_fkey");
+
+            entity.HasOne(d => d.Quiz).WithMany(p => p.QuizQuestions).HasConstraintName("quiz_questions_quiz_id_fkey");
+        });
+
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("roles_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<StudentQuestion>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_questions_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Annotation).WithMany(p => p.StudentQuestions)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_questions_annotation_id_fkey");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.StudentQuestions).HasConstraintName("student_questions_case_id_fkey");
+
+            entity.HasOne(d => d.Student).WithMany(p => p.StudentQuestions).HasConstraintName("student_questions_student_id_fkey");
+        });
+
+        modelBuilder.Entity<StudentQuizAnswer>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_quiz_answers_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+
+            entity.HasOne(d => d.Attempt).WithMany(p => p.StudentQuizAnswers).HasConstraintName("student_quiz_answers_attempt_id_fkey");
+
+            entity.HasOne(d => d.Question).WithMany(p => p.StudentQuizAnswers).HasConstraintName("student_quiz_answers_question_id_fkey");
+        });
+
+        modelBuilder.Entity<UserProfile>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("user_profiles_pkey");
+
+            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.HasKey(e => new { e.UserId, e.RoleId }).HasName("user_roles_pkey");
+
+            entity.Property(e => e.AssignedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Role).WithMany(p => p.UserRoles).HasConstraintName("user_roles_role_id_fkey");
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserRoles).HasConstraintName("user_roles_user_id_fkey");
+        });
+
+        OnModelCreatingPartial(modelBuilder);
+    }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+}
