@@ -2,7 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Auth;
@@ -11,9 +11,9 @@ namespace BoneVisQA.Services.Services;
 
 public class AuthService : IAuthService
 {
-    private readonly IAuthRepository _authRepository;
+    private readonly AuthRepository _authRepository;
 
-    public AuthService(IAuthRepository authRepository)
+    public AuthService(AuthRepository authRepository)
     {
         _authRepository = authRepository;
     }
