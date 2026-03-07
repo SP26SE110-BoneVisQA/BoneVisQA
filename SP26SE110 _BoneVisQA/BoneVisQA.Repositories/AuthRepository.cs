@@ -30,5 +30,16 @@ public class AuthRepository : GenericRepository<User>, IAuthRepository
         _context.Users.Update(user);
         await _context.SaveChangesAsync();
     }
+
+    public async Task<Role?> GetRoleByNameAsync(string roleName)
+    {
+        return await _context.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == roleName);
+    }
+
+    public async Task AddUserRoleAsync(UserRole userRole)
+    {
+        _context.UserRoles.Add(userRole);
+        await _context.SaveChangesAsync();
+    }
 }
 

@@ -6,5 +6,6 @@ public class RegisterRequestDto
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string? SchoolCohort { get; set; }
+    public string RoleName { get; set; } = "Student";
 }
 

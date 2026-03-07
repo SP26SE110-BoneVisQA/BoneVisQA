@@ -30,6 +30,16 @@ public class AuthService : IAuthService
             };
         }
 
+        var role = await _authRepository.GetRoleByNameAsync(request.RoleName);
+        if (role == null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = $"Role '{request.RoleName}' không tồn tại."
+            };
+        }
+
         var now = DateTime.UtcNow;
         var user = new User
         {
@@ -43,6 +53,16 @@ public class AuthService : IAuthService
         };
 
         await _authRepository.CreateUserAsync(user);
+
+        var userRole = new UserRole
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            RoleId = role.Id,
+            AssignedAt = now
+        };
+
+        await _authRepository.AddUserRoleAsync(userRole);
 
         return new AuthResultDto
         {
