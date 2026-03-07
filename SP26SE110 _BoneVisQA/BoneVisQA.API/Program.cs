@@ -67,6 +67,8 @@ builder.Services.AddScoped<AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<LecturerRepository>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
+builder.Services.AddScoped<StudentRepository>();
+builder.Services.AddScoped<IStudentService, StudentService>();
 
 var app = builder.Build();
 
