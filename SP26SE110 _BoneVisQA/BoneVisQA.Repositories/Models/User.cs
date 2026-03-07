@@ -23,9 +23,6 @@ public partial class User
     [Column("password")]
     public string? Password { get; set; }
 
-    [Column("role")]
-    public string Role { get; set; } = null!;
-
     [Column("school_cohort")]
     public string? SchoolCohort { get; set; }
 
@@ -61,4 +58,7 @@ public partial class User
 
     [InverseProperty("Student")]
     public virtual ICollection<StudentQuestion> StudentQuestions { get; set; } = new List<StudentQuestion>();
+
+    [InverseProperty("User")]
+    public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

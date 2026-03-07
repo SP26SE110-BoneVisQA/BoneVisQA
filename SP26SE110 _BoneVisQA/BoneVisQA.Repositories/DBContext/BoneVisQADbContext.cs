@@ -1,12 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using BoneVisQA.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.Repositories.Models;
+namespace BoneVisQA.Repositories.DBContext;
 
-public partial class BoneQADbContext : DbContext
+public partial class BoneVisQADbContext : DbContext
 {
-    public BoneQADbContext(DbContextOptions<BoneQADbContext> options)
+    public BoneVisQADbContext()
+    {
+    }
+
+    public BoneVisQADbContext(DbContextOptions<BoneVisQADbContext> options)
         : base(options)
     {
     }
@@ -45,11 +50,15 @@ public partial class BoneQADbContext : DbContext
 
     public virtual DbSet<QuizQuestion> QuizQuestions { get; set; }
 
+    public virtual DbSet<Role> Roles { get; set; }
+
     public virtual DbSet<StudentQuestion> StudentQuestions { get; set; }
 
     public virtual DbSet<StudentQuizAnswer> StudentQuizAnswers { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+
+    public virtual DbSet<UserRole> UserRoles { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -271,6 +280,15 @@ public partial class BoneQADbContext : DbContext
             entity.HasOne(d => d.Quiz).WithMany(p => p.QuizQuestions).HasConstraintName("quiz_questions_quiz_id_fkey");
         });
 
+        modelBuilder.Entity<Role>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("roles_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
         modelBuilder.Entity<StudentQuestion>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("student_questions_pkey");
@@ -305,6 +323,18 @@ public partial class BoneQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("user_roles_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.AssignedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Role).WithMany(p => p.UserRoles).HasConstraintName("user_roles_role_id_fkey");
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserRoles).HasConstraintName("user_roles_user_id_fkey");
         });
 
         OnModelCreatingPartial(modelBuilder);
