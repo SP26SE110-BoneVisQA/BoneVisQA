@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services
 {
-    public class ExpertService : IExpertService
+    public class MedicalCaseService : IMedicalCaseService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public ExpertService(IUnitOfWork unitOfWork)
+        public MedicalCaseService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }
@@ -33,9 +33,9 @@ namespace BoneVisQA.Services.Services
                 CreatedAt = DateTime.UtcNow
             };
 
-            _unitOfWork.MedicalCaseRepository.PrepareCreate(medicalCase);
+            await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
 
-            if (dto.Images != null)
+            if (dto.Images?.Any() == true)
             {
                 foreach (var img in dto.Images)
                 {
@@ -50,9 +50,9 @@ namespace BoneVisQA.Services.Services
                         CreatedAt = DateTime.UtcNow
                     };
 
-                    _unitOfWork.MedicalImageRepository.PrepareCreate(medicalImage);
+                    await _unitOfWork.MedicalImageRepository.AddAsync(medicalImage);
 
-                    if (img.Annotations != null)
+                    if (img.Annotations?.Any() == true)
                     {
                         foreach (var ann in img.Annotations)
                         {
@@ -65,7 +65,7 @@ namespace BoneVisQA.Services.Services
                                 CreatedAt = DateTime.UtcNow
                             };
 
-                            _unitOfWork.CaseAnnotationRepository.PrepareCreate(annotation);
+                            await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
                         }
                     }
                 }

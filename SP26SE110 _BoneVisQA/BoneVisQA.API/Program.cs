@@ -73,7 +73,7 @@ builder.Services.AddScoped<StudentRepository>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddScoped<IExpertService, ExpertService>();
+builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 var app = builder.Build();
 

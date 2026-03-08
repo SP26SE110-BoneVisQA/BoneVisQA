@@ -2,6 +2,7 @@
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Expert;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,67 +11,69 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services
 {
-    public class QuizService : IQuizService
-    {
-        private readonly IUnitOfWork _unitOfWork;
-
-        public QuizService(IUnitOfWork unitOfWork)
+        public class QuizService : IQuizService
         {
-            _unitOfWork = unitOfWork;
-        }
+            private readonly IUnitOfWork _unitOfWork;
 
-        public async Task<QuizDTO> CreateQuizAsync(QuizDTO dto)
-        {
-            var quiz = new Quiz
+            public QuizService(IUnitOfWork unitOfWork)
             {
-                Id = Guid.NewGuid(),
-                ClassId = dto.ClassId,
-                Title = dto.Title,
-                OpenTime = dto.OpenTime,
-                CloseTime = dto.CloseTime,
-                TimeLimit = dto.TimeLimit,
-                PassingScore = dto.PassingScore,
-                CreatedAt = DateTime.UtcNow
-            };
+                _unitOfWork = unitOfWork;
+            }
 
-            _unitOfWork.QuizRepository.PrepareCreate(quiz);
-
-            await _unitOfWork.SaveAsync();
-
-            dto.Id = quiz.Id;
-            dto.CreatedAt = quiz.CreatedAt;
-
-            return dto;
-        }
-
-        public async Task<QuizQuestionDTO> CreateQuizQuestionAsync(QuizQuestionDTO dto)
-        {
-            var question = new QuizQuestion
+            public async Task<QuizDTO> CreateQuizAsync(QuizDTO request)
             {
-                Id = Guid.NewGuid(),
-                QuizId = dto.QuizId,
-                CaseId = dto.CaseId,
-                QuestionText = dto.QuestionText,
-                Type = dto.Type,
-                CorrectAnswer = dto.CorrectAnswer
-            };
+                var quiz = new Quiz
+                {
+                    Id = Guid.NewGuid(),
+                    ClassId = request.ClassId,
+                    Title = request.Title,
+                    OpenTime = request.OpenTime,
+                    CloseTime = request.CloseTime,
+                    TimeLimit = request.TimeLimit,
+                    PassingScore = request.PassingScore,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            _unitOfWork.QuizQuestionRepository.PrepareCreate(question);
+                await _unitOfWork.QuizRepository.AddAsync(quiz);
 
-            await _unitOfWork.SaveAsync();
+                await _unitOfWork.SaveAsync();
 
-            dto.Id = question.Id;
+                request.Id = quiz.Id;
+                request.CreatedAt = quiz.CreatedAt;
 
-            return dto;
-        }
+                return request;
+            }
 
-        public async Task<List<QuizDTO>> GetQuizForClassAsync(Guid classId)
-        {
-            var quizzes = await _unitOfWork.QuizRepository.GetAllAsync();
+            public async Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, QuizQuestionDTO request)
+            {
+                var question = new QuizQuestion
+                {
+                    Id = Guid.NewGuid(),
+                    QuizId = quizId,
+                    CaseId = request.CaseId,
+                    QuestionText = request.QuestionText,
+                    Type = request.Type,
+                    CorrectAnswer = request.CorrectAnswer
+                };
 
-            return quizzes
-                .Where(q => q.ClassId == classId)
-                .Select(q => new QuizDTO
+                await _unitOfWork.QuizQuestionRepository.AddAsync(question);
+
+                await _unitOfWork.SaveAsync();
+
+                request.Id = question.Id;
+                request.QuizId = quizId;
+
+                return request;
+            }
+
+            public async Task<List<QuizDTO>> GetQuizzesByClassAsync(Guid classId)
+            {
+                var quizzes = await _unitOfWork.QuizRepository
+                    .GetQueryable()
+                    .Where(q => q.ClassId == classId)
+                    .ToListAsync();
+
+                return quizzes.Select(q => new QuizDTO
                 {
                     Id = q.Id,
                     ClassId = q.ClassId,
@@ -80,68 +83,28 @@ namespace BoneVisQA.Services.Services
                     TimeLimit = q.TimeLimit,
                     PassingScore = q.PassingScore,
                     CreatedAt = q.CreatedAt
-                })
-                .ToList();
-        }
-
-        public async Task<StudentQuizAnswerDTO> SubmitAnswerAsync(StudentQuizAnswerDTO dto)
-        {
-            var question = await _unitOfWork.QuizQuestionRepository.GetByIdAsync(dto.QuestionId);
-
-            bool isCorrect = false;
-
-            if (question?.CorrectAnswer != null)
-            {
-                isCorrect = string.Equals(
-                    question.CorrectAnswer.Trim(),
-                    dto.StudentAnswer.Trim(),
-                    StringComparison.OrdinalIgnoreCase);
+                }).ToList();
             }
 
-            var answer = new StudentQuizAnswer
+            public async Task<List<QuizDTO>> RecommendQuizAsync(string topic)
             {
-                Id = Guid.NewGuid(),
-                AttemptId = dto.AttemptId,
-                QuestionId = dto.QuestionId,
-                StudentAnswer = dto.StudentAnswer,
-                IsCorrect = isCorrect
-            };
+                var quizzes = await _unitOfWork.QuizRepository
+                    .GetQueryable()
+                    .Where(q => q.Title.Contains(topic))
+                    .Take(10)
+                    .ToListAsync();
 
-            _unitOfWork.StudentQuizAnswerRepository.PrepareCreate(answer);
-
-            await _unitOfWork.SaveAsync();
-
-            dto.Id = answer.Id;
-            dto.IsCorrect = isCorrect;
-
-            return dto;
-        }
-
-        public async Task<float> GradeQuizAttemptAsync(Guid attemptId)
-        {
-            var answers = await _unitOfWork.StudentQuizAnswerRepository.GetAllAsync();
-
-            var attemptAnswers = answers.Where(a => a.AttemptId == attemptId).ToList();
-
-            if (!attemptAnswers.Any())
-                return 0;
-
-            int total = attemptAnswers.Count;
-            int correct = attemptAnswers.Count(a => a.IsCorrect == true);
-
-            float score = (float)correct / total * 100;
-
-            var attempt = await _unitOfWork.QuizAttemptRepository.GetByIdAsync(attemptId);
-
-            if (attempt != null)
-            {
-                attempt.Score = score;
-
-                _unitOfWork.QuizAttemptRepository.PrepareUpdate(attempt);
-                await _unitOfWork.SaveAsync();
+                return quizzes.Select(q => new QuizDTO
+                {
+                    Id = q.Id,
+                    ClassId = q.ClassId,
+                    Title = q.Title,
+                    OpenTime = q.OpenTime,
+                    CloseTime = q.CloseTime,
+                    TimeLimit = q.TimeLimit,
+                    PassingScore = q.PassingScore,
+                    CreatedAt = q.CreatedAt
+                }).ToList();
             }
-
-            return score;
         }
-    }
 }

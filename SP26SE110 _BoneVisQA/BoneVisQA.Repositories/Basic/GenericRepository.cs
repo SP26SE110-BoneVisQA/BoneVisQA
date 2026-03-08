@@ -10,126 +10,64 @@ namespace BoneVisQA.Repositories.Basic
 {
     public class GenericRepository<T> where T : class
     {
-        protected BoneVisQADbContext _context;
-
-        public GenericRepository()
-        {
-            _context ??= new();
-        }
+        protected readonly BoneVisQADbContext _context;
+        protected readonly DbSet<T> _dbSet;
 
         public GenericRepository(BoneVisQADbContext context)
         {
             _context = context;
+            _dbSet = context.Set<T>();
         }
 
-        public List<T> GetAll()
+        // Queryable để service filter
+        public IQueryable<T> GetQueryable()
         {
-            return _context.Set<T>().ToList();
+            return _dbSet.AsQueryable();
         }
+
         public async Task<List<T>> GetAllAsync()
         {
-            return await _context.Set<T>().ToListAsync();
-        }
-        public void Create(T entity)
-        {
-            _context.Add(entity);
-            _context.SaveChanges();
+            return await _dbSet.ToListAsync();
         }
 
-        public async Task<int> CreateAsync(T entity)
+        public async Task<T?> GetByIdAsync(Guid id)
         {
-            _context.Add(entity);
-            return await _context.SaveChangesAsync();
+            return await _dbSet.FindAsync(id);
         }
+
+        public async Task AddAsync(T entity)
+        {
+            await _dbSet.AddAsync(entity);
+        }
+
+        public async Task AddRangeAsync(IEnumerable<T> entities)
+        {
+            await _dbSet.AddRangeAsync(entities);
+        }
+
         public void Update(T entity)
         {
-            _context.ChangeTracker.Clear(); // unlock tracking item
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-            _context.SaveChanges();
+            _dbSet.Update(entity);
         }
 
-        public async Task<int> UpdateAsync(T entity)
+        public void Remove(T entity)
         {
-            _context.ChangeTracker.Clear();
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-            return await _context.SaveChangesAsync();
+            _dbSet.Remove(entity);
         }
 
-        public bool Remove(T entity)
+        public async Task RemoveByIdAsync(Guid id)
         {
-            _context.Remove(entity);
-            _context.SaveChanges();
-            return true;
+            var entity = await GetByIdAsync(id);
+            if (entity != null)
+            {
+                _dbSet.Remove(entity);
+            }
         }
 
-        public async Task<bool> RemoveAsync(T entity)
+        public bool Any(Func<T, bool> predicate)
         {
-            _context.Remove(entity);
-            await _context.SaveChangesAsync();
-            return true;
+            return _dbSet.Any(predicate);
         }
-
-        public T GetById(int id)
-        {
-            return _context.Set<T>().Find(id);
-        }
-
-        public async Task<T> GetByIdAsync(int id)
-        {
-            return await _context.Set<T>().FindAsync(id);
-        }
-
-        public T GetById(string code)
-        {
-            return _context.Set<T>().Find(code);
-        }
-
-        public async Task<T> GetByIdAsync(string code)
-        {
-            return await _context.Set<T>().FindAsync(code);
-        }
-
-        public T GetById(Guid code)
-        {
-            return _context.Set<T>().Find(code);
-        }
-
-        public async Task<T> GetByIdAsync(Guid code)
-        {
-            return await _context.Set<T>().FindAsync(code);
-        }
-
-        #region Separating asigning entity to DBContext (thao tac vs RAM) and save operators (save changes once to persistent DB)       
-
-        public void PrepareCreate(T entity)
-        {
-            _context.Add(entity);
-        }
-
-        public void PrepareUpdate(T entity)
-        {
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-        }
-
-        public void PrepareRemove(T entity)
-        {
-            _context.Remove(entity);
-        }
-
-        public int Save()
-        {
-            return _context.SaveChanges();
-        }
-
-        public async Task<int> SaveAsync()
-        {
-            return await _context.SaveChangesAsync();
-        }
-
-        #endregion Separating asign entity and save operators
     }
 }
 

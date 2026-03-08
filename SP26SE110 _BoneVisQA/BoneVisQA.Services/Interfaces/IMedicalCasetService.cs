@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces
 {
-    public interface IExpertService
+    public interface IMedicalCaseService
     {
         Task<Guid> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto);
     }

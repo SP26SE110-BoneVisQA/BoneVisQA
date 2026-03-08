@@ -7,21 +7,14 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces
 {
-    public interface IQuizService
+        public interface IQuizService
     {
-        // Expert tạo quiz
-        Task<QuizDTO> CreateQuizAsync(QuizDTO dto);
+        Task<QuizDTO> CreateQuizAsync(QuizDTO request);
 
-        // Expert thêm câu hỏi vào quiz
-        Task<QuizQuestionDTO> CreateQuizQuestionAsync(QuizQuestionDTO dto);
+        Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, QuizQuestionDTO request);
 
-        // Lấy quiz theo class
-        Task<List<QuizDTO>> GetQuizForClassAsync(Guid classId);
+        Task<List<QuizDTO>> GetQuizzesByClassAsync(Guid classId);
 
-        // Student submit answer
-        Task<StudentQuizAnswerDTO> SubmitAnswerAsync(StudentQuizAnswerDTO dto);
-
-        // Chấm điểm quiz
-        Task<float> GradeQuizAttemptAsync(Guid attemptId);
+        Task<List<QuizDTO>> RecommendQuizAsync(string topic);
     }
 }
