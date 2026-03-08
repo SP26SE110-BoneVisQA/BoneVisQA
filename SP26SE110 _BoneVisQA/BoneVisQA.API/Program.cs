@@ -1,10 +1,12 @@
 using System.Text;
-using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.DBContext;
+using BoneVisQA.Repositories.Services;
+using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -70,6 +72,9 @@ builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<StudentRepository>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IExpertService, ExpertService>();
+builder.Services.AddScoped<IQuizService, QuizService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

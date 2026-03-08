@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 

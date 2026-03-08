@@ -2,8 +2,8 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Auth;
 
