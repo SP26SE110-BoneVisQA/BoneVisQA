@@ -24,6 +24,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<CaseAnswer> CaseAnswers { get; set; }
 
+    public virtual DbSet<CaseTag> CaseTags { get; set; }
+
     public virtual DbSet<CaseViewLog> CaseViewLogs { get; set; }
 
     public virtual DbSet<Category> Categories { get; set; }
@@ -55,6 +57,8 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<StudentQuestion> StudentQuestions { get; set; }
 
     public virtual DbSet<StudentQuizAnswer> StudentQuizAnswers { get; set; }
+
+    public virtual DbSet<Tag> Tags { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
 
@@ -128,6 +132,17 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.ReviewedBy).WithMany(p => p.CaseAnswers)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("case_answers_reviewed_by_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseTag>(entity =>
+        {
+            entity.HasKey(e => new { e.CaseId, e.TagId }).HasName("case_tags_pkey");
+
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.CaseTags).HasConstraintName("case_tags_case_id_fkey");
+
+            entity.HasOne(d => d.Tag).WithMany(p => p.CaseTags).HasConstraintName("case_tags_tag_id_fkey");
         });
 
         modelBuilder.Entity<CaseViewLog>(entity =>
@@ -316,12 +331,22 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Question).WithMany(p => p.StudentQuizAnswers).HasConstraintName("student_quiz_answers_question_id_fkey");
         });
 
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("tags_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("users_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
         });
 

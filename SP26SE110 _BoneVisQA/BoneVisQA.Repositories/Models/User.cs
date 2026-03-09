@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BoneVisQA.Repositories.Models;
 
 [Table("users")]
+[Index("IsActive", Name = "idx_users_is_active")]
 [Index("Email", Name = "users_email_key", IsUnique = true)]
 public partial class User
 {
@@ -34,6 +35,9 @@ public partial class User
 
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
+
+    [Column("is_active")]
+    public bool IsActive { get; set; }
 
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
