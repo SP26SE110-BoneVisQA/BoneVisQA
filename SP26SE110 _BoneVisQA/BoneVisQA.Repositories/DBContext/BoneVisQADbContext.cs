@@ -34,6 +34,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
 
+    public virtual DbSet<ClassTag> ClassTags { get; set; }
+
     public virtual DbSet<Document> Documents { get; set; }
 
     public virtual DbSet<DocumentChunk> DocumentChunks { get; set; }
@@ -186,6 +188,17 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Class).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_class_id_fkey");
 
             entity.HasOne(d => d.Student).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_student_id_fkey");
+        });
+
+        modelBuilder.Entity<ClassTag>(entity =>
+        {
+            entity.HasKey(e => new { e.ClassId, e.TagId }).HasName("class_tags_pkey");
+
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.ClassTags).HasConstraintName("class_tags_class_id_fkey");
+
+            entity.HasOne(d => d.Tag).WithMany(p => p.ClassTags).HasConstraintName("class_tags_tag_id_fkey");
         });
 
         modelBuilder.Entity<Document>(entity =>

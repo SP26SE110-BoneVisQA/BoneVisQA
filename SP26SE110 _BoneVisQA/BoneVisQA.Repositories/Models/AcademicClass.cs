@@ -35,6 +35,9 @@ public partial class AcademicClass
     public virtual ICollection<ClassEnrollment> ClassEnrollments { get; set; } = new List<ClassEnrollment>();
 
     [InverseProperty("Class")]
+    public virtual ICollection<ClassTag> ClassTags { get; set; } = new List<ClassTag>();
+
+    [InverseProperty("Class")]
     public virtual ICollection<LearningStatistic> LearningStatistics { get; set; } = new List<LearningStatistic>();
 
     [ForeignKey("LecturerId")]

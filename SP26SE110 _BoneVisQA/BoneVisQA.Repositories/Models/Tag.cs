@@ -29,4 +29,7 @@ public partial class Tag
 
     [InverseProperty("Tag")]
     public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();
+
+    [InverseProperty("Tag")]
+    public virtual ICollection<ClassTag> ClassTags { get; set; } = new List<ClassTag>();
 }
