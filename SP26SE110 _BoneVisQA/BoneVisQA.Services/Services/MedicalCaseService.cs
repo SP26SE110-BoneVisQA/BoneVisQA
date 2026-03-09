@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services
 {
-    public class MedicalService : IMedicalCaseService
+    public class MedicalCaseService : IMedicalCaseService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public MedicalService(IUnitOfWork unitOfWork)
+        public MedicalCaseService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }

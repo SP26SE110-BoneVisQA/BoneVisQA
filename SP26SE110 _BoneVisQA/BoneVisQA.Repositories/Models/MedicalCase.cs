@@ -32,6 +32,9 @@ public partial class MedicalCase
     public DateTime? UpdatedAt { get; set; }
 
     [InverseProperty("Case")]
+    public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();
+
+    [InverseProperty("Case")]
     public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();
 
     [ForeignKey("CategoryId")]
