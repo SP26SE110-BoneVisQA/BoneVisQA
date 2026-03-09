@@ -10,70 +10,49 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services
 {
-    public class MedicalCaseService : IMedicalCaseService
+    public class MedicalService : IMedicalCaseService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public MedicalCaseService(IUnitOfWork unitOfWork)
+        public MedicalService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }
 
         public async Task<Guid> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto)
         {
-            var caseId = Guid.NewGuid();
-
             var medicalCase = new MedicalCase
             {
-                Id = caseId,
+                Id = Guid.NewGuid(),
                 Title = dto.Title,
                 Description = dto.Description,
                 Difficulty = dto.Difficulty,
                 CategoryId = dto.CategoryId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+
+                MedicalImages = dto.Images?.Select(img => new MedicalImage
+                {
+                    Id = Guid.NewGuid(),
+                    ImageUrl = img.ImageUrl,
+                    Modality = img.Modality,
+                    CreatedAt = DateTime.UtcNow,
+
+                    CaseAnnotations = img.Annotations?.Select(a => new CaseAnnotation
+                    {
+                        Id = Guid.NewGuid(),
+                        Label = a.Label,
+                        Coordinates = a.Coordinates,
+                        CreatedAt = DateTime.UtcNow
+                    }).ToList()
+
+                }).ToList()
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
 
-            if (dto.Images?.Any() == true)
-            {
-                foreach (var img in dto.Images)
-                {
-                    var imageId = Guid.NewGuid();
-
-                    var medicalImage = new MedicalImage
-                    {
-                        Id = imageId,
-                        CaseId = caseId,
-                        ImageUrl = img.ImageUrl,
-                        Modality = img.Modality,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    await _unitOfWork.MedicalImageRepository.AddAsync(medicalImage);
-
-                    if (img.Annotations?.Any() == true)
-                    {
-                        foreach (var ann in img.Annotations)
-                        {
-                            var annotation = new CaseAnnotation
-                            {
-                                Id = Guid.NewGuid(),
-                                ImageId = imageId,
-                                Label = ann.Label,
-                                Coordinates = ann.Coordinates,
-                                CreatedAt = DateTime.UtcNow
-                            };
-
-                            await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
-                        }
-                    }
-                }
-            }
-
             await _unitOfWork.SaveAsync();
 
-            return caseId;
+            return medicalCase.Id;
         }
     }
 }
