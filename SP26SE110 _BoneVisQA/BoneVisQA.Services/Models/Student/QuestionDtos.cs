@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace BoneVisQA.Services.Models.Student;
 
@@ -45,4 +44,3 @@ public class StudentQuestionHistoryItemDto
     public string QuestionText { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
 }
-

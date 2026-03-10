@@ -9,6 +9,8 @@ public interface IStudentRepository
 {
     Task<List<MedicalCase>> GetAllCasesAsync();
 
+    Task<List<MedicalCase>> GetFilteredCasesAsync(CaseFilter filter);
+
     Task<MedicalCase?> GetCaseWithImagesAsync(Guid caseId);
 
     Task<CaseViewLog> AddCaseViewLogAsync(CaseViewLog log);
@@ -18,6 +20,8 @@ public interface IStudentRepository
     Task<StudentQuestion> CreateStudentQuestionAsync(StudentQuestion question);
 
     Task<List<StudentQuestion>> GetQuestionsByStudentAsync(Guid studentId);
+
+    Task<List<Announcement>> GetAnnouncementsForStudentAsync(Guid studentId);
 
     Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
 

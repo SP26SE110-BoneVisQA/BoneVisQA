@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories;
+using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
 
@@ -11,11 +12,13 @@ namespace BoneVisQA.Services.Services;
 
 public class StudentService : IStudentService
 {
-    private readonly StudentRepository _studentRepository;
+    private readonly IStudentRepository _studentRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public StudentService(StudentRepository studentRepository)
+    public StudentService(IStudentRepository studentRepository, IUnitOfWork unitOfWork)
     {
         _studentRepository = studentRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
@@ -30,7 +33,35 @@ public class StudentService : IStudentService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl
+                IsApproved = c.IsApproved,
+                ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
+                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter)
+    {
+        var repoFilter = new CaseFilter
+        {
+            CategoryId = filter.CategoryId,
+            Difficulty = filter.Difficulty,
+            Location = filter.Location,
+            LessonType = filter.LessonType
+        };
+        var cases = await _studentRepository.GetFilteredCasesAsync(repoFilter);
+
+        return cases
+            .Select(c => new CaseListItemDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Description = c.Description,
+                Difficulty = c.Difficulty,
+                CategoryName = c.Category?.Name,
+                IsApproved = c.IsApproved,
+                ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
+                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
             })
             .ToList();
     }
@@ -61,6 +92,7 @@ public class StudentService : IStudentService
             Description = entity.Description,
             Difficulty = entity.Difficulty,
             CategoryName = entity.Category?.Name,
+            IsApproved = entity.IsApproved,
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
                 .Select(i => new MedicalImageDto
@@ -111,8 +143,6 @@ public class StudentService : IStudentService
 
         var created = await _studentRepository.CreateStudentQuestionAsync(question);
 
-        // Tạm thời chỉ lưu câu hỏi, phần trả lời AI/RAG sẽ được tích hợp ở module khác.
-
         return new StudentQuestionDto
         {
             Id = created.Id,
@@ -136,6 +166,23 @@ public class StudentService : IStudentService
                 CaseId = q.CaseId,
                 QuestionText = q.QuestionText,
                 CreatedAt = q.CreatedAt
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<StudentAnnouncementDto>> GetAnnouncementsAsync(Guid studentId)
+    {
+        var announcements = await _studentRepository.GetAnnouncementsForStudentAsync(studentId);
+
+        return announcements
+            .Select(a => new StudentAnnouncementDto
+            {
+                Id = a.Id,
+                ClassId = a.ClassId,
+                ClassName = a.Class?.ClassName,
+                Title = a.Title,
+                Content = a.Content,
+                CreatedAt = a.CreatedAt
             })
             .ToList();
     }
@@ -193,7 +240,7 @@ public class StudentService : IStudentService
         }
 
         var questions = quiz.QuizQuestions
-            .Select(q => new QuizQuestionDto
+            .Select(q => new StudentQuizQuestionDto
             {
                 QuestionId = q.Id,
                 QuestionText = q.QuestionText,
@@ -299,4 +346,3 @@ public class StudentService : IStudentService
         };
     }
 }
-

@@ -9,6 +9,8 @@ public interface IStudentService
 {
     Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId);
 
+    Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter);
+
     Task<CaseDetailDto?> GetCaseDetailAsync(Guid caseId, Guid studentId);
 
     Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request);
@@ -16,6 +18,8 @@ public interface IStudentService
     Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
+
+    Task<IReadOnlyList<StudentAnnouncementDto>> GetAnnouncementsAsync(Guid studentId);
 
     Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId);
 

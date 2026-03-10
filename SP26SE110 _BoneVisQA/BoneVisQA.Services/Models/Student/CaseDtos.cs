@@ -11,6 +11,8 @@ public class CaseListItemDto
     public string? Difficulty { get; set; }
     public string? CategoryName { get; set; }
     public string? ThumbnailImageUrl { get; set; }
+    public bool IsApproved { get; set; }
+    public List<string>? Tags { get; set; }
 }
 
 public class MedicalImageDto
@@ -27,6 +29,6 @@ public class CaseDetailDto
     public string Description { get; set; } = string.Empty;
     public string? Difficulty { get; set; }
     public string? CategoryName { get; set; }
+    public bool IsApproved { get; set; }
     public IReadOnlyList<MedicalImageDto> Images { get; set; } = Array.Empty<MedicalImageDto>();
 }
-

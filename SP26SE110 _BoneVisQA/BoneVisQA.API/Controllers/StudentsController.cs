@@ -3,17 +3,19 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class StudentController : ControllerBase
+[Authorize]
+public class StudentsController : ControllerBase
 {
     private readonly IStudentService _studentService;
 
-    public StudentController(IStudentService studentService)
+    public StudentsController(IStudentService studentService)
     {
         _studentService = studentService;
     }
@@ -22,6 +24,13 @@ public class StudentController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCases([FromQuery] Guid studentId)
     {
         var result = await _studentService.GetCasesAsync(studentId);
+        return Ok(result);
+    }
+
+    [HttpGet("cases/filter")]
+    public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetFilteredCases([FromQuery] Guid studentId, [FromQuery] CaseFilterRequestDto filter)
+    {
+        var result = await _studentService.GetFilteredCasesAsync(studentId, filter);
         return Ok(result);
     }
 
@@ -55,6 +64,13 @@ public class StudentController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<StudentQuestionHistoryItemDto>>> GetQuestionHistory([FromQuery] Guid studentId)
     {
         var result = await _studentService.GetQuestionHistoryAsync(studentId);
+        return Ok(result);
+    }
+
+    [HttpGet("announcements")]
+    public async Task<ActionResult<IReadOnlyList<StudentAnnouncementDto>>> GetAnnouncements([FromQuery] Guid studentId)
+    {
+        var result = await _studentService.GetAnnouncementsAsync(studentId);
         return Ok(result);
     }
 

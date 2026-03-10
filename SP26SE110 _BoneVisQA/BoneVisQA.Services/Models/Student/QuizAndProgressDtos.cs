@@ -15,7 +15,7 @@ public class QuizListItemDto
     public double? Score { get; set; }
 }
 
-public class QuizQuestionDto
+public class StudentQuizQuestionDto
 {
     public Guid QuestionId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
@@ -28,7 +28,7 @@ public class QuizSessionDto
     public Guid AttemptId { get; set; }
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;
-    public IReadOnlyList<QuizQuestionDto> Questions { get; set; } = Array.Empty<QuizQuestionDto>();
+    public IReadOnlyList<StudentQuizQuestionDto> Questions { get; set; } = Array.Empty<StudentQuizQuestionDto>();
 }
 
 public class SubmitQuizQuestionAnswerDto
@@ -58,4 +58,3 @@ public class StudentProgressDto
     public int TotalQuestionsAsked { get; set; }
     public double? AvgQuizScore { get; set; }
 }
-
