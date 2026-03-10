@@ -51,7 +51,7 @@
 - `GET /api/Lecturer/classes?lecturerId={GUID-LECTURER-ID}`
 - Kết quả: danh sách `ClassDto`.
 
-#### 2.3. Ghi danh sinh viên vào lớp
+#### 2.3. Ghi danh một sinh viên vào lớp
 
 - `POST /api/Lecturer/classes/{classId}/enroll`
   ```json
@@ -63,7 +63,50 @@
   - `204 No Content` nếu thành công.
   - `409 Conflict` nếu sinh viên đã tồn tại trong lớp.
 
-#### 2.4. Tạo thông báo cho lớp
+#### 2.4. Ghi danh nhiều sinh viên cùng lúc
+
+- `POST /api/Lecturer/classes/{classId}/enrollmany`
+  ```json
+  {
+    "studentIds": [
+      "GUID-STUDENT-ID-1",
+      "GUID-STUDENT-ID-2",
+      "GUID-STUDENT-ID-3"
+    ]
+  }
+  ```
+- Kết quả: danh sách `StudentEnrollmentDto` của các sinh viên trong lớp sau khi thêm.
+
+#### 2.5. Xóa sinh viên khỏi lớp
+
+- `DELETE /api/Lecturer/classes/{classId}/students/{studentId}`
+- Kết quả:
+  - `204 No Content` nếu thành công.
+  - `404 Not Found` nếu sinh viên không tồn tại trong lớp.
+
+#### 2.6. Xem danh sách sinh viên trong lớp
+
+- `GET /api/Lecturer/classes/{classId}/students`
+- Kết quả: danh sách `StudentEnrollmentDto`:
+  ```json
+  [
+    {
+      "enrollmentId": "GUID-ENROLLMENT-ID",
+      "studentId": "GUID-STUDENT-ID",
+      "studentName": "Nguyen Van A",
+      "studentEmail": "student1@example.com",
+      "studentCode": "SE171589",
+      "enrolledAt": "2026-03-01T10:00:00Z"
+    }
+  ]
+  ```
+
+#### 2.7. Xem danh sách sinh viên chưa được ghi danh
+
+- `GET /api/Lecturer/classes/{classId}/students/available`
+- Kết quả: danh sách `StudentEnrollmentDto` các sinh viên chưa thuộc lớp này.
+
+#### 2.8. Tạo thông báo cho lớp
 
 - `POST /api/Lecturer/classes/{classId}/announcements`
   ```json
@@ -74,7 +117,7 @@
   ```
 - Kết quả: `AnnouncementDto` (`id`, `classId`, `title`, `content`, `createdAt`).
 
-#### 2.5. Tạo quiz cho lớp
+#### 2.9. Tạo quiz cho lớp
 
 - `POST /api/Lecturer/classes/{classId}/quizzes`
   ```json
@@ -88,7 +131,7 @@
   ```
 - Kết quả: `QuizDto` (`id`, `classId`, `title`, `openTime`, `closeTime`, `timeLimit`, `passingScore`).
 
-#### 2.6. Xem thống kê học tập của lớp
+#### 2.10. Xem thống kê học tập của lớp
 
 - `GET /api/Lecturer/classes/{classId}/stats`
 - Kết quả: `ClassStatsDto`:
@@ -109,7 +152,10 @@
 1. Đăng ký tài khoản Lecturer → đăng nhập lấy JWT.
 2. Dùng JWT gọi:
    - Tạo lớp (`/api/Lecturer/classes`).
-   - Enroll sinh viên vào lớp (`/api/Lecturer/classes/{classId}/enroll`).
+   - Xem danh sách sinh viên chưa ghi danh (`/api/Lecturer/classes/{classId}/students/available`).
+   - Ghi danh sinh viên (`/api/Lecturer/classes/{classId}/enroll` hoặc `/enrollmany`).
+   - Xem danh sách sinh viên trong lớp (`/api/Lecturer/classes/{classId}/students`).
+   - Xóa sinh viên khỏi lớp nếu cần (`DELETE .../students/{studentId}`).
    - Tạo quiz cho lớp (`/api/Lecturer/classes/{classId}/quizzes`).
    - Gửi thông báo cho lớp (`/api/Lecturer/classes/{classId}/announcements`).
 3. Theo dõi kết quả học tập qua:

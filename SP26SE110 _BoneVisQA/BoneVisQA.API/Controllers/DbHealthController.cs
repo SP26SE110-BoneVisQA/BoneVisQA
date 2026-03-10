@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.DBContext;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,6 +8,7 @@ namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[AllowAnonymous]
 public class DbHealthController : ControllerBase
 {
     private readonly BoneVisQADbContext _context;

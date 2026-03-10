@@ -46,6 +46,78 @@ public class LecturerRepository : ILecturerRepository
         return enrollment;
     }
 
+    public async Task<bool> RemoveEnrollmentAsync(Guid classId, Guid studentId)
+    {
+        var enrollment = await _context.ClassEnrollments
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == studentId);
+
+        if (enrollment == null)
+        {
+            return false;
+        }
+
+        _context.ClassEnrollments.Remove(enrollment);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<StudentEnrollmentInfo>> GetEnrollmentsByClassAsync(Guid classId)
+    {
+        return await _context.ClassEnrollments
+            .AsNoTracking()
+            .Where(e => e.ClassId == classId)
+            .Join(_context.Users, e => e.StudentId, u => u.Id, (e, u) => new StudentEnrollmentInfo
+            {
+                EnrollmentId = e.Id,
+                StudentId = e.StudentId,
+                StudentName = u.FullName,
+                StudentEmail = u.Email,
+                StudentCode = u.SchoolCohort,
+                EnrolledAt = e.EnrolledAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<StudentEnrollmentInfo>> GetUnenrolledStudentsAsync(Guid classId)
+    {
+        var enrolledStudentIds = await _context.ClassEnrollments
+            .AsNoTracking()
+            .Where(e => e.ClassId == classId)
+            .Select(e => e.StudentId)
+            .ToListAsync();
+
+        var studentRole = await _context.Roles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == "Student");
+
+        if (studentRole == null)
+        {
+            return new List<StudentEnrollmentInfo>();
+        }
+
+        var studentUserIds = await _context.UserRoles
+            .AsNoTracking()
+            .Where(ur => ur.RoleId == studentRole.Id)
+            .Select(ur => ur.UserId)
+            .ToListAsync();
+
+        var unenrolledStudents = await _context.Users
+            .AsNoTracking()
+            .Where(u => studentUserIds.Contains(u.Id) && !enrolledStudentIds.Contains(u.Id))
+            .Select(u => new StudentEnrollmentInfo
+            {
+                EnrollmentId = Guid.Empty,
+                StudentId = u.Id,
+                StudentName = u.FullName,
+                StudentEmail = u.Email,
+                StudentCode = u.SchoolCohort,
+                EnrolledAt = null
+            })
+            .ToListAsync();
+
+        return unenrolledStudents;
+    }
+
     public async Task<Announcement> CreateAnnouncementAsync(Announcement announcement)
     {
         _context.Announcements.Add(announcement);
