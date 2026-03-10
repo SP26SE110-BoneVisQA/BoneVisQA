@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.DBContext;
+using BoneVisQA.Repositories.DBContext;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -99,6 +99,22 @@ namespace BoneVisQA.Repositories.Basic
         public async Task<T> GetByIdAsync(Guid code)
         {
             return await _context.Set<T>().FindAsync(code);
+        }
+
+        public IQueryable<T> FindByCondition(System.Linq.Expressions.Expression<Func<T, bool>> expression)
+        {
+            return _context.Set<T>().Where(expression);
+        }
+
+        public async Task<int> DeleteAsync(Guid id)
+        {
+            var entity = await _context.Set<T>().FindAsync(id);
+            if (entity != null)
+            {
+                _context.Set<T>().Remove(entity);
+                return await _context.SaveChangesAsync();
+            }
+            return 0;
         }
 
         #region Separating asigning entity to DBContext (thao tac vs RAM) and save operators (save changes once to persistent DB)       

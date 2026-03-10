@@ -1,6 +1,8 @@
 using System.Text;
 using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.DBContext;
+using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -63,11 +65,10 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddScoped<AuthRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<LecturerRepository>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
-builder.Services.AddScoped<StudentRepository>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 
 var app = builder.Build();
