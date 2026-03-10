@@ -40,6 +40,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<DocumentChunk> DocumentChunks { get; set; }
 
+    public virtual DbSet<DocumentTag> DocumentTags { get; set; }
+
     public virtual DbSet<ExpertReview> ExpertReviews { get; set; }
 
     public virtual DbSet<LearningStatistic> LearningStatistics { get; set; }
@@ -207,6 +209,8 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsOutdated).HasDefaultValue(false);
+            entity.Property(e => e.Version).HasDefaultValue(1);
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -220,6 +224,17 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
 
             entity.HasOne(d => d.Doc).WithMany(p => p.DocumentChunks).HasConstraintName("document_chunks_doc_id_fkey");
+        });
+
+        modelBuilder.Entity<DocumentTag>(entity =>
+        {
+            entity.HasKey(e => new { e.DocumentId, e.TagId }).HasName("document_tags_pkey");
+
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Document).WithMany(p => p.DocumentTags).HasConstraintName("document_tags_document_id_fkey");
+
+            entity.HasOne(d => d.Tag).WithMany(p => p.DocumentTags).HasConstraintName("document_tags_tag_id_fkey");
         });
 
         modelBuilder.Entity<ExpertReview>(entity =>

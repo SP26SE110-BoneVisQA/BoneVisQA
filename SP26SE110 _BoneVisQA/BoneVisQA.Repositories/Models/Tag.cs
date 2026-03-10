@@ -32,4 +32,7 @@ public partial class Tag
 
     [InverseProperty("Tag")]
     public virtual ICollection<ClassTag> ClassTags { get; set; } = new List<ClassTag>();
+
+    [InverseProperty("Tag")]
+    public virtual ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
 }

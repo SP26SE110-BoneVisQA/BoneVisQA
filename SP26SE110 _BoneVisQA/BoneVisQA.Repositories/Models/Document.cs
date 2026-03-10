@@ -25,10 +25,19 @@ public partial class Document
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
+    [Column("version")]
+    public int Version { get; set; }
+
+    [Column("is_outdated")]
+    public bool IsOutdated { get; set; }
+
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
     public virtual Category? Category { get; set; }
 
     [InverseProperty("Doc")]
     public virtual ICollection<DocumentChunk> DocumentChunks { get; set; } = new List<DocumentChunk>();
+
+    [InverseProperty("Document")]
+    public virtual ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
 }
