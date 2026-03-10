@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BoneVisQA.Repositories;
 
-public class AuthRepository : GenericRepository<User>, IAuthRepository
+public class AuthRepository : GenericRepository<User>
 {
     public AuthRepository(BoneVisQADbContext context) : base(context)
     {

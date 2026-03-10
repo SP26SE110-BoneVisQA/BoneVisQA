@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.DBContext;
@@ -14,28 +15,43 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
 
-    var securityScheme = new OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
+        Description = "JWT Authorization. Nhập token sau 'Bearer '",
         Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Nhập JWT theo dạng: Bearer {token}"
-    };
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer"
+    });
 
-    c.AddSecurityDefinition("Bearer", securityScheme);
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            securityScheme,
-            new string[] { }
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
         }
     });
 });
@@ -44,26 +60,23 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
         npgsqlOptions => npgsqlOptions.SetPostgresVersion(15, 0)));
 
-var jwtSection = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSection["Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured."));
+// JWT Configuration
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
+var key = Encoding.UTF8.GetBytes(jwtKey);
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSection["Issuer"],
-        ValidAudience = jwtSection["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key)
-    };
-});
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
@@ -73,14 +86,15 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// CORS
+app.UseCors("AllowAll");
+
+// Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();

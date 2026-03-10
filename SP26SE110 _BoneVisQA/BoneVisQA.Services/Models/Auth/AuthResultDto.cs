@@ -10,5 +10,9 @@ public class AuthResultDto
     public string? FullName { get; set; }
     public string? Email { get; set; }
     public string? Token { get; set; }
+
+    // when a user logs in we return all the role names so the caller
+    // (and Jwt generator) know which roles this account belongs to.
+    public IReadOnlyList<string>? Roles { get; set; }
 }
 

@@ -10,5 +10,10 @@ public interface IAuthRepository
     Task UpdateUserAsync(User user);
     Task<Role?> GetRoleByNameAsync(string roleName);
     Task AddUserRoleAsync(UserRole userRole);
+
+    /// <summary>
+    /// Returns the names of all roles assigned to the given user.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetRoleNamesForUserAsync(Guid userId);
 }
 
