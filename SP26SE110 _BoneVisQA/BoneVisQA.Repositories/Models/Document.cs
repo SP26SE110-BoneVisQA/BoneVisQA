@@ -24,6 +24,12 @@ public partial class Document
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
+   
+    [Column("version")]
+    public int Version { get; set; } = 1;
+    
+    [Column("outdate")]
+    public bool IsOutdated { get; set; } = false;
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
@@ -31,4 +37,5 @@ public partial class Document
 
     [InverseProperty("Doc")]
     public virtual ICollection<DocumentChunk> DocumentChunks { get; set; } = new List<DocumentChunk>();
+    public ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
 }

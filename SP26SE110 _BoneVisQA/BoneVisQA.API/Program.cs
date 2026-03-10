@@ -76,7 +76,10 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
-builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<ITagCaseService, TagCaseService>();
+builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
+builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
+builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

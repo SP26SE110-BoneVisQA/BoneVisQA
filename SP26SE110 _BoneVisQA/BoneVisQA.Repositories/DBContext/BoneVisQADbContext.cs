@@ -61,6 +61,8 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<UserRole> UserRoles { get; set; }
+    
+    public virtual DbSet<DocumentTag> DocumentTags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -196,6 +198,28 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("documents_category_id_fkey");
+            entity.Property(e => e.Version)
+                  .HasDefaultValue(1);
+            entity.Property(e => e.IsOutdated)
+                  .HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<DocumentTag>(entity =>
+        {
+            entity.HasKey(dt => new { dt.DocumentId, dt.TagId });
+
+            entity.HasOne(dt => dt.Document)
+                  .WithMany(d => d.DocumentTags)
+                  .HasForeignKey(dt => dt.DocumentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(dt => dt.Tag)
+                  .WithMany(t => t.DocumentTags)
+                  .HasForeignKey(dt => dt.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.CreatedAt)
+                  .HasDefaultValueSql("NOW()");
         });
 
         modelBuilder.Entity<DocumentChunk>(entity =>

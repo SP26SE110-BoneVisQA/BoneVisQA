@@ -32,6 +32,9 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<User> UserRepository { get; }
         GenericRepository<Role> RoleRepository { get; }
         GenericRepository<UserRole> UserRoleRepository { get; }
+        GenericRepository<CaseTag> CaseTagRepository { get; }
+        GenericRepository<Tag> TagRepository { get; }
+        GenericRepository<DocumentTag> DocumentTagRepository { get; }
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();

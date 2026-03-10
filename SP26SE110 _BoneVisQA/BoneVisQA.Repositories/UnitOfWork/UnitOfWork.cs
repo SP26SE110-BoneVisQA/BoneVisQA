@@ -23,6 +23,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<ClassEnrollment> _classenrollmentRepository = null!;
         private GenericRepository<Document> _documentRepository = null!;
         private GenericRepository<DocumentChunk> _documentchunkRepository = null!;
+        private GenericRepository<DocumentTag> _documenttagRepository = null!;
         private GenericRepository<ExpertReview> _expertreviewRepository = null!;
         private GenericRepository<LearningStatistic> _learningstatisticRepository = null!;
         private GenericRepository<MedicalCase> _medicalcaseRepository = null!;
@@ -35,6 +36,8 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<User> _userRepository = null!;
         private GenericRepository<Role> _roleRepository = null!;
         private GenericRepository<UserRole> _userroleRepository = null!;
+        private GenericRepository<CaseTag> _casetagRepository = null!;
+        private GenericRepository<Tag> _tagRepository = null!;
 
         public UnitOfWork(BoneVisQADbContext context)
         {
@@ -63,6 +66,9 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<User> UserRepository => _userRepository ??= new GenericRepository<User>(_context);
         public GenericRepository<Role> RoleRepository => _roleRepository ??= new GenericRepository<Role>(_context);
         public GenericRepository<UserRole> UserRoleRepository => _userroleRepository ??= new GenericRepository<UserRole>(_context);
+        public GenericRepository<CaseTag> CaseTagRepository => _casetagRepository ??= new GenericRepository<CaseTag>(_context);
+        public GenericRepository<Tag> TagRepository => _tagRepository ??= new GenericRepository<Tag>(_context);
+        public GenericRepository<DocumentTag> DocumentTagRepository => _documenttagRepository ??= new GenericRepository<DocumentTag>(_context);
 
         public int Save() => _context.SaveChanges();
 

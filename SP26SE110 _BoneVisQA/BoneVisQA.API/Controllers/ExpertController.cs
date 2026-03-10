@@ -1,16 +1,18 @@
 ﻿using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers
 {
     [ApiController]
-    [Route("api/expert")]
+    [Route("api/[controller]")]
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;
         private readonly IQuizService _quizService;
+        private readonly ITagCaseService _tagCaseService;
 
         public ExpertController(IMedicalCaseService medicalService, IQuizService quizService)
         {
@@ -77,6 +79,17 @@ namespace BoneVisQA.API.Controllers
             var result = await _quizService.RecommendQuizAsync(topic);
 
             return Ok(result);
+        }
+
+        [HttpPost("add-tags")]
+        public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)
+        {
+            var result = await _tagCaseService.AddTagCasesAsync(dto);
+
+            if (!result)
+                return BadRequest();
+
+            return Ok("Tags added successfully");
         }
     }
 }
