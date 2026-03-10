@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -30,6 +30,12 @@ public partial class MedicalCase
 
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
+
+    [Column("is_approved")]
+    public bool IsApproved { get; set; } = false;
+
+    [Column("is_active")]
+    public bool IsActive { get; set; } = true;
 
     [InverseProperty("Case")]
     public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();

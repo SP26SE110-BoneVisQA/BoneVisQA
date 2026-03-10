@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using BoneVisQA.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
@@ -272,6 +272,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsApproved).HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
 
             entity.HasOne(d => d.Category).WithMany(p => p.MedicalCases)
                 .OnDelete(DeleteBehavior.SetNull)
