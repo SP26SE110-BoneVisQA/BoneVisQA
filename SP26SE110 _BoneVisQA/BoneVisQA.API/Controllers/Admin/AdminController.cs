@@ -1,9 +1,9 @@
-﻿using BoneVisQA.Services.Interfaces;
+﻿using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BoneVisQA.API.Controllers
+namespace BoneVisQA.API.Controllers.Admin
 {
   //  [Authorize(Roles = "Admin")]
     [ApiController]
@@ -102,9 +102,7 @@ namespace BoneVisQA.API.Controllers
         //==========================================================================================================================================
 
         // POST api/admin/documents
-        // [FromForm] vì có IFormFile
         [HttpPost("documents")]
-        [Consumes("multipart/form-data")]
         public async Task<IActionResult> Save([FromForm] SaveDocumentDTO dto)
         {
             var result = await _documentservice.SaveAsync(dto);
@@ -128,9 +126,7 @@ namespace BoneVisQA.API.Controllers
         }
 
         // PUT api/admin/documents/{id}/version
-        // [FromForm] vì có IFormFile
         [HttpPut("{id}/version")]
-        [Consumes("multipart/form-data")]
         public async Task<IActionResult> UploadNewVersion(Guid id,[FromForm] UploadNewVersionRequestDTO request)
         {
             var result = await _documentservice.UploadNewVersionAsync(id, request.File);

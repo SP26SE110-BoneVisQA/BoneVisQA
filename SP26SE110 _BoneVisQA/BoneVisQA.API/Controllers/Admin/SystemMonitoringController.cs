@@ -1,7 +1,7 @@
-﻿using BoneVisQA.Services.Interfaces;
+﻿using BoneVisQA.Services.Interfaces.Admin;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BoneVisQA.API.Controllers
+namespace BoneVisQA.API.Controllers.Admin
 {
     [ApiController]
     [Route("api/[controller]")]

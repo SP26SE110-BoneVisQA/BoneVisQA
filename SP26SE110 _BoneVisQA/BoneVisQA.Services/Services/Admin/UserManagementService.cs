@@ -1,6 +1,6 @@
 ﻿using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BoneVisQA.Services.Services
+namespace BoneVisQA.Services.Services.Admin
 {
     public class UserManagementService : IUserManagementService
     {

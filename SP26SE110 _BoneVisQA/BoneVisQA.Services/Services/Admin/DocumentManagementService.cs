@@ -1,6 +1,5 @@
 ﻿using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
@@ -9,8 +8,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BoneVisQA.Services.Interfaces.Admin;
 
-namespace BoneVisQA.Services.Services
+namespace BoneVisQA.Services.Services.Admin
 {
     public class DocumentManagementService : IDocumentManagementService
     {

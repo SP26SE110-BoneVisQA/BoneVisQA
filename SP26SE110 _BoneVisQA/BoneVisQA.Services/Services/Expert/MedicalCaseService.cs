@@ -1,6 +1,6 @@
 ﻿using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using System;
 using System.Collections.Generic;
@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BoneVisQA.Services.Services
+namespace BoneVisQA.Services.Services.Expert
 {
     public class MedicalCaseService : IMedicalCaseService
     {

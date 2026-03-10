@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BoneVisQA.Services.Interfaces
+namespace BoneVisQA.Services.Interfaces.Expert
 {
         public interface IQuizService
     {

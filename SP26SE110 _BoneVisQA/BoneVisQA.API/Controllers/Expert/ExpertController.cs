@@ -1,10 +1,10 @@
-﻿using BoneVisQA.Services.Interfaces;
+﻿using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BoneVisQA.API.Controllers
+namespace BoneVisQA.API.Controllers.Expert
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -28,7 +28,7 @@ namespace BoneVisQA.API.Controllers
             return Ok(new
             {
                 message = "Medical case created successfully",
-                caseId = caseId
+                caseId
             });
         }
 
@@ -81,7 +81,7 @@ namespace BoneVisQA.API.Controllers
             return Ok(result);
         }
 
-        [HttpPost("add-tags")]
+        [HttpPost("tags")]
         public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)
         {
             var result = await _tagCaseService.AddTagCasesAsync(dto);
