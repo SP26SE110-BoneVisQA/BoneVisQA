@@ -19,7 +19,7 @@ public interface IStudentRepository
 
     Task<List<StudentQuestion>> GetQuestionsByStudentAsync(Guid studentId);
 
-    Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
+   // Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
 
     Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId);
 

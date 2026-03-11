@@ -26,7 +26,6 @@ namespace BoneVisQA.Services.Services.Expert
             var quiz = new Quiz
             {
                 Id = Guid.NewGuid(),
-                ClassId = request.ClassId,
                 Title = request.Title,
                 OpenTime = request.OpenTime,
                 CloseTime = request.CloseTime,
@@ -41,7 +40,6 @@ namespace BoneVisQA.Services.Services.Expert
             return new QuizDTO
             {
                 Id = quiz.Id,
-                ClassId = quiz.ClassId,
                 Title = quiz.Title,
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
@@ -87,7 +85,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CorrectAnswer = question.CorrectAnswer
             };
         }
-        public async Task AssignQuizToClassAsync(Guid classId, Guid quizId)
+        public async Task<ClassQuizDTO> AssignQuizToClassAsync(Guid classId, Guid quizId)
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
                 .GetByIdAsync(classId)
@@ -112,6 +110,13 @@ namespace BoneVisQA.Services.Services.Expert
 
             await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
+           
+            return new ClassQuizDTO
+            {
+                ClassId = classQuiz.ClassId,
+                QuizId = classQuiz.QuizId,
+                AssignedAt = classQuiz.AssignedAt
+            };
         }
         public async Task<QuizScoreResultDTO> CalculateScoreAsync(Guid attemptId)
         {

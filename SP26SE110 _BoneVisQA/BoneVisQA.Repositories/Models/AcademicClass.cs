@@ -41,8 +41,8 @@ public partial class AcademicClass
     [InverseProperty("AcademicClasses")]
     public virtual User? Lecturer { get; set; }
 
-    [InverseProperty("Class")]
-    public virtual ICollection<Quiz> Quizzes { get; set; } = new List<Quiz>();
+    //[InverseProperty("Class")]
+    //public virtual ICollection<Quiz> Quizzes { get; set; } = new List<Quiz>();
 
     public virtual ICollection<ClassQuiz> ClassQuizzes { get; set; } = new List<ClassQuiz>();
 

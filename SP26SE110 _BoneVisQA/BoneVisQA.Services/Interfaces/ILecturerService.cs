@@ -14,7 +14,7 @@ public interface ILecturerService
 
     Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request);
 
-    Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);
+  //  Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);
 
     Task<ClassStatsDto> GetClassStatsAsync(Guid classId);
 }

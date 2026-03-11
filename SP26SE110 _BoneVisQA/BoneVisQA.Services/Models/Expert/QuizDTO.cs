@@ -13,8 +13,6 @@ namespace BoneVisQA.Services.Models.Expert
     {
         public Guid Id { get; set; }
 
-        public Guid ClassId { get; set; }
-
         public string Title { get; set; } = null!;
 
         public DateTime? OpenTime { get; set; }
@@ -25,6 +23,12 @@ namespace BoneVisQA.Services.Models.Expert
 
         public int? PassingScore { get; set; }
         public DateTime? CreatedAt { get; set; }
+    }
+    public class ClassQuizDTO
+    {
+        public Guid ClassId { get; set; }
+        public Guid QuizId { get; set; }
+        public DateTime? AssignedAt { get; set; }
     }
     public class QuizQuestionDTO
     {

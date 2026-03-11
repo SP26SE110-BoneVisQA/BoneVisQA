@@ -51,12 +51,12 @@ public class LecturerController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("classes/{classId:guid}/quizzes")]
-    public async Task<ActionResult<QuizDto>> CreateQuiz(Guid classId, [FromBody] CreateQuizRequestDto request)
-    {
-        var result = await _lecturerService.CreateQuizAsync(classId, request);
-        return Ok(result);
-    }
+    //[HttpPost("classes/{classId:guid}/quizzes")]
+    //public async Task<ActionResult<QuizDto>> CreateQuiz(Guid classId, [FromBody] CreateQuizRequestDto request)
+    //{
+    //    var result = await _lecturerService.CreateQuizAsync(classId, request);
+    //    return Ok(result);
+    //}
 
     [HttpGet("classes/{classId:guid}/stats")]
     public async Task<ActionResult<ClassStatsDto>> GetClassStats(Guid classId)

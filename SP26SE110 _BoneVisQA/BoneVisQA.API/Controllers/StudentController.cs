@@ -58,12 +58,12 @@ public class StudentController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("quizzes")]
-    public async Task<ActionResult<IReadOnlyList<QuizListItemDto>>> GetQuizzes([FromQuery] Guid studentId)
-    {
-        var result = await _studentService.GetAvailableQuizzesAsync(studentId);
-        return Ok(result);
-    }
+    //[HttpGet("quizzes")]
+    //public async Task<ActionResult<IReadOnlyList<QuizListItemDto>>> GetQuizzes([FromQuery] Guid studentId)
+    //{
+    //    var result = await _studentService.GetAvailableQuizzesAsync(studentId);
+    //    return Ok(result);
+    //}
 
     [HttpPost("quizzes/{quizId:guid}/start")]
     public async Task<ActionResult<QuizSessionDto>> StartQuiz(Guid quizId, [FromQuery] Guid studentId)

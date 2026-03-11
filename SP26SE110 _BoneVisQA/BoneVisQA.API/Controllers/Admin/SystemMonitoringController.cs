@@ -20,7 +20,11 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetOverview()
         {
             var result = await _service.GetOverviewAsync();
-            return Ok(result);
+            return Ok(new
+            {
+                Message = "Get overview successfully.",
+                result
+            });
         }
 
         // GET api/admin/monitoring/users
@@ -28,20 +32,26 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetUserStats()
         {
             var result = await _service.GetUserStatsAsync();
-            return Ok(result);
+            return Ok(new
+            {
+                Message = "Get user stat successfully.",
+                result
+            });
         }
 
         // GET api/admin/monitoring/activity?from=2024-01-01&to=2024-12-31
         [HttpGet("activity")]
-        public async Task<IActionResult> GetActivityStats(
-            [FromQuery] DateTime from,
-            [FromQuery] DateTime to)
+        public async Task<IActionResult> GetActivityStats([FromQuery] DateTime from,[FromQuery] DateTime to)
         {
             if (from > to)
                 return BadRequest("Ngày bắt đầu phải nhỏ hơn ngày kết thúc.");
 
             var result = await _service.GetActivityStatsAsync(from, to);
-            return Ok(result);
+            return Ok(new
+            {
+                Message = "Get activity stat successfully.",
+                result
+            });
         }
 
         // GET api/admin/monitoring/rag
@@ -49,7 +59,11 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetRagStats()
         {
             var result = await _service.GetRagStatsAsync();
-            return Ok(result);
+            return Ok(new
+            {
+                Message = "Get rag stat successfully.",
+                result
+            });
         }
 
         // GET api/admin/monitoring/reviews
@@ -57,7 +71,11 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetExpertReviewStats()
         {
             var result = await _service.GetExpertReviewStatsAsync();
-            return Ok(result);
+            return Ok(new
+            {
+                Message = "Get expert review successfully.",
+                result
+            });
         }
     }
 }

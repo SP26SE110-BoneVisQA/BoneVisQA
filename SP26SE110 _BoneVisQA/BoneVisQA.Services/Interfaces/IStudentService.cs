@@ -17,7 +17,7 @@ public interface IStudentService
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 
-    Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId);
+ //   Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId);
 
     Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId);
 

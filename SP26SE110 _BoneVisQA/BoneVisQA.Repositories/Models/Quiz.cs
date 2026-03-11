@@ -13,9 +13,6 @@ public partial class Quiz
     [Column("id")]
     public Guid Id { get; set; }
 
-    [Column("class_id")]
-    public Guid ClassId { get; set; }
-
     [Column("title")]
     public string Title { get; set; } = null!;
 
@@ -34,9 +31,9 @@ public partial class Quiz
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
-    [ForeignKey("ClassId")]
-    [InverseProperty("Quizzes")]
-    public virtual AcademicClass Class { get; set; } = null!;
+    //[ForeignKey("ClassId")]
+    //[InverseProperty("Quizzes")]
+    //public virtual AcademicClass Class { get; set; } = null!;
 
     [InverseProperty("Quiz")]
     public virtual ICollection<QuizAttempt> QuizAttempts { get; set; } = new List<QuizAttempt>();

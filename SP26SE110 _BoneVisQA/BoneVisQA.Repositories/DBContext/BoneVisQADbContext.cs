@@ -303,14 +303,21 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Case).WithMany(p => p.MedicalImages).HasConstraintName("medical_images_case_id_fkey");
         });
 
+        //modelBuilder.Entity<Quiz>(entity =>
+        //{
+        //    entity.HasKey(e => e.Id).HasName("quizzes_pkey");
+
+        //    entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+        //    entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+        //    entity.HasOne(d => d.Class).WithMany(p => p.Quizzes).HasConstraintName("quizzes_class_id_fkey");
+        //});
+
         modelBuilder.Entity<Quiz>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
-
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-
-            entity.HasOne(d => d.Class).WithMany(p => p.Quizzes).HasConstraintName("quizzes_class_id_fkey");
         });
 
         modelBuilder.Entity<QuizAttempt>(entity =>

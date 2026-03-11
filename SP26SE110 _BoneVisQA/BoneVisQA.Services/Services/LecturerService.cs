@@ -103,34 +103,34 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request)
-    {
-        var now = DateTime.UtcNow;
-        var entity = new Quiz
-        {
-            Id = Guid.NewGuid(),
-            ClassId = classId,
-            Title = request.Title,
-            OpenTime = request.OpenTime,
-            CloseTime = request.CloseTime,
-            TimeLimit = request.TimeLimit,
-            PassingScore = request.PassingScore,
-            CreatedAt = now
-        };
+    //public async Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request)
+    //{
+    //    var now = DateTime.UtcNow;
+    //    var entity = new Quiz
+    //    {
+    //        Id = Guid.NewGuid(),
+    //        ClassId = classId,
+    //        Title = request.Title,
+    //        OpenTime = request.OpenTime,
+    //        CloseTime = request.CloseTime,
+    //        TimeLimit = request.TimeLimit,
+    //        PassingScore = request.PassingScore,
+    //        CreatedAt = now
+    //    };
 
-        var created = await _lecturerRepository.CreateQuizAsync(entity);
+    //    var created = await _lecturerRepository.CreateQuizAsync(entity);
 
-        return new QuizDto
-        {
-            Id = created.Id,
-            ClassId = created.ClassId,
-            Title = created.Title,
-            OpenTime = created.OpenTime,
-            CloseTime = created.CloseTime,
-            TimeLimit = created.TimeLimit,
-            PassingScore = created.PassingScore
-        };
-    }
+    //    return new QuizDto
+    //    {
+    //        Id = created.Id,
+    //        ClassId = created.ClassId,
+    //        Title = created.Title,
+    //        OpenTime = created.OpenTime,
+    //        CloseTime = created.CloseTime,
+    //        TimeLimit = created.TimeLimit,
+    //        PassingScore = created.PassingScore
+    //    };
+    //}
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {

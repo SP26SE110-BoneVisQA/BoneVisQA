@@ -67,27 +67,27 @@ public class StudentRepository : IStudentRepository
             .ToListAsync();
     }
 
-    public async Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow)
-    {
-        var classIds = await _context.ClassEnrollments
-            .AsNoTracking()
-            .Where(e => e.StudentId == studentId)
-            .Select(e => e.ClassId)
-            .ToListAsync();
+    //public async Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow)
+    //{
+    //    var classIds = await _context.ClassEnrollments
+    //        .AsNoTracking()
+    //        .Where(e => e.StudentId == studentId)
+    //        .Select(e => e.ClassId)
+    //        .ToListAsync();
 
-        if (classIds.Count == 0)
-        {
-            return new List<Quiz>();
-        }
+    //    if (classIds.Count == 0)
+    //    {
+    //        return new List<Quiz>();
+    //    }
 
-        return await _context.Quizzes
-            .AsNoTracking()
-            .Where(q => classIds.Contains(q.ClassId)
-                        && (q.OpenTime == null || q.OpenTime <= utcNow)
-                        && (q.CloseTime == null || q.CloseTime >= utcNow))
-            .Include(q => q.QuizAttempts)
-            .ToListAsync();
-    }
+    //    return await _context.Quizzes
+    //        .AsNoTracking()
+    //        .Where(q => classIds.Contains(q.ClassId)
+    //                    && (q.OpenTime == null || q.OpenTime <= utcNow)
+    //                    && (q.CloseTime == null || q.CloseTime >= utcNow))
+    //        .Include(q => q.QuizAttempts)
+    //        .ToListAsync();
+    //}
 
     public async Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId)
     {

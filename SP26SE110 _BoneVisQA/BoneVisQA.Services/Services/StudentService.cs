@@ -140,29 +140,29 @@ public class StudentService : IStudentService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId)
-    {
-        var utcNow = DateTime.UtcNow;
-        var quizzes = await _studentRepository.GetQuizzesForStudentAsync(studentId, utcNow);
+    //public async Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId)
+    //{
+    //    var utcNow = DateTime.UtcNow;
+    //    var quizzes = await _studentRepository.GetQuizzesForStudentAsync(studentId, utcNow);
 
-        return quizzes
-            .Select(q =>
-            {
-                var attempt = q.QuizAttempts.FirstOrDefault(a => a.StudentId == studentId);
-                return new QuizListItemDto
-                {
-                    QuizId = q.Id,
-                    Title = q.Title,
-                    OpenTime = q.OpenTime,
-                    CloseTime = q.CloseTime,
-                    TimeLimit = q.TimeLimit,
-                    PassingScore = q.PassingScore,
-                    IsCompleted = attempt?.CompletedAt != null,
-                    Score = attempt?.Score
-                };
-            })
-            .ToList();
-    }
+    //    return quizzes
+    //        .Select(q =>
+    //        {
+    //            var attempt = q.QuizAttempts.FirstOrDefault(a => a.StudentId == studentId);
+    //            return new QuizListItemDto
+    //            {
+    //                QuizId = q.Id,
+    //                Title = q.Title,
+    //                OpenTime = q.OpenTime,
+    //                CloseTime = q.CloseTime,
+    //                TimeLimit = q.TimeLimit,
+    //                PassingScore = q.PassingScore,
+    //                IsCompleted = attempt?.CompletedAt != null,
+    //                Score = attempt?.Score
+    //            };
+    //        })
+    //        .ToList();
+    //}
 
     public async Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId)
     {

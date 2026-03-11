@@ -25,35 +25,55 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetUsersByRole(string role)
         {
             var users = await _userservice.GetUserByRoleAsync(role);
-            return Ok(users);
+            return Ok(new
+            {
+                Message = "Get Users by role successfully.",
+                users
+            });
         }
 
         [HttpPut("{id}/activate")]
         public async Task<IActionResult> Activate(Guid id)
         {
-            await _userservice.ActivateUserAccountAsync(id);
-            return Ok();
+           var result = await _userservice.ActivateUserAccountAsync(id);
+            return Ok(new
+            {
+                Message = "Actice user successfully.",
+                result
+            });
         }
 
         [HttpPut("{id}/deactivate")]
         public async Task<IActionResult> Deactivate(Guid id)
         {
-            await _userservice.DeactivateUserAccountAsync(id);
-            return Ok();
+            var result = await _userservice.DeactivateUserAccountAsync(id);
+            return Ok(new
+            {
+                Message = "Deactive user successfully.",
+                result
+            });
         }
 
         [HttpPost("{id}/assign-role")]
         public async Task<IActionResult> AssignRole(Guid id, string role)
         {
-            await _userservice.AssignRoleAsync(id, role);
-            return Ok();
+            var result = await _userservice.AssignRoleAsync(id, role);
+            return Ok(new
+            {
+                Message = "Assign user successfully.",
+                result
+            });
         }
 
         [HttpDelete("{id}/revoke-role")]
         public async Task<IActionResult> RevokeRole(Guid id, string role)
         {
-            await _userservice.RevokeRoleAsync(id, role);
-            return Ok();
+            var result = await _userservice.RevokeRoleAsync(id, role);
+            return Ok(new
+            {
+                Message = "Revoke role user successfully.",
+                result
+            });
         }
         // ====================================================================================================================================
 

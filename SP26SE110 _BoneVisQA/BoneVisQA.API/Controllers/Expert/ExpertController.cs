@@ -72,10 +72,11 @@ namespace BoneVisQA.API.Controllers.Expert
         [HttpPost("class/{classId}/assign/{quizId}")]
         public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
         { 
-            await _quizService.AssignQuizToClassAsync(classId, quizId);
+            var result = await _quizService.AssignQuizToClassAsync(classId, quizId);
             return Ok(new
             { 
-                Message = "Gán quiz vào lớp thành công." 
+                Message = "AssignQuiz successfully.",
+                result
             });
         }
 
