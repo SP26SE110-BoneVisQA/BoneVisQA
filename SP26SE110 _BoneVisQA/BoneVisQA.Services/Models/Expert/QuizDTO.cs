@@ -24,22 +24,34 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TimeLimit { get; set; }
 
         public int? PassingScore { get; set; }
-
         public DateTime? CreatedAt { get; set; }
     }
     public class QuizQuestionDTO
     {
         public Guid Id { get; set; }
-
         public Guid QuizId { get; set; }
-
         public Guid? CaseId { get; set; }
-
         public string QuestionText { get; set; } = null!;
-
         public string? Type { get; set; }
-
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
         public string? CorrectAnswer { get; set; }
+    }
+
+    public class QuizScoreResultDTO
+    {
+        public Guid AttemptId { get; set; }
+        public Guid StudentId { get; set; }
+        public Guid QuizId { get; set; }
+        public string QuizTitle { get; set; } = null!;
+        public int TotalQuestions { get; set; }
+        public int CorrectAnswers { get; set; }
+        public float Score { get; set; }         
+        public int? PassingScore { get; set; }   
+        public bool IsPassed { get; set; }
+        public DateTime? CompletedAt { get; set; }
     }
 
 }

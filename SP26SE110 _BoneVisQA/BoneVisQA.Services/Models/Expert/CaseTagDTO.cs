@@ -11,14 +11,14 @@ namespace BoneVisQA.Services.Models.Expert
 {
     public class CaseTagDTO
     {
+        public Guid MedicalCaseId { get; set; }
+        public Guid TagId { get; set; }
+    }
+
+    public class CaseTagDTOResponse
+    {
         public Guid CaseId { get; set; }
-
-        public List<Guid>? SpecialtyTagIds { get; set; }
-
-        public List<Guid>? BoneLocationTagIds { get; set; }
-
-        public List<Guid>? LesionTypeTagIds { get; set; }
-
-        public Guid? DifficultyTagId { get; set; }
+        public Guid TagId { get; set; }
+        public DateTime? CreatedAt { get; set; }
     }
 }

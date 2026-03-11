@@ -64,6 +64,8 @@ public partial class BoneVisQADbContext : DbContext
     
     public virtual DbSet<DocumentTag> DocumentTags { get; set; }
 
+    public virtual DbSet<ClassQuiz> ClassQuizzes { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -187,6 +189,25 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.HasOne(d => d.Student).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_student_id_fkey");
         });
+
+        modelBuilder.Entity<ClassQuiz>(entity =>
+        {
+            entity.HasKey(cq => new { cq.ClassId, cq.QuizId });
+
+            entity.HasOne(cq => cq.AcademicClass)
+                  .WithMany(c => c.ClassQuizzes)
+                  .HasForeignKey(cq => cq.ClassId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cq => cq.Quiz)
+                  .WithMany(q => q.ClassQuizzes)
+                  .HasForeignKey(cq => cq.QuizId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.AssignedAt)
+                  .HasDefaultValueSql("NOW()");
+        });
+
 
         modelBuilder.Entity<Document>(entity =>
         {

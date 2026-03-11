@@ -13,8 +13,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, QuizQuestionDTO request);
 
-        Task<List<QuizDTO>> GetQuizzesByClassAsync(Guid classId);
-
-        Task<List<QuizDTO>> RecommendQuizAsync(string topic);
+        Task AssignQuizToClassAsync(Guid classId, Guid quizId);
+        Task<QuizScoreResultDTO> CalculateScoreAsync(Guid attemptId);
     }
 }

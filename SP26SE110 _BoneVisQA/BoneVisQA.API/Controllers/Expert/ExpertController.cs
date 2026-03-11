@@ -14,10 +14,11 @@ namespace BoneVisQA.API.Controllers.Expert
         private readonly IQuizService _quizService;
         private readonly ITagCaseService _tagCaseService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizService quizService)
+        public ExpertController(IMedicalCaseService medicalService, IQuizService quizService, ITagCaseService tagCaseService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
+            _tagCaseService = tagCaseService;
         }
 
         [HttpPost("cases")]
@@ -42,7 +43,11 @@ namespace BoneVisQA.API.Controllers.Expert
 
             var result = await _quizService.CreateQuizAsync(request);
 
-            return Ok(result);
+            return Ok(new
+            {
+                message = "Quiz created successfully",
+                result
+            });
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
@@ -57,39 +62,43 @@ namespace BoneVisQA.API.Controllers.Expert
 
             var result = await _quizService.CreateQuestionAsync(quizId, request);
 
-            return Ok(result);
-        }
-
-        [HttpGet("classes/{classId}/quizzes")]
-        public async Task<IActionResult> GetQuizzesByClass(Guid classId)
-        {
-            var result = await _quizService.GetQuizzesByClassAsync(classId);
-
-            return Ok(result);
-        }
-
-        [HttpGet("quizzes/recommend")]
-        public async Task<IActionResult> RecommendQuiz([FromQuery] string topic)
-        {
-            if (string.IsNullOrEmpty(topic))
+            return Ok(new
             {
-                return BadRequest("Topic is required");
-            }
-
-            var result = await _quizService.RecommendQuizAsync(topic);
-
-            return Ok(result);
+                message = "Quiz_Question created successfully",
+                result
+            });
         }
 
-        [HttpPost("tags")]
+        [HttpPost("class/{classId}/assign/{quizId}")]
+        public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
+        { 
+            await _quizService.AssignQuizToClassAsync(classId, quizId);
+            return Ok(new
+            { 
+                Message = "Gán quiz vào lớp thành công." 
+            });
+        }
+
+        [HttpPost("attempts/{attemptId}/score")]
+        public async Task<IActionResult> CalculateScore(Guid attemptId)
+        {
+            var result = await _quizService.CalculateScoreAsync(attemptId);
+            return Ok(new
+            {
+                Message = "Calculate score successfully.", 
+                result
+            });
+        }
+        [HttpPost("case-tag")]
         public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)
         {
             var result = await _tagCaseService.AddTagCasesAsync(dto);
 
-            if (!result)
-                return BadRequest();
-
-            return Ok("Tags added successfully");
+            return Ok(new
+            {
+                Message = "Tags added successfully",
+                result
+            });
         }
     }
 }

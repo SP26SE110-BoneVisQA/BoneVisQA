@@ -18,59 +18,42 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
-        public async Task<bool> AddTagCasesAsync(CaseTagDTO dto)
+        public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {
-            var tagIds = new List<Guid>();
-
-            // gom tất cả tag lại
-            if (dto.SpecialtyTagIds != null)
-                tagIds.AddRange(dto.SpecialtyTagIds);
-
-            if (dto.BoneLocationTagIds != null)
-                tagIds.AddRange(dto.BoneLocationTagIds);
-
-            if (dto.LesionTypeTagIds != null)
-                tagIds.AddRange(dto.LesionTypeTagIds);
-
-            if (dto.DifficultyTagId.HasValue)
-                tagIds.Add(dto.DifficultyTagId.Value);
-
-            // check case tồn tại
+            // Check case tồn tại
             var caseExists = await _unitOfWork.MedicalCaseRepository
-                .ExistsAsync(x => x.Id == dto.CaseId);
-
+                .ExistsAsync(x => x.Id == dto.MedicalCaseId);
             if (!caseExists)
-                throw new Exception("Medical case not found");
+                throw new KeyNotFoundException("Không tìm thấy medical case.");
 
-            foreach (var tagId in tagIds)
+            // Check tag tồn tại
+            var tagExists = await _unitOfWork.TagRepository
+                .ExistsAsync(x => x.Id == dto.TagId);
+            if (!tagExists)
+                throw new KeyNotFoundException("Không tìm thấy tag.");
+
+            // Check đã gắn chưa
+            var exists = await _unitOfWork.CaseTagRepository
+                .ExistsAsync(x => x.CaseId == dto.MedicalCaseId && x.TagId == dto.TagId);
+            if (exists)
+                throw new InvalidOperationException("Tag đã được gắn vào case này rồi.");
+
+            var caseTag = new CaseTag
             {
-                // check tag tồn tại
-                var tagExists = await _unitOfWork.TagRepository
-                    .ExistsAsync(x => x.Id == tagId);
+                CaseId = dto.MedicalCaseId,
+                TagId = dto.TagId,
+                CreatedAt = DateTime.UtcNow
+            };
 
-                if (!tagExists)
-                    continue;
-
-                // check đã gắn chưa
-                var exists = await _unitOfWork.CaseTagRepository
-                    .ExistsAsync(x => x.CaseId == dto.CaseId && x.TagId == tagId);
-
-                if (exists)
-                    continue;
-
-                var caseTag = new CaseTag
-                {
-                    CaseId = dto.CaseId,
-                    TagId = tagId,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _unitOfWork.CaseTagRepository.AddAsync(caseTag);
-            }
-
+            await _unitOfWork.CaseTagRepository.AddAsync(caseTag);
             await _unitOfWork.SaveAsync();
 
-            return true;
+            return new CaseTagDTOResponse
+            {
+                CaseId = caseTag.CaseId,
+                TagId = caseTag.TagId,
+                CreatedAt = caseTag.CreatedAt
+            };
         }
     }
 }

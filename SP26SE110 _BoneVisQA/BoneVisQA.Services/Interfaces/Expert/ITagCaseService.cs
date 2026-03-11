@@ -9,6 +9,6 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface ITagCaseService
     {
-        Task<bool> AddTagCasesAsync(CaseTagDTO dto);
+        Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto);
     }
 }

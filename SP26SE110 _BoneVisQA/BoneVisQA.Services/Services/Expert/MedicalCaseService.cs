@@ -30,14 +30,14 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = dto.CategoryId,
                 CreatedAt = DateTime.UtcNow,
 
-                MedicalImages = dto.Images?.Select(img => new MedicalImage
+                MedicalImages = dto.Images.Select(img => new MedicalImage
                 {
                     Id = Guid.NewGuid(),
                     ImageUrl = img.ImageUrl,
                     Modality = img.Modality,
                     CreatedAt = DateTime.UtcNow,
 
-                    CaseAnnotations = img.Annotations?.Select(a => new CaseAnnotation
+                    CaseAnnotations = img.Annotations.Select(a => new CaseAnnotation
                     {
                         Id = Guid.NewGuid(),
                         Label = a.Label,
