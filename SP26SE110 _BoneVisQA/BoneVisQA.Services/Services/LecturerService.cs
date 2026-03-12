@@ -220,7 +220,6 @@ public class LecturerService : ILecturerService
         var entity = new Quiz
         {
             Id = Guid.NewGuid(),
-            ClassId = classId,
             Title = request.Title,
             OpenTime = request.OpenTime,
             CloseTime = request.CloseTime,
@@ -232,10 +231,19 @@ public class LecturerService : ILecturerService
         await _unitOfWork.QuizRepository.CreateAsync(entity);
         await _unitOfWork.SaveAsync();
 
+        var classQuiz = new ClassQuiz
+        {
+            ClassId = classId,
+            QuizId = entity.Id,
+            AssignedAt = now
+        };
+        await _unitOfWork.ClassQuizRepository.CreateAsync(classQuiz);
+        await _unitOfWork.SaveAsync();
+
         return new QuizDto
         {
             Id = entity.Id,
-            ClassId = entity.ClassId,
+            ClassId = classId,
             Title = entity.Title,
             OpenTime = entity.OpenTime,
             CloseTime = entity.CloseTime,
@@ -283,11 +291,6 @@ public class LecturerService : ILecturerService
 
         await _unitOfWork.QuizQuestionRepository.CreateAsync(entity);
         await _unitOfWork.SaveAsync();
-
-        var quiz = await _unitOfWork.QuizRepository
-            .FindByCondition(q => q.Id == request.QuizId)
-            .Include(q => q.Class)
-            .FirstOrDefaultAsync();
 
         return new QuizQuestionDto
         {
@@ -450,7 +453,7 @@ public class LecturerService : ILecturerService
                 StudentId = q.StudentId,
                 StudentName = q.Student?.FullName ?? string.Empty,
                 StudentEmail = q.Student?.Email ?? string.Empty,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 CaseTitle = q.Case?.Title ?? string.Empty,
                 QuestionText = q.QuestionText,
                 Language = q.Language,

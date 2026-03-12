@@ -21,20 +21,32 @@ namespace BoneVisQA.Services.Services
 
         public async Task<QuizDto> CreateQuizAsync(QuizDto request)
         {
+            var now = DateTime.UtcNow;
             var quiz = new Quiz
             {
                 Id = Guid.NewGuid(),
-                ClassId = request.ClassId,
                 Title = request.Title,
                 OpenTime = request.OpenTime,
                 CloseTime = request.CloseTime,
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = now
             };
 
             await _unitOfWork.QuizRepository.CreateAsync(quiz);
             await _unitOfWork.SaveAsync();
+
+            if (request.ClassId != Guid.Empty)
+            {
+                var classQuiz = new ClassQuiz
+                {
+                    ClassId = request.ClassId,
+                    QuizId = quiz.Id,
+                    AssignedAt = now
+                };
+                await _unitOfWork.ClassQuizRepository.CreateAsync(classQuiz);
+                await _unitOfWork.SaveAsync();
+            }
 
             request.Id = quiz.Id;
             request.CreatedAt = quiz.CreatedAt;
@@ -70,14 +82,24 @@ namespace BoneVisQA.Services.Services
 
         public async Task<List<QuizDto>> GetQuizzesByClassAsync(Guid classId)
         {
+            var quizIds = await _unitOfWork.ClassQuizRepository
+                .FindByCondition(cq => cq.ClassId == classId)
+                .Select(cq => cq.QuizId)
+                .ToListAsync();
+
+            if (quizIds.Count == 0)
+            {
+                return new List<QuizDto>();
+            }
+
             var quizzes = await _unitOfWork.QuizRepository
-                .FindByCondition(q => q.ClassId == classId)
+                .FindByCondition(q => quizIds.Contains(q.Id))
                 .ToListAsync();
 
             return quizzes.Select(q => new QuizDto
             {
                 Id = q.Id,
-                ClassId = q.ClassId,
+                ClassId = classId,
                 Title = q.Title,
                 OpenTime = q.OpenTime,
                 CloseTime = q.CloseTime,
@@ -97,7 +119,7 @@ namespace BoneVisQA.Services.Services
             return quizzes.Select(q => new QuizDto
             {
                 Id = q.Id,
-                ClassId = q.ClassId,
+                ClassId = Guid.Empty,
                 Title = q.Title,
                 OpenTime = q.OpenTime,
                 CloseTime = q.CloseTime,

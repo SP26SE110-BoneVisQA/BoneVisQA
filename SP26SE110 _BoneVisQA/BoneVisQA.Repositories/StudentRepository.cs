@@ -131,8 +131,18 @@ public class StudentRepository : IStudentRepository
             return new List<Quiz>();
         }
 
+        var quizIds = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => classIds.Contains(cq.ClassId))
+            .Select(cq => cq.QuizId)
+            .ToListAsync();
+
+        if (quizIds.Count == 0)
+        {
+            return new List<Quiz>();
+        }
+
         return await _unitOfWork.QuizRepository
-            .FindByCondition(q => classIds.Contains(q.ClassId)
+            .FindByCondition(q => quizIds.Contains(q.Id)
                         && (q.OpenTime == null || q.OpenTime <= utcNow)
                         && (q.CloseTime == null || q.CloseTime >= utcNow))
             .Include(q => q.QuizAttempts)
@@ -151,6 +161,14 @@ public class StudentRepository : IStudentRepository
     {
         return await _unitOfWork.QuizAttemptRepository
             .FindByCondition(a => a.StudentId == studentId && a.QuizId == quizId)
+            .Include(a => a.StudentQuizAnswers)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<QuizAttempt?> GetQuizAttemptByIdAsync(Guid attemptId, Guid studentId)
+    {
+        return await _unitOfWork.QuizAttemptRepository
+            .FindByCondition(a => a.Id == attemptId && a.StudentId == studentId)
             .Include(a => a.StudentQuizAnswers)
             .FirstOrDefaultAsync();
     }

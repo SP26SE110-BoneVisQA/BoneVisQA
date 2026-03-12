@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
@@ -107,12 +108,14 @@ public class StudentService : IStudentService
 
     public async Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request)
     {
+        var coordinatesJson = TryParseCoordinatesJson(request.Coordinates);
+
         var entity = new CaseAnnotation
         {
             Id = Guid.NewGuid(),
             ImageId = request.ImageId,
             Label = request.Label,
-            Coordinates = request.Coordinates,
+            Coordinates = coordinatesJson,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -130,14 +133,16 @@ public class StudentService : IStudentService
 
     public async Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request)
     {
+        var language = NormalizeLanguage(request.Language);
+
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
             StudentId = studentId,
-            CaseId = request.CaseId,
+            CaseId = request.CaseId == Guid.Empty ? null : request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = request.Language,
+            Language = language,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -147,12 +152,35 @@ public class StudentService : IStudentService
         {
             Id = created.Id,
             StudentId = created.StudentId,
-            CaseId = created.CaseId,
+            CaseId = created.CaseId ?? Guid.Empty,
             AnnotationId = created.AnnotationId,
             QuestionText = created.QuestionText,
             Language = created.Language,
             CreatedAt = created.CreatedAt
         };
+    }
+
+    private static string? NormalizeLanguage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "vi";
+        var v = value.Trim().ToLowerInvariant();
+        if (v == "vi" || v == "vie") return "vi";
+        if (v == "en" || v == "eng") return "en";
+        return "vi";
+    }
+
+    private static string? TryParseCoordinatesJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        try
+        {
+            using var _ = JsonDocument.Parse(value);
+            return value;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)
@@ -260,10 +288,11 @@ public class StudentService : IStudentService
 
     public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
     {
-        var attempt = await _studentRepository.GetQuizAttemptAsync(studentId, request.AttemptId);
+        var attempt = await _studentRepository.GetQuizAttemptByIdAsync(request.AttemptId, studentId);
         if (attempt == null)
         {
-            throw new InvalidOperationException("Lần làm quiz không tồn tại.");
+            throw new InvalidOperationException(
+                "Lần làm quiz không tồn tại hoặc không thuộc về sinh viên này. Kiểm tra attemptId và studentId (phải trùng với student_id của lần làm bài trong bảng quiz_attempts).");
         }
 
         var quiz = await _studentRepository.GetQuizWithQuestionsAsync(attempt.QuizId);

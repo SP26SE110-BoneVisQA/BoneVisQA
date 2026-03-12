@@ -29,6 +29,8 @@ public interface IStudentRepository
 
     Task<QuizAttempt?> GetQuizAttemptAsync(Guid studentId, Guid quizId);
 
+    Task<QuizAttempt?> GetQuizAttemptByIdAsync(Guid attemptId, Guid studentId);
+
     Task<QuizAttempt> CreateQuizAttemptAsync(QuizAttempt attempt);
 
     Task UpdateQuizAttemptAsync(QuizAttempt attempt);

@@ -34,6 +34,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
 
+    public virtual DbSet<ClassQuiz> ClassQuizzes { get; set; }
+
     public virtual DbSet<ClassTag> ClassTags { get; set; }
 
     public virtual DbSet<Document> Documents { get; set; }
@@ -290,14 +292,22 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Case).WithMany(p => p.MedicalImages).HasConstraintName("medical_images_case_id_fkey");
         });
 
+        modelBuilder.Entity<ClassQuiz>(entity =>
+        {
+            entity.HasKey(e => new { e.ClassId, e.QuizId }).HasName("class_quizzes_pkey");
+
+            entity.Property(e => e.AssignedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizzes).HasConstraintName("class_quizzes_class_id_fkey");
+            entity.HasOne(d => d.Quiz).WithMany(p => p.ClassQuizzes).HasConstraintName("class_quizzes_quiz_id_fkey");
+        });
+
         modelBuilder.Entity<Quiz>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-
-            entity.HasOne(d => d.Class).WithMany(p => p.Quizzes).HasConstraintName("quizzes_class_id_fkey");
         });
 
         modelBuilder.Entity<QuizAttempt>(entity =>
