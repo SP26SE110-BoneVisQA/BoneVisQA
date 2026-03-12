@@ -67,8 +67,33 @@ namespace BoneVisQA.Services.Services.Admin
             };
         }
 
-        // ── SaveAsync: tạo mới (Id = null) hoặc cập nhật ────
-        public async Task<DocumentDTO> SaveAsync(SaveDocumentDTO dto)
+        // ── Helper: sync tags ────────────────────────────────
+        private async Task SyncTagsAsync(Guid documentId, List<Guid> newTagIds)
+        {
+            var existing = await _unitOfWork.DocumentTagRepository
+                .FindAsync(dt => dt.DocumentId == documentId);
+
+            // Xóa tags cũ không còn trong danh sách mới
+            var toRemove = existing
+                .Where(dt => !newTagIds.Contains(dt.TagId))
+                .ToList();
+            await _unitOfWork.DocumentTagRepository.RemoveRangeAsync(toRemove);
+
+            // Thêm tags mới chưa có
+            var existingTagIds = existing.Select(dt => dt.TagId).ToHashSet();
+            var toAdd = newTagIds
+                .Where(id => !existingTagIds.Contains(id))
+                .Select(id => new DocumentTag
+                {
+                    DocumentId = documentId,
+                    TagId = id,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+            await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
+        }
+
+        // ── UploadDocumentAsync: tạo mới hoặc cập nhật ──────
+        public async Task<DocumentDTO> UploadDocumentAsync(SaveDocumentDTO dto)
         {
             await _unitOfWork.BeginTransactionAsync();
             try
@@ -108,10 +133,6 @@ namespace BoneVisQA.Services.Services.Admin
                     await _unitOfWork.DocumentRepository.UpdateAsync(doc);
                 }
 
-                // Sync tags
-                if (dto.TagIds.Any())
-                    await SyncTagsAsync(doc.Id, dto.TagIds);
-
                 await _unitOfWork.SaveAsync();
                 await _unitOfWork.CommitTransactionAsync();
 
@@ -127,33 +148,11 @@ namespace BoneVisQA.Services.Services.Admin
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
+            var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
+                ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
+
             await SyncTagsAsync(documentId, tagIds);
             await _unitOfWork.SaveAsync();
-        }
-
-        // ── Helper sync tags (dùng nội bộ) ──────────────────
-        private async Task SyncTagsAsync(Guid documentId, List<Guid> newTagIds)
-        {
-            var existing = await _unitOfWork.DocumentTagRepository
-                .FindAsync(dt => dt.DocumentId == documentId);
-
-            // Xóa tags cũ không còn trong danh sách mới
-            var toRemove = existing
-                .Where(dt => !newTagIds.Contains(dt.TagId))
-                .ToList();
-            await _unitOfWork.DocumentTagRepository.RemoveRangeAsync(toRemove);
-
-            // Thêm tags mới chưa có
-            var existingTagIds = existing.Select(dt => dt.TagId).ToHashSet();
-            var toAdd = newTagIds
-                .Where(id => !existingTagIds.Contains(id))
-                .Select(id => new DocumentTag
-                {
-                    DocumentId = documentId,
-                    TagId = id,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-            await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
         }
 
         // ── ChangeCategoryAsync ──────────────────────────────
@@ -171,14 +170,13 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         // ── UploadNewVersionAsync: tăng version ──────────────
-        public async Task<DocumentDTO> UploadNewVersionAsync(Guid documentId, IFormFile file)
+        public async Task<DocumentDTO> UploadNewVersionAsync(Guid documentId)
         {
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
 
-            doc.FilePath = await SaveFileAsync(file);
             doc.Version += 1;
-            doc.IsOutdated = false;  // upload version mới → bỏ đánh dấu lỗi thời
+            doc.IsOutdated = false;
 
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();

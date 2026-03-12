@@ -6,31 +6,6 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Admin
 {
-    public class SystemOverviewDTO
-    {
-        // User
-        public int TotalUsers { get; set; }
-        public int ActiveUsers { get; set; }
-        public int NewUsersThisMonth { get; set; }
-        public int PendingUsers { get; set; }        
-
-        // Hoạt động
-        public int TotalCaseViews { get; set; }
-        public int TotalStudentQuestions { get; set; }
-        public int TotalQuizAttempts { get; set; }
-        public float AvgQuizScore { get; set; }
-
-        // RAG
-        public int TotalDocuments { get; set; }
-        public int TotalChunks { get; set; }
-        public int TotalCitations { get; set; }
-
-        // Expert Review
-        public int TotalReviews { get; set; }
-        public int ApprovedReviews { get; set; }
-        public int RejectedReviews { get; set; }
-    }
-
     // Thống kê user chi tiết
     public class UserStatDTO
     {
@@ -45,11 +20,11 @@ namespace BoneVisQA.Services.Models.Admin
     // Thống kê hoạt động
     public class ActivityStatDTO
     {
-        public int TotalCaseViews { get; set; }
-        public int TotalStudentQuestions { get; set; }
-        public int TotalQuizAttempts { get; set; }
-        public float AvgQuizScore { get; set; }
-        public List<DailyActivityDTO> DailyActivity { get; set; } = new(); 
+        public int TotalCaseViews { get; set; }        
+        public int TotalStudentQuestions { get; set; } 
+        public int TotalQuizAttempts { get; set; }     
+        public float AvgQuizScore { get; set; }        
+        public List<DailyActivityDTO> DailyActivity { get; set; } = new();
     }
 
     public class DailyActivityDTO

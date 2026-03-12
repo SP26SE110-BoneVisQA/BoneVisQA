@@ -13,21 +13,13 @@ namespace BoneVisQA.Services.Models.Admin
     public class DocumentQualityDTO
     {
         public Guid DocumentId { get; set; }
-
         public string Title { get; set; } = null!;
-
         public string? FilePath { get; set; }
-
         public DateTime? CreatedAt { get; set; }
-
+        public int Version { get; set; }
         public int CitationCount { get; set; }
-
-        public int StudentQuestionCount { get; set; }
-
         public int NegativeReviewCount { get; set; }
-
         public bool IsOutdated { get; set; }
-
         public bool RequiresReview { get; set; }
     }
 

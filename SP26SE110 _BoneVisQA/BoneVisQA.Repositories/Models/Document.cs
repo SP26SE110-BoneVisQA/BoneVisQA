@@ -27,8 +27,8 @@ public partial class Document
    
     [Column("version")]
     public int Version { get; set; } = 1;
-    
-    [Column("outdate")]
+
+    [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
 
     [ForeignKey("CategoryId")]

@@ -10,7 +10,7 @@ namespace BoneVisQA.Services.Interfaces.Admin
 {
     public interface IDocumentManagementService
     {
-        Task<DocumentDTO> SaveAsync(SaveDocumentDTO dto);   
+        Task<DocumentDTO> UploadDocumentAsync(SaveDocumentDTO dto);   
 
 
         // ── Tổ chức chủ đề & thẻ ────────────────────────────
@@ -18,7 +18,7 @@ namespace BoneVisQA.Services.Interfaces.Admin
         Task ChangeCategoryAsync(Guid documentId, Guid categoryId);
 
         // ── Quản lý phiên bản & lỗi thời ────────────────────
-        Task<DocumentDTO> UploadNewVersionAsync(Guid documentId, IFormFile file);
+        Task<DocumentDTO> UploadNewVersionAsync(Guid documentId);
         Task MarkOutdatedAsync(Guid documentId, bool isOutdated);
     }
 }

@@ -9,8 +9,6 @@ namespace BoneVisQA.Services.Interfaces.Admin
 {
     public interface ISystemMonitoringService
     {
-        Task<SystemOverviewDTO> GetOverviewAsync();
-
         Task<UserStatDTO> GetUserStatsAsync();
         Task<ActivityStatDTO> GetActivityStatsAsync(DateTime from, DateTime to);
         Task<RagStatDTO> GetRagStatsAsync();

@@ -94,14 +94,6 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(result);
         }
 
-        // GET api/admin/documents/quality/high-question-rate?minQuestionCount=5
-        [HttpGet("high-question-rate")]
-        public async Task<IActionResult> GetHighQuestionRate([FromQuery] int minQuestionCount = 5)
-        {
-            var result = await _qualityservice.GetDocumentsWithHighStudentQuestionRateAsync(minQuestionCount);
-            return Ok(result);
-        }
-
         // GET api/admin/documents/quality/outdated?yearsThreshold=2
         [HttpGet("outdated")]
         public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
@@ -123,9 +115,9 @@ namespace BoneVisQA.API.Controllers.Admin
 
         // POST api/admin/documents
         [HttpPost("documents")]
-        public async Task<IActionResult> Save([FromForm] SaveDocumentDTO dto)
+        public async Task<IActionResult> UploadDocument([FromForm] SaveDocumentDTO dto)
         {
-            var result = await _documentservice.SaveAsync(dto);
+            var result = await _documentservice.UploadDocumentAsync(dto);
             return Ok(result);
         }
 
@@ -147,9 +139,9 @@ namespace BoneVisQA.API.Controllers.Admin
 
         // PUT api/admin/documents/{id}/version
         [HttpPut("{id}/version")]
-        public async Task<IActionResult> UploadNewVersion(Guid id,[FromForm] UploadNewVersionRequestDTO request)
+        public async Task<IActionResult> UploadNewVersion(Guid id)
         {
-            var result = await _documentservice.UploadNewVersionAsync(id, request.File);
+            var result = await _documentservice.UploadNewVersionAsync(id);
             return Ok(result);
         }
 

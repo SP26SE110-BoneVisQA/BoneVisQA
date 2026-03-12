@@ -18,57 +18,6 @@ namespace BoneVisQA.Services.Services.Admin
             _unitOfWork = unitOfWork;
         }
 
-        // ── Dashboard tổng quan ──────────────────────────────
-        public async Task<SystemOverviewDTO> GetOverviewAsync()
-        {
-            var users = await _unitOfWork.UserRepository.GetAllAsync();
-            var caseViews = await _unitOfWork.CaseViewLogRepository.GetAllAsync();
-            var studentQuestions = await _unitOfWork.StudentQuestionRepository.GetAllAsync();
-            var quizAttempts = await _unitOfWork.QuizAttemptRepository.GetAllAsync();
-            var documents = await _unitOfWork.DocumentRepository.GetAllAsync();
-            var chunks = await _unitOfWork.DocumentChunkRepository.GetAllAsync();
-            var citations = await _unitOfWork.CitationRepository.GetAllAsync();
-            var reviews = await _unitOfWork.ExpertReviewRepository.GetAllAsync();
-
-            var thisMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-
-            // Lấy userId có role Pending
-            var pendingRole = await _unitOfWork.RoleRepository
-                .FirstOrDefaultAsync(r => r.Name == "Pending");
-            var pendingUserIds = pendingRole != null
-                ? (await _unitOfWork.UserRoleRepository
-                    .FindAsync(ur => ur.RoleId == pendingRole.Id))
-                    .Select(ur => ur.UserId).ToHashSet()
-                : new HashSet<Guid>();
-
-            return new SystemOverviewDTO
-            {
-                // User
-                TotalUsers = users.Count,
-                ActiveUsers = users.Count(u => u.IsActive),
-                NewUsersThisMonth = users.Count(u => u.CreatedAt >= thisMonth),
-                PendingUsers = pendingUserIds.Count,
-
-                // Hoạt động
-                TotalCaseViews = caseViews.Count,
-                TotalStudentQuestions = studentQuestions.Count,
-                TotalQuizAttempts = quizAttempts.Count,
-                AvgQuizScore = quizAttempts.Any()
-                    ? (float)quizAttempts.Average(q => q.Score)
-                    : 0f,
-
-                // RAG
-                TotalDocuments = documents.Count,
-                TotalChunks = chunks.Count,
-                TotalCitations = citations.Count,
-
-                // Expert Review
-                TotalReviews = reviews.Count,
-                ApprovedReviews = reviews.Count(r => r.Action == "approved"),
-                RejectedReviews = reviews.Count(r => r.Action == "rejected")
-            };
-        }
-
         // ── Thống kê user chi tiết ───────────────────────────
         public async Task<UserStatDTO> GetUserStatsAsync()
         {
@@ -78,6 +27,7 @@ namespace BoneVisQA.Services.Services.Admin
 
             var thisMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
 
+            // Lấy userId có role Pending
             var pendingRole = await _unitOfWork.RoleRepository
                 .FirstOrDefaultAsync(r => r.Name == "Pending");
             var pendingUserIds = pendingRole != null
@@ -98,14 +48,17 @@ namespace BoneVisQA.Services.Services.Admin
                 ActiveUsers = users.Count(u => u.IsActive),
                 InactiveUsers = users.Count(u => !u.IsActive),
                 PendingUsers = pendingUserIds.Count,
-                NewUsersThisMonth = users.Count(u => u.CreatedAt >= thisMonth),
+                NewUsersThisMonth = users.Count(u => u.CreatedAt.HasValue &&
+                                        u.CreatedAt.Value >= thisMonth),
                 UsersByRole = usersByRole
             };
         }
 
-        // ── Thống kê hoạt động theo khoảng thời gian ─────────
+        // ── Thống kê hoạt động ───────────────────────────────
         public async Task<ActivityStatDTO> GetActivityStatsAsync(DateTime from, DateTime to)
         {
+            var stats = await _unitOfWork.LearningStatisticRepository.GetAllAsync();
+
             var caseViews = await _unitOfWork.CaseViewLogRepository
                 .FindAsync(c => c.ViewedAt >= from && c.ViewedAt <= to);
             var questions = await _unitOfWork.StudentQuestionRepository
@@ -113,13 +66,13 @@ namespace BoneVisQA.Services.Services.Admin
             var quizAttempts = await _unitOfWork.QuizAttemptRepository
                 .FindAsync(q => q.StartedAt >= from && q.StartedAt <= to);
 
-            // Group theo ngày
             var dailyActivity = Enumerable.Range(0, (to - from).Days + 1)
                 .Select(i => from.AddDays(i).Date)
                 .Select(date => new DailyActivityDTO
                 {
                     Date = date,
-                    CaseViews = caseViews.Count(c => c.ViewedAt.HasValue && c.ViewedAt.Value.Date == date),
+                    CaseViews = caseViews.Count(c => c.ViewedAt.HasValue &&
+                                       c.ViewedAt.Value.Date == date),
                     Questions = questions.Count(q => q.CreatedAt.HasValue &&
                                        q.CreatedAt.Value.Date == date),
                     QuizAttempts = quizAttempts.Count(q => q.StartedAt.HasValue &&
@@ -128,11 +81,12 @@ namespace BoneVisQA.Services.Services.Admin
 
             return new ActivityStatDTO
             {
-                TotalCaseViews = caseViews.Count,
-                TotalStudentQuestions = questions.Count,
+                TotalCaseViews = stats.Sum(s => s.TotalCasesViewed ?? 0),
+                TotalStudentQuestions = stats.Sum(s => s.TotalQuestionsAsked ?? 0),
                 TotalQuizAttempts = quizAttempts.Count,
-                AvgQuizScore = quizAttempts.Any()
-                    ? (float)quizAttempts.Average(q => q.Score)
+                AvgQuizScore = stats.Any(s => s.AvgQuizScore.HasValue)
+                    ? (float)stats.Where(s => s.AvgQuizScore.HasValue)
+                                  .Average(s => s.AvgQuizScore!.Value)
                     : 0f,
                 DailyActivity = dailyActivity
             };
@@ -145,7 +99,7 @@ namespace BoneVisQA.Services.Services.Admin
             var chunks = await _unitOfWork.DocumentChunkRepository.GetAllAsync();
             var citations = await _unitOfWork.CitationRepository.GetAllAsync();
 
-            // Top tài liệu được cite nhiều nhất
+            // Map chunk → doc
             var chunkDocMap = chunks.ToDictionary(c => c.Id, c => c.DocId);
 
             var topCited = citations
@@ -183,9 +137,9 @@ namespace BoneVisQA.Services.Services.Admin
             return new ExpertReviewStatDTO
             {
                 TotalReviews = reviews.Count,
-                ApprovedReviews = reviews.Count(r => r.Action == "approved"),
-                RejectedReviews = reviews.Count(r => r.Action == "rejected"),
-                PendingAnswers = answers.Count(a => a.Status == "pending")
+                ApprovedReviews = reviews.Count(r => r.Action == "Approve"),
+                RejectedReviews = reviews.Count(r => r.Action == "Reject"),
+                PendingAnswers = answers.Count(a => a.Status == "Pending")
             };
         }
     }

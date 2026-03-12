@@ -15,18 +15,6 @@ namespace BoneVisQA.API.Controllers.Admin
             _service = service;
         }
 
-        // GET api/admin/monitoring/overview
-        [HttpGet("overview")]
-        public async Task<IActionResult> GetOverview()
-        {
-            var result = await _service.GetOverviewAsync();
-            return Ok(new
-            {
-                Message = "Get overview successfully.",
-                result
-            });
-        }
-
         // GET api/admin/monitoring/users
         [HttpGet("users")]
         public async Task<IActionResult> GetUserStats()

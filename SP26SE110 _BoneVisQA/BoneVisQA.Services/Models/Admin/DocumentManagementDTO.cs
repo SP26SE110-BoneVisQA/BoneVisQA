@@ -13,7 +13,6 @@ namespace BoneVisQA.Services.Models.Admin
         public string Title { get; set; } = null!;
         public IFormFile? File { get; set; }
         public Guid? CategoryId { get; set; }
-        public List<Guid> TagIds { get; set; } = new();
     }
 
     public class DocumentFilterDTO
