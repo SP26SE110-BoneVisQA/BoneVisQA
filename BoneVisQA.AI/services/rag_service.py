@@ -1,18 +1,18 @@
 """
 Online pipeline: embed user question (local sentence-transformers), search Supabase via RPC,
-fetch image, build multimodal prompt, call Gemini 1.5 Pro, return structured VQA_Response.
+fetch image, build multimodal prompt, call OpenRouter (Meta LLaMA Vision), return structured VQA_Response.
 """
+import base64
 import json
+import os
 import re
 from uuid import UUID
 
-from google import genai
-from google.genai import types
 import requests
+from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 
 from config import (
-    GEMINI_API_KEY,
     RAG_MATCH_COUNT,
     RAG_MATCH_THRESHOLD,
     SUPABASE_KEY,
@@ -143,26 +143,48 @@ def generate_diagnostic_answer(request: VQA_Request) -> VQA_Response:
         request.language,
     )
 
-    # Step D: Call Gemini (new google-genai SDK)
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    # Step D: Call OpenRouter (Meta LLaMA vision) via OpenAI SDK
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY is not set")
+
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+    # Build message payload
     if image_bytes and mime_type:
-        contents = [
-            types.Part.from_text(prompt),
-            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        content = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime_type};base64,{image_b64}",
+                },
+            },
         ]
     else:
-        contents = [types.Part.from_text(prompt)]
-    response = client.models.generate_content(
-        model="gemini-1.5-pro",
-        contents=contents,
-        config=types.GenerateContentConfig(response_mime_type="application/json"),
-    )
+        content = [{"type": "text", "text": prompt}]
+
+    messages = [
+        {
+            "role": "user",
+            "content": content,
+        }
+    ]
+
     try:
-        response_text = response.text
-    except (AttributeError, ValueError):
-        response_text = None
-        if getattr(response, "candidates", None) and response.candidates and response.candidates[0].content.parts:
-            response_text = response.candidates[0].content.parts[0].text
+        response = client.chat.completions.create(
+            model="meta-llama/llama-3.2-11b-vision-instruct:free",
+            messages=messages,
+            temperature=0.2,
+        )
+        response_text = response.choices[0].message.content
+    except Exception as e:
+        raise RuntimeError(f"OpenRouter generation error: {e}") from e
+
     if not response_text:
         return VQA_Response(
             answer_text="No response generated.",
