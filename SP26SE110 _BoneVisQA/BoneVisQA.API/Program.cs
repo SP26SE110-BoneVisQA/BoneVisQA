@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using BoneVisQA.Repositories.DBContext;
@@ -65,9 +66,12 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
         npgsqlOptions => npgsqlOptions.SetPostgresVersion(15, 0)));
 
-// JWT Configuration
+// JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
-var key = Encoding.UTF8.GetBytes(jwtKey);
+var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+if (keyBytes.Length < 32)
+    keyBytes = SHA256.HashData(keyBytes);
+var key = keyBytes;
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
