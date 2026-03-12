@@ -73,21 +73,21 @@ public class StudentRepository : IStudentRepository
 
     public async Task<CaseViewLog> AddCaseViewLogAsync(CaseViewLog log)
     {
-        await _unitOfWork.CaseViewLogRepository.CreateAsync(log);
+        await _unitOfWork.CaseViewLogRepository.AddAsync(log);
         await _unitOfWork.SaveAsync();
         return log;
     }
 
     public async Task<CaseAnnotation> CreateAnnotationAsync(CaseAnnotation annotation)
     {
-        await _unitOfWork.CaseAnnotationRepository.CreateAsync(annotation);
+        await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
         await _unitOfWork.SaveAsync();
         return annotation;
     }
 
     public async Task<StudentQuestion> CreateStudentQuestionAsync(StudentQuestion question)
     {
-        await _unitOfWork.StudentQuestionRepository.CreateAsync(question);
+        await _unitOfWork.StudentQuestionRepository.AddAsync(question);
         await _unitOfWork.SaveAsync();
         return question;
     }
@@ -176,7 +176,7 @@ public class StudentRepository : IStudentRepository
 
     public async Task<QuizAttempt> CreateQuizAttemptAsync(QuizAttempt attempt)
     {
-        await _unitOfWork.QuizAttemptRepository.CreateAsync(attempt);
+        await _unitOfWork.QuizAttemptRepository.AddAsync(attempt);
         await _unitOfWork.SaveAsync();
         return attempt;
     }
@@ -191,7 +191,7 @@ public class StudentRepository : IStudentRepository
     {
         foreach (var answer in answers)
         {
-            await _unitOfWork.StudentQuizAnswerRepository.CreateAsync(answer);
+            await _unitOfWork.StudentQuizAnswerRepository.AddAsync(answer);
         }
         await _unitOfWork.SaveAsync();
     }

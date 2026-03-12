@@ -95,7 +95,7 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
-builder.Services.AddScoped<IQuizService, QuizService>();
+builder.Services.AddScoped<BoneVisQA.Services.Interfaces.IQuizService, BoneVisQA.Services.Services.QuizService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
 builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();

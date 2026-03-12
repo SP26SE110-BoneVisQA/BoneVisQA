@@ -1,5 +1,4 @@
 using BoneVisQA.Repositories.Basic;
-﻿using BoneVisQA.Repositories.Basic;
 using BoneVisQA.Repositories.Models;
 using System;
 using System.Collections.Generic;
@@ -37,7 +36,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<CaseTag> CaseTagRepository { get; }
         GenericRepository<Tag> TagRepository { get; }
         GenericRepository<DocumentTag> DocumentTagRepository { get; }
-        GenericRepository<ClassQuiz> ClassQuizRepository { get; }
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();

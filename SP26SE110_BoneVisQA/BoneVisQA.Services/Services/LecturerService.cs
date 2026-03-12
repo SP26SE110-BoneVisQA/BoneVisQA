@@ -33,7 +33,7 @@ public class LecturerService : ILecturerService
             UpdatedAt = now
         };
 
-        await _unitOfWork.AcademicClassRepository.CreateAsync(entity);
+        await _unitOfWork.AcademicClassRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         return new ClassDto
@@ -83,7 +83,7 @@ public class LecturerService : ILecturerService
             EnrolledAt = DateTime.UtcNow
         };
 
-        await _unitOfWork.ClassEnrollmentRepository.CreateAsync(enrollment);
+        await _unitOfWork.ClassEnrollmentRepository.AddAsync(enrollment);
         await _unitOfWork.SaveAsync();
         return true;
     }
@@ -109,7 +109,7 @@ public class LecturerService : ILecturerService
                 EnrolledAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.ClassEnrollmentRepository.CreateAsync(enrollment);
+            await _unitOfWork.ClassEnrollmentRepository.AddAsync(enrollment);
         }
 
         await _unitOfWork.SaveAsync();
@@ -202,7 +202,7 @@ public class LecturerService : ILecturerService
             CreatedAt = now
         };
 
-        await _unitOfWork.AnnouncementRepository.CreateAsync(entity);
+        await _unitOfWork.AnnouncementRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         return new AnnouncementDto
@@ -229,7 +229,7 @@ public class LecturerService : ILecturerService
             CreatedAt = now
         };
 
-        await _unitOfWork.QuizRepository.CreateAsync(entity);
+        await _unitOfWork.QuizRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         var classQuiz = new ClassQuiz
@@ -238,7 +238,7 @@ public class LecturerService : ILecturerService
             QuizId = entity.Id,
             AssignedAt = now
         };
-        await _unitOfWork.ClassQuizRepository.CreateAsync(classQuiz);
+        await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
         await _unitOfWork.SaveAsync();
 
         return new QuizDto
@@ -291,7 +291,7 @@ public class LecturerService : ILecturerService
             CorrectAnswer = request.CorrectAnswer
         };
 
-        await _unitOfWork.QuizQuestionRepository.CreateAsync(entity);
+        await _unitOfWork.QuizQuestionRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         return new QuizQuestionDto

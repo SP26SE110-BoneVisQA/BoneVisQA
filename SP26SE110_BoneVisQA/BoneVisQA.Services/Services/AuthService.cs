@@ -9,10 +9,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
-using BoneVisQA.Repositories.Models;
-using BoneVisQA.Repositories.Services;
-using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Auth;
 
 namespace BoneVisQA.Services.Services;
 
@@ -46,7 +42,6 @@ public class AuthService : IAuthService
             .FindByCondition(r => r.Name == "Pending")
             .FirstOrDefaultAsync();
 
-        var role = await _authRepository.GetRoleByNameAsync("Pending");
         if (role == null)
         {
             return new AuthResultDto
@@ -69,7 +64,7 @@ public class AuthService : IAuthService
             UpdatedAt = now
         };
 
-        await _unitOfWork.UserRepository.CreateAsync(user);
+        await _unitOfWork.UserRepository.AddAsync(user);
 
         var userRole = new UserRole
         {
@@ -79,7 +74,7 @@ public class AuthService : IAuthService
             AssignedAt = now
         };
 
-        await _unitOfWork.UserRoleRepository.CreateAsync(userRole);
+        await _unitOfWork.UserRoleRepository.AddAsync(userRole);
         await _unitOfWork.SaveAsync();
 
         return new AuthResultDto

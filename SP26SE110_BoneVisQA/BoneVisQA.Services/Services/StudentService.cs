@@ -221,6 +221,17 @@ public class StudentService : IStudentService
     {
         var utcNow = DateTime.UtcNow;
         var quizzes = await _studentRepository.GetQuizzesForStudentAsync(studentId, utcNow);
+        return quizzes.Select(q => new QuizListItemDto
+        {
+            QuizId = q.Id,
+            Title = q.Title ?? string.Empty,
+            OpenTime = q.OpenTime,
+            CloseTime = q.CloseTime,
+            TimeLimit = q.TimeLimit,
+            PassingScore = q.PassingScore,
+            IsCompleted = false,
+            Score = null
+        }).ToList();
     }
 
 

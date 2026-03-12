@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -30,12 +30,6 @@ public partial class Document
 
     [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
-
-    [Column("version")]
-    public int Version { get; set; }
-
-    [Column("is_outdated")]
-    public bool IsOutdated { get; set; }
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]

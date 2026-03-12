@@ -153,23 +153,21 @@ namespace BoneVisQA.Repositories.Basic
             return _dbSet.FirstOrDefault(filter);
         }
 
-        public IQueryable<T> FindByCondition(System.Linq.Expressions.Expression<Func<T, bool>> expression)
+        public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
         {
-            return _context.Set<T>().Where(expression);
+            return _dbSet.Where(expression);
         }
 
         public async Task<int> DeleteAsync(Guid id)
         {
-            var entity = await _context.Set<T>().FindAsync(id);
+            var entity = await _dbSet.FindAsync(id);
             if (entity != null)
             {
-                _context.Set<T>().Remove(entity);
+                _dbSet.Remove(entity);
                 return await _context.SaveChangesAsync();
             }
             return 0;
         }
-
-        #region Separating asigning entity to DBContext (thao tac vs RAM) and save operators (save changes once to persistent DB)       
 
         public virtual async Task<IList<TEntity>> GetAllAsync(Expression<Func<IQueryable<TEntity>, IQueryable<TEntity>>>? include)
         {
