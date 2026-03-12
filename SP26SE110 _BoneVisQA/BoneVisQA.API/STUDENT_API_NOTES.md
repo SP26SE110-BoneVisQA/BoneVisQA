@@ -1,11 +1,11 @@
-## Student API Notes
+# Student API Notes
 
-### 1. Chạy API & đăng nhập Student
+## 1. Chạy API & đăng nhập Student
 
 - Chạy backend: `dotnet run --project BoneVisQA.API`
-- Mở Swagger: `https://localhost:5001/swagger`.
+- Mở Swagger: `http://localhost:5046/swagger` (hoặc port trong console)
 
-#### Đăng ký Student
+### Đăng ký Student
 
 - `POST /api/Auths/register`
   ```json
@@ -18,7 +18,7 @@
   }
   ```
 
-#### Đăng nhập Student
+### Đăng nhập Student
 
 - `POST /api/Auths/login`
   ```json
@@ -30,15 +30,13 @@
 - Lấy `token` trong response, dùng cho các request sau:
   - Header: `Authorization: Bearer <token>`
 
-> Lưu ý: hiện tại controller đang nhận `studentId` qua query. Khi tích hợp bảo mật đầy đủ, có thể lấy `studentId` trực tiếp từ JWT.
-
 ---
 
-### 2. Chức năng chính cho Student (StudentController)
+## 2. Chức năng chính cho Student (StudentsController)
 
-#### 2.1. Xem danh sách ca bệnh
+### 2.1. Xem danh sách ca bệnh
 
-- `GET /api/Student/cases?studentId={GUID-STUDENT-ID}`
+- `GET /api/Students/cases?studentId={GUID-STUDENT-ID}`
 - Kết quả: danh sách `CaseListItemDto`:
   ```json
   [
@@ -53,9 +51,18 @@
   ]
   ```
 
-#### 2.2. Xem chi tiết ca bệnh (và ghi log xem ca)
+### 2.2. Lọc ca bệnh (Filter)
 
-- `GET /api/Student/cases/{caseId}?studentId={GUID-STUDENT-ID}`
+- `GET /api/Students/cases/filter?studentId={GUID-STUDENT-ID}`
+- Query params:
+  - `difficulty`: "basic" | "intermediate" | "advanced" (optional)
+  - `categoryId`: GUID category (optional)
+  - `searchTerm`: từ khóa tìm kiếm (optional)
+- Kết quả: danh sách `CaseListItemDto` (tương tự 2.1)
+
+### 2.3. Xem chi tiết ca bệnh (và ghi log xem ca)
+
+- `GET /api/Students/cases/{caseId}?studentId={GUID-STUDENT-ID}`
 - Kết quả: `CaseDetailDto`:
   ```json
   {
@@ -74,9 +81,9 @@
   }
   ```
 
-#### 2.3. Tạo annotation trên ảnh
+### 2.4. Tạo annotation trên ảnh
 
-- `POST /api/Student/annotations?studentId={GUID-STUDENT-ID}`
+- `POST /api/Students/annotations?studentId={GUID-STUDENT-ID}`
 - Body:
   ```json
   {
@@ -85,11 +92,12 @@
     "coordinates": "{\"x\":100,\"y\":150,\"width\":80,\"height\":60}"
   }
   ```
+- **Lưu ý**: `coordinates` phải là JSON hợp lệ (định dạng `{"x":..., "y":..., "width":..., "height":...}`).
 - Kết quả: `AnnotationDto` với `id`, `imageId`, `label`, `coordinates`, `createdAt`.
 
-#### 2.4. Gửi câu hỏi (Visual Q&A – lưu lịch sử)
+### 2.5. Gửi câu hỏi (Visual Q&A – lưu lịch sử)
 
-- `POST /api/Student/questions?studentId={GUID-STUDENT-ID}`
+- `POST /api/Students/questions?studentId={GUID-STUDENT-ID}`
 - Body:
   ```json
   {
@@ -99,11 +107,14 @@
     "language": "en"
   }
   ```
+- **Lưu ý**:
+  - `language`: chỉ chấp nhận "vi" hoặc "en" (hệ thống tự chuyển đổi VIE → vi, EN → en).
+  - `caseId` có thể để trống (null) nếu câu hỏi không gắn với ca bệnh cụ thể.
 - Kết quả: `StudentQuestionDto`.
 
-#### 2.5. Xem lịch sử câu hỏi
+### 2.6. Xem lịch sử câu hỏi
 
-- `GET /api/Student/questions?studentId={GUID-STUDENT-ID}`
+- `GET /api/Students/questions?studentId={GUID-STUDENT-ID}`
 - Kết quả: danh sách `StudentQuestionHistoryItemDto`:
   ```json
   [
@@ -116,9 +127,26 @@
   ]
   ```
 
-#### 2.6. Xem danh sách quiz được giao
+### 2.7. Xem thông báo của lớp
 
-- `GET /api/Student/quizzes?studentId={GUID-STUDENT-ID}`
+- `GET /api/Students/announcements?studentId={GUID-STUDENT-ID}`
+- Kết quả: danh sách `StudentAnnouncementDto`:
+  ```json
+  [
+    {
+      "id": "GUID-ANNOUNCEMENT-ID",
+      "classId": "GUID-CLASS-ID",
+      "className": "Orthopedics - Class A 2026",
+      "title": "New bone fracture cases",
+      "content": "Please review...",
+      "createdAt": "2026-03-07T09:00:00Z"
+    }
+  ]
+  ```
+
+### 2.8. Xem danh sách quiz được giao
+
+- `GET /api/Students/quizzes?studentId={GUID-STUDENT-ID}`
 - Kết quả: danh sách `QuizListItemDto`:
   ```json
   [
@@ -135,9 +163,9 @@
   ]
   ```
 
-#### 2.7. Bắt đầu làm quiz
+### 2.9. Bắt đầu làm quiz
 
-- `POST /api/Student/quizzes/{quizId}/start?studentId={GUID-STUDENT-ID}`
+- `POST /api/Students/quizzes/{quizId}/start?studentId={GUID-STUDENT-ID}`
 - Kết quả: `QuizSessionDto`:
   ```json
   {
@@ -155,9 +183,10 @@
   }
   ```
 
-#### 2.8. Nộp bài quiz
+### 2.10. Nộp bài quiz
 
-- `POST /api/Student/quizzes/submit?studentId={GUID-STUDENT-ID}`
+- `POST /api/Students/quizzes/submit?studentId={GUID-STUDENT-ID}`
+- **Lưu ý**: `studentId` có thể bỏ trống nếu đã đăng nhập (hệ thống tự lấy từ JWT).
 - Body:
   ```json
   {
@@ -181,9 +210,9 @@
   }
   ```
 
-#### 2.9. Xem tổng quan tiến độ học tập
+### 2.11. Xem tổng quan tiến độ học tập
 
-- `GET /api/Student/progress?studentId={GUID-STUDENT-ID}`
+- `GET /api/Students/progress?studentId={GUID-STUDENT-ID}`
 - Kết quả: `StudentProgressDto`:
   ```json
   {
@@ -195,17 +224,34 @@
 
 ---
 
-### 3. Flow mẫu cho Student
+## 3. Flow mẫu cho Student
 
-1. Đăng ký Student → đăng nhập lấy JWT.
-2. Vào Swagger:
-   - Xem danh sách ca bệnh (`/api/Student/cases`).
-   - Mở chi tiết ca để xem ảnh (`/api/Student/cases/{caseId}`).
-   - Tạo annotation vùng nghi ngờ (`/api/Student/annotations`).
-   - Gửi câu hỏi cho hệ thống (lưu lịch sử) (`/api/Student/questions`).
-3. Làm quiz:
-   - Xem quiz được giao (`/api/Student/quizzes`).
-   - Bắt đầu một quiz (`/api/Student/quizzes/{quizId}/start`).
-   - Nộp bài (`/api/Student/quizzes/submit`).
-4. Xem `progress` để theo dõi quá trình học.
+1. **Đăng ký & Đăng nhập** → lấy JWT.
+2. **Xem ca bệnh**:
+   - Xem danh sách (`/api/Students/cases`).
+   - Lọc ca (`/api/Students/cases/filter`).
+   - Mở chi tiết ca (`/api/Students/cases/{caseId}`) → tự động ghi log.
+3. **Tương tác**:
+   - Tạo annotation (`/api/Students/annotations`).
+   - Gửi câu hỏi (`/api/Students/questions`).
+   - Xem lịch sử câu hỏi (`/api/Students/questions`).
+4. **Làm quiz**:
+   - Xem quiz được giao (`/api/Students/quizzes`).
+   - Bắt đầu quiz (`/api/Students/quizzes/{quizId}/start`).
+   - Nộp bài (`/api/Students/quizzes/submit`).
+5. **Theo dõi**:
+   - Xem thông báo (`/api/Students/announcements`).
+   - Xem tiến độ (`/api/Students/progress`).
+
+---
+
+## 4. Các lỗi thường gặp & cách xử lý
+
+| Lỗi | Nguyên nhân | Cách xử lý |
+|-----|-------------|-------------|
+| `student_questions_language_check` | `language` không phải "vi" hoặc "en" | Dùng đúng giá trị "vi" hoặc "en" |
+| `invalid input syntax for type json` | `coordinates` không phải JSON hợp lệ | Dùng format `{"x":100,"y":150,"width":80,"height":60}` |
+| `student_questions_student_id_fkey` | `studentId` không tồn tại trong bảng users | Truyền đúng `studentId` (id từ bảng users) |
+| `Lần làm quiz không tồn tại` | `attemptId` không đúng hoặc không thuộc student đó | Dùng `attemptId` từ API start quiz, `studentId` phải trùng |
+| `CaseId` null error | DB chấp nhận null nhưng code không | Dùng `Guid.Empty` hoặc bỏ trống nếu không có case |
 
