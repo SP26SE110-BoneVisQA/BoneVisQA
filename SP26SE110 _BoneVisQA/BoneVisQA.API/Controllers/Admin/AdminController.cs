@@ -104,6 +104,20 @@ namespace BoneVisQA.API.Controllers.Admin
             });
         }
 
+        // GET api/admin/documents/quality/flagged-for-review
+        [HttpGet("flagged-for-review")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetDocumentsFlaggedForReview()
+        {
+            var result = await _qualityservice.GetDocumentsFlaggedForReviewAsync();
+           
+            return Ok(new
+            {
+                Message = "Get documents flagged for review successfully.",
+                result
+            });
+        }
+
         // GET api/admin/documents/quality/outdated?yearsThreshold=2
         [HttpGet("outdated")]
         public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)

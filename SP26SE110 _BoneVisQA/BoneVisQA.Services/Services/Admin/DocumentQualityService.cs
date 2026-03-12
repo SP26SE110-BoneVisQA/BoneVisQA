@@ -97,5 +97,22 @@ namespace BoneVisQA.Services.Services.Admin
 
             return dtos.OrderBy(d => d.CreatedAt).ToList();
         }
+
+        public async Task<List<DocumentQualityDTO>> GetDocumentsFlaggedForReviewAsync()
+        {
+            var allDocs = await _unitOfWork.DocumentRepository.GetAllAsync();
+            var dtos = new List<DocumentQualityDTO>();
+
+            foreach (var doc in allDocs)
+            {
+                var dto = await BuildDTOAsync(doc);
+                if (dto.RequiresReview)
+                    dtos.Add(dto);
+            }
+
+            return dtos.OrderByDescending(d => d.NegativeReviewCount)
+                       .ThenBy(d => d.CreatedAt)
+                       .ToList();
+        }
     }
 }
