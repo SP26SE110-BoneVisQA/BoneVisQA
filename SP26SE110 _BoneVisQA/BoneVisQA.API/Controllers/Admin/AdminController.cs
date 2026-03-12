@@ -83,7 +83,12 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetMostReferenced([FromQuery] int top = 10)
         {
             var result = await _qualityservice.GetMostReferencedDocumentsAsync(top);
-            return Ok(result);
+           
+            return Ok(new
+            {
+                Message = "Get most reference document successfully.",
+                result
+            });
         }
 
         // GET api/admin/documents/quality/negative-reviews
@@ -91,7 +96,12 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetNegativeReviews()
         {
             var result = await _qualityservice.GetDocumentsWithNegativeExpertReviewsAsync();
-            return Ok(result);
+          
+            return Ok(new
+            {
+                Message = "Get documents negative review successfully.",
+                result
+            });
         }
 
         // GET api/admin/documents/quality/outdated?yearsThreshold=2
@@ -99,17 +109,13 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
         {
             var result = await _qualityservice.GetOutdatedDocumentsAsync(yearsThreshold);
-            return Ok(result);
+           
+            return Ok(new
+            {
+                Message = "Get outdated document successfully.",
+                result
+            });
         }
-
-        // GET api/admin/documents/quality/require-review
-        [HttpGet("require-review")]
-        public async Task<IActionResult> GetRequireReview()
-        {
-            var result = await _qualityservice.GetDocumentsRequireReviewAsync();
-            return Ok(result);
-        }
-
 
         //==========================================================================================================================================
 
@@ -118,23 +124,35 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> UploadDocument([FromForm] SaveDocumentDTO dto)
         {
             var result = await _documentservice.UploadDocumentAsync(dto);
-            return Ok(result);
+
+            return Ok(new
+            {
+                Message = "Upload document successfully.",
+                result
+            });
         }
 
         // PUT api/admin/documents/{id}/tags
-        [HttpPut("{id}/tags")]
-        public async Task<IActionResult> UpdateTags(Guid id, [FromBody] List<Guid> tagIds)
+        [HttpPut("tags")]
+        public async Task<IActionResult> UpdateTags(
+     [FromQuery] Guid documentId,
+     [FromQuery] List<Guid> tagIds)
         {
-            await _documentservice.UpdateTagsAsync(id, tagIds);
-            return NoContent();
+            var result = await _documentservice.UpdateTagsAsync(documentId, tagIds);
+            return Ok(result);
         }
 
         // PUT api/admin/documents/{id}/category
         [HttpPut("{id}/category/{categoryId}")]
-        public async Task<IActionResult> ChangeCategory(Guid id, Guid categoryId)
+        public async Task<IActionResult> ChangeCategory(Guid id, [FromHeader] Guid categoryId)
         {
-            await _documentservice.ChangeCategoryAsync(id, categoryId);
-            return NoContent();
+            var result = await _documentservice.ChangeCategoryAsync(id, categoryId);
+
+            return Ok(new
+            {
+                Message = "Change document category successfully.",
+                result
+            });
         }
 
         // PUT api/admin/documents/{id}/version
@@ -142,15 +160,25 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> UploadNewVersion(Guid id)
         {
             var result = await _documentservice.UploadNewVersionAsync(id);
-            return Ok(result);
+
+            return Ok(new
+            {
+                Message = "Upload document version successfully.",
+                result
+            });
         }
 
         // PUT api/admin/documents/{id}/outdated
         [HttpPut("{id}/outdated")]
         public async Task<IActionResult> MarkOutdated(Guid id, [FromBody] bool isOutdated)
         {
-            await _documentservice.MarkOutdatedAsync(id, isOutdated);
-            return NoContent();
+            var result = await _documentservice.MarkOutdatedAsync(id, isOutdated);
+
+            return Ok(new
+            {
+                Message = "Mark document outdate successfully.",
+                result
+            });
         }
     }
 }

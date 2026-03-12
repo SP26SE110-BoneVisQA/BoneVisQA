@@ -55,14 +55,13 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         // ── Thống kê hoạt động ───────────────────────────────
-        public async Task<ActivityStatDTO> GetActivityStatsAsync(DateTime from, DateTime to)
+        public async Task<ActivityStatDTO> GetActivityStatsAsync(DateTimeOffset from, DateTimeOffset to)
         {
             var stats = await _unitOfWork.LearningStatisticRepository.GetAllAsync();
 
             var caseViews = await _unitOfWork.CaseViewLogRepository
                 .FindAsync(c => c.ViewedAt >= from && c.ViewedAt <= to);
-            var questions = await _unitOfWork.StudentQuestionRepository
-                .FindAsync(q => q.CreatedAt >= from && q.CreatedAt <= to);
+
             var quizAttempts = await _unitOfWork.QuizAttemptRepository
                 .FindAsync(q => q.StartedAt >= from && q.StartedAt <= to);
 
@@ -73,8 +72,7 @@ namespace BoneVisQA.Services.Services.Admin
                     Date = date,
                     CaseViews = caseViews.Count(c => c.ViewedAt.HasValue &&
                                        c.ViewedAt.Value.Date == date),
-                    Questions = questions.Count(q => q.CreatedAt.HasValue &&
-                                       q.CreatedAt.Value.Date == date),
+                    Questions = 0,
                     QuizAttempts = quizAttempts.Count(q => q.StartedAt.HasValue &&
                                        q.StartedAt.Value.Date == date)
                 }).ToList();
@@ -82,7 +80,7 @@ namespace BoneVisQA.Services.Services.Admin
             return new ActivityStatDTO
             {
                 TotalCaseViews = stats.Sum(s => s.TotalCasesViewed ?? 0),
-                TotalStudentQuestions = stats.Sum(s => s.TotalQuestionsAsked ?? 0),
+                TotalStudentQuestions = stats.Sum(s => s.TotalQuestionsAsked ?? 0), 
                 TotalQuizAttempts = quizAttempts.Count,
                 AvgQuizScore = stats.Any(s => s.AvgQuizScore.HasValue)
                     ? (float)stats.Where(s => s.AvgQuizScore.HasValue)

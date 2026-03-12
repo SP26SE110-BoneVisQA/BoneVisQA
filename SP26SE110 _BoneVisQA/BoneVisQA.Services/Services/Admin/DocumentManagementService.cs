@@ -67,31 +67,6 @@ namespace BoneVisQA.Services.Services.Admin
             };
         }
 
-        // ── Helper: sync tags ────────────────────────────────
-        private async Task SyncTagsAsync(Guid documentId, List<Guid> newTagIds)
-        {
-            var existing = await _unitOfWork.DocumentTagRepository
-                .FindAsync(dt => dt.DocumentId == documentId);
-
-            // Xóa tags cũ không còn trong danh sách mới
-            var toRemove = existing
-                .Where(dt => !newTagIds.Contains(dt.TagId))
-                .ToList();
-            await _unitOfWork.DocumentTagRepository.RemoveRangeAsync(toRemove);
-
-            // Thêm tags mới chưa có
-            var existingTagIds = existing.Select(dt => dt.TagId).ToHashSet();
-            var toAdd = newTagIds
-                .Where(id => !existingTagIds.Contains(id))
-                .Select(id => new DocumentTag
-                {
-                    DocumentId = documentId,
-                    TagId = id,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-            await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
-        }
-
         // ── UploadDocumentAsync: tạo mới hoặc cập nhật ──────
         public async Task<DocumentDTO> UploadDocumentAsync(SaveDocumentDTO dto)
         {
@@ -146,17 +121,37 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
-        public async Task UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
+        public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
 
-            await SyncTagsAsync(documentId, tagIds);
+            // Sync tags trực tiếp, không cần helper riêng
+            var existing = await _unitOfWork.DocumentTagRepository
+                .FindAsync(dt => dt.DocumentId == documentId);
+
+            var toRemove = existing
+                .Where(dt => !tagIds.Contains(dt.TagId))
+                .ToList();
+            await _unitOfWork.DocumentTagRepository.RemoveRangeAsync(toRemove);
+
+            var existingTagIds = existing.Select(dt => dt.TagId).ToHashSet();
+            var toAdd = tagIds
+                .Where(id => !existingTagIds.Contains(id))
+                .Select(id => new DocumentTag
+                {
+                    DocumentId = documentId,
+                    TagId = id,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+            await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
+
             await _unitOfWork.SaveAsync();
+            return await MapToDTOAsync(doc);
         }
 
         // ── ChangeCategoryAsync ──────────────────────────────
-        public async Task ChangeCategoryAsync(Guid documentId, Guid categoryId)
+        public async Task<DocumentDTO> ChangeCategoryAsync(Guid documentId, Guid categoryId)
         {
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
@@ -167,6 +162,8 @@ namespace BoneVisQA.Services.Services.Admin
             doc.CategoryId = categoryId;
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
+
+            return await MapToDTOAsync(doc);    
         }
 
         // ── UploadNewVersionAsync: tăng version ──────────────
@@ -185,7 +182,7 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         // ── MarkOutdatedAsync ────────────────────────────────
-        public async Task MarkOutdatedAsync(Guid documentId, bool isOutdated)
+        public async Task<DocumentDTO> MarkOutdatedAsync(Guid documentId, bool isOutdated)
         {
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
@@ -193,6 +190,8 @@ namespace BoneVisQA.Services.Services.Admin
             doc.IsOutdated = isOutdated;
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
+
+            return await MapToDTOAsync(doc);
         }
     }
 }

@@ -32,6 +32,7 @@ namespace BoneVisQA.Services.Services.Admin
 
             // Đếm NegativeReview qua citations → case_answers → expert_reviews
             var answerIds = citations.Select(c => c.AnswerId).Distinct().ToHashSet();
+          
             var negativeReviews = await _unitOfWork.ExpertReviewRepository
                 .FindAsync(r => answerIds.Contains(r.AnswerId) && r.Action == "Reject");
             int negativeReviewCount = negativeReviews.Count;
@@ -95,24 +96,6 @@ namespace BoneVisQA.Services.Services.Admin
                 dtos.Add(await BuildDTOAsync(doc));
 
             return dtos.OrderBy(d => d.CreatedAt).ToList();
-        }
-
-        // ── Tài liệu cần rà soát ────────────────────────────
-        public async Task<List<DocumentQualityDTO>> GetDocumentsRequireReviewAsync()
-        {
-            var allDocs = await _unitOfWork.DocumentRepository.GetAllAsync();
-            var dtos = new List<DocumentQualityDTO>();
-
-            foreach (var doc in allDocs)
-            {
-                var dto = await BuildDTOAsync(doc);
-                if (dto.RequiresReview)
-                    dtos.Add(dto);
-            }
-
-            return dtos.OrderByDescending(d => d.NegativeReviewCount)
-                       .ThenBy(d => d.CreatedAt)
-                       .ToList();
         }
     }
 }
