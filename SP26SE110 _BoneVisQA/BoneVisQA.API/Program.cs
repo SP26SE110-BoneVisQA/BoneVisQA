@@ -89,13 +89,10 @@ var app = builder.Build();
 // CORS
 app.UseCors("AllowAll");
 
-// Swagger
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+// Swagger (bật cả Production để test API trên Render)
+app.UseSwagger();
+app.UseSwaggerUI();
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
