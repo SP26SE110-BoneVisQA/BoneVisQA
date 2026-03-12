@@ -1,13 +1,18 @@
 using System.Security.Claims;
 using System.Text;
-using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
+using BoneVisQA.Services.Services.Admin;
+using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -83,6 +88,15 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
+builder.Services.AddScoped<IQuizService, QuizService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<ITagCaseService, TagCaseService>();
+builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
+builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
+builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 
 var app = builder.Build();
 

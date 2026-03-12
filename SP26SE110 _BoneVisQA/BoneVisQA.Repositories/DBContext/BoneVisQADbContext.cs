@@ -23,6 +23,7 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<CaseAnnotation> CaseAnnotations { get; set; }
 
     public virtual DbSet<CaseAnswer> CaseAnswers { get; set; }
+    public virtual DbSet<CaseTag> CaseTags { get; set; }
 
     public virtual DbSet<CaseTag> CaseTags { get; set; }
 
@@ -63,12 +64,17 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<StudentQuestion> StudentQuestions { get; set; }
 
     public virtual DbSet<StudentQuizAnswer> StudentQuizAnswers { get; set; }
+    public virtual DbSet<Tag> Tags { get; set; }
 
     public virtual DbSet<Tag> Tags { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<UserRole> UserRoles { get; set; }
+    
+    public virtual DbSet<DocumentTag> DocumentTags { get; set; }
+
+    public virtual DbSet<ClassQuiz> ClassQuizzes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -205,6 +211,25 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Tag).WithMany(p => p.ClassTags).HasConstraintName("class_tags_tag_id_fkey");
         });
 
+        modelBuilder.Entity<ClassQuiz>(entity =>
+        {
+            entity.HasKey(cq => new { cq.ClassId, cq.QuizId });
+
+            entity.HasOne(cq => cq.AcademicClass)
+                  .WithMany(c => c.ClassQuizzes)
+                  .HasForeignKey(cq => cq.ClassId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cq => cq.Quiz)
+                  .WithMany(q => q.ClassQuizzes)
+                  .HasForeignKey(cq => cq.QuizId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.AssignedAt)
+                  .HasDefaultValueSql("NOW()");
+        });
+
+
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("documents_pkey");
@@ -217,6 +242,28 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("documents_category_id_fkey");
+            entity.Property(e => e.Version)
+                  .HasDefaultValue(1);
+            entity.Property(e => e.IsOutdated)
+                  .HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<DocumentTag>(entity =>
+        {
+            entity.HasKey(dt => new { dt.DocumentId, dt.TagId });
+
+            entity.HasOne(dt => dt.Document)
+                  .WithMany(d => d.DocumentTags)
+                  .HasForeignKey(dt => dt.DocumentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(dt => dt.Tag)
+                  .WithMany(t => t.DocumentTags)
+                  .HasForeignKey(dt => dt.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.CreatedAt)
+                  .HasDefaultValueSql("NOW()");
         });
 
         modelBuilder.Entity<DocumentChunk>(entity =>
@@ -301,11 +348,19 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizzes).HasConstraintName("class_quizzes_class_id_fkey");
             entity.HasOne(d => d.Quiz).WithMany(p => p.ClassQuizzes).HasConstraintName("class_quizzes_quiz_id_fkey");
         });
+        //modelBuilder.Entity<Quiz>(entity =>
+        //{
+        //    entity.HasKey(e => e.Id).HasName("quizzes_pkey");
+
+        //    entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+        //    entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+        //    entity.HasOne(d => d.Class).WithMany(p => p.Quizzes).HasConstraintName("quizzes_class_id_fkey");
+        //});
 
         modelBuilder.Entity<Quiz>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
-
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
         });

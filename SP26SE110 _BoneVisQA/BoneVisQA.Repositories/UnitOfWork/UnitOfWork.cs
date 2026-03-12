@@ -1,4 +1,5 @@
 using BoneVisQA.Repositories.Basic;
+﻿using BoneVisQA.Repositories.Basic;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Models;
 using System;
@@ -39,6 +40,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<UserRole> _userroleRepository = null!;
         private GenericRepository<CaseTag> _casetagRepository = null!;
         private GenericRepository<Tag> _tagRepository = null!;
+        private GenericRepository<ClassQuiz> _classquizRepository = null!;
 
         public UnitOfWork(BoneVisQADbContext context)
         {
@@ -72,6 +74,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<Tag> TagRepository => _tagRepository ??= new GenericRepository<Tag>(_context);
         public GenericRepository<DocumentTag> DocumentTagRepository => _documenttagRepository ??= new GenericRepository<DocumentTag>(_context);
 
+        public GenericRepository<ClassQuiz> ClassQuizRepository => _classquizRepository ??= new GenericRepository<ClassQuiz>(_context);
         public int Save() => _context.SaveChanges();
 
         public async Task<int> SaveAsync() => await _context.SaveChangesAsync();

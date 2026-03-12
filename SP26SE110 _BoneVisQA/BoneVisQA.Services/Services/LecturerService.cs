@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -251,6 +252,7 @@ public class LecturerService : ILecturerService
             PassingScore = entity.PassingScore
         };
     }
+
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {

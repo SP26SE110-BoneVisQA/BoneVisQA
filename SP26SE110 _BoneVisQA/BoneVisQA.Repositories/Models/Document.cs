@@ -24,6 +24,12 @@ public partial class Document
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
+   
+    [Column("version")]
+    public int Version { get; set; } = 1;
+
+    [Column("is_outdated")]
+    public bool IsOutdated { get; set; } = false;
 
     [Column("version")]
     public int Version { get; set; }
@@ -40,4 +46,5 @@ public partial class Document
 
     [InverseProperty("Document")]
     public virtual ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
+
 }

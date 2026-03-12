@@ -7,7 +7,7 @@ using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.Repositories;
+namespace BoneVisQA.Repositories.Services;
 
 public class LecturerRepository : ILecturerRepository
 {

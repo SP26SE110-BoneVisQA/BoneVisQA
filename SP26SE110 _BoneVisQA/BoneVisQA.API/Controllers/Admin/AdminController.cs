@@ -1,0 +1,198 @@
+﻿using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Models.Admin;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace BoneVisQA.API.Controllers.Admin
+{
+  //  [Authorize(Roles = "Admin")]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AdminController : ControllerBase
+    {
+        private readonly IUserManagementService _userservice;
+        private readonly IDocumentManagementService _documentservice;
+        private readonly IDocumentQualityService _qualityservice;
+
+        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice)
+        {
+            _userservice = userservice;
+            _documentservice = documentservice;
+            _qualityservice = qualityservice;
+        }
+
+        [HttpGet("role/{role}")]
+        public async Task<IActionResult> GetUsersByRole(string role)
+        {
+            var users = await _userservice.GetUserByRoleAsync(role);
+            return Ok(new
+            {
+                Message = "Get Users by role successfully.",
+                users
+            });
+        }
+
+        [HttpPut("{id}/activate")]
+        public async Task<IActionResult> Activate(Guid id)
+        {
+           var result = await _userservice.ActivateUserAccountAsync(id);
+            return Ok(new
+            {
+                Message = "Actice user successfully.",
+                result
+            });
+        }
+
+        [HttpPut("{id}/deactivate")]
+        public async Task<IActionResult> Deactivate(Guid id)
+        {
+            var result = await _userservice.DeactivateUserAccountAsync(id);
+            return Ok(new
+            {
+                Message = "Deactive user successfully.",
+                result
+            });
+        }
+
+        [HttpPost("{id}/assign-role")]
+        public async Task<IActionResult> AssignRole(Guid id, string role)
+        {
+            var result = await _userservice.AssignRoleAsync(id, role);
+            return Ok(new
+            {
+                Message = "Assign user successfully.",
+                result
+            });
+        }
+
+        [HttpDelete("{id}/revoke-role")]
+        public async Task<IActionResult> RevokeRole(Guid id, string role)
+        {
+            var result = await _userservice.RevokeRoleAsync(id, role);
+            return Ok(new
+            {
+                Message = "Revoke role user successfully.",
+                result
+            });
+        }
+        // ====================================================================================================================================
+
+
+        // GET api/admin/documents/quality/most-referenced?top=10
+        [HttpGet("most-referenced")]
+        public async Task<IActionResult> GetMostReferenced([FromQuery] int top = 10)
+        {
+            var result = await _qualityservice.GetMostReferencedDocumentsAsync(top);
+           
+            return Ok(new
+            {
+                Message = "Get most reference document successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/documents/quality/negative-reviews
+        [HttpGet("negative-reviews")]
+        public async Task<IActionResult> GetNegativeReviews()
+        {
+            var result = await _qualityservice.GetDocumentsWithNegativeExpertReviewsAsync();
+          
+            return Ok(new
+            {
+                Message = "Get documents negative review successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/documents/quality/flagged-for-review
+        [HttpGet("flagged-for-review")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetDocumentsFlaggedForReview()
+        {
+            var result = await _qualityservice.GetDocumentsFlaggedForReviewAsync();
+           
+            return Ok(new
+            {
+                Message = "Get documents flagged for review successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/documents/quality/outdated?yearsThreshold=2
+        [HttpGet("outdated")]
+        public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
+        {
+            var result = await _qualityservice.GetOutdatedDocumentsAsync(yearsThreshold);
+           
+            return Ok(new
+            {
+                Message = "Get outdated document successfully.",
+                result
+            });
+        }
+
+        //==========================================================================================================================================
+
+        // POST api/admin/documents
+        [HttpPost("documents")]
+        public async Task<IActionResult> UploadDocument([FromForm] SaveDocumentDTO dto)
+        {
+            var result = await _documentservice.UploadDocumentAsync(dto);
+
+            return Ok(new
+            {
+                Message = "Upload document successfully.",
+                result
+            });
+        }
+
+        // PUT api/admin/documents/{id}/tags
+        [HttpPut("tags")]
+        public async Task<IActionResult> UpdateTags(
+     [FromQuery] Guid documentId,
+     [FromQuery] List<Guid> tagIds)
+        {
+            var result = await _documentservice.UpdateTagsAsync(documentId, tagIds);
+            return Ok(result);
+        }
+
+        // PUT api/admin/documents/{id}/category
+        [HttpPut("{id}/category/{categoryId}")]
+        public async Task<IActionResult> ChangeCategory(Guid id, [FromHeader] Guid categoryId)
+        {
+            var result = await _documentservice.ChangeCategoryAsync(id, categoryId);
+
+            return Ok(new
+            {
+                Message = "Change document category successfully.",
+                result
+            });
+        }
+
+        // PUT api/admin/documents/{id}/version
+        [HttpPut("{id}/version")]
+        public async Task<IActionResult> UploadNewVersion(Guid id)
+        {
+            var result = await _documentservice.UploadNewVersionAsync(id);
+
+            return Ok(new
+            {
+                Message = "Upload document version successfully.",
+                result
+            });
+        }
+
+        // PUT api/admin/documents/{id}/outdated
+        [HttpPut("{id}/outdated")]
+        public async Task<IActionResult> MarkOutdated(Guid id, [FromBody] bool isOutdated)
+        {
+            var result = await _documentservice.MarkOutdatedAsync(id, isOutdated);
+
+            return Ok(new
+            {
+                Message = "Mark document outdate successfully.",
+                result
+            });
+        }
+    }
+}

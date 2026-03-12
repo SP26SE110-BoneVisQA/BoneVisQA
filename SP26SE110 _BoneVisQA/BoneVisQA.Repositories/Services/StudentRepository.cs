@@ -7,7 +7,7 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.Repositories;
+namespace BoneVisQA.Repositories.Services;
 
 public class StudentRepository : IStudentRepository
 {
@@ -126,10 +126,11 @@ public class StudentRepository : IStudentRepository
             .Select(e => e.ClassId)
             .ToListAsync();
 
-        if (classIds.Count == 0)
-        {
-            return new List<Quiz>();
-        }
+
+    //    if (classIds.Count == 0)
+    //    {
+    //        return new List<Quiz>();
+    //    }
 
         var quizIds = await _unitOfWork.ClassQuizRepository
             .FindByCondition(cq => classIds.Contains(cq.ClassId))

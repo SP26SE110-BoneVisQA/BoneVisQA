@@ -9,6 +9,10 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
+using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Auth;
 
 namespace BoneVisQA.Services.Services;
 
@@ -42,6 +46,7 @@ public class AuthService : IAuthService
             .FindByCondition(r => r.Name == "Pending")
             .FirstOrDefaultAsync();
 
+        var role = await _authRepository.GetRoleByNameAsync("Pending");
         if (role == null)
         {
             return new AuthResultDto
@@ -111,6 +116,25 @@ public class AuthService : IAuthService
             {
                 Success = false,
                 Message = "Email hoặc mật khẩu không đúng."
+            };
+        }
+
+        if (!user.IsActive)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin để được hỗ trợ."
+            };
+        }
+
+        var isPending = user.UserRoles.Any(ur => ur.Role.Name == "Pending");
+        if (isPending)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được gán vai trò, liên hệ admin để được hỗ trợ."
             };
         }
 
