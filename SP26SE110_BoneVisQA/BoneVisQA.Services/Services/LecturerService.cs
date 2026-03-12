@@ -312,7 +312,7 @@ public class LecturerService : ILecturerService
             {
                 Id = q.Id,
                 QuizId = q.QuizId,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 CaseTitle = q.Case?.Title,
                 QuestionText = q.QuestionText,
                 Type = q.Type ?? "multiple_choice",
@@ -450,7 +450,7 @@ public class LecturerService : ILecturerService
                 StudentId = q.StudentId,
                 StudentName = q.Student?.FullName ?? string.Empty,
                 StudentEmail = q.Student?.Email ?? string.Empty,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 CaseTitle = q.Case?.Title ?? string.Empty,
                 QuestionText = q.QuestionText,
                 Language = q.Language,

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -19,7 +19,7 @@ public partial class StudentQuestion
     public Guid StudentId { get; set; }
 
     [Column("case_id")]
-    public Guid CaseId { get; set; }
+    public Guid? CaseId { get; set; }
 
     [Column("annotation_id")]
     public Guid? AnnotationId { get; set; }
@@ -30,6 +30,12 @@ public partial class StudentQuestion
     [Column("language")]
     public string? Language { get; set; }
 
+    [Column("custom_image_url")]
+    public string? CustomImageUrl { get; set; }
+
+    [Column("custom_coordinates", TypeName = "jsonb")]
+    public string? CustomCoordinates { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -39,7 +45,7 @@ public partial class StudentQuestion
 
     [ForeignKey("CaseId")]
     [InverseProperty("StudentQuestions")]
-    public virtual MedicalCase Case { get; set; } = null!;
+    public virtual MedicalCase? Case { get; set; }
 
     [InverseProperty("Question")]
     public virtual ICollection<CaseAnswer> CaseAnswers { get; set; } = new List<CaseAnswer>();
