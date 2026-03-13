@@ -9,10 +9,7 @@ load_dotenv()
 
 SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-
-EMBEDDING_MODEL: str = "models/text-embedding-004"
-GEMINI_MODEL: str = "models/gemini-1.5-pro"
+OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
 
 CHUNK_SIZE: int = 1000
 CHUNK_OVERLAP: int = 200
