@@ -10,7 +10,7 @@ namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Lecturer")]
 public class LecturersController : ControllerBase
 {
     private readonly ILecturerService _lecturerService;
