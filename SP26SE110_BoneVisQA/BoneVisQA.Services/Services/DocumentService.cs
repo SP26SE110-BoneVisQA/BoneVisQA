@@ -43,7 +43,7 @@ public class DocumentService : IDocumentService
             CreatedAt = DateTime.UtcNow
         };
 
-        await _unitOfWork.DocumentRepository.CreateAsync(document);
+        await _unitOfWork.DocumentRepository.AddAsync(document);
         await _unitOfWork.SaveAsync();
 
         _ = Task.Run(async () =>
