@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
@@ -161,6 +160,63 @@ public class StudentService : IStudentService
             Language = created.Language,
             CreatedAt = created.CreatedAt
         };
+    }
+
+      public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
+    {
+        var question = new StudentQuestion
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CaseId = request.CaseId,
+            AnnotationId = request.AnnotationId,
+            QuestionText = request.QuestionText,
+            Language = request.Language,
+            CustomImageUrl = request.ImageUrl,
+            CustomCoordinates = request.Coordinates,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var created = await _studentRepository.CreateStudentQuestionAsync(question);
+
+        return new StudentQuestionDto
+        {
+            Id = created.Id,
+            StudentId = created.StudentId,
+            CaseId = created.CaseId ?? Guid.Empty,
+            AnnotationId = created.AnnotationId,
+            QuestionText = created.QuestionText,
+            Language = created.Language,
+            CreatedAt = created.CreatedAt
+        };
+    }
+
+    public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
+    {
+        var answer = new CaseAnswer
+        {
+            Id = Guid.NewGuid(),
+            QuestionId = questionId,
+            AnswerText = response.AnswerText,
+            StructuredDiagnosis = response.SuggestedDiagnosis,
+            DifferentialDiagnoses = response.DifferentialDiagnoses,
+            Status = "Generated",
+            GeneratedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
+
+        foreach (var c in response.Citations)
+        {
+            var citation = new Citation
+            {
+                Id = Guid.NewGuid(),
+                AnswerId = answer.Id,
+                ChunkId = c.ChunkId,
+                SimilarityScore = c.SimilarityScore
+            };
+            await _unitOfWork.CitationRepository.AddAsync(citation);
+        }
     }
 
     private static string? NormalizeLanguage(string? value)
