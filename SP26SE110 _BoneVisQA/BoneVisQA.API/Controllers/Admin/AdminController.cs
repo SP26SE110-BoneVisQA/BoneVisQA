@@ -67,15 +67,12 @@ namespace BoneVisQA.API.Controllers.Admin
             });
         }
 
-        [HttpDelete("{id}/revoke-role")]
-        public async Task<IActionResult> RevokeRole(Guid id, string role)
+        // PUT api/admin/users/{userId}/revoke-role
+        [HttpPut("{userId}/revoke-role")]
+        public async Task<IActionResult> RevokeRole(Guid userId)
         {
-            var result = await _userservice.RevokeRoleAsync(id, role);
-            return Ok(new
-            {
-                Message = "Revoke role user successfully.",
-                result
-            });
+            var result = await _userservice.RevokeRoleAsync(userId);
+            return Ok(result);
         }
         // ====================================================================================================================================
 

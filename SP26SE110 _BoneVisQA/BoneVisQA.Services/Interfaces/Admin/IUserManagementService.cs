@@ -17,6 +17,6 @@ namespace BoneVisQA.Services.Interfaces.Admin
 
         Task<UserManagementDTO> AssignRoleAsync(Guid userId, string roleName);
 
-        Task<UserManagementDTO> RevokeRoleAsync(Guid userId, string roleName);
+        Task<UserManagementDTO> RevokeRoleAsync(Guid userId); 
     }
 }

@@ -26,11 +26,13 @@ namespace BoneVisQA.Services.Services.Admin
         // ── Helper: lưu file vật lý ─────────────────────────
         private async Task<string> SaveFileAsync(IFormFile file)
         {
-            var uploadFolder = Path.Combine(_env.WebRootPath, "uploads", "documents");
+            var uploadFolder = Path.Combine(_env.ContentRootPath, "uploads", "documents");
+
             if (!Directory.Exists(uploadFolder))
                 Directory.CreateDirectory(uploadFolder);
 
-            var fileName = $"{Guid.NewGuid()}_{file.FileName}";
+            var extension = Path.GetExtension(file.FileName);
+            var fileName = $"{Guid.NewGuid()}{extension}";  
             var filePath = Path.Combine(uploadFolder, fileName);
 
             using var stream = new FileStream(filePath, FileMode.Create);
