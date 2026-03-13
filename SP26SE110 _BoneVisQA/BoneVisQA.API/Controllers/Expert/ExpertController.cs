@@ -23,7 +23,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(CreateMedicalCaseDTO dto)
+        public async Task<IActionResult> CreateCase(MedicalCaseDTO dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 

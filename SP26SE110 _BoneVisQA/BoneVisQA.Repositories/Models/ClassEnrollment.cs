@@ -21,6 +21,9 @@ public partial class ClassEnrollment
     [Column("student_id")]
     public Guid StudentId { get; set; }
 
+    [Column("class_name")]
+    public string? ClassName { get; set; }
+
     [Column("enrolled_at")]
     public DateTime? EnrolledAt { get; set; }
 
