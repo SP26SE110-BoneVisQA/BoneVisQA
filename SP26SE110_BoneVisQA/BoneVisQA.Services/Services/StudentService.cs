@@ -162,8 +162,11 @@ public class StudentService : IStudentService
         };
     }
 
-      public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
+
+    public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
     {
+        var language = NormalizeLanguage(request.Language);
+
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
@@ -171,9 +174,8 @@ public class StudentService : IStudentService
             CaseId = request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = request.Language,
-            CustomImageUrl = request.ImageUrl,
-            CustomCoordinates = request.Coordinates,
+
+            Language = language,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -200,22 +202,25 @@ public class StudentService : IStudentService
             AnswerText = response.AnswerText,
             StructuredDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = response.DifferentialDiagnoses,
-            Status = "Generated",
+
+            Status = "answered",
             GeneratedAt = DateTime.UtcNow
         };
 
-        await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
+        await _studentRepository.CreateCaseAnswerAsync(answer);
 
-        foreach (var c in response.Citations)
+        if (response.Citations != null && response.Citations.Count > 0)
         {
-            var citation = new Citation
+            var citations = response.Citations.Select(c => new Citation
             {
                 Id = Guid.NewGuid(),
                 AnswerId = answer.Id,
                 ChunkId = c.ChunkId,
                 SimilarityScore = c.SimilarityScore
-            };
-            await _unitOfWork.CitationRepository.AddAsync(citation);
+
+            });
+
+            await _studentRepository.AddCitationsAsync(citations);
         }
     }
 
