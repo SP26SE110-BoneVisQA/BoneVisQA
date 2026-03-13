@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
-  //  [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")]
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
@@ -13,12 +13,14 @@ namespace BoneVisQA.API.Controllers.Admin
         private readonly IUserManagementService _userservice;
         private readonly IDocumentManagementService _documentservice;
         private readonly IDocumentQualityService _qualityservice;
+        private readonly ISystemMonitoringService _systemservice;
 
-        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice)
+        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice, ISystemMonitoringService systemservice)
         {
             _userservice = userservice;
             _documentservice = documentservice;
             _qualityservice = qualityservice;
+            _systemservice = systemservice;
         }
 
         [HttpGet("role/{role}")]
@@ -65,15 +67,12 @@ namespace BoneVisQA.API.Controllers.Admin
             });
         }
 
-        [HttpDelete("{id}/revoke-role")]
-        public async Task<IActionResult> RevokeRole(Guid id, string role)
+        // PUT api/admin/users/{userId}/revoke-role
+        [HttpPut("{userId}/revoke-role")]
+        public async Task<IActionResult> RevokeRole(Guid userId)
         {
-            var result = await _userservice.RevokeRoleAsync(id, role);
-            return Ok(new
-            {
-                Message = "Revoke role user successfully.",
-                result
-            });
+            var result = await _userservice.RevokeRoleAsync(userId);
+            return Ok(result);
         }
         // ====================================================================================================================================
 
@@ -133,16 +132,39 @@ namespace BoneVisQA.API.Controllers.Admin
 
         //==========================================================================================================================================
 
-        // POST api/admin/documents
-        [HttpPost("documents")]
-        public async Task<IActionResult> UploadDocument([FromForm] SaveDocumentDTO dto)
+        // GET api/admin/documents/{id}
+        [HttpGet("documents/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetDocumentById(Guid id)
         {
-            var result = await _documentservice.UploadDocumentAsync(dto);
-
+            var result = await _documentservice.GetDocumentByIdAsync(id);
             return Ok(new
             {
-                Message = "Upload document successfully.",
+                Message = "Get document by id successfully.",
                 result
+            });
+        }
+
+        // POST api/admin/documents
+        [HttpPost("documents")]
+        public async Task<IActionResult> CreateDocument([FromForm] SaveDocumentDTO dto)
+        {
+            var result = await _documentservice.CreateDocumentAsync(dto);
+            return Ok(new 
+            { 
+                Message = "Tạo tài liệu thành công.", result }
+            );
+        }
+
+        // PUT api/admin/documents/{id}
+        [HttpPut("documents/{id}")]
+        public async Task<IActionResult> UpdateDocument(Guid id, [FromForm] SaveDocumentDTO dto)
+        {
+            var result = await _documentservice.UpdateDocumentAsync(id, dto);
+            return Ok(new 
+            { 
+                Message = "Cập nhật tài liệu thành công.", result 
             });
         }
 
@@ -191,6 +213,59 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(new
             {
                 Message = "Mark document outdate successfully.",
+                result
+            });
+        }
+
+        //===================================================================================================
+
+        // GET api/admin/monitoring/users
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUserStats()
+        {
+            var result = await _systemservice.GetUserStatsAsync();
+            return Ok(new
+            {
+                Message = "Get user stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/activity?from=2024-01-01&to=2024-12-31
+        [HttpGet("activity")]
+        public async Task<IActionResult> GetActivityStats([FromQuery] DateTime from, [FromQuery] DateTime to)
+        {
+            if (from > to)
+                return BadRequest("Ngày bắt đầu phải nhỏ hơn ngày kết thúc.");
+
+            var result = await _systemservice.GetActivityStatsAsync(from, to);
+            return Ok(new
+            {
+                Message = "Get activity stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/rag
+        [HttpGet("rag")]
+        public async Task<IActionResult> GetRagStats()
+        {
+            var result = await _systemservice.GetRagStatsAsync();
+            return Ok(new
+            {
+                Message = "Get rag stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/reviews
+        [HttpGet("reviews")]
+        public async Task<IActionResult> GetExpertReviewStats()
+        {
+            var result = await _systemservice.GetExpertReviewStatsAsync();
+            return Ok(new
+            {
+                Message = "Get expert review successfully.",
                 result
             });
         }

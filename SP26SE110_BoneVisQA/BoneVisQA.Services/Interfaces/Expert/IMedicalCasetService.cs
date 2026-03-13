@@ -9,6 +9,6 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface IMedicalCaseService
     {
-        Task<Guid> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto);
+        Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTO dto);
     }
 }

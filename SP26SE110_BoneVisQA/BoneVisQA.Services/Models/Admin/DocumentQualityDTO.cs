@@ -22,10 +22,5 @@ namespace BoneVisQA.Services.Models.Admin
         public bool IsOutdated { get; set; }
         public bool RequiresReview { get; set; }
     }
-
-    public class UploadNewVersionRequestDTO
-    {
-        public IFormFile File { get; set; } = null!;
-    }
 }
 
