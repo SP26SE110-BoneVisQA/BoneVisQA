@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using BoneVisQA.Services.Interfaces;
@@ -63,7 +64,12 @@ public class AuthsController : ControllerBase
         var issuer = jwtSection["Issuer"];
         var audience = jwtSection["Audience"];
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        // HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
+        var keyBytes = Encoding.UTF8.GetBytes(key);
+        if (keyBytes.Length < 32)
+            keyBytes = SHA256.HashData(keyBytes);
+
+        var securityKey = new SymmetricSecurityKey(keyBytes);
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>

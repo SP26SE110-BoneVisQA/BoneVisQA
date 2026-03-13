@@ -23,4 +23,5 @@ public partial class ClassQuiz
     [ForeignKey("QuizId")]
     [InverseProperty("ClassQuizzes")]
     public virtual Quiz Quiz { get; set; } = null!;
+
 }

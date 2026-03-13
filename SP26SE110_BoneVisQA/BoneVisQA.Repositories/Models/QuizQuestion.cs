@@ -25,6 +25,18 @@ public partial class QuizQuestion
     [Column("type")]
     public string? Type { get; set; }
 
+    [Column("option_a")]
+    public string? OptionA { get; set; }
+
+    [Column("option_b")]
+    public string? OptionB { get; set; }
+
+    [Column("option_c")]
+    public string? OptionC { get; set; }
+
+    [Column("option_d")]
+    public string? OptionD { get; set; }
+
     [Column("correct_answer")]
     public string? CorrectAnswer { get; set; }
 

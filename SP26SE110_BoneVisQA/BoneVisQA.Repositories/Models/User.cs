@@ -9,6 +9,7 @@ namespace BoneVisQA.Repositories.Models;
 [Table("users")]
 [Index("IsActive", Name = "idx_users_is_active")]
 [Index("Email", Name = "users_email_key", IsUnique = true)]
+[Index("IsActive", Name = "idx_users_is_active")]
 public partial class User
 {
     [Key]

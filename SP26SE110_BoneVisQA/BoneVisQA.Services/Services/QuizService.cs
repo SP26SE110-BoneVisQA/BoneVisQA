@@ -33,7 +33,7 @@ namespace BoneVisQA.Services.Services
                 CreatedAt = now
             };
 
-            await _unitOfWork.QuizRepository.CreateAsync(quiz);
+            await _unitOfWork.QuizRepository.AddAsync(quiz);
             await _unitOfWork.SaveAsync();
 
             if (request.ClassId != Guid.Empty)
@@ -44,7 +44,7 @@ namespace BoneVisQA.Services.Services
                     QuizId = quiz.Id,
                     AssignedAt = now
                 };
-                await _unitOfWork.ClassQuizRepository.CreateAsync(classQuiz);
+                await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
                 await _unitOfWork.SaveAsync();
             }
 
@@ -71,7 +71,7 @@ namespace BoneVisQA.Services.Services
                 CorrectAnswer = request.CorrectAnswer
             };
 
-            await _unitOfWork.QuizQuestionRepository.CreateAsync(question);
+            await _unitOfWork.QuizQuestionRepository.AddAsync(question);
             await _unitOfWork.SaveAsync();
 
             request.Id = question.Id;

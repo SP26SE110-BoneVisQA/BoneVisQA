@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -24,12 +24,12 @@ public partial class Document
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
-
+   
     [Column("version")]
-    public int Version { get; set; }
+    public int Version { get; set; } = 1;
 
     [Column("is_outdated")]
-    public bool IsOutdated { get; set; }
+    public bool IsOutdated { get; set; } = false;
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
@@ -40,4 +40,5 @@ public partial class Document
 
     [InverseProperty("Document")]
     public virtual ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
+
 }

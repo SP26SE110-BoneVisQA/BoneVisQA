@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
 
@@ -219,25 +221,19 @@ public class StudentService : IStudentService
     {
         var utcNow = DateTime.UtcNow;
         var quizzes = await _studentRepository.GetQuizzesForStudentAsync(studentId, utcNow);
-
-        return quizzes
-            .Select(q =>
-            {
-                var attempt = q.QuizAttempts.FirstOrDefault(a => a.StudentId == studentId);
-                return new QuizListItemDto
-                {
-                    QuizId = q.Id,
-                    Title = q.Title,
-                    OpenTime = q.OpenTime,
-                    CloseTime = q.CloseTime,
-                    TimeLimit = q.TimeLimit,
-                    PassingScore = q.PassingScore,
-                    IsCompleted = attempt?.CompletedAt != null,
-                    Score = attempt?.Score
-                };
-            })
-            .ToList();
+        return quizzes.Select(q => new QuizListItemDto
+        {
+            QuizId = q.Id,
+            Title = q.Title ?? string.Empty,
+            OpenTime = q.OpenTime,
+            CloseTime = q.CloseTime,
+            TimeLimit = q.TimeLimit,
+            PassingScore = q.PassingScore,
+            IsCompleted = false,
+            Score = null
+        }).ToList();
     }
+
 
     public async Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId)
     {

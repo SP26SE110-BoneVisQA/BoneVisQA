@@ -1,13 +1,19 @@
+using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
-using BoneVisQA.Repositories;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
+using BoneVisQA.Services.Services.Admin;
+using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -60,9 +66,12 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
         npgsqlOptions => npgsqlOptions.SetPostgresVersion(15, 0)));
 
-// JWT Configuration
+// JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
-var key = Encoding.UTF8.GetBytes(jwtKey);
+var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+if (keyBytes.Length < 32)
+    keyBytes = SHA256.HashData(keyBytes);
+var key = keyBytes;
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -83,6 +92,15 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
+builder.Services.AddScoped<BoneVisQA.Services.Interfaces.IQuizService, BoneVisQA.Services.Services.QuizService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<ITagCaseService, TagCaseService>();
+builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
+builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
+builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 
 var app = builder.Build();
 

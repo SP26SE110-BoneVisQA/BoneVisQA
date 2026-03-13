@@ -3,149 +3,187 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Repositories.Basic
 {
-    public class GenericRepository<T> where T : class
-    {
-        protected BoneVisQADbContext _context;
 
-        public GenericRepository()
-        {
-            _context ??= new();
-        }
+    public class GenericRepository<TEntity> where TEntity : class
+    {
+        protected readonly BoneVisQADbContext _context;
+        protected readonly DbSet<TEntity> _dbSet;
 
         public GenericRepository(BoneVisQADbContext context)
         {
             _context = context;
+
+            _dbSet = context.Set<TEntity>();
         }
 
-        public List<T> GetAll()
+        // Get All (Async & Sync)
+        public virtual async Task<List<TEntity>> GetAllAsync()
+            => await _dbSet.ToListAsync();
+
+        public virtual List<TEntity> GetAll()
+            => _dbSet.ToList();
+
+        // Find (Async & Sync)
+        public virtual async Task<List<TEntity>> FindAsync(Expression<Func<TEntity, bool>> filter)
+            => await _dbSet.Where(filter).ToListAsync();
+
+        public virtual List<TEntity> Find(Expression<Func<TEntity, bool>> filter)
+            => _dbSet.Where(filter).ToList();
+
+        // GetById (Async & Sync)
+        public virtual async Task<TEntity?> GetByIdAsync(object id)
+            => await _dbSet.FindAsync(id);
+
+        public virtual TEntity? GetById(object id)
+            => _dbSet.Find(id);
+
+        // Paging (Async & Sync)
+        public virtual async Task<List<TEntity>> GetPagedAsync(int pageIndex, int pageSize)
+            => await _dbSet.Skip((pageIndex - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        public virtual List<TEntity> GetPaged(int pageIndex, int pageSize)
+            => _dbSet.Skip((pageIndex - 1) * pageSize).Take(pageSize).ToList();
+
+        // Paging + filter
+        public virtual async Task<List<TEntity>> FindPagedAsync(Expression<Func<TEntity, bool>> filter, int pageIndex, int pageSize)
+            => await _dbSet.Where(filter).Skip((pageIndex - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        public virtual List<TEntity> FindPaged(Expression<Func<TEntity, bool>> filter, int pageIndex, int pageSize)
+            => _dbSet.Where(filter).Skip((pageIndex - 1) * pageSize).Take(pageSize).ToList();
+
+        // Count (Async & Sync)
+        public virtual async Task<int> CountAsync(Expression<Func<TEntity, bool>>? filter = null)
+            => filter == null ? await _dbSet.CountAsync() : await _dbSet.CountAsync(filter!);
+
+        public virtual int Count(Expression<Func<TEntity, bool>>? filter = null)
+            => filter == null ? _dbSet.Count() : _dbSet.Count(filter!);
+
+        // Add/Update/Remove
+        public virtual void Add(TEntity entity) => _dbSet.Add(entity);
+        public virtual void AddRange(IEnumerable<TEntity> entities) => _dbSet.AddRange(entities);
+        public virtual void Remove(TEntity entity) => _dbSet.Remove(entity);
+        public virtual void RemoveRange(IEnumerable<TEntity> entities) => _dbSet.RemoveRange(entities);
+        public virtual void Update(TEntity entity)
         {
-            return _context.Set<T>().ToList();
-        }
-        public async Task<List<T>> GetAllAsync()
-        {
-            return await _context.Set<T>().ToListAsync();
-        }
-        public void Create(T entity)
-        {
-            _context.Add(entity);
-            _context.SaveChanges();
+            _dbSet.Attach(entity);
+            _context.Entry(entity).State = EntityState.Modified;
         }
 
-        public async Task<int> CreateAsync(T entity)
+        // Add/Update/Remove (Async)
+        // Add single entity asynchronously
+        public virtual async Task AddAsync(TEntity entity)
         {
-            _context.Add(entity);
-            return await _context.SaveChangesAsync();
-        }
-        public void Update(T entity)
-        {
-            _context.ChangeTracker.Clear(); // unlock tracking item
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-            _context.SaveChanges();
+            await _dbSet.AddAsync(entity);
         }
 
-        public async Task<int> UpdateAsync(T entity)
+        // Add multiple entities asynchronously
+        public virtual async Task AddRangeAsync(IEnumerable<TEntity> entities)
         {
-            _context.ChangeTracker.Clear();
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-            return await _context.SaveChangesAsync();
+            await _dbSet.AddRangeAsync(entities);
         }
 
-        public bool Remove(T entity)
+        // Remove single entity asynchronously (EF Core không có remove async, nhưng bạn có thể dùng Task.Run nếu cần)
+        public virtual Task RemoveAsync(TEntity entity)
         {
-            _context.Remove(entity);
-            _context.SaveChanges();
-            return true;
+            _dbSet.Remove(entity);
+            return Task.CompletedTask;
         }
 
-        public async Task<bool> RemoveAsync(T entity)
+        // Remove multiple entities asynchronously
+        public virtual Task RemoveRangeAsync(IEnumerable<TEntity> entities)
         {
-            _context.Remove(entity);
-            await _context.SaveChangesAsync();
-            return true;
+            _dbSet.RemoveRange(entities);
+            return Task.CompletedTask;
         }
 
-        public T GetById(int id)
+        // Update asynchronously (Attach và Modified là sync, nên cũng bọc lại tương tự)
+        public virtual Task UpdateAsync(TEntity entity)
         {
-            return _context.Set<T>().Find(id);
+            _dbSet.Attach(entity);
+            _context.Entry(entity).State = EntityState.Modified;
+            return Task.CompletedTask;
         }
 
-        public async Task<T> GetByIdAsync(int id)
+        //----------------------------------------------------------------------------
+        //----------------------------------------------------------------------------
+        // 1. GetAllIncludeAsync
+        public virtual async Task<List<TEntity>> GetAllIncludeAsync(
+            params Expression<Func<TEntity, object>>[] includes)
         {
-            return await _context.Set<T>().FindAsync(id);
+            IQueryable<TEntity> query = _dbSet;
+            foreach (var include in includes)
+            {
+                query = query.Include(include);
+            }
+            return await query.ToListAsync();
         }
 
-        public T GetById(string code)
+        // 2. FindIncludeAsync
+        public virtual async Task<List<TEntity>> FindIncludeAsync(
+            Expression<Func<TEntity, bool>> filter,
+            params Expression<Func<TEntity, object>>[] includes)
         {
-            return _context.Set<T>().Find(code);
+            IQueryable<TEntity> query = _dbSet.Where(filter);
+            foreach (var include in includes)
+            {
+                query = query.Include(include);
+            }
+            return await query.ToListAsync();
         }
 
-        public async Task<T> GetByIdAsync(string code)
+        // 3. ExistsAsync
+        public virtual async Task<bool> ExistsAsync(Expression<Func<TEntity, bool>> filter)
         {
-            return await _context.Set<T>().FindAsync(code);
+            return await _dbSet.AnyAsync(filter);
         }
 
-        public T GetById(Guid code)
+        // 4. FirstOrDefaultAsync
+        public virtual async Task<TEntity?> FirstOrDefaultAsync(Expression<Func<TEntity, bool>> filter)
         {
-            return _context.Set<T>().Find(code);
+            return await _dbSet.FirstOrDefaultAsync(filter);
         }
 
-        public async Task<T> GetByIdAsync(Guid code)
+        // 5. FirstOrDefault (Sync)
+        public virtual TEntity? FirstOrDefault(Expression<Func<TEntity, bool>> filter)
         {
-            return await _context.Set<T>().FindAsync(code);
+            return _dbSet.FirstOrDefault(filter);
         }
 
-        public IQueryable<T> FindByCondition(System.Linq.Expressions.Expression<Func<T, bool>> expression)
+        public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
         {
-            return _context.Set<T>().Where(expression);
+            return _dbSet.Where(expression);
         }
 
         public async Task<int> DeleteAsync(Guid id)
         {
-            var entity = await _context.Set<T>().FindAsync(id);
+
+            var entity = await _dbSet.FindAsync(id);
             if (entity != null)
             {
-                _context.Set<T>().Remove(entity);
+                _dbSet.Remove(entity);
                 return await _context.SaveChangesAsync();
             }
             return 0;
         }
 
-        #region Separating asigning entity to DBContext (thao tac vs RAM) and save operators (save changes once to persistent DB)       
 
-        public void PrepareCreate(T entity)
+        public virtual async Task<IList<TEntity>> GetAllAsync(Expression<Func<IQueryable<TEntity>, IQueryable<TEntity>>>? include)
         {
-            _context.Add(entity);
-        }
+            IQueryable<TEntity> query = _dbSet;
 
-        public void PrepareUpdate(T entity)
-        {
-            var tracker = _context.Attach(entity);
-            tracker.State = EntityState.Modified;
-        }
+            if (include != null)
+            {
+                query = include.Compile()(query);
+            }
 
-        public void PrepareRemove(T entity)
-        {
-            _context.Remove(entity);
+            return await query.ToListAsync();
         }
-
-        public int Save()
-        {
-            return _context.SaveChanges();
-        }
-
-        public async Task<int> SaveAsync()
-        {
-            return await _context.SaveChangesAsync();
-        }
-
-        #endregion Separating asign entity and save operators
     }
 }
-

@@ -64,7 +64,7 @@ public class AuthService : IAuthService
             UpdatedAt = now
         };
 
-        await _unitOfWork.UserRepository.CreateAsync(user);
+        await _unitOfWork.UserRepository.AddAsync(user);
 
         var userRole = new UserRole
         {
@@ -74,7 +74,7 @@ public class AuthService : IAuthService
             AssignedAt = now
         };
 
-        await _unitOfWork.UserRoleRepository.CreateAsync(userRole);
+        await _unitOfWork.UserRoleRepository.AddAsync(userRole);
         await _unitOfWork.SaveAsync();
 
         return new AuthResultDto
@@ -111,6 +111,25 @@ public class AuthService : IAuthService
             {
                 Success = false,
                 Message = "Email hoặc mật khẩu không đúng."
+            };
+        }
+
+        if (!user.IsActive)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin để được hỗ trợ."
+            };
+        }
+
+        var isPending = user.UserRoles.Any(ur => ur.Role.Name == "Pending");
+        if (isPending)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được gán vai trò, liên hệ admin để được hỗ trợ."
             };
         }
 
