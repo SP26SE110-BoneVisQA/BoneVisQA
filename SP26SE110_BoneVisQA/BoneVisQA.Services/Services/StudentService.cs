@@ -162,9 +162,9 @@ public class StudentService : IStudentService
         };
     }
 
-    public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
+
+      public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
     {
-        var language = NormalizeLanguage(request.Language);
 
         var question = new StudentQuestion
         {
@@ -173,7 +173,10 @@ public class StudentService : IStudentService
             CaseId = request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = language,
+            Language = request.Language,
+            CustomImageUrl = request.ImageUrl,
+            CustomCoordinates = request.Coordinates,
+
             CreatedAt = DateTime.UtcNow
         };
 
@@ -200,23 +203,24 @@ public class StudentService : IStudentService
             AnswerText = response.AnswerText,
             StructuredDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = response.DifferentialDiagnoses,
-            Status = "answered",
+            Status = "Generated",
             GeneratedAt = DateTime.UtcNow
         };
 
-        await _studentRepository.CreateCaseAnswerAsync(answer);
+        await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
 
-        if (response.Citations != null && response.Citations.Count > 0)
+        foreach (var c in response.Citations)
         {
-            var citations = response.Citations.Select(c => new Citation
+            var citation = new Citation
+
             {
                 Id = Guid.NewGuid(),
                 AnswerId = answer.Id,
                 ChunkId = c.ChunkId,
                 SimilarityScore = c.SimilarityScore
-            });
+            };
+            await _unitOfWork.CitationRepository.AddAsync(citation);
 
-            await _studentRepository.AddCitationsAsync(citations);
         }
     }
 
@@ -240,6 +244,7 @@ public class StudentService : IStudentService
         catch
         {
             return null;
+
         }
     }
 
@@ -251,7 +256,7 @@ public class StudentService : IStudentService
             .Select(q => new StudentQuestionHistoryItemDto
             {
                 Id = q.Id,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 QuestionText = q.QuestionText,
                 CreatedAt = q.CreatedAt
             })
@@ -327,7 +332,7 @@ public class StudentService : IStudentService
                 QuestionId = q.Id,
                 QuestionText = q.QuestionText,
                 Type = q.Type,
-                CaseId = q.CaseId
+                CaseId = q.CaseId ?? Guid.Empty
             })
             .ToList();
 

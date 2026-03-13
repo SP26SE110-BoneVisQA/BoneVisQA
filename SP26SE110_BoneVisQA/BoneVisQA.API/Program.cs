@@ -64,7 +64,11 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddDbContext<BoneVisQADbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
-        npgsqlOptions => npgsqlOptions.SetPostgresVersion(15, 0)));
+        npgsqlOptions =>
+        {
+            npgsqlOptions.SetPostgresVersion(15, 0);
+            npgsqlOptions.UseVector();
+        }));
 
 // JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
@@ -92,6 +96,12 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddHttpClient<IAIService, BoneVisQA.Services.Services.AIService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["AIService:BaseUrl"] ?? "http://localhost:8000");
+});
+builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
@@ -107,13 +117,10 @@ var app = builder.Build();
 // CORS
 app.UseCors("AllowAll");
 
-// Swagger
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+// Swagger (bật cả Production để test API trên Render)
+app.UseSwagger();
+app.UseSwaggerUI();
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 

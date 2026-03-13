@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Interfaces;
 
@@ -16,6 +17,10 @@ public interface IStudentService
     Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request);
 
     Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request);
+
+    Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request);
+
+    Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 
