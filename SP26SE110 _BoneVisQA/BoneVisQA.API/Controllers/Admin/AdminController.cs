@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
-  //  [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")]
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
@@ -13,12 +13,14 @@ namespace BoneVisQA.API.Controllers.Admin
         private readonly IUserManagementService _userservice;
         private readonly IDocumentManagementService _documentservice;
         private readonly IDocumentQualityService _qualityservice;
+        private readonly ISystemMonitoringService _systemservice;
 
-        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice)
+        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice, ISystemMonitoringService systemservice)
         {
             _userservice = userservice;
             _documentservice = documentservice;
             _qualityservice = qualityservice;
+            _systemservice = systemservice;
         }
 
         [HttpGet("role/{role}")]
@@ -191,6 +193,59 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(new
             {
                 Message = "Mark document outdate successfully.",
+                result
+            });
+        }
+
+        //===================================================================================================
+
+        // GET api/admin/monitoring/users
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUserStats()
+        {
+            var result = await _systemservice.GetUserStatsAsync();
+            return Ok(new
+            {
+                Message = "Get user stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/activity?from=2024-01-01&to=2024-12-31
+        [HttpGet("activity")]
+        public async Task<IActionResult> GetActivityStats([FromQuery] DateTime from, [FromQuery] DateTime to)
+        {
+            if (from > to)
+                return BadRequest("Ngày bắt đầu phải nhỏ hơn ngày kết thúc.");
+
+            var result = await _systemservice.GetActivityStatsAsync(from, to);
+            return Ok(new
+            {
+                Message = "Get activity stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/rag
+        [HttpGet("rag")]
+        public async Task<IActionResult> GetRagStats()
+        {
+            var result = await _systemservice.GetRagStatsAsync();
+            return Ok(new
+            {
+                Message = "Get rag stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/reviews
+        [HttpGet("reviews")]
+        public async Task<IActionResult> GetExpertReviewStats()
+        {
+            var result = await _systemservice.GetExpertReviewStatsAsync();
+            return Ok(new
+            {
+                Message = "Get expert review successfully.",
                 result
             });
         }
