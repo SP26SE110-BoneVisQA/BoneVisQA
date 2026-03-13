@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Services;
 
@@ -160,6 +160,64 @@ public class StudentService : IStudentService
             Language = created.Language,
             CreatedAt = created.CreatedAt
         };
+    }
+
+    public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
+    {
+        var language = NormalizeLanguage(request.Language);
+
+        var question = new StudentQuestion
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CaseId = request.CaseId,
+            AnnotationId = request.AnnotationId,
+            QuestionText = request.QuestionText,
+            Language = language,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var created = await _studentRepository.CreateStudentQuestionAsync(question);
+
+        return new StudentQuestionDto
+        {
+            Id = created.Id,
+            StudentId = created.StudentId,
+            CaseId = created.CaseId ?? Guid.Empty,
+            AnnotationId = created.AnnotationId,
+            QuestionText = created.QuestionText,
+            Language = created.Language,
+            CreatedAt = created.CreatedAt
+        };
+    }
+
+    public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
+    {
+        var answer = new CaseAnswer
+        {
+            Id = Guid.NewGuid(),
+            QuestionId = questionId,
+            AnswerText = response.AnswerText,
+            StructuredDiagnosis = response.SuggestedDiagnosis,
+            DifferentialDiagnoses = response.DifferentialDiagnoses,
+            Status = "answered",
+            GeneratedAt = DateTime.UtcNow
+        };
+
+        await _studentRepository.CreateCaseAnswerAsync(answer);
+
+        if (response.Citations != null && response.Citations.Count > 0)
+        {
+            var citations = response.Citations.Select(c => new Citation
+            {
+                Id = Guid.NewGuid(),
+                AnswerId = answer.Id,
+                ChunkId = c.ChunkId,
+                SimilarityScore = c.SimilarityScore
+            });
+
+            await _studentRepository.AddCitationsAsync(citations);
+        }
     }
 
     private static string? NormalizeLanguage(string? value)

@@ -39,5 +39,9 @@ public interface IStudentRepository
     Task AddStudentQuizAnswersAsync(IEnumerable<StudentQuizAnswer> answers);
 
     Task<(int totalCasesViewed, int totalQuestionsAsked, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId);
+
+    Task<CaseAnswer> CreateCaseAnswerAsync(CaseAnswer answer);
+
+    Task AddCitationsAsync(IEnumerable<Citation> citations);
 }
 

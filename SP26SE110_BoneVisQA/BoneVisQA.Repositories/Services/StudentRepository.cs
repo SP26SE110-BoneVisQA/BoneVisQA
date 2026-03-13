@@ -218,4 +218,20 @@ public class StudentRepository : IStudentRepository
 
         return (totalCasesViewed, totalQuestionsAsked, avgQuizScore);
     }
+
+    public async Task<CaseAnswer> CreateCaseAnswerAsync(CaseAnswer answer)
+    {
+        await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
+        await _unitOfWork.SaveAsync();
+        return answer;
+    }
+
+    public async Task AddCitationsAsync(IEnumerable<Citation> citations)
+    {
+        foreach (var citation in citations)
+        {
+            await _unitOfWork.CitationRepository.AddAsync(citation);
+        }
+        await _unitOfWork.SaveAsync();
+    }
 }
