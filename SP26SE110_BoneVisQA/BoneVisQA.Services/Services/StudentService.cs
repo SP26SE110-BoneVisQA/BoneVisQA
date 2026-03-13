@@ -162,8 +162,10 @@ public class StudentService : IStudentService
         };
     }
 
+
       public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
     {
+
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
@@ -174,6 +176,7 @@ public class StudentService : IStudentService
             Language = request.Language,
             CustomImageUrl = request.ImageUrl,
             CustomCoordinates = request.Coordinates,
+
             CreatedAt = DateTime.UtcNow
         };
 
@@ -209,6 +212,7 @@ public class StudentService : IStudentService
         foreach (var c in response.Citations)
         {
             var citation = new Citation
+
             {
                 Id = Guid.NewGuid(),
                 AnswerId = answer.Id,
@@ -216,6 +220,7 @@ public class StudentService : IStudentService
                 SimilarityScore = c.SimilarityScore
             };
             await _unitOfWork.CitationRepository.AddAsync(citation);
+
         }
     }
 
