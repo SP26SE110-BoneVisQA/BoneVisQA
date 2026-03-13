@@ -87,10 +87,12 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddHttpClient<IAIService, BoneVisQA.Services.Services.AIService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["AIService:BaseUrl"] ?? "http://localhost:8000");
 });
+builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>();
 
 var app = builder.Build();
 
