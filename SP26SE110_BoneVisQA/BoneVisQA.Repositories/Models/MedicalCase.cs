@@ -32,16 +32,20 @@ public partial class MedicalCase
     public DateTime? UpdatedAt { get; set; }
 
     [Column("is_approved")]
-    public bool IsApproved { get; set; } = false;
+
+    public bool? IsApproved { get; set; } = false;
 
     [Column("is_active")]
-    public bool IsActive { get; set; } = true;
+    public bool? IsActive { get; set; } = true;
 
     [Column("suggested_diagnosis")]
     public string? SuggestedDiagnosis { get; set; }
 
     [Column("key_findings")]
     public string? KeyFindings { get; set; }
+
+    [Column("reflective_questions")]
+    public string? ReflectiveQuestions { get; set; }
 
     [InverseProperty("Case")]
     public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();

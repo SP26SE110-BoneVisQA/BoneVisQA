@@ -31,6 +31,9 @@ public partial class Document
     [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
 
+    [Column("indexing_status")]
+    public string IndexingStatus { get; set; } = "Pending";
+
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
     public virtual Category? Category { get; set; }

@@ -3,6 +3,7 @@ Online pipeline: embed user question (local sentence-transformers), search Supab
 fetch image, build multimodal prompt, call OpenRouter (Meta LLaMA Vision), return structured VQA_Response.
 """
 import base64
+import io
 import json
 import os
 import re
@@ -10,6 +11,7 @@ from uuid import UUID
 
 import requests
 from openai import OpenAI
+from PIL import Image, ImageDraw
 from sentence_transformers import SentenceTransformer
 
 from config import (
@@ -70,6 +72,75 @@ def _download_image(image_url: str | None) -> tuple[bytes | None, str]:
         return None, ""
 
 
+def _parse_coordinates(coords_str: str | None) -> dict | None:
+    """
+    Parse coordinates string (JSON format: {"x": 10, "y": 20, "w": 100, "h": 150}).
+    Returns dict with x, y, w, h or None if invalid.
+    """
+    if not coords_str or not coords_str.strip():
+        return None
+    try:
+        coords = json.loads(coords_str)
+        if all(k in coords for k in ("x", "y", "w", "h")):
+            return {
+                "x": int(coords["x"]),
+                "y": int(coords["y"]),
+                "w": int(coords["w"]),
+                "h": int(coords["h"]),
+            }
+    except (json.JSONDecodeError, ValueError, TypeError):
+        pass
+    return None
+
+
+def _process_image_with_bounding_box(
+    image_bytes: bytes,
+    coords: dict | None,
+    mode: str = "annotate",
+) -> tuple[bytes, str]:
+    """
+    Process image with bounding box. 
+    
+    Args:
+        image_bytes: Raw image bytes
+        coords: Dict with x, y, w, h (top-left corner and dimensions)
+        mode: "annotate" draws a red box, "crop" extracts the region
+        
+    Returns:
+        Processed image bytes and mime type
+    """
+    if not coords:
+        return image_bytes, "image/jpeg"
+    
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        
+        x, y, w, h = coords["x"], coords["y"], coords["w"], coords["h"]
+        
+        img_width, img_height = img.size
+        x = max(0, min(x, img_width - 1))
+        y = max(0, min(y, img_height - 1))
+        w = min(w, img_width - x)
+        h = min(h, img_height - y)
+        
+        if mode == "crop" and w > 10 and h > 10:
+            img = img.crop((x, y, x + w, y + h))
+        else:
+            draw = ImageDraw.Draw(img)
+            box_coords = [(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)]
+            draw.line(box_coords, fill="red", width=3)
+        
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=95)
+        return output.getvalue(), "image/jpeg"
+        
+    except Exception:
+        return image_bytes, "image/jpeg"
+
+
 def _build_prompt(
     question: str,
     retrieved_context: list[dict],
@@ -106,7 +177,7 @@ You must respond with a valid JSON object only, no other text. Use this exact st
 Use the actual chunk IDs from the retrieved context for citationChunkIds (the 'id' of each chunk you used). If no chunks were provided, use an empty array for citationChunkIds."""
 
 
-def _parse_gemini_json_response(text: str) -> dict:
+def _parse_llm_json_response(text: str) -> dict:
     """Extract JSON object from model response (handle markdown code blocks)."""
     text = text.strip()
     match = re.search(r"\{[\s\S]*\}", text)
@@ -117,12 +188,9 @@ def _parse_gemini_json_response(text: str) -> dict:
 
 def generate_diagnostic_answer(request: VQA_Request) -> VQA_Response:
     """
-    Full RAG + Gemini pipeline: retrieve chunks, optionally load image,
-    call Gemini 1.5 Pro with multimodal prompt, return structured VQA_Response.
+    Full RAG + OpenRouter pipeline: retrieve chunks, optionally load image,
+    call LLaMA Vision via OpenRouter, return structured VQA_Response.
     """
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY is not set")
-
     # Step A: Retrieval
     query_embedding = _embed_query(request.question_text)
     retrieved = _retrieve_chunks(query_embedding)
@@ -132,8 +200,15 @@ def generate_diagnostic_answer(request: VQA_Request) -> VQA_Response:
         if rid:
             id_to_similarity[str(rid)] = float(row.get("similarity", 0.0))
 
-    # Step B: Image handling
+    # Step B: Image handling with bounding box processing
     image_bytes, mime_type = _download_image(request.image_url)
+    
+    if image_bytes:
+        coords = _parse_coordinates(request.coordinates)
+        if coords:
+            image_bytes, mime_type = _process_image_with_bounding_box(
+                image_bytes, coords, mode="annotate"
+            )
 
     # Step C: Prompt
     prompt = _build_prompt(
@@ -177,7 +252,7 @@ def generate_diagnostic_answer(request: VQA_Request) -> VQA_Response:
 
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-3.2-11b-vision-instruct:free",
+            model="openrouter/healer-alpha",
             messages=messages,
             temperature=0.2,
         )
@@ -194,7 +269,7 @@ def generate_diagnostic_answer(request: VQA_Request) -> VQA_Response:
         )
 
     try:
-        parsed = _parse_gemini_json_response(response_text)
+        parsed = _parse_llm_json_response(response_text)
     except json.JSONDecodeError:
         return VQA_Response(
             answer_text=response_text[:4000] if response_text else "Parse error.",

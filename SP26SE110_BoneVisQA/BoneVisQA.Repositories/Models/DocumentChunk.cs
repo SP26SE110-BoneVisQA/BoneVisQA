@@ -26,6 +26,9 @@ public partial class DocumentChunk
     [Column("embedding", TypeName = "vector(768)")]
     public Pgvector.Vector? Embedding { get; set; }
 
+    [Column("is_flagged")]
+    public bool IsFlagged { get; set; } = false;
+
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 

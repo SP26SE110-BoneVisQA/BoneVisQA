@@ -43,6 +43,12 @@ public partial class StudentQuestion
     [InverseProperty("StudentQuestions")]
     public virtual CaseAnnotation? Annotation { get; set; }
 
+    [Column("custom_image_url")]
+    public string? CustomImageUrl { get; set; }
+
+    [Column("custom_coordinates")]
+    public string? CustomCoordinates { get; set; }  
+
     [ForeignKey("CaseId")]
     [InverseProperty("StudentQuestions")]
     public virtual MedicalCase? Case { get; set; }

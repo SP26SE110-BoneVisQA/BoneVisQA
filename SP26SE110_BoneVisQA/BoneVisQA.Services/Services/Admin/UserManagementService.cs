@@ -28,7 +28,6 @@ namespace BoneVisQA.Services.Services.Admin
           "Pending",
           "Expert",
           "Lecturer",
-          "ContentCurator"
         };
         public async Task<List<UserManagementDTO>> GetUserByRoleAsync(string role)
         {
@@ -155,17 +154,10 @@ namespace BoneVisQA.Services.Services.Admin
             };
         }
 
-        public async Task<UserManagementDTO> RevokeRoleAsync(Guid userId, string roleName)
+        public async Task<UserManagementDTO> RevokeRoleAsync(Guid userId)
         {
-            if (!_validRoles.Contains(roleName))
-                throw new ArgumentException("Role not found");
-
-            if (roleName != "Pending")
-                throw new InvalidOperationException("You can only revoke user to Pending role.");
-
-            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);
-            if (user == null)
-                throw new KeyNotFoundException("User not found");
+            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId)
+                ?? throw new KeyNotFoundException("User not found");
 
             var pendingRole = await _unitOfWork.RoleRepository
                 .FirstOrDefaultAsync(r => r.Name == "Pending")
@@ -173,26 +165,20 @@ namespace BoneVisQA.Services.Services.Admin
 
             var hasPending = await _unitOfWork.UserRoleRepository
                 .ExistsAsync(x => x.UserId == userId && x.RoleId == pendingRole.Id);
-
             if (hasPending)
                 throw new InvalidOperationException("User already has Pending role.");
 
+            // Xóa tất cả role hiện tại
             var userRoles = await _unitOfWork.UserRoleRepository
                 .FindAsync(x => x.UserId == userId);
-
             foreach (var ur in userRoles)
-            {
                 await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
-            }
 
-            // thêm Pending
-            var pendingUserRole = new UserRole
+            await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
             {
                 UserId = userId,
                 RoleId = pendingRole.Id
-            };
-
-            await _unitOfWork.UserRoleRepository.AddAsync(pendingUserRole);
+            });
 
             await _unitOfWork.SaveAsync();
 
@@ -203,7 +189,7 @@ namespace BoneVisQA.Services.Services.Admin
                 Email = user.Email,
                 Roles = new List<string> { "Pending" },
                 SchoolCohort = user.SchoolCohort,
-                LastLogin = user.LastLogin, 
+                LastLogin = user.LastLogin,
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt
