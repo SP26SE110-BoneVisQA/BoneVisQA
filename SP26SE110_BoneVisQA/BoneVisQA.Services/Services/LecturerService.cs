@@ -378,8 +378,8 @@ public class LecturerService : ILecturerService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
-                IsActive = c.IsActive,
+                IsApproved = c.IsApproved ?? false,
+                IsActive = c.IsActive ?? true,
                 CreatedAt = c.CreatedAt
             })
             .ToList();
