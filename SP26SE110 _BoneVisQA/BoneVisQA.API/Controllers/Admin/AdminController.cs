@@ -132,16 +132,39 @@ namespace BoneVisQA.API.Controllers.Admin
 
         //==========================================================================================================================================
 
-        // POST api/admin/documents
-        [HttpPost("documents")]
-        public async Task<IActionResult> UploadDocument([FromForm] SaveDocumentDTO dto)
+        // GET api/admin/documents/{id}
+        [HttpGet("documents/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetDocumentById(Guid id)
         {
-            var result = await _documentservice.UploadDocumentAsync(dto);
-
+            var result = await _documentservice.GetDocumentByIdAsync(id);
             return Ok(new
             {
-                Message = "Upload document successfully.",
+                Message = "Get document by id successfully.",
                 result
+            });
+        }
+
+        // POST api/admin/documents
+        [HttpPost("documents")]
+        public async Task<IActionResult> CreateDocument([FromForm] SaveDocumentDTO dto)
+        {
+            var result = await _documentservice.CreateDocumentAsync(dto);
+            return Ok(new 
+            { 
+                Message = "Tạo tài liệu thành công.", result }
+            );
+        }
+
+        // PUT api/admin/documents/{id}
+        [HttpPut("documents/{id}")]
+        public async Task<IActionResult> UpdateDocument(Guid id, [FromForm] SaveDocumentDTO dto)
+        {
+            var result = await _documentservice.UpdateDocumentAsync(id, dto);
+            return Ok(new 
+            { 
+                Message = "Cập nhật tài liệu thành công.", result 
             });
         }
 
