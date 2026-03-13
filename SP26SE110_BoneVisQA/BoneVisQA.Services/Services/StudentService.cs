@@ -10,6 +10,7 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Services;
 
@@ -182,6 +183,7 @@ public class StudentService : IStudentService
         catch
         {
             return null;
+
         }
     }
 
@@ -193,7 +195,7 @@ public class StudentService : IStudentService
             .Select(q => new StudentQuestionHistoryItemDto
             {
                 Id = q.Id,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 QuestionText = q.QuestionText,
                 CreatedAt = q.CreatedAt
             })
@@ -269,7 +271,7 @@ public class StudentService : IStudentService
                 QuestionId = q.Id,
                 QuestionText = q.QuestionText,
                 Type = q.Type,
-                CaseId = q.CaseId
+                CaseId = q.CaseId ?? Guid.Empty
             })
             .ToList();
 

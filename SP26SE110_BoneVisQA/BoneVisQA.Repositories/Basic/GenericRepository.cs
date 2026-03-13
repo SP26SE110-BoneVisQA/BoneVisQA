@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using System.Linq.Expressions;
+
 using System.Text;
 using System.Threading.Tasks;
 
@@ -15,6 +16,7 @@ namespace BoneVisQA.Repositories.Basic
     {
         protected readonly BoneVisQADbContext _context;
         protected readonly DbSet<TEntity> _dbSet;
+
 
         public GenericRepository(BoneVisQADbContext context)
         {
@@ -159,6 +161,7 @@ namespace BoneVisQA.Repositories.Basic
         public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
         {
             return _dbSet.Where(expression);
+
         }
 
         public async Task<int> DeleteAsync(Guid id)
@@ -168,6 +171,7 @@ namespace BoneVisQA.Repositories.Basic
             if (entity != null)
             {
                 _dbSet.Remove(entity);
+
                 return await _context.SaveChangesAsync();
             }
             return 0;

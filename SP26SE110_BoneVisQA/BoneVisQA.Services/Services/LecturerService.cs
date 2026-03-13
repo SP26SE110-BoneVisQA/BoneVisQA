@@ -317,7 +317,7 @@ public class LecturerService : ILecturerService
             {
                 Id = q.Id,
                 QuizId = q.QuizId,
-                CaseId = q.CaseId,
+                CaseId = q.CaseId ?? Guid.Empty,
                 CaseTitle = q.Case?.Title,
                 QuestionText = q.QuestionText,
                 Type = q.Type ?? "multiple_choice",

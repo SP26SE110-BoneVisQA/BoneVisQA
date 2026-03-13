@@ -30,6 +30,12 @@ public partial class StudentQuestion
     [Column("language")]
     public string? Language { get; set; }
 
+    [Column("custom_image_url")]
+    public string? CustomImageUrl { get; set; }
+
+    [Column("custom_coordinates", TypeName = "jsonb")]
+    public string? CustomCoordinates { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
