@@ -43,6 +43,9 @@ public partial class MedicalCase
     [Column("key_findings")]
     public string? KeyFindings { get; set; }
 
+    [Column("reflective_questions")]
+    public string? ReflectiveQuestions { get; set; }
+
     [InverseProperty("Case")]
     public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();
 
