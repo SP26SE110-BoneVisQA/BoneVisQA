@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Repositories.Services;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,7 @@ public class LecturerService : ILecturerService
             UpdatedAt = now
         };
 
-        await _unitOfWork.AcademicClassRepository.CreateAsync(entity);
+        await _unitOfWork.AcademicClassRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         return new ClassDto
@@ -82,7 +83,7 @@ public class LecturerService : ILecturerService
             EnrolledAt = DateTime.UtcNow
         };
 
-        await _unitOfWork.ClassEnrollmentRepository.CreateAsync(enrollment);
+        await _unitOfWork.ClassEnrollmentRepository.AddAsync(enrollment);
         await _unitOfWork.SaveAsync();
         return true;
     }
@@ -108,7 +109,7 @@ public class LecturerService : ILecturerService
                 EnrolledAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.ClassEnrollmentRepository.CreateAsync(enrollment);
+            await _unitOfWork.ClassEnrollmentRepository.AddAsync(enrollment);
         }
 
         await _unitOfWork.SaveAsync();
@@ -201,7 +202,7 @@ public class LecturerService : ILecturerService
             CreatedAt = now
         };
 
-        await _unitOfWork.AnnouncementRepository.CreateAsync(entity);
+        await _unitOfWork.AnnouncementRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
         return new AnnouncementDto
@@ -220,7 +221,6 @@ public class LecturerService : ILecturerService
         var entity = new Quiz
         {
             Id = Guid.NewGuid(),
-            ClassId = classId,
             Title = request.Title,
             OpenTime = request.OpenTime,
             CloseTime = request.CloseTime,
@@ -229,13 +229,22 @@ public class LecturerService : ILecturerService
             CreatedAt = now
         };
 
-        await _unitOfWork.QuizRepository.CreateAsync(entity);
+        await _unitOfWork.QuizRepository.AddAsync(entity);
+        await _unitOfWork.SaveAsync();
+
+        var classQuiz = new ClassQuiz
+        {
+            ClassId = classId,
+            QuizId = entity.Id,
+            AssignedAt = now
+        };
+        await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
         await _unitOfWork.SaveAsync();
 
         return new QuizDto
         {
             Id = entity.Id,
-            ClassId = entity.ClassId,
+            ClassId = classId,
             Title = entity.Title,
             OpenTime = entity.OpenTime,
             CloseTime = entity.CloseTime,
@@ -243,6 +252,7 @@ public class LecturerService : ILecturerService
             PassingScore = entity.PassingScore
         };
     }
+
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {
@@ -281,13 +291,8 @@ public class LecturerService : ILecturerService
             CorrectAnswer = request.CorrectAnswer
         };
 
-        await _unitOfWork.QuizQuestionRepository.CreateAsync(entity);
+        await _unitOfWork.QuizQuestionRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
-
-        var quiz = await _unitOfWork.QuizRepository
-            .FindByCondition(q => q.Id == request.QuizId)
-            .Include(q => q.Class)
-            .FirstOrDefaultAsync();
 
         return new QuizQuestionDto
         {

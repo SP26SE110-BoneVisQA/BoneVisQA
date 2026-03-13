@@ -7,7 +7,7 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.Repositories;
+namespace BoneVisQA.Repositories.Services;
 
 public class StudentRepository : IStudentRepository
 {
@@ -73,21 +73,21 @@ public class StudentRepository : IStudentRepository
 
     public async Task<CaseViewLog> AddCaseViewLogAsync(CaseViewLog log)
     {
-        await _unitOfWork.CaseViewLogRepository.CreateAsync(log);
+        await _unitOfWork.CaseViewLogRepository.AddAsync(log);
         await _unitOfWork.SaveAsync();
         return log;
     }
 
     public async Task<CaseAnnotation> CreateAnnotationAsync(CaseAnnotation annotation)
     {
-        await _unitOfWork.CaseAnnotationRepository.CreateAsync(annotation);
+        await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
         await _unitOfWork.SaveAsync();
         return annotation;
     }
 
     public async Task<StudentQuestion> CreateStudentQuestionAsync(StudentQuestion question)
     {
-        await _unitOfWork.StudentQuestionRepository.CreateAsync(question);
+        await _unitOfWork.StudentQuestionRepository.AddAsync(question);
         await _unitOfWork.SaveAsync();
         return question;
     }
@@ -126,13 +126,24 @@ public class StudentRepository : IStudentRepository
             .Select(e => e.ClassId)
             .ToListAsync();
 
-        if (classIds.Count == 0)
+
+    //    if (classIds.Count == 0)
+    //    {
+    //        return new List<Quiz>();
+    //    }
+
+        var quizIds = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => classIds.Contains(cq.ClassId))
+            .Select(cq => cq.QuizId)
+            .ToListAsync();
+
+        if (quizIds.Count == 0)
         {
             return new List<Quiz>();
         }
 
         return await _unitOfWork.QuizRepository
-            .FindByCondition(q => classIds.Contains(q.ClassId)
+            .FindByCondition(q => quizIds.Contains(q.Id)
                         && (q.OpenTime == null || q.OpenTime <= utcNow)
                         && (q.CloseTime == null || q.CloseTime >= utcNow))
             .Include(q => q.QuizAttempts)
@@ -155,9 +166,17 @@ public class StudentRepository : IStudentRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<QuizAttempt?> GetQuizAttemptByIdAsync(Guid attemptId, Guid studentId)
+    {
+        return await _unitOfWork.QuizAttemptRepository
+            .FindByCondition(a => a.Id == attemptId && a.StudentId == studentId)
+            .Include(a => a.StudentQuizAnswers)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<QuizAttempt> CreateQuizAttemptAsync(QuizAttempt attempt)
     {
-        await _unitOfWork.QuizAttemptRepository.CreateAsync(attempt);
+        await _unitOfWork.QuizAttemptRepository.AddAsync(attempt);
         await _unitOfWork.SaveAsync();
         return attempt;
     }
@@ -172,7 +191,7 @@ public class StudentRepository : IStudentRepository
     {
         foreach (var answer in answers)
         {
-            await _unitOfWork.StudentQuizAnswerRepository.CreateAsync(answer);
+            await _unitOfWork.StudentQuizAnswerRepository.AddAsync(answer);
         }
         await _unitOfWork.SaveAsync();
     }

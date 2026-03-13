@@ -24,12 +24,12 @@ public partial class Document
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
-
+   
     [Column("version")]
-    public int Version { get; set; }
+    public int Version { get; set; } = 1;
 
     [Column("is_outdated")]
-    public bool IsOutdated { get; set; }
+    public bool IsOutdated { get; set; } = false;
 
     [Column("indexing_status")]
     public string IndexingStatus { get; set; } = "Pending";
@@ -43,4 +43,5 @@ public partial class Document
 
     [InverseProperty("Document")]
     public virtual ICollection<DocumentTag> DocumentTags { get; set; } = new List<DocumentTag>();
+
 }

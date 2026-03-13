@@ -40,7 +40,7 @@ public class StudentQuestionDto
 public class StudentQuestionHistoryItemDto
 {
     public Guid Id { get; set; }
-    public Guid CaseId { get; set; }
+    public Guid? CaseId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
 }

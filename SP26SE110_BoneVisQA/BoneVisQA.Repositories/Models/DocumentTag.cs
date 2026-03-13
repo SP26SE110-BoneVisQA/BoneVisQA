@@ -30,4 +30,5 @@ public partial class DocumentTag
     [ForeignKey("TagId")]
     [InverseProperty("DocumentTags")]
     public virtual Tag Tag { get; set; } = null!;
+
 }

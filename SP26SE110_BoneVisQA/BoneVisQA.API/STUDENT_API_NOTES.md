@@ -1,11 +1,12 @@
-## Student API Notes
+# Student API Notes
 
-### 1. Chạy API & đăng nhập Student
+## 1. Chạy API & đăng nhập Student
 
 - Chạy backend: `dotnet run --project BoneVisQA.API`
-- Mở Swagger: `https://localhost:5001/swagger`.
+- Mở Swagger: `http://localhost:5046/swagger` (hoặc port trong console)
 
-#### Đăng ký Student
+### Đăng ký Student
+
 
 - `POST /api/Auths/register`
   ```json
@@ -17,6 +18,7 @@
     "roleName": "Student"
   }
   ```
+
 
 #### Đăng nhập Student
 
@@ -30,9 +32,9 @@
 - Lấy `token` trong response, dùng cho các request sau:
   - Header: `Authorization: Bearer <token>`
 
+
 > Lưu ý: hiện tại controller đang nhận `studentId` qua query. Khi tích hợp bảo mật đầy đủ, có thể lấy `studentId` trực tiếp từ JWT.
 
----
 
 ### 2. Chức năng chính cho Student (StudentController)
 
@@ -52,6 +54,7 @@
     }
   ]
   ```
+
 
 #### 2.2. Xem chi tiết ca bệnh (và ghi log xem ca)
 
@@ -74,6 +77,7 @@
   }
   ```
 
+
 #### 2.3. Tạo annotation trên ảnh
 
 - `POST /api/Student/annotations?studentId={GUID-STUDENT-ID}`
@@ -85,6 +89,7 @@
     "coordinates": "{\"x\":100,\"y\":150,\"width\":80,\"height\":60}"
   }
   ```
+
 - Kết quả: `AnnotationDto` với `id`, `imageId`, `label`, `coordinates`, `createdAt`.
 
 #### 2.4. Gửi câu hỏi (Visual Q&A – lưu lịch sử)
@@ -99,6 +104,7 @@
     "language": "en"
   }
   ```
+
 - Kết quả: `StudentQuestionDto`.
 
 #### 2.5. Xem lịch sử câu hỏi
@@ -115,6 +121,7 @@
     }
   ]
   ```
+
 
 #### 2.6. Xem danh sách quiz được giao
 
@@ -134,6 +141,7 @@
     }
   ]
   ```
+
 
 #### 2.7. Bắt đầu làm quiz
 
@@ -155,6 +163,7 @@
   }
   ```
 
+<
 #### 2.8. Nộp bài quiz
 
 - `POST /api/Student/quizzes/submit?studentId={GUID-STUDENT-ID}`
@@ -180,6 +189,7 @@
     "passed": true
   }
   ```
+
 
 #### 2.9. Xem tổng quan tiến độ học tập
 

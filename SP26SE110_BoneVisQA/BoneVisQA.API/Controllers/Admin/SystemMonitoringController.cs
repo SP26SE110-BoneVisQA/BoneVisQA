@@ -1,0 +1,69 @@
+﻿using BoneVisQA.Services.Interfaces.Admin;
+using Microsoft.AspNetCore.Mvc;
+
+namespace BoneVisQA.API.Controllers.Admin
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    // [Authorize(Roles = "Admin")]
+    public class SystemMonitoringController : ControllerBase
+    {
+        private readonly ISystemMonitoringService _service;
+
+        public SystemMonitoringController(ISystemMonitoringService service)
+        {
+            _service = service;
+        }
+
+        // GET api/admin/monitoring/users
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUserStats()
+        {
+            var result = await _service.GetUserStatsAsync();
+            return Ok(new
+            {
+                Message = "Get user stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/activity?from=2024-01-01&to=2024-12-31
+        [HttpGet("activity")]
+        public async Task<IActionResult> GetActivityStats([FromQuery] DateTime from,[FromQuery] DateTime to)
+        {
+            if (from > to)
+                return BadRequest("Ngày bắt đầu phải nhỏ hơn ngày kết thúc.");
+
+            var result = await _service.GetActivityStatsAsync(from, to);
+            return Ok(new
+            {
+                Message = "Get activity stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/rag
+        [HttpGet("rag")]
+        public async Task<IActionResult> GetRagStats()
+        {
+            var result = await _service.GetRagStatsAsync();
+            return Ok(new
+            {
+                Message = "Get rag stat successfully.",
+                result
+            });
+        }
+
+        // GET api/admin/monitoring/reviews
+        [HttpGet("reviews")]
+        public async Task<IActionResult> GetExpertReviewStats()
+        {
+            var result = await _service.GetExpertReviewStatsAsync();
+            return Ok(new
+            {
+                Message = "Get expert review successfully.",
+                result
+            });
+        }
+    }
+}

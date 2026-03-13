@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Basic;
+using BoneVisQA.Repositories.Basic;
 using BoneVisQA.Repositories.Models;
 using System;
 using System.Collections.Generic;
@@ -18,6 +18,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<Category> CategoryRepository { get; }
         GenericRepository<Citation> CitationRepository { get; }
         GenericRepository<ClassEnrollment> ClassEnrollmentRepository { get; }
+        GenericRepository<ClassQuiz> ClassQuizRepository { get; }
         GenericRepository<Document> DocumentRepository { get; }
         GenericRepository<DocumentChunk> DocumentChunkRepository { get; }
         GenericRepository<ExpertReview> ExpertReviewRepository { get; }

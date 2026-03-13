@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
@@ -81,6 +82,7 @@ public class StudentsController : ControllerBase
         return Ok(result);
     }
 
+
     [HttpPost("quizzes/{quizId:guid}/start")]
     public async Task<ActionResult<QuizSessionDto>> StartQuiz(Guid quizId, [FromQuery] Guid studentId)
     {
@@ -89,9 +91,17 @@ public class StudentsController : ControllerBase
     }
 
     [HttpPost("quizzes/submit")]
-    public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid studentId, [FromBody] SubmitQuizRequestDto request)
+    public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
     {
-        var result = await _studentService.SubmitQuizAsync(studentId, request);
+        var effectiveStudentId = studentId ?? Guid.Empty;
+        if (effectiveStudentId == Guid.Empty)
+        {
+            var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var id))
+                return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
+            effectiveStudentId = id;
+        }
+        var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
         return Ok(result);
     }
 
