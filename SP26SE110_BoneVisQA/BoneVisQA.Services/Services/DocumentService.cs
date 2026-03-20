@@ -1,10 +1,10 @@
-using System.Text;
-using System.Text.Json;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Pgvector;
 
 namespace BoneVisQA.Services.Services;
 
@@ -12,19 +12,19 @@ public class DocumentService : IDocumentService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
-    private readonly HttpClient _httpClient;
-    private readonly string _aiServiceBaseUrl;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<DocumentService> _logger;
 
     public DocumentService(
         IUnitOfWork unitOfWork,
         ISupabaseStorageService storageService,
-        IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IServiceScopeFactory scopeFactory,
+        ILogger<DocumentService> logger)
     {
         _unitOfWork = unitOfWork;
         _storageService = storageService;
-        _httpClient = httpClientFactory.CreateClient();
-        _aiServiceBaseUrl = configuration["AIService:BaseUrl"] ?? "http://localhost:8000";
+        _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     public async Task<DocumentDto> UploadDocumentAsync(IFormFile file, DocumentUploadDto metadata)
@@ -46,15 +46,18 @@ public class DocumentService : IDocumentService
         await _unitOfWork.DocumentRepository.AddAsync(document);
         await _unitOfWork.SaveAsync();
 
+        var docId = document.Id;
+        var url = fileUrl;
         _ = Task.Run(async () =>
         {
             try
             {
-                await TriggerPythonIngestionAsync(document.Id, fileUrl);
+                await IngestDocumentInBackgroundAsync(docId, url).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                await UpdateIndexingStatusAsync(document.Id, "Failed");
+                _logger.LogError(ex, "Unhandled exception in background ingest task wrapper for Document ID {DocumentId}", docId);
+                await MarkIndexingFailedInNewScopeAsync(docId);
             }
         });
 
@@ -78,6 +81,12 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document == null) return false;
 
+        var chunks = await _unitOfWork.DocumentChunkRepository.FindAsync(c => c.DocId == id);
+        if (chunks.Count > 0)
+        {
+            await _unitOfWork.DocumentChunkRepository.RemoveRangeAsync(chunks);
+        }
+
         await _unitOfWork.DocumentRepository.DeleteAsync(id);
         await _unitOfWork.SaveAsync();
         return true;
@@ -93,15 +102,18 @@ public class DocumentService : IDocumentService
         await _unitOfWork.DocumentRepository.UpdateAsync(document);
         await _unitOfWork.SaveAsync();
 
+        var docId = document.Id;
+        var url = document.FilePath;
         _ = Task.Run(async () =>
         {
             try
             {
-                await TriggerPythonIngestionAsync(document.Id, document.FilePath);
+                await IngestDocumentInBackgroundAsync(docId, url).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                await UpdateIndexingStatusAsync(document.Id, "Failed");
+                _logger.LogError(ex, "Unhandled exception in background ingest task wrapper for Document ID {DocumentId}", docId);
+                await MarkIndexingFailedInNewScopeAsync(docId);
             }
         });
 
@@ -119,30 +131,86 @@ public class DocumentService : IDocumentService
         }
     }
 
-    private async Task TriggerPythonIngestionAsync(Guid docId, string fileUrl)
+    private async Task IngestDocumentInBackgroundAsync(Guid docId, string fileUrl)
     {
-        var payload = new
+        try
         {
-            docId = docId.ToString(),
-            fileUrl = fileUrl
-        };
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var pdf = scope.ServiceProvider.GetRequiredService<IPdfProcessingService>();
+            var embedding = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
 
-        var content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+            _logger.LogInformation("Background ingestion started for Document ID {DocumentId}", docId);
 
-        var response = await _httpClient.PostAsync(
-            $"{_aiServiceBaseUrl}/api/v1/documents/ingest",
-            content);
+            await SetStatusAsync(uow, docId, "Processing");
 
-        if (response.IsSuccessStatusCode)
-        {
-            await UpdateIndexingStatusAsync(docId, "Completed");
+            var chunkTexts = await pdf.DownloadAndChunkPdfAsync(fileUrl);
+            _logger.LogInformation("Extracted {ChunkCount} chunks. Starting embedding generation...", chunkTexts.Count);
+
+            var existing = await uow.DocumentChunkRepository.FindAsync(c => c.DocId == docId);
+            if (existing.Count > 0)
+            {
+                await uow.DocumentChunkRepository.RemoveRangeAsync(existing);
+                await uow.SaveAsync();
+            }
+
+            var entities = new List<DocumentChunk>();
+            for (var i = 0; i < chunkTexts.Count; i++)
+            {
+                var vec = await embedding.EmbedTextAsync(chunkTexts[i]);
+                entities.Add(new DocumentChunk
+                {
+                    Id = Guid.NewGuid(),
+                    DocId = docId,
+                    Content = chunkTexts[i],
+                    ChunkOrder = i,
+                    Embedding = new Vector(vec),
+                    IsFlagged = false
+                });
+            }
+
+            _logger.LogInformation("Embeddings generated. Saving to database...");
+
+            if (entities.Count > 0)
+                await uow.DocumentChunkRepository.AddRangeAsync(entities);
+
+            await uow.SaveAsync();
+            await SetStatusAsync(uow, docId, "Completed");
+            _logger.LogInformation("Background ingestion completed successfully for Document ID {DocumentId}", docId);
         }
-        else
+        catch (Exception ex)
         {
-            await UpdateIndexingStatusAsync(docId, "Failed");
+            _logger.LogError(ex, "FATAL ERROR in background ingestion for Document ID {DocumentId}", docId);
+            await MarkIndexingFailedInNewScopeAsync(docId);
+        }
+    }
+
+    /// <summary>
+    /// Uses a fresh scope so Failed status is persisted even if the ingestion scope/DbContext is faulted.
+    /// </summary>
+    private async Task MarkIndexingFailedInNewScopeAsync(Guid docId)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await SetStatusAsync(uow, docId, "Failed");
+            _logger.LogWarning("Document {DocumentId} IndexingStatus set to Failed (new DbContext scope).", docId);
+        }
+        catch (Exception inner)
+        {
+            _logger.LogError(inner, "Could not update IndexingStatus to Failed for Document ID {DocumentId}", docId);
+        }
+    }
+
+    private static async Task SetStatusAsync(IUnitOfWork uow, Guid docId, string status)
+    {
+        var doc = await uow.DocumentRepository.GetByIdAsync(docId);
+        if (doc != null)
+        {
+            doc.IndexingStatus = status;
+            await uow.DocumentRepository.UpdateAsync(doc);
+            await uow.SaveAsync();
         }
     }
 
