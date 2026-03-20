@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-  //  [Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/[controller]")]
     public class ExpertController : ControllerBase
@@ -23,7 +23,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(MedicalCaseDTO dto)
+        public async Task<IActionResult> CreateCase(CreateMedicalCaseDTO dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
@@ -31,6 +31,28 @@ namespace BoneVisQA.API.Controllers.Expert
             {
                 message = "Medical case created successfully",
                 caseId
+            });
+        }
+
+        [HttpPost("images")]
+        public async Task<IActionResult> AddImage([FromBody] AddMedicalImageDTO dto)
+        {
+            var result = await _medicalcaseService.AddImageAsync(dto);
+            return Ok(new
+            {
+                message = "Medical_Image created successfully",
+                result
+            });
+        }
+
+        [HttpPost("annotations")]
+        public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTO dto)
+        {
+            var result = await _medicalcaseService.AddAnnotationAsync(dto);
+            return Ok(new
+            {
+                message = "Medical_Annotation created successfully",
+                result
             });
         }
 

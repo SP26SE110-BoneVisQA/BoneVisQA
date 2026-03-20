@@ -20,7 +20,7 @@ namespace BoneVisQA.Services.Services.Expert
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTO dto)
+        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto) 
         {
             var medicalCase = new MedicalCase
             {
@@ -29,8 +29,10 @@ namespace BoneVisQA.Services.Services.Expert
                 Description = dto.Description,
                 Difficulty = dto.Difficulty,
                 CategoryId = dto.CategoryId,
-                IsApproved = dto.IsApproved ?? false,
-                IsActive = dto.IsActive ?? true,
+                SuggestedDiagnosis = dto.SuggestedDiagnosis,
+                KeyFindings = dto.KeyFindings,
+                IsApproved = false,
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 MedicalImages = dto.Images?.Select(img => new MedicalImage
@@ -52,7 +54,6 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
             await _unitOfWork.SaveAsync();
 
-            // Map sang DTO trả về
             return new MedicalCaseDTO
             {
                 Id = medicalCase.Id,
@@ -65,16 +66,70 @@ namespace BoneVisQA.Services.Services.Expert
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
                 KeyFindings = medicalCase.KeyFindings,
                 CreatedAt = medicalCase.CreatedAt,
-                Images = medicalCase.MedicalImages.Select(img => new CreateMedicalImageDTO
+                Images = medicalCase.MedicalImages.Select(img => new MedicalImageDTO 
                 {
+                    Id = img.Id,
                     ImageUrl = img.ImageUrl,
                     Modality = img.Modality,
-                    Annotations = img.CaseAnnotations.Select(a => new CreateAnnotationDTO
+                    Annotations = img.CaseAnnotations.Select(a => new AnnotationDTO 
                     {
+                        Id = a.Id,
                         Label = a.Label,
                         Coordinates = a.Coordinates
                     }).ToList()
                 }).ToList()
+            };
+        }
+        // Thêm image cho case
+        public async Task<MedicalImageDTO> AddImageAsync(AddMedicalImageDTO dto)
+        {
+            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.CaseId)
+                ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+
+            var image = new MedicalImage
+            {
+                Id = Guid.NewGuid(),
+                CaseId = dto.CaseId,
+                ImageUrl = dto.ImageUrl,
+                Modality = dto.Modality,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _unitOfWork.MedicalImageRepository.AddAsync(image);
+            await _unitOfWork.SaveAsync();
+
+            return new MedicalImageDTO
+            {
+                Id = image.Id,
+                ImageUrl = image.ImageUrl,
+                Modality = image.Modality,
+                Annotations = new List<AnnotationDTO>()
+            };
+        }
+
+        // Thêm annotation cho image
+        public async Task<AnnotationDTO> AddAnnotationAsync(AddAnnotationDTO dto)
+        {
+            var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(dto.ImageId)
+                ?? throw new KeyNotFoundException("Không tìm thấy ảnh.");
+
+            var annotation = new CaseAnnotation
+            {
+                Id = Guid.NewGuid(),
+                ImageId = dto.ImageId,
+                Label = dto.Label,
+                Coordinates = dto.Coordinates,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
+            await _unitOfWork.SaveAsync();
+
+            return new AnnotationDTO
+            {
+                Id = annotation.Id,
+                Label = annotation.Label,
+                Coordinates = annotation.Coordinates
             };
         }
     }
