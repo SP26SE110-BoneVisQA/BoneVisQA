@@ -36,7 +36,7 @@ public class StudentService : IStudentService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
+                IsApproved = c.IsApproved ?? false,
                 ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
             })
@@ -62,7 +62,7 @@ public class StudentService : IStudentService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
+                IsApproved = c.IsApproved ?? false,
                 ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
             })
@@ -95,7 +95,7 @@ public class StudentService : IStudentService
             Description = entity.Description,
             Difficulty = entity.Difficulty,
             CategoryName = entity.Category?.Name,
-            IsApproved = entity.IsApproved,
+            IsApproved = entity.IsApproved ?? false,
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
                 .Select(i => new MedicalImageDto
@@ -135,8 +135,6 @@ public class StudentService : IStudentService
 
     public async Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request)
     {
-        var language = NormalizeLanguage(request.Language);
-
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
@@ -144,7 +142,6 @@ public class StudentService : IStudentService
             CaseId = request.CaseId == Guid.Empty ? null : request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = language,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -157,7 +154,6 @@ public class StudentService : IStudentService
             CaseId = created.CaseId ?? Guid.Empty,
             AnnotationId = created.AnnotationId,
             QuestionText = created.QuestionText,
-            Language = created.Language,
             CreatedAt = created.CreatedAt
         };
     }
@@ -173,7 +169,6 @@ public class StudentService : IStudentService
             CaseId = request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = request.Language,
             CustomImageUrl = request.ImageUrl,
             CustomCoordinates = request.Coordinates,
 
@@ -189,7 +184,6 @@ public class StudentService : IStudentService
             CaseId = created.CaseId ?? Guid.Empty,
             AnnotationId = created.AnnotationId,
             QuestionText = created.QuestionText,
-            Language = created.Language,
             CreatedAt = created.CreatedAt
         };
     }
@@ -222,15 +216,6 @@ public class StudentService : IStudentService
             await _unitOfWork.CitationRepository.AddAsync(citation);
 
         }
-    }
-
-    private static string? NormalizeLanguage(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return "vi";
-        var v = value.Trim().ToLowerInvariant();
-        if (v == "vi" || v == "vie") return "vi";
-        if (v == "en" || v == "eng") return "en";
-        return "vi";
     }
 
     private static string? TryParseCoordinatesJson(string? value)

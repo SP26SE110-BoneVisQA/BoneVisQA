@@ -24,26 +24,36 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("upload")]
+    [RequestSizeLimit(104857600)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<DocumentDto>> Upload([FromForm] DocumentUploadRequest request)
     {
+        Console.WriteLine("=> [DEBUG] Starting file upload processing...");
+
         if (request.File == null || request.File.Length == 0)
         {
             return BadRequest(new { message = "File is required." });
         }
 
-        var allowedExtensions = new[] { ".pdf" };
         var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
-        if (!allowedExtensions.Contains(extension))
+        if (extension != ".pdf")
         {
-            return BadRequest(new { message = "Only PDF files are allowed." });
+            return BadRequest(new
+            {
+                message = "Security Policy: Only standard .pdf documents are allowed in the BoneVisQA medical knowledge base."
+            });
         }
+
+        Console.WriteLine("--> [DEBUG] File extension validated...");
 
         var metadata = new DocumentUploadDto
         {
             Title = request.Title,
             CategoryId = request.CategoryId
         };
+
+        Console.WriteLine("--> [DEBUG] Passing to DocumentService...");
 
         var document = await _documentService.UploadDocumentAsync(request.File, metadata);
         return CreatedAtAction(nameof(GetById), new { id = document.Id }, document);

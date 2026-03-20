@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -180,7 +180,7 @@ namespace BoneVisQA.API.Controllers.Admin
 
         // PUT api/admin/documents/{id}/category
         [HttpPut("{id}/category/{categoryId}")]
-        public async Task<IActionResult> ChangeCategory(Guid id, [FromHeader] Guid categoryId)
+        public async Task<IActionResult> ChangeCategory(Guid id, [FromRoute] Guid categoryId)
         {
             var result = await _documentservice.ChangeCategoryAsync(id, categoryId);
 

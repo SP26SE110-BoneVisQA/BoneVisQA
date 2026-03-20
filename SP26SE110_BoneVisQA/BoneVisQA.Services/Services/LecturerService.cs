@@ -378,8 +378,8 @@ public class LecturerService : ILecturerService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
-                IsActive = c.IsActive,
+                IsApproved = c.IsApproved ?? false,
+                IsActive = c.IsActive ?? false,
                 CreatedAt = c.CreatedAt
             })
             .ToList();
@@ -458,7 +458,6 @@ public class LecturerService : ILecturerService
                 CaseId = q.CaseId ?? Guid.Empty,
                 CaseTitle = q.Case?.Title ?? string.Empty,
                 QuestionText = q.QuestionText,
-                Language = q.Language,
                 CreatedAt = q.CreatedAt,
                 AnswerText = q.CaseAnswers?.FirstOrDefault()?.AnswerText,
                 AnswerStatus = q.CaseAnswers?.FirstOrDefault()?.Status

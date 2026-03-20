@@ -27,9 +27,6 @@ public partial class StudentQuestion
     [Column("question_text")]
     public string QuestionText { get; set; } = null!;
 
-    [Column("language")]
-    public string? Language { get; set; }
-
     [Column("custom_image_url")]
     public string? CustomImageUrl { get; set; }
 
@@ -42,12 +39,6 @@ public partial class StudentQuestion
     [ForeignKey("AnnotationId")]
     [InverseProperty("StudentQuestions")]
     public virtual CaseAnnotation? Annotation { get; set; }
-
-    [Column("custom_image_url")]
-    public string? CustomImageUrl { get; set; }
-
-    [Column("custom_coordinates")]
-    public string? CustomCoordinates { get; set; }  
 
     [ForeignKey("CaseId")]
     [InverseProperty("StudentQuestions")]
