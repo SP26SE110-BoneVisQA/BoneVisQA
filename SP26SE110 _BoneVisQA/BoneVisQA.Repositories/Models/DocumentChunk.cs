@@ -1,8 +1,9 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore;
+using System.Numerics;
 
 namespace BoneVisQA.Repositories.Models;
 
@@ -22,6 +23,12 @@ public partial class DocumentChunk
 
     [Column("chunk_order")]
     public int ChunkOrder { get; set; }
+
+    //[Column("embedding", TypeName = "vector(768)")]
+    //public Pgvector.Vector? Embedding { get; set; }
+
+    //[Column("is_flagged")]
+    //public bool IsFlagged { get; set; } = false;
 
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();

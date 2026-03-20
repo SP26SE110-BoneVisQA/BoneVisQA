@@ -67,73 +67,13 @@ namespace BoneVisQA.Services.Services.Admin
                 Version = doc.Version,
                 IsOutdated = doc.IsOutdated,
                 CreatedAt = doc.CreatedAt,
+                IndexingStatus = doc.IndexingStatus,    
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
                 ChunkCount = chunks.Count
             };
-        }
-
-        // ── CreateDocumentAsync: chỉ tạo mới ────────────────
-        public async Task<DocumentDTO> CreateDocumentAsync(SaveDocumentDTO dto)
-        {
-            await _unitOfWork.BeginTransactionAsync();
-            try
-            {
-                var doc = new Document
-                {
-                    Id = Guid.NewGuid(),
-                    Title = dto.Title,
-                    CategoryId = dto.CategoryId,
-                    Version = 1,
-                    IsOutdated = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                if (dto.File != null)
-                    doc.FilePath = await SaveFileAsync(dto.File);
-
-                await _unitOfWork.DocumentRepository.AddAsync(doc);
-                await _unitOfWork.SaveAsync();
-                await _unitOfWork.CommitTransactionAsync();
-
-                return await MapToDTOAsync(doc);
-            }
-            catch
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw;
-            }
-        }
-
-        // ── UpdateDocumentAsync: chỉ cập nhật ───────────────
-        public async Task<DocumentDTO> UpdateDocumentAsync(Guid documentId, SaveDocumentDTO dto)
-        {
-            await _unitOfWork.BeginTransactionAsync();
-            try
-            {
-                var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
-                    ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
-
-                doc.Title = dto.Title;
-                doc.CategoryId = dto.CategoryId;
-
-                if (dto.File != null)
-                    doc.FilePath = await SaveFileAsync(dto.File);
-
-                await _unitOfWork.DocumentRepository.UpdateAsync(doc);
-                await _unitOfWork.SaveAsync();
-                await _unitOfWork.CommitTransactionAsync();
-
-                return await MapToDTOAsync(doc);
-            }
-            catch
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw;
-            }
-        }
-
+        }      
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
@@ -204,15 +144,6 @@ namespace BoneVisQA.Services.Services.Admin
             doc.IsOutdated = isOutdated;
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
-
-            return await MapToDTOAsync(doc);
-        }
-
-        // ── GetDocumentByIdAsync ─────────────────────────────
-        public async Task<DocumentDTO> GetDocumentByIdAsync(Guid documentId)
-        {
-            var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
-                ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
 
             return await MapToDTOAsync(doc);
         }

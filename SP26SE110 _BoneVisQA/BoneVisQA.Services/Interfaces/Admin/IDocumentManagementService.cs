@@ -10,11 +10,6 @@ namespace BoneVisQA.Services.Interfaces.Admin
 {
     public interface IDocumentManagementService
     {
-        Task<DocumentDTO> GetDocumentByIdAsync(Guid documentId);
-        Task<DocumentDTO> CreateDocumentAsync(SaveDocumentDTO dto);         
-        Task<DocumentDTO> UpdateDocumentAsync(Guid documentId, SaveDocumentDTO dto);
-
-
         // ── Tổ chức chủ đề & thẻ ────────────────────────────
         Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds);
         Task<DocumentDTO> ChangeCategoryAsync(Guid documentId, Guid categoryId);
