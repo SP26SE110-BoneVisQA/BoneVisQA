@@ -101,6 +101,7 @@ namespace BoneVisQA.Services.Services.Expert
             return new MedicalImageDTO
             {
                 Id = image.Id,
+                CaseName = medicalCase.Title,   
                 ImageUrl = image.ImageUrl,
                 Modality = image.Modality,
                 Annotations = new List<AnnotationDTO>()

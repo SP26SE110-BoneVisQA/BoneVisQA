@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-    [Authorize(Roles = "Expert")]
+  //  [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/[controller]")]
     public class ExpertController : ControllerBase
@@ -74,9 +74,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(
-            Guid quizId,
-            [FromBody] QuizQuestionDTO request)
+        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDTO request)
         {
             if (request == null)
             {

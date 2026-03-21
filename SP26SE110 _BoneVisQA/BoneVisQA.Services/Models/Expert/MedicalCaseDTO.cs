@@ -23,21 +23,6 @@ namespace BoneVisQA.Services.Models.Expert
         public DateTime? CreatedAt { get; set; }
         public List<MedicalImageDTO> Images { get; set; } = new(); 
     }
-
-    public class MedicalImageDTO
-    {
-        public Guid Id { get; set; }                              
-        public string ImageUrl { get; set; } = null!;
-        public string? Modality { get; set; }
-        public List<AnnotationDTO> Annotations { get; set; } = new();
-    }
-
-    public class AnnotationDTO
-    {
-        public Guid Id { get; set; }                             
-        public string Label { get; set; } = null!;
-        public string? Coordinates { get; set; }
-    }
     public class CreateMedicalCaseDTO
     {
         public string Title { get; set; } = null!;
@@ -49,6 +34,27 @@ namespace BoneVisQA.Services.Models.Expert
         public List<CreateMedicalImageDTO>? Images { get; set; }
     }
 
+    public class MedicalImageDTO
+    {
+        public Guid Id { get; set; }                              
+        public string ImageUrl { get; set; } = null!;
+        public string? Modality { get; set; }
+        public string CaseName { get; set; } = null!;   
+        public List<AnnotationDTO> Annotations { get; set; } = new();
+    }
+
+    public class AnnotationDTO
+    {
+        public Guid Id { get; set; }
+        public string Label { get; set; } = null!;
+        public string? Coordinates { get; set; }
+    }
+    public class AddMedicalImageDTO
+    {
+        public Guid CaseId { get; set; }
+        public string ImageUrl { get; set; } = null!;
+        public string? Modality { get; set; }
+    }
     public class CreateMedicalImageDTO
     {
         public string ImageUrl { get; set; } = null!;
@@ -61,14 +67,6 @@ namespace BoneVisQA.Services.Models.Expert
         public string Label { get; set; } = null!;
         public string? Coordinates { get; set; }
     }
-
-    public class AddMedicalImageDTO
-    {
-        public Guid CaseId { get; set; }
-        public string ImageUrl { get; set; } = null!;
-        public string? Modality { get; set; }
-    }
-
     public class AddAnnotationDTO
     {
         public Guid ImageId { get; set; }

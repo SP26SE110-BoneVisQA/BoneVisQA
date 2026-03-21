@@ -49,14 +49,13 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, QuizQuestionDTO request)
+        public async Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDTO request)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
             var question = new QuizQuestion
             {
-                Id = Guid.NewGuid(),
                 QuizId = quizId,
                 CaseId = request.CaseId,
                 QuestionText = request.QuestionText,
@@ -75,6 +74,7 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 Id = question.Id,
                 QuizId = question.QuizId,
+                QuizTitle = quiz.Title,
                 CaseId = question.CaseId,
                 QuestionText = question.QuestionText,
                 Type = question.Type,
@@ -114,7 +114,9 @@ namespace BoneVisQA.Services.Services.Expert
             return new ClassQuizDTO
             {
                 ClassId = classQuiz.ClassId,
+                ClassName = academicClass.ClassName, 
                 QuizId = classQuiz.QuizId,
+                QuizName = quiz.Title,  
                 AssignedAt = classQuiz.AssignedAt
             };
         }

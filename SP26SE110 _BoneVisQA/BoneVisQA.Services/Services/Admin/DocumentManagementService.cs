@@ -23,34 +23,9 @@ namespace BoneVisQA.Services.Services.Admin
             _env = env;
         }
 
-        // ── Helper: lưu file vật lý ─────────────────────────
-        private async Task<string> SaveFileAsync(IFormFile file)
-        {
-            var uploadFolder = Path.Combine(_env.ContentRootPath, "uploads", "documents");
-            if (!Directory.Exists(uploadFolder))
-                Directory.CreateDirectory(uploadFolder);
-
-            var extension = Path.GetExtension(file.FileName);
-            var originalName = Path.GetFileNameWithoutExtension(file.FileName);
-
-            // ✅ Rút ngắn tên nếu quá dài (max 50 ký tự)
-            if (originalName.Length > 50)
-                originalName = originalName.Substring(0, 50);
-
-            var fileName = $"{originalName}_{DateTime.UtcNow:yyyyMMddHHmmss}{extension}";
-            var filePath = Path.Combine(uploadFolder, fileName);
-
-            using var stream = new FileStream(filePath, FileMode.Create);
-            await file.CopyToAsync(stream);
-
-            return $"/uploads/documents/{fileName}";
-        }
-
         // ── Helper: map Entity → DTO ─────────────────────────
         private async Task<DocumentDTO> MapToDTOAsync(Document doc)
         {
-            var chunks = await _unitOfWork.DocumentChunkRepository
-                .FindAsync(c => c.DocId == doc.Id);
 
             var docTags = await _unitOfWork.DocumentTagRepository
                 .FindIncludeAsync(dt => dt.DocumentId == doc.Id, dt => dt.Tag);
@@ -71,7 +46,6 @@ namespace BoneVisQA.Services.Services.Admin
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
-                ChunkCount = chunks.Count
             };
         }      
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
