@@ -10,8 +10,8 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface IMedicalCaseService
     {
-        Task<MedicalCaseDTO> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto);
-        Task<MedicalImageDTO> AddImageAsync(AddMedicalImageDTO dto);
-        Task<AnnotationDTO> AddAnnotationAsync(AddAnnotationDTO dto);
+        Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTOResponse dto);
+        Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
+        Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
     }
 }

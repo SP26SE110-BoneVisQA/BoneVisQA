@@ -23,7 +23,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(CreateMedicalCaseDTO dto)
+        public async Task<IActionResult> CreateCase(MedicalCaseDTOResponse dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
@@ -35,7 +35,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("images")]
-        public async Task<IActionResult> AddImage([FromBody] AddMedicalImageDTO dto)
+        public async Task<IActionResult> AddImage([FromForm] AddMedicalImageDTOResponse dto)
         {
             var result = await _medicalcaseService.AddImageAsync(dto);
             return Ok(new
@@ -46,7 +46,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("annotations")]
-        public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTO dto)
+        public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTOResponse dto)
         {
             var result = await _medicalcaseService.AddAnnotationAsync(dto);
             return Ok(new
@@ -74,7 +74,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDTO request)
+        public async Task<IActionResult> CreateQuestion(Guid quizId,CreateQuizQuestionDTO request)
         {
             if (request == null)
             {

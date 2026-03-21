@@ -3,6 +3,8 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Student;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,13 +16,36 @@ namespace BoneVisQA.Services.Services.Expert
     public class MedicalCaseService : IMedicalCaseService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IWebHostEnvironment _env;
 
-        public MedicalCaseService(IUnitOfWork unitOfWork)
+        public MedicalCaseService(IUnitOfWork unitOfWork, IWebHostEnvironment env)
         {
             _unitOfWork = unitOfWork;
+            _env = env;
+        }
+        private async Task<string> SaveImageAsync(IFormFile file)
+        {
+            var uploadFolder = Path.Combine(_env.ContentRootPath, "uploads", "images");
+            if (!Directory.Exists(uploadFolder))
+                Directory.CreateDirectory(uploadFolder);
+
+            var extension = Path.GetExtension(file.FileName);
+            var originalName = Path.GetFileNameWithoutExtension(file.FileName);
+
+            // Rút ngắn tên nếu quá dài
+            if (originalName.Length > 50)
+                originalName = originalName.Substring(0, 50);
+
+            var fileName = $"{originalName}_{DateTime.UtcNow:yyyyMMddHHmmss}{extension}";
+            var filePath = Path.Combine(uploadFolder, fileName);
+
+            using var stream = new FileStream(filePath, FileMode.Create);
+            await file.CopyToAsync(stream);
+
+            return $"/uploads/images/{fileName}";
         }
 
-        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(CreateMedicalCaseDTO dto) 
+        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTOResponse dto)
         {
             var medicalCase = new MedicalCase
             {
@@ -35,20 +60,6 @@ namespace BoneVisQA.Services.Services.Expert
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
-                MedicalImages = dto.Images?.Select(img => new MedicalImage
-                {
-                    Id = Guid.NewGuid(),
-                    ImageUrl = img.ImageUrl,
-                    Modality = img.Modality,
-                    CreatedAt = DateTime.UtcNow,
-                    CaseAnnotations = img.Annotations?.Select(a => new CaseAnnotation
-                    {
-                        Id = Guid.NewGuid(),
-                        Label = a.Label,
-                        Coordinates = a.Coordinates,
-                        CreatedAt = DateTime.UtcNow
-                    }).ToList() ?? new List<CaseAnnotation>()
-                }).ToList() ?? new List<MedicalImage>()
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
@@ -66,31 +77,21 @@ namespace BoneVisQA.Services.Services.Expert
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
                 KeyFindings = medicalCase.KeyFindings,
                 CreatedAt = medicalCase.CreatedAt,
-                Images = medicalCase.MedicalImages.Select(img => new MedicalImageDTO 
-                {
-                    Id = img.Id,
-                    ImageUrl = img.ImageUrl,
-                    Modality = img.Modality,
-                    Annotations = img.CaseAnnotations.Select(a => new AnnotationDTO 
-                    {
-                        Id = a.Id,
-                        Label = a.Label,
-                        Coordinates = a.Coordinates
-                    }).ToList()
-                }).ToList()
             };
         }
         // Thêm image cho case
-        public async Task<MedicalImageDTO> AddImageAsync(AddMedicalImageDTO dto)
+        public async Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.CaseId)
                 ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+
+            var imageUrl = await SaveImageAsync(dto.Image);
 
             var image = new MedicalImage
             {
                 Id = Guid.NewGuid(),
                 CaseId = dto.CaseId,
-                ImageUrl = dto.ImageUrl,
+                ImageUrl = imageUrl,         
                 Modality = dto.Modality,
                 CreatedAt = DateTime.UtcNow
             };
@@ -98,18 +99,18 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.MedicalImageRepository.AddAsync(image);
             await _unitOfWork.SaveAsync();
 
-            return new MedicalImageDTO
+            return new AddMedicalImageDTO
             {
                 Id = image.Id,
-                CaseName = medicalCase.Title,   
                 ImageUrl = image.ImageUrl,
                 Modality = image.Modality,
-                Annotations = new List<AnnotationDTO>()
+                CaseName = medicalCase.Title,   
+                Annotations = new List<AddAnnotationDTO>()
             };
         }
 
         // Thêm annotation cho image
-        public async Task<AnnotationDTO> AddAnnotationAsync(AddAnnotationDTO dto)
+        public async Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto)
         {
             var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(dto.ImageId)
                 ?? throw new KeyNotFoundException("Không tìm thấy ảnh.");
@@ -126,7 +127,7 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.CaseAnnotationRepository.AddAsync(annotation);
             await _unitOfWork.SaveAsync();
 
-            return new AnnotationDTO
+            return new AddAnnotationDTO
             {
                 Id = annotation.Id,
                 Label = annotation.Label,
