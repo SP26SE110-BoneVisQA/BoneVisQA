@@ -6,16 +6,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-  //  [Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/[controller]")]
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;
-        private readonly IQuizService _quizService;
+        private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizService quizService, ITagCaseService tagCaseService)
+        public ExpertController(IMedicalCaseService medicalService, IQuizsService quizService, ITagCaseService tagCaseService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;

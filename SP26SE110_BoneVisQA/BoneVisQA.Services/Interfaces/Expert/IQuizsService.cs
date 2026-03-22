@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces.Expert
 {
-        public interface IQuizService
+        public interface IQuizsService
     {
         Task<QuizDTO> CreateQuizAsync(QuizDTO request);
 

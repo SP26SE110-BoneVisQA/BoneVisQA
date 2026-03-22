@@ -12,11 +12,11 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Expert
 {
-    public class QuizService : IQuizService
+    public class QuizsService : IQuizsService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public QuizService(IUnitOfWork unitOfWork)
+        public QuizsService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }

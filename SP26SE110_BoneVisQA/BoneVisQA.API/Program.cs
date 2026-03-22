@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Security.Claims;
 using System.Text;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
@@ -13,7 +12,6 @@ using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -105,7 +103,7 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
-builder.Services.AddScoped<BoneVisQA.Services.Interfaces.IQuizService, BoneVisQA.Services.Services.QuizService>();
+builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
 builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
