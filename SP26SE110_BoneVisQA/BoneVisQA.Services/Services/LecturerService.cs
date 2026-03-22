@@ -75,11 +75,17 @@ public class LecturerService : ILecturerService
             return false;
         }
 
+        // Get class info to store class name
+        var classEntity = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .FirstOrDefaultAsync();
+
         var enrollment = new ClassEnrollment
         {
             Id = Guid.NewGuid(),
             ClassId = classId,
             StudentId = studentId,
+            ClassName = classEntity?.ClassName,
             EnrolledAt = DateTime.UtcNow
         };
 
@@ -90,6 +96,13 @@ public class LecturerService : ILecturerService
 
     public async Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid classId, EnrollStudentsRequestDto request)
     {
+        // Get class info to store class name
+        var classEntity = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .FirstOrDefaultAsync();
+
+        var className = classEntity?.ClassName;
+
         foreach (var studentId in request.StudentIds)
         {
             var existing = await _unitOfWork.ClassEnrollmentRepository
@@ -106,6 +119,7 @@ public class LecturerService : ILecturerService
                 Id = Guid.NewGuid(),
                 ClassId = classId,
                 StudentId = studentId,
+                ClassName = className,
                 EnrolledAt = DateTime.UtcNow
             };
 
@@ -147,6 +161,7 @@ public class LecturerService : ILecturerService
                 StudentName = e.Student?.FullName ?? string.Empty,
                 StudentEmail = e.Student?.Email ?? string.Empty,
                 StudentCode = e.Student?.SchoolCohort,
+                ClassName = e.ClassName,
                 EnrolledAt = e.EnrolledAt
             })
             .ToList();

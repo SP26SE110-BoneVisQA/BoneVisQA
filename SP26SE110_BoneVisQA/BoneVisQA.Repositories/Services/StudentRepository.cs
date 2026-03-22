@@ -193,7 +193,6 @@ public class StudentRepository : IStudentRepository
         {
             await _unitOfWork.StudentQuizAnswerRepository.AddAsync(answer);
         }
-        await _unitOfWork.SaveAsync();
     }
 
     public async Task<(int totalCasesViewed, int totalQuestionsAsked, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)

@@ -10,6 +10,7 @@ public class StudentEnrollmentDto
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;
     public string? StudentCode { get; set; }
+    public string? ClassName { get; set; }
     public DateTime? EnrolledAt { get; set; }
 }
 

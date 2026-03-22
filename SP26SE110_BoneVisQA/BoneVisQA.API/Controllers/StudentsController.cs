@@ -101,8 +101,15 @@ public class StudentsController : ControllerBase
                 return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
             effectiveStudentId = id;
         }
-        var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
-        return Ok(result);
+        try
+        {
+            var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("progress")]
