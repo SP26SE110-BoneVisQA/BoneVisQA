@@ -28,11 +28,27 @@ namespace BoneVisQA.Services.Models.Expert
     {
         public Guid ClassId { get; set; }
         public Guid QuizId { get; set; }
+        public string? QuizName { get; set; }
+        public string? ClassName { get; set; }   
         public DateTime? AssignedAt { get; set; }
     }
     public class QuizQuestionDTO
     {
         public Guid Id { get; set; }
+        public Guid QuizId { get; set; }
+        public string? QuizTitle { get; set; }
+        public Guid? CaseId { get; set; }
+        public string QuestionText { get; set; } = null!;
+        public string? Type { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+        public string? CorrectAnswer { get; set; }
+    }
+
+    public class CreateQuizQuestionDTO
+    {
         public Guid QuizId { get; set; }
         public Guid? CaseId { get; set; }
         public string QuestionText { get; set; } = null!;

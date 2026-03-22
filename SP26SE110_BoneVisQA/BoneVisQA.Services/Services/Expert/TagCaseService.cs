@@ -20,6 +20,13 @@ namespace BoneVisQA.Services.Services.Expert
         }
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {
+            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.MedicalCaseId)
+               ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+
+            var tageCase = await _unitOfWork.TagRepository.GetByIdAsync(dto.TagId)
+               ?? throw new KeyNotFoundException("Không tìm thấy tag.");
+
+
             // Check case tồn tại
             var caseExists = await _unitOfWork.MedicalCaseRepository
                 .ExistsAsync(x => x.Id == dto.MedicalCaseId);
@@ -51,7 +58,9 @@ namespace BoneVisQA.Services.Services.Expert
             return new CaseTagDTOResponse
             {
                 CaseId = caseTag.CaseId,
+                CaseTitle = medicalCase.Title,
                 TagId = caseTag.TagId,
+                TagName = tageCase.Name,    
                 CreatedAt = caseTag.CreatedAt
             };
         }

@@ -1,4 +1,5 @@
 ﻿using BoneVisQA.Repositories.Models;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -21,18 +22,56 @@ namespace BoneVisQA.Services.Models.Expert
         public string? SuggestedDiagnosis { get; set; }
         public string? KeyFindings { get; set; }
         public DateTime? CreatedAt { get; set; }
-        public List<CreateMedicalImageDTO> Images { get; set; } = new();
+    }
+    public class MedicalCaseDTOResponse
+    {
+        public string Title { get; set; } = null!;
+        public string Description { get; set; } = null!;
+        public string? Difficulty { get; set; }
+        public bool? IsApproved { get; set; }
+        public bool? IsActive { get; set; }
+        public Guid? CategoryId { get; set; }
+        public string? SuggestedDiagnosis { get; set; }
+        public string? KeyFindings { get; set; }
     }
 
+    //===============================================================================
+    public class AddMedicalImageDTO
+    {
+        public Guid Id { get; set; }                              
+        public string ImageUrl { get; set; } = null!;
+        public string? Modality { get; set; }
+        public string CaseTitle { get; set; } = null!;   
+        public List<AddAnnotationDTO> Annotations { get; set; } = new();
+    }
+    public class AddMedicalImageDTOResponse
+    {
+        public Guid CaseId { get; set; }
+        public IFormFile Image { get; set; } = null!;
+        public string? Modality { get; set; }
+    }
     public class CreateMedicalImageDTO
     {
-        public string ImageUrl { get; set; } = null!;
+        public IFormFile Image { get; set; } = null!;
         public string? Modality { get; set; }
         public List<CreateAnnotationDTO>? Annotations { get; set; }
     }
 
+    //===============================================================================
+    public class AddAnnotationDTO
+    {
+        public Guid Id { get; set; }
+        public string Label { get; set; } = null!;
+        public string? Coordinates { get; set; }
+    }
     public class CreateAnnotationDTO
     {
+        public string Label { get; set; } = null!;
+        public string? Coordinates { get; set; }
+    }
+    public class AddAnnotationDTOResponse
+    {
+        public Guid ImageId { get; set; }
         public string Label { get; set; } = null!;
         public string? Coordinates { get; set; }
     }

@@ -23,34 +23,9 @@ namespace BoneVisQA.Services.Services.Admin
             _env = env;
         }
 
-        // ── Helper: lưu file vật lý ─────────────────────────
-        private async Task<string> SaveFileAsync(IFormFile file)
-        {
-            var uploadFolder = Path.Combine(_env.ContentRootPath, "uploads", "documents");
-            if (!Directory.Exists(uploadFolder))
-                Directory.CreateDirectory(uploadFolder);
-
-            var extension = Path.GetExtension(file.FileName);
-            var originalName = Path.GetFileNameWithoutExtension(file.FileName);
-
-            // ✅ Rút ngắn tên nếu quá dài (max 50 ký tự)
-            if (originalName.Length > 50)
-                originalName = originalName.Substring(0, 50);
-
-            var fileName = $"{originalName}_{DateTime.UtcNow:yyyyMMddHHmmss}{extension}";
-            var filePath = Path.Combine(uploadFolder, fileName);
-
-            using var stream = new FileStream(filePath, FileMode.Create);
-            await file.CopyToAsync(stream);
-
-            return $"/uploads/documents/{fileName}";
-        }
-
         // ── Helper: map Entity → DTO ─────────────────────────
         private async Task<DocumentDTO> MapToDTOAsync(Document doc)
         {
-            var chunks = await _unitOfWork.DocumentChunkRepository
-                .FindAsync(c => c.DocId == doc.Id);
 
             var docTags = await _unitOfWork.DocumentTagRepository
                 .FindIncludeAsync(dt => dt.DocumentId == doc.Id, dt => dt.Tag);
@@ -67,73 +42,12 @@ namespace BoneVisQA.Services.Services.Admin
                 Version = doc.Version,
                 IsOutdated = doc.IsOutdated,
                 CreatedAt = doc.CreatedAt,
+                IndexingStatus = doc.IndexingStatus,    
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
-                ChunkCount = chunks.Count
             };
-        }
-
-        // ── CreateDocumentAsync: chỉ tạo mới ────────────────
-        public async Task<DocumentDTO> CreateDocumentAsync(SaveDocumentDTO dto)
-        {
-            await _unitOfWork.BeginTransactionAsync();
-            try
-            {
-                var doc = new Document
-                {
-                    Id = Guid.NewGuid(),
-                    Title = dto.Title,
-                    CategoryId = dto.CategoryId,
-                    Version = 1,
-                    IsOutdated = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                if (dto.File != null)
-                    doc.FilePath = await SaveFileAsync(dto.File);
-
-                await _unitOfWork.DocumentRepository.AddAsync(doc);
-                await _unitOfWork.SaveAsync();
-                await _unitOfWork.CommitTransactionAsync();
-
-                return await MapToDTOAsync(doc);
-            }
-            catch
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw;
-            }
-        }
-
-        // ── UpdateDocumentAsync: chỉ cập nhật ───────────────
-        public async Task<DocumentDTO> UpdateDocumentAsync(Guid documentId, SaveDocumentDTO dto)
-        {
-            await _unitOfWork.BeginTransactionAsync();
-            try
-            {
-                var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
-                    ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
-
-                doc.Title = dto.Title;
-                doc.CategoryId = dto.CategoryId;
-
-                if (dto.File != null)
-                    doc.FilePath = await SaveFileAsync(dto.File);
-
-                await _unitOfWork.DocumentRepository.UpdateAsync(doc);
-                await _unitOfWork.SaveAsync();
-                await _unitOfWork.CommitTransactionAsync();
-
-                return await MapToDTOAsync(doc);
-            }
-            catch
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw;
-            }
-        }
-
+        }      
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
@@ -204,15 +118,6 @@ namespace BoneVisQA.Services.Services.Admin
             doc.IsOutdated = isOutdated;
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
-
-            return await MapToDTOAsync(doc);
-        }
-
-        // ── GetDocumentByIdAsync ─────────────────────────────
-        public async Task<DocumentDTO> GetDocumentByIdAsync(Guid documentId)
-        {
-            var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
-                ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
 
             return await MapToDTOAsync(doc);
         }

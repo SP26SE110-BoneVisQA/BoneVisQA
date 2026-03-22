@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
-    [Authorize(Roles = "Admin")]
+   // [Authorize(Roles = "Admin")]
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
@@ -132,55 +132,23 @@ namespace BoneVisQA.API.Controllers.Admin
 
         //==========================================================================================================================================
 
-        // GET api/admin/documents/{id}
-        [HttpGet("documents/{id}")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetDocumentById(Guid id)
+        
+
+        // PUT api/admin/documents/{id}/tags
+        [HttpPut("tags")]
+        public async Task<IActionResult> UpdateTags([FromQuery] Guid documentId,[FromQuery] List<Guid> tagIds)
         {
-            var result = await _documentservice.GetDocumentByIdAsync(id);
+            var result = await _documentservice.UpdateTagsAsync(documentId, tagIds);
             return Ok(new
             {
-                Message = "Get document by id successfully.",
+                Message = "Update document tags successfully.",
                 result
             });
         }
 
-        // POST api/admin/documents
-        [HttpPost("documents")]
-        public async Task<IActionResult> CreateDocument([FromForm] SaveDocumentDTO dto)
-        {
-            var result = await _documentservice.CreateDocumentAsync(dto);
-            return Ok(new 
-            { 
-                Message = "Tạo tài liệu thành công.", result }
-            );
-        }
-
-        // PUT api/admin/documents/{id}
-        [HttpPut("documents/{id}")]
-        public async Task<IActionResult> UpdateDocument(Guid id, [FromForm] SaveDocumentDTO dto)
-        {
-            var result = await _documentservice.UpdateDocumentAsync(id, dto);
-            return Ok(new 
-            { 
-                Message = "Cập nhật tài liệu thành công.", result 
-            });
-        }
-
-        // PUT api/admin/documents/{id}/tags
-        [HttpPut("tags")]
-        public async Task<IActionResult> UpdateTags(
-     [FromQuery] Guid documentId,
-     [FromQuery] List<Guid> tagIds)
-        {
-            var result = await _documentservice.UpdateTagsAsync(documentId, tagIds);
-            return Ok(result);
-        }
-
         // PUT api/admin/documents/{id}/category
         [HttpPut("{id}/category/{categoryId}")]
-        public async Task<IActionResult> ChangeCategory(Guid id, [FromHeader] Guid categoryId)
+        public async Task<IActionResult> ChangeCategory(Guid id, Guid categoryId)
         {
             var result = await _documentservice.ChangeCategoryAsync(id, categoryId);
 
