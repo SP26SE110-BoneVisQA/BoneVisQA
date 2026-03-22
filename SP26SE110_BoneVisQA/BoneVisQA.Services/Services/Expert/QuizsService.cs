@@ -12,11 +12,11 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Expert
 {
-    public class QuizService : IQuizService
+    public class QuizsService : IQuizsService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public QuizService(IUnitOfWork unitOfWork)
+        public QuizsService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }
@@ -164,6 +164,58 @@ namespace BoneVisQA.Services.Services.Expert
                 IsPassed = isPassed,
                 CompletedAt = attempt.CompletedAt
             };
+        }
+
+        public async Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId)
+        {
+            var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+               ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            
+            var question = await _unitOfWork.QuizQuestionRepository
+           .FindByCondition(q => q.QuizId == quizId)
+           .Include(q => q.Quiz)
+           .ToListAsync();
+
+            return question
+                .Select(q => new QuizQuestionDTO
+                {
+                    Id = q.Id,
+                    QuizId = q.QuizId,
+                    QuizTitle = quiz.Title,
+                    CaseId = q.CaseId,
+                    QuestionText = q.QuestionText,
+                    Type = q.Type,
+                    OptionA = q.OptionA,
+                    OptionB = q.OptionB,
+                    OptionC = q.OptionC,
+                    OptionD = q.OptionD,
+                    CorrectAnswer = q.CorrectAnswer
+                })
+                .ToList();
+        }
+
+        public async Task<bool> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request)
+        {
+            var entity = await _unitOfWork.QuizQuestionRepository
+                .FindByCondition(q => q.Id == questionId)
+                .FirstOrDefaultAsync();
+
+            if (entity == null)
+            {
+                return false;
+            }
+
+            entity.QuestionText = request.QuestionText;
+            entity.Type = request.Type ?? entity.Type;
+            entity.OptionA = request.OptionA;
+            entity.OptionB = request.OptionB;
+            entity.OptionC = request.OptionC;
+            entity.OptionD = request.OptionD;
+            entity.CorrectAnswer = request.CorrectAnswer ?? entity.CorrectAnswer;
+
+            await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
+            await _unitOfWork.SaveAsync();
+            return true;
         }
     }
 }

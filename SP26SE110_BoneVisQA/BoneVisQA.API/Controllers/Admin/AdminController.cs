@@ -1,11 +1,13 @@
-﻿using BoneVisQA.Services.Interfaces.Admin;
+﻿using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
+using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
-   // [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")]
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
@@ -14,13 +16,15 @@ namespace BoneVisQA.API.Controllers.Admin
         private readonly IDocumentManagementService _documentservice;
         private readonly IDocumentQualityService _qualityservice;
         private readonly ISystemMonitoringService _systemservice;
+        private readonly IDocumentService _documentService;
 
-        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice, ISystemMonitoringService systemservice)
+        public AdminController(IUserManagementService userservice, IDocumentManagementService documentservice, IDocumentQualityService qualityservice, ISystemMonitoringService systemservice, IDocumentService documentService)
         {
             _userservice = userservice;
             _documentservice = documentservice;
             _qualityservice = qualityservice;
             _systemservice = systemservice;
+            _documentService = documentService;
         }
 
         [HttpGet("role/{role}")]
@@ -237,5 +241,90 @@ namespace BoneVisQA.API.Controllers.Admin
                 result
             });
         }
+
+        //===========================================================================================================================================
+        [HttpPost("upload")]
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult<DocumentDto>> Upload([FromForm] DocumentUploadRequest request)
+        {
+            if (request.File == null || request.File.Length == 0)
+            {
+                return BadRequest(new { message = "File is required." });
+            }
+
+            var allowedExtensions = new[] { ".pdf" };
+            var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(extension))
+            {
+                return BadRequest(new { message = "Only PDF files are allowed." });
+            }
+
+            var metadata = new DocumentUploadDto
+            {
+                Title = request.Title,
+                CategoryId = request.CategoryId
+            };
+
+            var document = await _documentService.UploadDocumentAsync(request.File, metadata);
+            return CreatedAtAction(nameof(GetById), new { id = document.Id }, document);
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<DocumentDto>>> GetAll()
+        {
+            var documents = await _documentService.GetAllDocumentsAsync();
+            return Ok(documents);
+        }
+
+        [HttpGet("{id:guid}")]
+        public async Task<ActionResult<DocumentDto>> GetById(Guid id)
+        {
+            var document = await _documentService.GetDocumentByIdAsync(id);
+            if (document == null)
+            {
+                return NotFound(new { message = "Document not found." });
+            }
+            return Ok(document);
+        }
+
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var success = await _documentService.DeleteDocumentAsync(id);
+            if (!success)
+            {
+                return NotFound(new { message = "Document not found." });
+            }
+            return NoContent();
+        }
+
+        [HttpPost("{id:guid}/reindex")]
+        public async Task<IActionResult> Reindex(Guid id)
+        {
+            var success = await _documentService.TriggerReindexAsync(id);
+            if (!success)
+            {
+                return NotFound(new { message = "Document not found or has no file path." });
+            }
+            return Ok(new { message = "Reindexing started." });
+        }
+
+        [HttpPatch("{id:guid}/status")]
+        public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateStatusRequest request)
+        {
+            await _documentService.UpdateIndexingStatusAsync(id, request.Status);
+            return Ok(new { message = "Status updated." });
+        }
     }
 }
+public class UpdateStatusRequest
+{
+    public string Status { get; set; } = string.Empty;
+}
+public class DocumentUploadRequest
+{
+    public IFormFile File { get; set; } = null!;
+    public string Title { get; set; } = string.Empty;
+    public Guid? CategoryId { get; set; }
+}
+

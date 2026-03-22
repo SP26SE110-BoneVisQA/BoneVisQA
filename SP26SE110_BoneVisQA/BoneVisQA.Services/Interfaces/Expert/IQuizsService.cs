@@ -8,13 +8,17 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces.Expert
 {
-        public interface IQuizService
+        public interface IQuizsService
     {
         Task<QuizDTO> CreateQuizAsync(QuizDTO request);
 
         Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDTO request);
 
         Task<ClassQuizDTO> AssignQuizToClassAsync(Guid classId, Guid quizId);
+       
         Task<QuizScoreResultDTO> CalculateScoreAsync(Guid attemptId);
+
+        Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId);
+        Task<bool> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     }
 }

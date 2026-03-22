@@ -6,16 +6,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-  //  [Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/[controller]")]
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;
-        private readonly IQuizService _quizService;
+        private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizService quizService, ITagCaseService tagCaseService)
+        public ExpertController(IMedicalCaseService medicalService, IQuizsService quizService, ITagCaseService tagCaseService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
@@ -121,6 +121,48 @@ namespace BoneVisQA.API.Controllers.Expert
                 Message = "Tags added successfully",
                 result
             });
+        }
+
+
+
+
+
+
+        [HttpGet("{quizId}")]
+        public async Task<IActionResult> GetQuizQuestions(Guid quizId)
+        {
+            var result = await _quizService.GetQuizQuestionsAsync(quizId);
+
+            if (result == null || !result.Any())
+            {
+                return NotFound("No quiz questions found.");
+            }
+
+            return Ok(result);
+        }
+
+        // ================================
+        // PUT: api/QuizQuestion/{questionId}
+        // Update quiz question
+        // ================================
+        [HttpPut("{questionId}")]
+        public async Task<IActionResult> UpdateQuizQuestion(
+            Guid questionId,
+            [FromBody] UpdateQuizsQuestionRequestDto request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request data.");
+            }
+
+            var updated = await _quizService.UpdateQuizQuestionAsync(questionId, request);
+
+            if (!updated)
+            {
+                return NotFound("Quiz question not found.");
+            }
+
+            return Ok("Update quiz question successfully.");
         }
     }
 }
