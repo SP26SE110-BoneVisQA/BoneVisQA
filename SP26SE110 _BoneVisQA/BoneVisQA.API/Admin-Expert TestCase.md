@@ -77,6 +77,23 @@ api/Expert/attempts/score
 //================================================================================================================
 
                                                            ADMIN ROLE
+api/admin/activate
+"id":"3c97d301-b0ff-4d40-abe8-27c1408fffbf",
+
+
+api/admin/deactivate
+"id":"3c97d301-b0ff-4d40-abe8-27c1408fffbf",
+
+
+api/admin/id/assign-role
+"id":"3c97d301-b0ff-4d40-abe8-27c1408fffbf",
+"role":"Student/Admin/Lecturter/Expert",
+
+
+api/admin/id/revoke-role
+"id":"3c97d301-b0ff-4d40-abe8-27c1408fffbf",
+"role":"Student/Lecturter/Expert",
+
 
 api/admin/tags
 "documentid": "a44e4ff5-40d5-40f2-ba85-c861a66b9a96",

@@ -41,7 +41,7 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid Id { get; set; }                              
         public string ImageUrl { get; set; } = null!;
         public string? Modality { get; set; }
-        public string CaseName { get; set; } = null!;   
+        public string CaseTitle { get; set; } = null!;   
         public List<AddAnnotationDTO> Annotations { get; set; } = new();
     }
     public class AddMedicalImageDTOResponse

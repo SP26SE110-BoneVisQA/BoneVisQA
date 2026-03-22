@@ -104,7 +104,7 @@ namespace BoneVisQA.Services.Services.Expert
                 Id = image.Id,
                 ImageUrl = image.ImageUrl,
                 Modality = image.Modality,
-                CaseName = medicalCase.Title,   
+                CaseTitle = medicalCase.Title,   
                 Annotations = new List<AddAnnotationDTO>()
             };
         }

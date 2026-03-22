@@ -58,7 +58,7 @@ namespace BoneVisQA.Services.Services.Expert
             return new CaseTagDTOResponse
             {
                 CaseId = caseTag.CaseId,
-                CaseName = medicalCase.Title,
+                CaseTitle = medicalCase.Title,
                 TagId = caseTag.TagId,
                 TagName = tageCase.Name,    
                 CreatedAt = caseTag.CreatedAt

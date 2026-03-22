@@ -19,7 +19,7 @@ namespace BoneVisQA.Services.Models.Expert
     {
         public Guid CaseId { get; set; }
         public Guid TagId { get; set; }
-        public string? CaseName { get; set; }   
+        public string? CaseTitle { get; set; }   
         public string? TagName { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
