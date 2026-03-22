@@ -36,7 +36,7 @@ public class StudentService : IStudentService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
+                IsApproved = c.IsApproved ?? false,
                 ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
             })
@@ -62,7 +62,7 @@ public class StudentService : IStudentService
                 Description = c.Description,
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
-                IsApproved = c.IsApproved,
+                IsApproved = c.IsApproved ?? false,
                 ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
             })
@@ -95,7 +95,7 @@ public class StudentService : IStudentService
             Description = entity.Description,
             Difficulty = entity.Difficulty,
             CategoryName = entity.Category?.Name,
-            IsApproved = entity.IsApproved,
+            IsApproved = entity.IsApproved ?? false,
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
                 .Select(i => new MedicalImageDto
