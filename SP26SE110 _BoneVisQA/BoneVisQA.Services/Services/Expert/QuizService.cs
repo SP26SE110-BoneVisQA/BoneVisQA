@@ -166,6 +166,7 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
+        //============================= Lecturer & Student =============================
         public async Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
@@ -218,8 +219,7 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
-        public async Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(
-    Guid studentId, StudentSubmitQuestionDTO submit)
+        public async Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(Guid studentId, StudentSubmitQuestionDTO submit)
         {
             var attempt = await _unitOfWork.QuizAttemptRepository
                 .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)

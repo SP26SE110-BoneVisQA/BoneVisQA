@@ -90,7 +90,7 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
-
+        //======================================================================================= 
         [HttpGet("{quizId}")]
         public async Task<IActionResult> GetQuizQuestions(Guid quizId)
         {
@@ -123,7 +123,17 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok("Update quiz question successfully.");
         }
+        // POST api/quizzes/submit
+        [HttpPost("submit")]
+        public async Task<IActionResult> SubmitAnswer(
+            [FromQuery] Guid studentId,
+            [FromBody] StudentSubmitQuestionDTO submit)
+        {
+            var result = await _quizService.StudentSubmitQuestionsAsync(studentId, submit);
+            return Ok(result);
+        }
 
+        //=======================================================================================
 
         [HttpPost("class/{classId}/assign/{quizId}")]
         public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
@@ -134,16 +144,6 @@ namespace BoneVisQA.API.Controllers.Expert
                 Message = "AssignQuiz successfully.",
                 result
             });
-        }
-
-        // POST api/quizzes/submit
-        [HttpPost("submit")]
-        public async Task<IActionResult> SubmitAnswer(
-            [FromQuery] Guid studentId,
-            [FromBody] StudentSubmitQuestionDTO submit)
-        {
-            var result = await _quizService.StudentSubmitQuestionsAsync(studentId, submit);
-            return Ok(result);
         }
 
         [HttpPost("attempts/{attemptId}/score")]
