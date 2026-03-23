@@ -66,6 +66,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<UserRole> UserRoles { get; set; }
 
+    public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -421,6 +423,23 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Role).WithMany(p => p.UserRoles).HasConstraintName("user_roles_role_id_fkey");
 
             entity.HasOne(d => d.User).WithMany(p => p.UserRoles).HasConstraintName("user_roles_user_id_fkey");
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("password_reset_tokens_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsUsed).HasDefaultValue(false);
+
+            entity.HasOne(d => d.User)
+                  .WithMany()
+                  .HasForeignKey(d => d.UserId)
+                  .OnDelete(DeleteBehavior.Cascade)
+                  .HasConstraintName("password_reset_tokens_user_id_fkey");
+
+            entity.HasIndex(e => e.Token).IsUnique().HasDatabaseName("idx_password_reset_tokens_token");
         });
 
         OnModelCreatingPartial(modelBuilder);

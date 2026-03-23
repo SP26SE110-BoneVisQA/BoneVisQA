@@ -21,7 +21,8 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetAllCasesAsync()
     {
         return await _unitOfWork.MedicalCaseRepository
-            .FindByCondition(c => (c.IsApproved == true) && (c.IsActive == true))
+
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.MedicalImages)
             .OrderByDescending(c => c.CreatedAt)
@@ -31,7 +32,8 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetFilteredCasesAsync(CaseFilter filter)
     {
         var query = _unitOfWork.MedicalCaseRepository
-            .FindByCondition(c => (c.IsApproved == true) && (c.IsActive == true))
+
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
@@ -193,7 +195,6 @@ public class StudentRepository : IStudentRepository
         {
             await _unitOfWork.StudentQuizAnswerRepository.AddAsync(answer);
         }
-        await _unitOfWork.SaveAsync();
     }
 
     public async Task<(int totalCasesViewed, int totalQuestionsAsked, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)

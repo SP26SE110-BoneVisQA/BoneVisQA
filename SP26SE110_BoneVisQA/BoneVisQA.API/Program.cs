@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
-using System.Security.Claims;
 using System.Text;
+using BoneVisQA.API;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
@@ -11,13 +11,16 @@ using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.Expert;
+using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add User Secrets cho development (Google OAuth credentials)
+builder.Configuration.AddUserSecrets<Program>();
 
 // Add services to the container.
 
@@ -60,6 +63,9 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+
+    // Bỏ yêu cầu Bearer cho các endpoint Auth (register, login, forgot-password, reset-password)
+    c.OperationFilter<SwaggerAuthFilter>();
 });
 
 builder.Services.AddDbContext<BoneVisQADbContext>(options =>
@@ -68,7 +74,8 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);
             npgsqlOptions.UseVector();
-        }));
+        }))
+    .AddScoped<BoneVisQADbContext>();
 
 // JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
@@ -89,11 +96,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Google:ClientId"] ?? "";
+        options.ClientSecret = builder.Configuration["Google:ClientSecret"] ?? "";
+        options.CallbackPath = "/signin-google";
     });
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
@@ -105,7 +119,7 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
-builder.Services.AddScoped<BoneVisQA.Services.Interfaces.IQuizService, BoneVisQA.Services.Services.QuizService>();
+builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
 builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
@@ -125,5 +139,55 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)
+// Token lấy từ URL: /reset-password?token=XXX (KHÔNG phải JWT từ login!)
+app.MapGet("/reset-password", (HttpContext ctx) =>
+{
+    var token = ctx.Request.Query["token"].ToString();
+    if (string.IsNullOrEmpty(token))
+    {
+        return Results.Content(@"<!DOCTYPE html><html><body><h1>Lỗi</h1><p class=""error"">Thiếu token. Vui lòng dùng link từ email.</p><p><a href=""/swagger"">Về trang chủ</a></p></body></html>", "text/html; charset=utf-8");
+    }
+    var tokenEscaped = token.Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
+    var html = @"<!DOCTYPE html>
+<html><head><meta charset=""utf-8""><title>Đặt lại mật khẩu - BoneVisQA</title>
+<style>body{font-family:Arial;max-width:420px;margin:50px auto;padding:20px}
+input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box}
+.pw-wrap{position:relative;margin:8px 0}
+.pw-wrap input{padding-right:50px}
+.pw-wrap span{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:13px;color:#888;user-select:none}
+button{background:#3498db;color:white;padding:12px;border:none;width:100%;cursor:pointer;margin-top:10px}
+.error{color:red}.success{color:green}
+.token-hint{font-size:11px;color:#888;margin:5px 0}
+</style></head><body>
+<h1>Đặt lại mật khẩu</h1>
+<p class=""token-hint"">Token: lấy từ link trong email (phần sau ?token=)</p>
+<div id=""msg""></div>
+<form id=""form"">
+<input type=""hidden"" name=""token"" value=""" + tokenEscaped + @""">
+<div class=""pw-wrap"">
+<input type=""password"" id=""p1"" name=""newPassword"" placeholder=""Mật khẩu mới (ít nhất 6 ký tự)"" required minlength=""6"">
+<span onclick=""tgl(1)"">Hiện</span>
+</div>
+<div class=""pw-wrap"">
+<input type=""password"" id=""p2"" name=""confirmPassword"" placeholder=""Xác nhận mật khẩu"" required>
+<span onclick=""tgl(2)"">Hiện</span>
+</div>
+<button type=""submit"">Đặt lại mật khẩu</button>
+</form>
+<script>
+function tgl(n){var e=document.getElementById('p'+n),b=e.nextElementSibling;e.type=e.type==='password'?'text':'password';b.textContent=b.textContent==='Hiện'?'Ẩn':'Hiện';}
+document.getElementById('form').onsubmit=async function(ev){ev.preventDefault();
+var p1=ev.target.newPassword.value,p2=ev.target.confirmPassword.value;
+if(p1!==p2){document.getElementById('msg').innerHTML='<p class=error>Mật khẩu không khớp</p>';return;}
+document.getElementById('msg').innerHTML='<p>Đang xử lý...</p>';
+var res=await fetch('/api/auths/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:ev.target.token.value,newPassword:p1})});
+var data=await res.json();
+document.getElementById('msg').innerHTML=data.success?'<p class=success>'+data.message+'</p><p><a href=/swagger>Đăng nhập tại đây</a></p>':'<p class=error>'+data.message+'</p><p class=token-hint>Kiểm tra: token phải từ link email (?token=xxx), KHÔNG dùng JWT từ login.</p>';
+};
+</script></body></html>";
+    return Results.Content(html, "text/html; charset=utf-8");
+});
 
 app.Run();

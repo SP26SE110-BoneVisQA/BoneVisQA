@@ -1,4 +1,5 @@
 using BoneVisQA.Repositories.Basic;
+using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Models;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
 {
     public interface IUnitOfWork : IDisposable
     {
+        BoneVisQADbContext Context { get; }
         GenericRepository<AcademicClass> AcademicClassRepository { get; }
         GenericRepository<Announcement> AnnouncementRepository { get; }
         GenericRepository<CaseAnnotation> CaseAnnotationRepository { get; }
@@ -36,6 +38,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<CaseTag> CaseTagRepository { get; }
         GenericRepository<Tag> TagRepository { get; }
         GenericRepository<DocumentTag> DocumentTagRepository { get; }
+        GenericRepository<PasswordResetToken> PasswordResetTokenRepository { get; }
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();
