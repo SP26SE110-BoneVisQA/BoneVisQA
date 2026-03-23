@@ -74,6 +74,15 @@ api/Expert/attempts/score
 
 "attemptId": "0ca4b8a0-8f35-4447-9567-cb81b0e39e00",
 
+api/Expert/studentsubmit
+
+{
+  "studentId": "",
+  "attemptId": "45f7669f-fa6d-48b8-8ab2-d5643831e026",
+  "questionId": "5b9b5ef3-0cec-46da-8e66-f0d3fc34ffed",
+  "studentAnswer": "a"
+}
+
 //================================================================================================================
 
                                                            ADMIN ROLE

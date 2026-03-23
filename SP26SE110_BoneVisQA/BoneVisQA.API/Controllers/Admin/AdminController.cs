@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
-  //  [Authorize(Roles = "Admin")]
+
+    [Authorize(Roles = "Admin")]
+
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
