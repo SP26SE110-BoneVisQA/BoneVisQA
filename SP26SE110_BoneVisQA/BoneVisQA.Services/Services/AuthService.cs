@@ -1,3 +1,4 @@
+using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
@@ -7,6 +8,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -16,13 +18,15 @@ namespace BoneVisQA.Services.Services;
 public class AuthService : IAuthService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly BoneVisQADbContext _dbContext;
     private readonly IHostEnvironment _env;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
 
-    public AuthService(IUnitOfWork unitOfWork, IHostEnvironment env, IEmailService emailService, IConfiguration configuration)
+    public AuthService(IUnitOfWork unitOfWork, BoneVisQADbContext dbContext, IHostEnvironment env, IEmailService emailService, IConfiguration configuration)
     {
         _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _env = env;
         _emailService = emailService;
         _configuration = configuration;
@@ -299,5 +303,147 @@ public class AuthService : IAuthService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomBytes);
         return Convert.ToBase64String(randomBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    public async Task<AuthResultDto> GoogleLoginAsync(GoogleLoginRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdToken))
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Google ID Token là bắt buộc."
+            };
+        }
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            var settings = new GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { _configuration["Google:ClientId"] }
+            };
+            payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, settings);
+        }
+        catch (Exception)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Token Google không hợp lệ."
+            };
+        }
+
+        var user = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.GoogleId == payload.Subject || u.Email == payload.Email)
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync();
+
+        if (user == null)
+        {
+            var existingByEmail = await _unitOfWork.UserRepository
+                .FindByCondition(u => u.Email == payload.Email)
+                .FirstOrDefaultAsync();
+
+            if (existingByEmail != null)
+            {
+                existingByEmail.GoogleId = payload.Subject;
+                if (!string.IsNullOrEmpty(payload.Picture))
+                {
+                    existingByEmail.AvatarUrl = payload.Picture;
+                }
+                existingByEmail.UpdatedAt = DateTime.UtcNow;
+                await _unitOfWork.UserRepository.UpdateAsync(existingByEmail);
+                await _unitOfWork.SaveAsync();
+                user = existingByEmail;
+            }
+            else
+            {
+                var studentRole = await _unitOfWork.RoleRepository
+                    .FindByCondition(r => r.Name == "Student")
+                    .FirstOrDefaultAsync();
+
+                if (studentRole == null)
+                {
+                    return new AuthResultDto
+                    {
+                        Success = false,
+                        Message = "Role 'Student' chưa được cấu hình trong hệ thống."
+                    };
+                }
+
+                var now = DateTime.UtcNow;
+                user = new User
+                {
+                    Id = Guid.NewGuid(),
+                    FullName = payload.Name ?? payload.Email,
+                    Email = payload.Email,
+                    GoogleId = payload.Subject,
+                    AvatarUrl = payload.Picture,
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+
+                await _unitOfWork.UserRepository.AddAsync(user);
+
+                var userRole = new UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    RoleId = studentRole.Id,
+                    AssignedAt = now
+                };
+
+                await _unitOfWork.UserRoleRepository.AddAsync(userRole);
+                await _unitOfWork.SaveAsync();
+            }
+        }
+
+        if (user == null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Không thể xử lý đăng nhập Google."
+            };
+        }
+
+        if (!user.IsActive)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin."
+            };
+        }
+
+        var isPending = user.UserRoles.Any(ur => ur.Role.Name == "Pending");
+        if (isPending)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản chưa được gán vai trò, liên hệ admin."
+            };
+        }
+
+        user.LastLogin = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.UserRepository.UpdateAsync(user);
+        await _unitOfWork.SaveAsync();
+
+        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Đăng nhập Google thành công.",
+            UserId = user.Id,
+            FullName = user.FullName,
+            Email = user.Email,
+            Roles = roles
+        };
     }
 }

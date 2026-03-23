@@ -110,6 +110,23 @@ public class AuthsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("google-login")]
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequestDto request)
+    {
+        var result = await _authService.GoogleLoginAsync(request);
+        if (!result.Success)
+        {
+            return Unauthorized(result);
+        }
+
+        if (result.UserId.HasValue)
+        {
+            result.Token = GenerateJwtToken(result);
+        }
+
+        return Ok(result);
+    }
+
     private string GenerateJwtToken(AuthResultDto authResult)
     {
         var jwtSection = _configuration.GetSection("Jwt");

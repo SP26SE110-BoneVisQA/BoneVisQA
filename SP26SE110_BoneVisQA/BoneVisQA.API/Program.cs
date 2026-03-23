@@ -11,12 +11,16 @@ using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.Expert;
+using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add User Secrets cho development (Google OAuth credentials)
+builder.Configuration.AddUserSecrets<Program>();
 
 // Add services to the container.
 
@@ -70,7 +74,8 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);
             npgsqlOptions.UseVector();
-        }));
+        }))
+    .AddScoped<BoneVisQADbContext>();
 
 // JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
@@ -91,6 +96,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Google:ClientId"] ?? "";
+        options.ClientSecret = builder.Configuration["Google:ClientSecret"] ?? "";
+        options.CallbackPath = "/signin-google";
     });
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

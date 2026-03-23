@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -39,6 +39,14 @@ public partial class User
 
     [Column("is_active")]
     public bool IsActive { get; set; }
+
+    [Column("google_id")]
+    [MaxLength(256)]
+    public string? GoogleId { get; set; }
+
+    [Column("avatar_url")]
+    [MaxLength(1024)]
+    public string? AvatarUrl { get; set; }
 
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
