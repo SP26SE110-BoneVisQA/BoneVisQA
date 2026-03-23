@@ -217,5 +217,54 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.SaveAsync();
             return true;
         }
+
+        public async Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(
+    Guid studentId, StudentSubmitQuestionDTO submit)
+        {
+            var attempt = await _unitOfWork.QuizAttemptRepository
+                .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)
+                ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+
+            var question = await _unitOfWork.QuizQuestionRepository
+                .GetByIdAsync(submit.QuestionId)
+                ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+
+            var quiz = await _unitOfWork.QuizRepository
+                .GetByIdAsync(attempt.QuizId)
+                ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+            var existing = await _unitOfWork.StudentQuizAnswerRepository
+                .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId
+                                       && a.QuestionId == submit.QuestionId);
+            if (existing != null)
+                throw new InvalidOperationException("Câu hỏi này đã được trả lời.");
+
+            bool isCorrect = string.Equals(
+                submit.StudentAnswer?.Trim(),
+                question.CorrectAnswer?.Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+
+            var studentQuizAnswer = new StudentQuizAnswer
+            {
+                Id = Guid.NewGuid(),
+                AttemptId = submit.AttemptId,
+                QuestionId = submit.QuestionId,
+                StudentAnswer = submit.StudentAnswer,
+                IsCorrect = isCorrect
+            };
+
+            await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
+            await _unitOfWork.SaveAsync();
+
+            return new StudentSubmitQuestionResponseDTO
+            {
+                QuizTile = quiz.Title,
+                QuestionText = question.QuestionText,
+                StudentAnswer = submit.StudentAnswer,
+                CorrectAnswer = question.CorrectAnswer,
+                IsCorrect = isCorrect
+            };
+        }
     }
 }

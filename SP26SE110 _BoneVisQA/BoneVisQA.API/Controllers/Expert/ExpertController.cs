@@ -136,6 +136,16 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
+        // POST api/quizzes/submit
+        [HttpPost("submit")]
+        public async Task<IActionResult> SubmitAnswer(
+            [FromQuery] Guid studentId,
+            [FromBody] StudentSubmitQuestionDTO submit)
+        {
+            var result = await _quizService.StudentSubmitQuestionsAsync(studentId, submit);
+            return Ok(result);
+        }
+
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {

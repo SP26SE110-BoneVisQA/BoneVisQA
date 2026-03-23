@@ -73,6 +73,7 @@ namespace BoneVisQA.Services.Models.Expert
         public bool IsPassed { get; set; }
         public DateTime? CompletedAt { get; set; }
     }
+
     public class UpdateQuizsQuestionRequestDto
     {
         public string QuestionText { get; set; } = string.Empty;
@@ -82,6 +83,31 @@ namespace BoneVisQA.Services.Models.Expert
         public string? OptionB { get; set; }
         public string? OptionC { get; set; }
         public string? OptionD { get; set; }
+    }
+
+    public class StudentSubmitQuestionDTO   
+    {
+        public Guid StudentId { get; set; }
+
+        public Guid AttemptId { get; set; }
+
+        public Guid QuestionId { get; set; }
+
+        public string? StudentAnswer { get; set; }
+
+    }
+
+    public class StudentSubmitQuestionResponseDTO
+    {
+        public string? QuizTile { get; set; }
+     
+        public  string? QuestionText { get; set; }
+       
+        public string? StudentAnswer { get; set; }
+       
+        public string? CorrectAnswer { get; set; }
+      
+        public bool? IsCorrect { get; set; }
     }
 
 }
