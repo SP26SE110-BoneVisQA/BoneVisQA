@@ -1,11 +1,12 @@
+using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Student;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Student;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers;
 
@@ -90,6 +91,18 @@ public class StudentsController : ControllerBase
         return Ok(result);
     }
 
+                                                            //  phan nam 
+    [HttpPost("submit")]
+    public async Task<IActionResult> SubmitAnswer(
+        [FromQuery] Guid studentId,
+        [FromBody] StudentSubmitQuestionDTO submit)
+    {
+        var result = await _studentService.StudentSubmitQuestionsAsync(studentId, submit);
+        return Ok(result);
+    }
+
+
+                                                             //code tran
     [HttpPost("quizzes/submit")]
     public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
     {

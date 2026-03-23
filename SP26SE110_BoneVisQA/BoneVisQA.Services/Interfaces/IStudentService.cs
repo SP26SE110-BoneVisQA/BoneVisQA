@@ -1,8 +1,9 @@
+using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Models.VisualQA;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using BoneVisQA.Services.Models.Student;
-using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Interfaces;
 
@@ -33,5 +34,7 @@ public interface IStudentService
     Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request);
 
     Task<StudentProgressDto> GetProgressAsync(Guid studentId);
+
+    Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(Guid studentid, StudentSubmitQuestionDTO submit);
 }
 

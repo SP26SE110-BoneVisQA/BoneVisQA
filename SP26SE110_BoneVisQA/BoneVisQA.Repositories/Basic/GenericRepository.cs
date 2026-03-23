@@ -160,11 +160,6 @@ namespace BoneVisQA.Repositories.Basic
         public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
         {
             return _dbSet.Where(expression);
-
-        public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
-        {
-            return _dbSet.Where(expression);
-
         }
 
         public async Task<int> DeleteAsync(Guid id)

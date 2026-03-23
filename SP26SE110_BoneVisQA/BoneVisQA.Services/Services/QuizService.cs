@@ -9,7 +9,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services
-{
+{ 
     public class QuizService : IQuizService
     {
         private readonly IUnitOfWork _unitOfWork;

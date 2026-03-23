@@ -1,15 +1,16 @@
+using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
+using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Models.VisualQA;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories.Interfaces;
-using BoneVisQA.Repositories.Models;
-using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Repositories.Services;
-using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Student;
-using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Services;
 
@@ -344,7 +345,58 @@ public class StudentService : IStudentService
             Questions = questions
         };
     }
+    //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
 
+    //===================== phan nam =====================   
+    public async Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(Guid studentId, StudentSubmitQuestionDTO submit)
+    {
+        var attempt = await _unitOfWork.QuizAttemptRepository
+            .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+
+        var question = await _unitOfWork.QuizQuestionRepository
+            .GetByIdAsync(submit.QuestionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+
+        var quiz = await _unitOfWork.QuizRepository
+            .GetByIdAsync(attempt.QuizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        var existing = await _unitOfWork.StudentQuizAnswerRepository
+            .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId
+                                   && a.QuestionId == submit.QuestionId);
+        if (existing != null)
+            throw new InvalidOperationException("Câu hỏi này đã được trả lời.");
+
+        bool isCorrect = string.Equals(
+            submit.StudentAnswer?.Trim(),
+            question.CorrectAnswer?.Trim(),
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        var studentQuizAnswer = new StudentQuizAnswer
+        {
+            Id = Guid.NewGuid(),
+            AttemptId = submit.AttemptId,
+            QuestionId = submit.QuestionId,
+            StudentAnswer = submit.StudentAnswer,
+            IsCorrect = isCorrect
+        };
+
+        await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
+        await _unitOfWork.SaveAsync();
+
+        return new StudentSubmitQuestionResponseDTO
+        {
+            QuizTile = quiz.Title,
+            QuestionText = question.QuestionText,
+            StudentAnswer = submit.StudentAnswer,
+            CorrectAnswer = question.CorrectAnswer,
+            IsCorrect = isCorrect
+        };
+    }
+
+                                       //===================== phan tran =====================   
     public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
     {
         await _unitOfWork.BeginTransactionAsync();
