@@ -152,7 +152,11 @@ namespace BoneVisQA.Repositories.Basic
         {
             return _dbSet.FirstOrDefault(filter);
         }
+        public IQueryable<TEntity> FindByCondition(Expression<Func<TEntity, bool>> expression)
+        {
+            return _dbSet.Where(expression);
 
+        }
 
         public virtual async Task<IList<TEntity>> GetAllAsync(Expression<Func<IQueryable<TEntity>, IQueryable<TEntity>>>? include)
         {
