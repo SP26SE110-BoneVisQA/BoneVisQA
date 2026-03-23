@@ -57,6 +57,59 @@ public class AuthsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Quên mật khẩu - gửi email chứa link reset. Token nằm trong link (?token=XXX)
+    /// </summary>
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new AuthResultDto
+            {
+                Success = false,
+                Message = "Email là bắt buộc."
+            });
+        }
+
+        var result = await _authService.ForgotPasswordAsync(request);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Đặt lại mật khẩu. Token lấy từ link trong email (sau khi gọi forgot-password).
+    /// Ví dụ link: http://localhost:5046/reset-password?token=XXX → token là phần XXX
+    /// </summary>
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            return BadRequest(new AuthResultDto
+            {
+                Success = false,
+                Message = "Token là bắt buộc."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return BadRequest(new AuthResultDto
+            {
+                Success = false,
+                Message = "Mật khẩu mới là bắt buộc."
+            });
+        }
+
+        var result = await _authService.ResetPasswordAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     private string GenerateJwtToken(AuthResultDto authResult)
     {
         var jwtSection = _configuration.GetSection("Jwt");

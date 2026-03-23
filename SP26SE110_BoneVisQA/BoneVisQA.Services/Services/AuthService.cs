@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace BoneVisQA.Services.Services;
 
@@ -16,11 +17,15 @@ public class AuthService : IAuthService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IHostEnvironment _env;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
 
-    public AuthService(IUnitOfWork unitOfWork, IHostEnvironment env)
+    public AuthService(IUnitOfWork unitOfWork, IHostEnvironment env, IEmailService emailService, IConfiguration configuration)
     {
         _unitOfWork = unitOfWork;
         _env = env;
+        _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<AuthResultDto> RegisterAsync(RegisterRequestDto request)
@@ -156,5 +161,143 @@ public class AuthService : IAuthService
         using var sha256 = SHA256.Create();
         var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
         return Convert.ToHexString(bytes);
+    }
+
+    public async Task<AuthResultDto> ForgotPasswordAsync(ForgotPasswordRequestDto request)
+    {
+        var user = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.Email == request.Email)
+            .FirstOrDefaultAsync();
+
+        if (user == null)
+        {
+            return new AuthResultDto
+            {
+                Success = true,
+                Message = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi."
+            };
+        }
+
+        var existingTokens = await _unitOfWork.PasswordResetTokenRepository
+            .FindByCondition(t => t.UserId == user.Id && !t.IsUsed)
+            .ToListAsync();
+
+        foreach (var oldToken in existingTokens)
+        {
+            oldToken.IsUsed = true;
+            await _unitOfWork.PasswordResetTokenRepository.UpdateAsync(oldToken);
+        }
+
+        var resetToken = new PasswordResetToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = GenerateSecureToken(),
+            ExpiresAt = DateTime.UtcNow.AddHours(1),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.PasswordResetTokenRepository.AddAsync(resetToken);
+        await _unitOfWork.SaveAsync();
+
+        var baseUrl = _configuration["App:BaseUrl"] ?? "http://localhost:3000";
+        var resetLink = $"{baseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+
+        var emailSent = await _emailService.SendPasswordResetEmailAsync(user.Email, resetLink);
+
+        if (!emailSent)
+        {
+            var devMessage = _env.IsDevelopment()
+                ? $"Không thể gửi email. Token test (chỉ dev): {resetToken.Token}"
+                : "Không thể gửi email. Vui lòng thử lại sau.";
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = devMessage
+            };
+        }
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi."
+        };
+    }
+
+    public async Task<AuthResultDto> ResetPasswordAsync(ResetPasswordRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 6)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Mật khẩu mới phải có ít nhất 6 ký tự."
+            };
+        }
+
+        var token = request.Token?.Trim() ?? "";
+        if (string.IsNullOrEmpty(token))
+        {
+            return new AuthResultDto { Success = false, Message = "Token là bắt buộc." };
+        }
+
+        var resetToken = await _unitOfWork.PasswordResetTokenRepository
+            .FindByCondition(t => t.Token == token && !t.IsUsed)
+            .Include(t => t.User)
+            .FirstOrDefaultAsync();
+
+        if (resetToken == null)
+        {
+            var expiredToken = await _unitOfWork.PasswordResetTokenRepository
+                .FindByCondition(t => t.Token == token)
+                .FirstOrDefaultAsync();
+            if (expiredToken != null)
+            {
+                return new AuthResultDto
+                {
+                    Success = false,
+                    Message = expiredToken.IsUsed
+                        ? "Token đã được sử dụng. Vui lòng yêu cầu đặt lại mật khẩu mới."
+                        : "Token đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu mới."
+                };
+            }
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Token không hợp lệ hoặc không tồn tại. Vui lòng dùng link mới từ email."
+            };
+        }
+
+        if (resetToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Token đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu mới."
+            };
+        }
+
+        resetToken.IsUsed = true;
+        resetToken.User.Password = HashPassword(request.NewPassword);
+        resetToken.User.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.PasswordResetTokenRepository.UpdateAsync(resetToken);
+        await _unitOfWork.UserRepository.UpdateAsync(resetToken.User);
+        await _unitOfWork.SaveAsync();
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Đặt lại mật khẩu thành công. Bạn có thể đăng nhập với mật khẩu mới."
+        };
+    }
+
+    private static string GenerateSecureToken()
+    {
+        var randomBytes = new byte[32];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        return Convert.ToBase64String(randomBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
 }
