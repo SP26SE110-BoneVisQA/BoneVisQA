@@ -23,21 +23,41 @@ public class EmailService : IEmailService
     {
         _configuration = configuration;
         _logger = logger;
-        _smtpHost = _configuration["Email:SmtpHost"] ?? "smtp.gmail.com";
-        _smtpPort = int.Parse(_configuration["Email:SmtpPort"] ?? "587");
-        _smtpUsername = _configuration["Email:Username"] ?? "";
-        _smtpPassword = _configuration["Email:Password"] ?? "";
-        _fromEmail = _configuration["Email:FromEmail"] ?? _smtpUsername;
-        _fromName = _configuration["Email:FromName"] ?? "BoneVisQA";
+
+        var smtpHost = _configuration["Email:SmtpHost"];
+        var smtpPort = _configuration["Email:SmtpPort"];
+        var smtpUsername = _configuration["Email:Username"];
+        var smtpPassword = _configuration["Email:Password"];
+        var fromEmail = _configuration["Email:FromEmail"];
+        var fromName = _configuration["Email:FromName"];
+
+        _logger.LogInformation("[EmailService] Config loaded - Host: {Host}, Port: {Port}, Username: {Username}, FromEmail: {FromEmail}",
+            smtpHost ?? "NULL", smtpPort ?? "NULL", smtpUsername ?? "NULL", fromEmail ?? "NULL");
+
+        _smtpHost = smtpHost ?? "smtp.gmail.com";
+        _smtpPort = int.TryParse(smtpPort, out var port) ? port : 587;
+        _smtpUsername = smtpUsername ?? "";
+        _smtpPassword = smtpPassword ?? "";
+        _fromEmail = fromEmail ?? _smtpUsername;
+        _fromName = fromName ?? "BoneVisQA";
+
+        _logger.LogInformation("[EmailService] Initialized - SmtpHost: {Host}, SmtpPort: {Port}, From: {From}",
+            _smtpHost, _smtpPort, _fromEmail);
     }
 
     public async Task<bool> SendPasswordResetEmailAsync(string toEmail, string resetLink)
     {
+        _logger.LogInformation("[SendPasswordResetEmailAsync] Attempting to send reset email to {ToEmail}", toEmail);
+
         if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
         {
-            _logger.LogError("Email config missing: Username or Password is empty. Check User Secrets.");
+            _logger.LogError("[SendPasswordResetEmailAsync] FAIL: Email config missing. Username: {Username}, Password empty: {IsEmpty}",
+                _smtpUsername ?? "NULL", string.IsNullOrEmpty(_smtpPassword));
             return false;
         }
+
+        _logger.LogInformation("[SendPasswordResetEmailAsync] SMTP config OK - connecting to {Host}:{Port}", _smtpHost, _smtpPort);
+
         try
         {
             var subject = "Đặt lại mật khẩu - BoneVisQA";
@@ -87,7 +107,8 @@ public class EmailService : IEmailService
             using var client = new SmtpClient(_smtpHost, _smtpPort)
             {
                 EnableSsl = true,
-                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword)
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
             };
 
             var message = new MailMessage
@@ -102,9 +123,105 @@ public class EmailService : IEmailService
             await client.SendMailAsync(message);
             return true;
         }
+        catch (SmtpException smtpEx)
+        {
+            _logger.LogError(smtpEx, "[SendPasswordResetEmailAsync] SMTP ERROR sending to {ToEmail}: {Code} - {Message}",
+                toEmail, smtpEx.StatusCode, smtpEx.Message);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {ToEmail}: {Message}", toEmail, ex.Message);
+            _logger.LogError(ex, "[SendPasswordResetEmailAsync] GENERAL ERROR sending reset email to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    public async Task<bool> SendWelcomeEmailAsync(string toEmail, string fullName)
+    {
+        _logger.LogInformation("[SendWelcomeEmailAsync] Attempting to send welcome email to {ToEmail} for {FullName}", toEmail, fullName);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendWelcomeEmailAsync] FAIL: Email config missing. Username: {Username}, Password empty: {IsEmpty}",
+                _smtpUsername ?? "NULL", string.IsNullOrEmpty(_smtpPassword));
+            return false;
+        }
+
+        _logger.LogInformation("[SendWelcomeEmailAsync] SMTP config OK - connecting to {Host}:{Port}", _smtpHost, _smtpPort);
+
+        try
+        {
+            var subject = "Chào mừng đến với BoneVisQA";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #2c3e50; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #f9f9f9; }}
+        .button {{ display: inline-block; padding: 12px 30px; background-color: #3498db; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+        .success {{ background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <h2>Chào mừng {fullName}!</h2>
+            <p>Xin chào {fullName},</p>
+            <p>Cảm ơn bạn đã đăng ký tài khoản tại <strong>BoneVisQA</strong>.</p>
+            <div class='success'>
+                <p><strong>Tài khoản của bạn đang chờ duyệt.</strong></p>
+                <p>Vui lòng đợi admin xác nhận để có thể đăng nhập và sử dụng hệ thống.</p>
+            </div>
+            <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
+            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+        </div>
+        <div class='footer'>
+            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
+            <p>Không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            _logger.LogInformation("[SendWelcomeEmailAsync] SMTP client ready, sending email to {ToEmail}...", toEmail);
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendWelcomeEmailAsync] SUCCESS: Welcome email sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (SmtpException smtpEx)
+        {
+            _logger.LogError(smtpEx, "[SendWelcomeEmailAsync] SMTP ERROR sending to {ToEmail}: {Code} - {Message}",
+                toEmail, smtpEx.StatusCode, smtpEx.Message);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendWelcomeEmailAsync] GENERAL ERROR sending welcome email to {ToEmail}: {Message}", toEmail, ex.Message);
             return false;
         }
     }

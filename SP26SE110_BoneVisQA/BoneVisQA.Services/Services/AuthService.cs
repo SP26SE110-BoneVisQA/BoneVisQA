@@ -86,6 +86,9 @@ public class AuthService : IAuthService
         await _unitOfWork.UserRoleRepository.AddAsync(userRole);
         await _unitOfWork.SaveAsync();
 
+        // Gửi email chào mừng (không blocking - tiếp tục dù user không nhận được mail)
+        _ = _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
+
         return new AuthResultDto
         {
             Success = true,
