@@ -97,33 +97,33 @@ public class StudentsController : ControllerBase
         [FromQuery] Guid studentId,
         [FromBody] StudentSubmitQuestionDTO submit)
     {
-        var result = await _studentService.StudentSubmitQuestionsAsync(studentId, submit);
+        var result = await _studentService.SubmitQuizAsync(studentId, submit);
         return Ok(result);
     }
 
 
                                                              //code tran
-    [HttpPost("quizzes/submit")]
-    public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
-    {
-        var effectiveStudentId = studentId ?? Guid.Empty;
-        if (effectiveStudentId == Guid.Empty)
-        {
-            var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var id))
-                return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
-            effectiveStudentId = id;
-        }
-        try
-        {
-            var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
+    //[HttpPost("quizzes/submit")]
+    //public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
+    //{
+    //    var effectiveStudentId = studentId ?? Guid.Empty;
+    //    if (effectiveStudentId == Guid.Empty)
+    //    {
+    //        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+    //        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var id))
+    //            return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
+    //        effectiveStudentId = id;
+    //    }
+    //    try
+    //    {
+    //        var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
+    //        return Ok(result);
+    //    }
+    //    catch (InvalidOperationException ex)
+    //    {
+    //        return BadRequest(new { message = ex.Message });
+    //    }
+    //}
 
     [HttpGet("progress")]
     public async Task<ActionResult<StudentProgressDto>> GetProgress([FromQuery] Guid studentId)

@@ -348,7 +348,7 @@ public class StudentService : IStudentService
     //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
 
     //===================== phan nam =====================   
-    public async Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(Guid studentId, StudentSubmitQuestionDTO submit)
+    public async Task<StudentSubmitQuestionResponseDTO> SubmitQuizAsync(Guid studentId, StudentSubmitQuestionDTO submit)
     {
         var attempt = await _unitOfWork.QuizAttemptRepository
             .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)
@@ -397,109 +397,109 @@ public class StudentService : IStudentService
     }
 
                                        //===================== phan tran =====================   
-    public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
-    {
-        await _unitOfWork.BeginTransactionAsync();
-        try
-        {
-            var attempt = await _studentRepository.GetQuizAttemptByIdAsync(request.AttemptId, studentId);
-            if (attempt == null)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw new InvalidOperationException(
-                    "Lần làm quiz không tồn tại hoặc không thuộc về sinh viên này. Kiểm tra attemptId và studentId (phải trùng với student_id của lần làm bài trong bảng quiz_attempts).");
-            }
+    //public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
+    //{
+    //    await _unitOfWork.BeginTransactionAsync();
+    //    try
+    //    {
+    //        var attempt = await _studentRepository.GetQuizAttemptByIdAsync(request.AttemptId, studentId);
+    //        if (attempt == null)
+    //        {
+    //            await _unitOfWork.RollbackTransactionAsync();
+    //            throw new InvalidOperationException(
+    //                "Lần làm quiz không tồn tại hoặc không thuộc về sinh viên này. Kiểm tra attemptId và studentId (phải trùng với student_id của lần làm bài trong bảng quiz_attempts).");
+    //        }
 
-            var quiz = await _studentRepository.GetQuizWithQuestionsAsync(attempt.QuizId);
-            if (quiz == null)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                throw new InvalidOperationException("Quiz không tồn tại.");
-            }
+    //        var quiz = await _studentRepository.GetQuizWithQuestionsAsync(attempt.QuizId);
+    //        if (quiz == null)
+    //        {
+    //            await _unitOfWork.RollbackTransactionAsync();
+    //            throw new InvalidOperationException("Quiz không tồn tại.");
+    //        }
 
-            var questionDict = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
+    //        var questionDict = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
 
-            var answers = new List<StudentQuizAnswer>();
-            var correctCount = 0;
-            var unmatchedQuestionIds = new List<Guid>();
+    //        var answers = new List<StudentQuizAnswer>();
+    //        var correctCount = 0;
+    //        var unmatchedQuestionIds = new List<Guid>();
 
-            foreach (var a in request.Answers)
-            {
-                if (!questionDict.TryGetValue(a.QuestionId, out var question))
-                {
-                    unmatchedQuestionIds.Add(a.QuestionId);
-                    continue;
-                }
+    //        foreach (var a in request.Answers)
+    //        {
+    //            if (!questionDict.TryGetValue(a.QuestionId, out var question))
+    //            {
+    //                unmatchedQuestionIds.Add(a.QuestionId);
+    //                continue;
+    //            }
 
-                var isCorrect = false;
-                if (question.CorrectAnswer != null && a.StudentAnswer != null)
-                {
-                    isCorrect = string.Equals(
-                        question.CorrectAnswer.Trim(),
-                        a.StudentAnswer.Trim(),
-                        StringComparison.OrdinalIgnoreCase);
-                }
+    //            var isCorrect = false;
+    //            if (question.CorrectAnswer != null && a.StudentAnswer != null)
+    //            {
+    //                isCorrect = string.Equals(
+    //                    question.CorrectAnswer.Trim(),
+    //                    a.StudentAnswer.Trim(),
+    //                    StringComparison.OrdinalIgnoreCase);
+    //            }
 
-                if (isCorrect)
-                {
-                    correctCount++;
-                }
+    //            if (isCorrect)
+    //            {
+    //                correctCount++;
+    //            }
 
-                answers.Add(new StudentQuizAnswer
-                {
-                    Id = Guid.NewGuid(),
-                    AttemptId = attempt.Id,
-                    QuestionId = question.Id,
-                    StudentAnswer = a.StudentAnswer,
-                    IsCorrect = isCorrect
-                });
-            }
+    //            answers.Add(new StudentQuizAnswer
+    //            {
+    //                Id = Guid.NewGuid(),
+    //                AttemptId = attempt.Id,
+    //                QuestionId = question.Id,
+    //                StudentAnswer = a.StudentAnswer,
+    //                IsCorrect = isCorrect
+    //            });
+    //        }
 
-            if (unmatchedQuestionIds.Count > 0)
-            {
-                var validIds = string.Join(", ", questionDict.Keys.OrderBy(x => x));
-                throw new InvalidOperationException(
-                    "Một hoặc nhiều questionId không thuộc quiz này: " +
-                    string.Join(", ", unmatchedQuestionIds.Distinct()) +
-                    ". Phải dùng QuestionId từ POST /api/Students/quizzes/{quizId}/start (mỗi phần tử questions[].questionId — đó là cột id trong bảng quiz_questions). " +
-                    "Không dùng quizId (bảng quizzes) làm questionId. " +
-                    (string.IsNullOrEmpty(validIds)
-                        ? "Quiz hiện không có câu hỏi nào trong quiz_questions."
-                        : $"Các questionId hợp lệ: {validIds}."));
-            }
+    //        if (unmatchedQuestionIds.Count > 0)
+    //        {
+    //            var validIds = string.Join(", ", questionDict.Keys.OrderBy(x => x));
+    //            throw new InvalidOperationException(
+    //                "Một hoặc nhiều questionId không thuộc quiz này: " +
+    //                string.Join(", ", unmatchedQuestionIds.Distinct()) +
+    //                ". Phải dùng QuestionId từ POST /api/Students/quizzes/{quizId}/start (mỗi phần tử questions[].questionId — đó là cột id trong bảng quiz_questions). " +
+    //                "Không dùng quizId (bảng quizzes) làm questionId. " +
+    //                (string.IsNullOrEmpty(validIds)
+    //                    ? "Quiz hiện không có câu hỏi nào trong quiz_questions."
+    //                    : $"Các questionId hợp lệ: {validIds}."));
+    //        }
 
-            var totalQuestions = quiz.QuizQuestions.Count;
-            double? score = null;
-            if (totalQuestions > 0)
-            {
-                score = correctCount * 100.0 / totalQuestions;
-            }
+    //        var totalQuestions = quiz.QuizQuestions.Count;
+    //        double? score = null;
+    //        if (totalQuestions > 0)
+    //        {
+    //            score = correctCount * 100.0 / totalQuestions;
+    //        }
 
-            attempt.Score = score;
-            attempt.CompletedAt = DateTime.UtcNow;
+    //        attempt.Score = score;
+    //        attempt.CompletedAt = DateTime.UtcNow;
 
-            await _studentRepository.AddStudentQuizAnswersAsync(answers);
-            await _studentRepository.UpdateQuizAttemptAsync(attempt);
+    //        await _studentRepository.AddStudentQuizAnswersAsync(answers);
+    //        await _studentRepository.UpdateQuizAttemptAsync(attempt);
 
-            await _unitOfWork.CommitTransactionAsync();
+    //        await _unitOfWork.CommitTransactionAsync();
 
-            var passed = score.HasValue && quiz.PassingScore.HasValue && score.Value >= quiz.PassingScore.Value;
+    //        var passed = score.HasValue && quiz.PassingScore.HasValue && score.Value >= quiz.PassingScore.Value;
 
-            return new QuizResultDto
-            {
-                AttemptId = attempt.Id,
-                QuizId = attempt.QuizId,
-                Score = score,
-                PassingScore = quiz.PassingScore,
-                Passed = passed
-            };
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            throw;
-        }
-    }
+    //        return new QuizResultDto
+    //        {
+    //            AttemptId = attempt.Id,
+    //            QuizId = attempt.QuizId,
+    //            Score = score,
+    //            PassingScore = quiz.PassingScore,
+    //            Passed = passed
+    //        };
+    //    }
+    //    catch
+    //    {
+    //        await _unitOfWork.RollbackTransactionAsync();
+    //        throw;
+    //    }
+    //}
 
     public async Task<StudentProgressDto> GetProgressAsync(Guid studentId)
     {

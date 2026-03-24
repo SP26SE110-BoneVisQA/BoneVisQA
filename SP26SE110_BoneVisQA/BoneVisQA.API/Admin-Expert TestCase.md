@@ -15,7 +15,7 @@ api/Expert/cases
 api/Expert/images
 
 {
-  "caseId": "69e859de-75d6-4cd3-9b19-8e6f340d8f00",
+  "caseId": "0425180d-e043-4dae-b07e-5cd2a837b006",
   "imageUrl": "",
   "modality": "MRI"
 }
@@ -33,7 +33,7 @@ api/Expert/annotations
 api/Expert/case-tag
 
 {
-  "medicalCaseId": "69e859de-75d6-4cd3-9b19-8e6f340d8f00",
+  "medicalCaseId": "0425180d-e043-4dae-b07e-5cd2a837b006",
   "tagId": "0cbcc68b-43db-48cb-b4df-68e9119df435"
 }
 
@@ -53,7 +53,7 @@ api/Expert/quizzes/questions
 
 {
   "quizId": "5c05995a-c6b4-49fd-bcf1-df63fc20e5e4",
-  "caseId": "69e859de-75d6-4cd3-9b19-8e6f340d8f00",
+  "caseId": "0425180d-e043-4dae-b07e-5cd2a837b006",
   "questionText": "Which radiographic feature best suggests a Colles fracture in this case?",
   "type": "MultipleChoice",
   "optionA": "Dorsal displacement of distal radius fragment",

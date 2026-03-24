@@ -31,10 +31,10 @@ public interface IStudentService
 
     Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId);
 
-    Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request);
+   // Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request);
 
     Task<StudentProgressDto> GetProgressAsync(Guid studentId);
 
-    Task<StudentSubmitQuestionResponseDTO> StudentSubmitQuestionsAsync(Guid studentid, StudentSubmitQuestionDTO submit);
+    Task<StudentSubmitQuestionResponseDTO> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDTO submit);
 }
 
