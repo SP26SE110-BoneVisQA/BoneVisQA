@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
-namespace BoneVisQA.API.Controllers;
+namespace BoneVisQA.API.Controllers.Student;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -132,4 +132,3 @@ public class StudentsController : ControllerBase
         return Ok(result);
     }
 }
-

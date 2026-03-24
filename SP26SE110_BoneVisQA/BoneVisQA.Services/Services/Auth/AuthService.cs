@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 
-namespace BoneVisQA.Services.Services;
+namespace BoneVisQA.Services.Services.Auth;
 
 public class AuthService : IAuthService
 {
