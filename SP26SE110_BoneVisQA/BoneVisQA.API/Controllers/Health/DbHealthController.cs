@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.API.Controllers;
+namespace BoneVisQA.API.Controllers.Health;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -42,4 +42,3 @@ public class DbHealthController : ControllerBase
         }
     }
 }
-

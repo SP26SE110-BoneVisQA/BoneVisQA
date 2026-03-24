@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
-namespace BoneVisQA.API.Controllers;
+namespace BoneVisQA.API.Controllers.Auth;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -167,4 +167,3 @@ public class AuthsController : ControllerBase
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
-

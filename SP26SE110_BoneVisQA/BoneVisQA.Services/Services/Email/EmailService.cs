@@ -6,7 +6,7 @@ using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
 
-namespace BoneVisQA.Services.Services;
+namespace BoneVisQA.Services.Services.Email;
 
 public class EmailService : IEmailService
 {
