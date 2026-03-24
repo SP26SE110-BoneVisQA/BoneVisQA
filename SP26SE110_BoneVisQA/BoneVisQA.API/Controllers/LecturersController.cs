@@ -1,10 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace BoneVisQA.API.Controllers;
 
@@ -86,13 +87,6 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("classes/{classId:guid}/quizzes")]
-    public async Task<ActionResult<QuizDto>> CreateQuiz(Guid classId, [FromBody] CreateQuizRequestDto request)
-    {
-        var result = await _lecturerService.CreateQuizAsync(classId, request);
-        return Ok(result);
-    }
-
     [HttpGet("classes/{classId:guid}/stats")]
     public async Task<ActionResult<ClassStatsDto>> GetClassStats(Guid classId)
     {
@@ -100,31 +94,88 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("quizzes/{quizId:guid}/questions")]
-    public async Task<ActionResult<QuizQuestionDto>> AddQuizQuestion(Guid quizId, [FromBody] CreateQuizQuestionRequestDto request)
-    {
-        request.QuizId = quizId;
-        var result = await _lecturerService.AddQuizQuestionAsync(request);
-        return Ok(result);
-    }
+    //========================================================================================================
 
-    [HttpGet("quizzes/{quizId:guid}/questions")]
-    public async Task<ActionResult<IReadOnlyList<QuizQuestionDto>>> GetQuizQuestions(Guid quizId)
+    //[HttpPost("classes/{classId:guid}/quizzes")]
+    //public async Task<ActionResult<QuizDto>> CreateQuiz(Guid classId, [FromBody] CreateQuizRequestDto request)
+    //{
+    //    var result = await _lecturerService.CreateQuizAsync(classId, request);
+    //    return Ok(result);
+    //}
+    //[HttpPost("quizzes/{quizId:guid}/questions")]
+    //public async Task<ActionResult<QuizQuestionDto>> AddQuizQuestion(Guid quizId, [FromBody] CreateQuizQuestionRequestDto request)
+    //{
+    //    request.QuizId = quizId;
+    //    var result = await _lecturerService.AddQuizQuestionAsync(request);
+    //    return Ok(result);
+    //}
+
+    //[HttpGet("quizzes/{quizId:guid}/questions")]
+    //public async Task<ActionResult<IReadOnlyList<QuizQuestionDto>>> GetQuizQuestions(Guid quizId)
+    //{
+    //    var result = await _lecturerService.GetQuizQuestionsAsync(quizId);
+    //    return Ok(result);
+    //}
+
+    //[HttpPut("quizzes/questions/{questionId:guid}")]
+    //public async Task<IActionResult> UpdateQuizQuestion(Guid questionId, [FromBody] UpdateQuizQuestionRequestDto request)
+    //{
+    //    var updated = await _lecturerService.UpdateQuizQuestionAsync(questionId, request);
+    //    if (!updated)
+    //    {
+    //        return NotFound(new { message = "Câu hỏi không tồn tại." });
+    //    }
+    //    return NoContent();
+    //}
+
+    [HttpGet("{quizId}")]
+    public async Task<IActionResult> GetQuizQuestions(Guid quizId)
     {
         var result = await _lecturerService.GetQuizQuestionsAsync(quizId);
+
+        if (result == null || !result.Any())
+        {
+            return NotFound("No quiz questions found.");
+        }
+
         return Ok(result);
     }
 
-    [HttpPut("quizzes/questions/{questionId:guid}")]
-    public async Task<IActionResult> UpdateQuizQuestion(Guid questionId, [FromBody] UpdateQuizQuestionRequestDto request)
+    [HttpPost]
+    public async Task<IActionResult> CreateQuiz([FromBody] QuizDTO request)
     {
-        var updated = await _lecturerService.UpdateQuizQuestionAsync(questionId, request);
-        if (!updated)
-        {
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
-        }
-        return NoContent();
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _lecturerService.CreateQuizAsync(request);
+
+        return Ok(result);
     }
+
+    [HttpPost("{quizId}/questions")]
+    public async Task<IActionResult> AddQuizQuestion(Guid quizId,[FromBody] CreateQuizQuestionDTO request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _lecturerService.AddQuizQuestionAsync(quizId, request);
+
+        return Ok(result);
+    }
+
+    [HttpPut("update-question/{questionId}")]
+    public async Task<IActionResult> UpdateQuizQuestion(Guid questionId, [FromBody] UpdateQuizsQuestionRequestDto request)
+    {
+        if (request == null)
+        {
+            return BadRequest("Invalid request data.");
+        }
+
+        var updated = await _lecturerService.UpdateQuizQuestionAsync(questionId, request);
+
+        return Ok("Update quiz question successfully.");
+    }
+
 
     [HttpDelete("quizzes/questions/{questionId:guid}")]
     public async Task<IActionResult> DeleteQuizQuestion(Guid questionId)

@@ -88,7 +88,7 @@ namespace BoneVisQA.API.Controllers.Expert
                 message = "Quiz_Question created successfully",
                 result
             });
-        }
+        }        
 
         [HttpPost("class/{classId}/assign/{quizId}")]
         public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
@@ -121,48 +121,6 @@ namespace BoneVisQA.API.Controllers.Expert
                 Message = "Tags added successfully",
                 result
             });
-        }
-
-
-
-
-
-
-        [HttpGet("{quizId}")]
-        public async Task<IActionResult> GetQuizQuestions(Guid quizId)
-        {
-            var result = await _quizService.GetQuizQuestionsAsync(quizId);
-
-            if (result == null || !result.Any())
-            {
-                return NotFound("No quiz questions found.");
-            }
-
-            return Ok(result);
-        }
-
-        // ================================
-        // PUT: api/QuizQuestion/{questionId}
-        // Update quiz question
-        // ================================
-        [HttpPut("{questionId}")]
-        public async Task<IActionResult> UpdateQuizQuestion(
-            Guid questionId,
-            [FromBody] UpdateQuizsQuestionRequestDto request)
-        {
-            if (request == null)
-            {
-                return BadRequest("Invalid request data.");
-            }
-
-            var updated = await _quizService.UpdateQuizQuestionAsync(questionId, request);
-
-            if (!updated)
-            {
-                return NotFound("Quiz question not found.");
-            }
-
-            return Ok("Update quiz question successfully.");
         }
     }
 }

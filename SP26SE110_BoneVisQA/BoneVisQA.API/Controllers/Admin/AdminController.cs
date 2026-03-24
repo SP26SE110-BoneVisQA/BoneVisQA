@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Admin
 {
+
     [Authorize(Roles = "Admin")]
+
     [ApiController]
     [Route("api/[controller]")]
     public class AdminController : ControllerBase
@@ -243,7 +245,7 @@ namespace BoneVisQA.API.Controllers.Admin
         }
 
         //===========================================================================================================================================
-        [HttpPost("upload")]
+        [HttpPost("document-upload")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<DocumentDto>> Upload([FromForm] DocumentUploadRequest request)
         {
@@ -269,14 +271,14 @@ namespace BoneVisQA.API.Controllers.Admin
             return CreatedAtAction(nameof(GetById), new { id = document.Id }, document);
         }
 
-        [HttpGet]
+        [HttpGet("document")]
         public async Task<ActionResult<IEnumerable<DocumentDto>>> GetAll()
         {
             var documents = await _documentService.GetAllDocumentsAsync();
             return Ok(documents);
         }
 
-        [HttpGet("{id:guid}")]
+        [HttpGet("document/{id:guid}")]
         public async Task<ActionResult<DocumentDto>> GetById(Guid id)
         {
             var document = await _documentService.GetDocumentByIdAsync(id);
@@ -298,7 +300,7 @@ namespace BoneVisQA.API.Controllers.Admin
             return NoContent();
         }
 
-        [HttpPost("{id:guid}/reindex")]
+        [HttpPost("document/{id:guid}/reindex")]
         public async Task<IActionResult> Reindex(Guid id)
         {
             var success = await _documentService.TriggerReindexAsync(id);
@@ -309,7 +311,7 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(new { message = "Reindexing started." });
         }
 
-        [HttpPatch("{id:guid}/status")]
+        [HttpPatch("document/{id:guid}/status")]
         public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateStatusRequest request)
         {
             await _documentService.UpdateIndexingStatusAsync(id, request.Status);
