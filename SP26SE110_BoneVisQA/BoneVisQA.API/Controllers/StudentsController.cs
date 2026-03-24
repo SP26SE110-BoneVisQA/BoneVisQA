@@ -1,11 +1,12 @@
+using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Student;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Student;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers;
 
@@ -90,27 +91,39 @@ public class StudentsController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("quizzes/submit")]
-    public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
+                                                            //  phan nam 
+    [HttpPost("submit")]
+    public async Task<IActionResult> SubmitAnswer(
+        [FromQuery] Guid studentId,
+        [FromBody] StudentSubmitQuestionDTO submit)
     {
-        var effectiveStudentId = studentId ?? Guid.Empty;
-        if (effectiveStudentId == Guid.Empty)
-        {
-            var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var id))
-                return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
-            effectiveStudentId = id;
-        }
-        try
-        {
-            var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _studentService.SubmitQuizAsync(studentId, submit);
+        return Ok(result);
     }
+
+
+                                                             //code tran
+    //[HttpPost("quizzes/submit")]
+    //public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
+    //{
+    //    var effectiveStudentId = studentId ?? Guid.Empty;
+    //    if (effectiveStudentId == Guid.Empty)
+    //    {
+    //        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+    //        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var id))
+    //            return Unauthorized(new { message = "Không xác định được sinh viên. Truyền studentId hoặc đăng nhập với tài khoản sinh viên." });
+    //        effectiveStudentId = id;
+    //    }
+    //    try
+    //    {
+    //        var result = await _studentService.SubmitQuizAsync(effectiveStudentId, request);
+    //        return Ok(result);
+    //    }
+    //    catch (InvalidOperationException ex)
+    //    {
+    //        return BadRequest(new { message = ex.Message });
+    //    }
+    //}
 
     [HttpGet("progress")]
     public async Task<ActionResult<StudentProgressDto>> GetProgress([FromQuery] Guid studentId)

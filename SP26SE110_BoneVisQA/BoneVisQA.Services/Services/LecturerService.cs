@@ -1,13 +1,14 @@
+﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Services;
+using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BoneVisQA.Repositories.Models;
-using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Repositories.Services;
-using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Lecturer;
-using Microsoft.EntityFrameworkCore;
 
 namespace BoneVisQA.Services.Services;
 
@@ -230,10 +231,37 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request)
+    //====================================================================================================
+    public async Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId)
     {
-        var now = DateTime.UtcNow;
-        var entity = new Quiz
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+           ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        var question = await _unitOfWork.QuizQuestionRepository
+       .FindByCondition(q => q.QuizId == quizId)
+       .Include(q => q.Quiz)
+       .ToListAsync();
+
+        return question
+            .Select(q => new QuizQuestionDTO
+            {
+                Id = q.Id,
+                QuizId = q.QuizId,
+                QuizTitle = quiz.Title,
+                CaseId = q.CaseId,
+                QuestionText = q.QuestionText,
+                Type = q.Type,
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                CorrectAnswer = q.CorrectAnswer
+            })
+            .ToList();
+    }
+    public async Task<QuizDTO> CreateQuizAsync(QuizDTO request)
+    {
+        var quiz = new Quiz
         {
             Id = Guid.NewGuid(),
             Title = request.Title,
@@ -241,125 +269,204 @@ public class LecturerService : ILecturerService
             CloseTime = request.CloseTime,
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
-            CreatedAt = now
+            CreatedAt = DateTime.UtcNow
         };
 
-        await _unitOfWork.QuizRepository.AddAsync(entity);
+        await _unitOfWork.QuizRepository.AddAsync(quiz);
         await _unitOfWork.SaveAsync();
 
-        var classQuiz = new ClassQuiz
+        return new QuizDTO
         {
-            ClassId = classId,
-            QuizId = entity.Id,
-            AssignedAt = now
-        };
-        await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
-        await _unitOfWork.SaveAsync();
-
-        return new QuizDto
-        {
-            Id = entity.Id,
-            ClassId = classId,
-            Title = entity.Title,
-            OpenTime = entity.OpenTime,
-            CloseTime = entity.CloseTime,
-            TimeLimit = entity.TimeLimit,
-            PassingScore = entity.PassingScore
+            Id = quiz.Id,
+            Title = quiz.Title,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimit = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore,
+            CreatedAt = quiz.CreatedAt
         };
     }
 
-
-    public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
+    public async Task<QuizQuestionDTO> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDTO request)
     {
-        var stats = await _unitOfWork.LearningStatisticRepository
-            .FindByCondition(s => s.ClassId == classId)
-            .ToListAsync();
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-        var totalStudents = stats.Count;
-        var totalCasesViewed = stats.Sum(s => s.TotalCasesViewed ?? 0);
-        var totalQuestionsAsked = stats.Sum(s => s.TotalQuestionsAsked ?? 0);
-        double? avgQuizScore = null;
-        if (stats.Count > 0)
+        var question = new QuizQuestion
         {
-            avgQuizScore = stats.Average(s => s.AvgQuizScore ?? 0);
-        }
-
-        return new ClassStatsDto
-        {
-            ClassId = classId,
-            TotalStudents = totalStudents,
-            TotalCasesViewed = totalCasesViewed,
-            TotalQuestionsAsked = totalQuestionsAsked,
-            AvgQuizScore = avgQuizScore
-        };
-    }
-
-    public async Task<QuizQuestionDto> AddQuizQuestionAsync(CreateQuizQuestionRequestDto request)
-    {
-        var entity = new QuizQuestion
-        {
-            Id = Guid.NewGuid(),
-            QuizId = request.QuizId,
+            QuizId = quizId,
             CaseId = request.CaseId,
             QuestionText = request.QuestionText,
             Type = request.Type,
+            OptionA = request.OptionA,
+            OptionB = request.OptionB,
+            OptionC = request.OptionC,
+            OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer
         };
 
-        await _unitOfWork.QuizQuestionRepository.AddAsync(entity);
+        await _unitOfWork.QuizQuestionRepository.AddAsync(question);
         await _unitOfWork.SaveAsync();
 
-        return new QuizQuestionDto
+        return new QuizQuestionDTO
         {
-            Id = entity.Id,
-            QuizId = entity.QuizId,
-            CaseId = entity.CaseId,
-            QuestionText = entity.QuestionText,
-            Type = entity.Type ?? "multiple_choice",
-            CorrectAnswer = entity.CorrectAnswer
+            Id = question.Id,
+            QuizId = question.QuizId,
+            QuizTitle = quiz.Title,
+            CaseId = question.CaseId,
+            QuestionText = question.QuestionText,
+            Type = question.Type,
+            OptionA = question.OptionA,
+            OptionB = question.OptionB,
+            OptionC = question.OptionC,
+            OptionD = question.OptionD,
+            CorrectAnswer = question.CorrectAnswer
         };
     }
-
-    public async Task<IReadOnlyList<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId)
+    public async Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request)
     {
-        var questions = await _unitOfWork.QuizQuestionRepository
-            .FindByCondition(q => q.QuizId == quizId)
-            .Include(q => q.Case)
-            .ToListAsync();
+        var entity = await _unitOfWork.QuizQuestionRepository.GetByIdAsync(questionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
 
-        return questions
-            .Select(q => new QuizQuestionDto
-            {
-                Id = q.Id,
-                QuizId = q.QuizId,
-                CaseId = q.CaseId ?? Guid.Empty,
-                CaseTitle = q.Case?.Title,
-                QuestionText = q.QuestionText,
-                Type = q.Type ?? "multiple_choice",
-                CorrectAnswer = q.CorrectAnswer
-            })
-            .ToList();
-    }
-
-    public async Task<bool> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizQuestionRequestDto request)
-    {
-        var entity = await _unitOfWork.QuizQuestionRepository
-            .FindByCondition(q => q.Id == questionId)
-            .FirstOrDefaultAsync();
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(entity.QuizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
         if (entity == null)
-        {
-            return false;
-        }
+            throw new KeyNotFoundException("Không tìm thấy cau hoi.");
+
 
         entity.QuestionText = request.QuestionText;
-        entity.Type = request.Type ?? entity.Type;
-        entity.CorrectAnswer = request.CorrectAnswer ?? entity.CorrectAnswer;
+        entity.Type = request.Type;
+        entity.OptionA = request.OptionA;
+        entity.OptionB = request.OptionB;
+        entity.OptionC = request.OptionC;
+        entity.OptionD = request.OptionD;
+        entity.CorrectAnswer = request.CorrectAnswer;
 
         await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
         await _unitOfWork.SaveAsync();
-        return true;
+       
+        return new UpdateQuizsQuestionResponseDto
+        {
+            QuizTitle = quiz.Title, 
+            QuestionText = request.QuestionText,
+            Type = request.Type,
+            OptionA = request.OptionA,
+            OptionB = request.OptionB,
+            OptionC = request.OptionC,
+            OptionD = request.OptionD,
+            CorrectAnswer = request.CorrectAnswer,
+        };
     }
+
+
+
+    //================================================ code tran ====================================================
+
+
+    //public async Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request)
+    //{
+    //    var now = DateTime.UtcNow;
+    //    var entity = new Quiz
+    //    {
+    //        Id = Guid.NewGuid(),
+    //        Title = request.Title,
+    //        OpenTime = request.OpenTime,
+    //        CloseTime = request.CloseTime,
+    //        TimeLimit = request.TimeLimit,
+    //        PassingScore = request.PassingScore,
+    //        CreatedAt = now
+    //    };
+
+    //    await _unitOfWork.QuizRepository.AddAsync(entity);
+    //    await _unitOfWork.SaveAsync();
+
+    //    var classQuiz = new ClassQuiz
+    //    {
+    //        ClassId = classId,
+    //        QuizId = entity.Id,
+    //        AssignedAt = now
+    //    };
+    //    await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+    //    await _unitOfWork.SaveAsync();
+
+    //    return new QuizDto
+    //    {
+    //        Id = entity.Id,
+    //        ClassId = classId,
+    //        Title = entity.Title,
+    //        OpenTime = entity.OpenTime,
+    //        CloseTime = entity.CloseTime,
+    //        TimeLimit = entity.TimeLimit,
+    //        PassingScore = entity.PassingScore
+    //    };
+    //}
+    //public async Task<QuizQuestionDto> AddQuizQuestionAsync(CreateQuizQuestionRequestDto request)
+    //{
+    //    var entity = new QuizQuestion
+    //    {
+    //        Id = Guid.NewGuid(),
+    //        QuizId = request.QuizId,
+    //        CaseId = request.CaseId,
+    //        QuestionText = request.QuestionText,
+    //        Type = request.Type,
+    //        CorrectAnswer = request.CorrectAnswer
+    //    };
+
+    //    await _unitOfWork.QuizQuestionRepository.AddAsync(entity);
+    //    await _unitOfWork.SaveAsync();
+
+    //    return new QuizQuestionDto
+    //    {
+    //        Id = entity.Id,
+    //        QuizId = entity.QuizId,
+    //        CaseId = entity.CaseId,
+    //        QuestionText = entity.QuestionText,
+    //        Type = entity.Type ?? "multiple_choice",
+    //        CorrectAnswer = entity.CorrectAnswer
+    //    };
+    //}
+
+    //public async Task<IReadOnlyList<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId)
+    //{
+    //    var questions = await _unitOfWork.QuizQuestionRepository
+    //        .FindByCondition(q => q.QuizId == quizId)
+    //        .Include(q => q.Case)
+    //        .ToListAsync();
+
+    //    return questions
+    //        .Select(q => new QuizQuestionDto
+    //        {
+    //            Id = q.Id,
+    //            QuizId = q.QuizId,
+    //            CaseId = q.CaseId ?? Guid.Empty,
+    //            CaseTitle = q.Case?.Title,
+    //            QuestionText = q.QuestionText,
+    //            Type = q.Type ?? "multiple_choice",
+    //            CorrectAnswer = q.CorrectAnswer
+    //        })
+    //        .ToList();
+    //}
+
+    //public async Task<bool> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizQuestionRequestDto request)
+    //{
+    //    var entity = await _unitOfWork.QuizQuestionRepository
+    //        .FindByCondition(q => q.Id == questionId)
+    //        .FirstOrDefaultAsync();
+
+    //    if (entity == null)
+    //    {
+    //        return false;
+    //    }
+
+    //    entity.QuestionText = request.QuestionText;
+    //    entity.Type = request.Type ?? entity.Type;
+    //    entity.CorrectAnswer = request.CorrectAnswer ?? entity.CorrectAnswer;
+
+    //    await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
+    //    await _unitOfWork.SaveAsync();
+    //    return true;
+    //}
 
     public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
     {
@@ -399,6 +506,31 @@ public class LecturerService : ILecturerService
                 CreatedAt = c.CreatedAt
             })
             .ToList();
+    }
+
+    public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
+    {
+        var stats = await _unitOfWork.LearningStatisticRepository
+            .FindByCondition(s => s.ClassId == classId)
+            .ToListAsync();
+
+        var totalStudents = stats.Count;
+        var totalCasesViewed = stats.Sum(s => s.TotalCasesViewed ?? 0);
+        var totalQuestionsAsked = stats.Sum(s => s.TotalQuestionsAsked ?? 0);
+        double? avgQuizScore = null;
+        if (stats.Count > 0)
+        {
+            avgQuizScore = stats.Average(s => s.AvgQuizScore ?? 0);
+        }
+
+        return new ClassStatsDto
+        {
+            ClassId = classId,
+            TotalStudents = totalStudents,
+            TotalCasesViewed = totalCasesViewed,
+            TotalQuestionsAsked = totalQuestionsAsked,
+            AvgQuizScore = avgQuizScore
+        };
     }
 
     public async Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request)
