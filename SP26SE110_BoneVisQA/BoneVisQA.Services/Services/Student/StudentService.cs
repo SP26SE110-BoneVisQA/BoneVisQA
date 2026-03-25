@@ -348,6 +348,19 @@ public class StudentService : IStudentService
     //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
 
     //===================== phan nam =====================   
+   
+    private string? GetOptionText(QuizQuestion question, string? optionKey)
+    {
+        return optionKey?.ToUpper() switch
+        {
+            "A" => question.OptionA,
+            "B" => question.OptionB,
+            "C" => question.OptionC,
+            "D" => question.OptionD,
+            _ => null
+        };
+    }
+
     public async Task<StudentSubmitQuestionResponseDTO> SubmitQuizAsync(Guid studentId, StudentSubmitQuestionDTO submit)
     {
         var attempt = await _unitOfWork.QuizAttemptRepository
@@ -388,10 +401,16 @@ public class StudentService : IStudentService
 
         return new StudentSubmitQuestionResponseDTO
         {
-            QuizTile = quiz.Title,
+            QuizTitle = quiz.Title,
             QuestionText = question.QuestionText,
-            StudentAnswer = submit.StudentAnswer,
+            OptionA = question.OptionA,
+            OptionB = question.OptionB,
+            OptionC = question.OptionC,
+            OptionD = question.OptionD,
+            StudentAnswer = submit.StudentAnswer?.ToUpper(),
+            StudentAnswerText = GetOptionText(question, submit.StudentAnswer), 
             CorrectAnswer = question.CorrectAnswer,
+            CorrectAnswerText = GetOptionText(question, question.CorrectAnswer),
             IsCorrect = isCorrect
         };
     }
