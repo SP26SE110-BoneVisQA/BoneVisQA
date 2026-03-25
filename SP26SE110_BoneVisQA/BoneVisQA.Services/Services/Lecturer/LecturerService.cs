@@ -291,7 +291,15 @@ public class LecturerService : ILecturerService
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
-
+       
+        MedicalCase? medicalCase = null;
+        if (request.CaseId.HasValue)
+        {
+            medicalCase = await _unitOfWork.MedicalCaseRepository
+                .GetByIdAsync(request.CaseId.Value)
+                ?? throw new KeyNotFoundException("Không tìm thấy medical case.");
+        }
+       
         var question = new QuizQuestion
         {
             QuizId = quizId,
@@ -314,6 +322,7 @@ public class LecturerService : ILecturerService
             QuizId = question.QuizId,
             QuizTitle = quiz.Title,
             CaseId = question.CaseId,
+            CaseTitle = medicalCase?.Title, 
             QuestionText = question.QuestionText,
             Type = question.Type,
             OptionA = question.OptionA,
