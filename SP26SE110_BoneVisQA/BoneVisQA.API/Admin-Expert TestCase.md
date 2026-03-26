@@ -4,8 +4,8 @@
 api/Expert/cases
 
 {
-  "title": "Distal Radius Fracture - X-ray Case",
-  "description": "A 45-year-old female presents with wrist pain after falling on an outstretched hand. Evaluate the X-ray image and identify the fracture characteristics.",
+  "title": "Distal Radius Fracture - MRI Case",
+  "description": "A 55-year-old female presents with wrist pain after falling on an outstretched hand. Evaluate the X-ray image and identify the fracture characteristics.",
   "difficulty": "Easy",
   "categoryId": "8cae8008-bec5-4fb0-9808-becece8243a9",
   "suggestedDiagnosis": "Distal radius fracture (Colles fracture)",
@@ -23,7 +23,7 @@ api/Expert/images
 api/Expert/annotations
 
 {
-    "id": "9f4e2ba3-69ed-49a7-9a54-47c1083330e5",
+    "id": "d5e9b485-7dd0-4014-946c-69817c5823c1",
     "label": "Distal radius fracture line",
     "coordinates": "{\"x\":120,\"y\":240,\"width\":80,\"height\":60}"
   }
@@ -34,7 +34,7 @@ api/Expert/case-tag
 
 {
   "medicalCaseId": "0425180d-e043-4dae-b07e-5cd2a837b006",
-  "tagId": "0cbcc68b-43db-48cb-b4df-68e9119df435"
+  "tagId": "b8727057-d8eb-421c-9636-f43dff762fed"
 }
 
 api/Expert/quizzes
@@ -65,20 +65,20 @@ api/Expert/quizzes/questions
 
 /api/Expert/class/assign
 
-"classId":"0bf619ce-62dc-4787-9429-2862df0d4ac0",
+"classId":"1f28fc56-1308-48e8-a971-680d06bbeaab",
 "quizId": "5c05995a-c6b4-49fd-bcf1-df63fc20e5e4",
 
 
 
 api/Expert/attempts/score
 
-"attemptId": "0ca4b8a0-8f35-4447-9567-cb81b0e39e00",
+"attemptId": "45f7669f-fa6d-48b8-8ab2-d5643831e026",
 
 api/Expert/studentsubmit
 
 {
   "studentId": "",
-  "attemptId": "45f7669f-fa6d-48b8-8ab2-d5643831e026",
+  "attemptId": "445f7669f-fa6d-48b8-8ab2-d5643831e026",
   "questionId": "5b9b5ef3-0cec-46da-8e66-f0d3fc34ffed",
   "studentAnswer": "a"
 }
