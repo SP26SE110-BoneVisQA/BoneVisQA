@@ -2,7 +2,6 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -232,7 +231,7 @@ public class LecturerService : ILecturerService
     }
 
     //====================================================================================================
-    public async Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId)
+    public async Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
@@ -243,7 +242,7 @@ public class LecturerService : ILecturerService
        .ToListAsync();
 
         return question
-            .Select(q => new QuizQuestionDTO
+            .Select(q => new QuizQuestionDto
             {
                 Id = q.Id,
                 QuizId = q.QuizId,
@@ -259,8 +258,43 @@ public class LecturerService : ILecturerService
             })
             .ToList();
     }
-    public async Task<QuizDTO> CreateQuizAsync(QuizDTO request)
+
+    public async Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId)
     {
+        var question = await _unitOfWork.QuizQuestionRepository
+            .FindByCondition(q => q.Id == questionId)
+            .Include(q => q.Quiz)
+            .FirstOrDefaultAsync();
+
+        if (question == null)
+            return null;
+
+        return new QuizQuestionDto
+        {
+            Id = question.Id,
+            QuizId = question.QuizId,
+            QuizTitle = question.Quiz?.Title,
+            CaseId = question.CaseId,
+            QuestionText = question.QuestionText,
+            Type = question.Type,
+            OptionA = question.OptionA,
+            OptionB = question.OptionB,
+            OptionC = question.OptionC,
+            OptionD = question.OptionD,
+            CorrectAnswer = question.CorrectAnswer
+        };
+    }
+
+    public async Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request)
+    {
+        var now = DateTime.UtcNow;
+
+        if (request.ClassId != Guid.Empty)
+        {
+            _ = await _unitOfWork.AcademicClassRepository.GetByIdAsync(request.ClassId)
+                ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+        }
+
         var quiz = new Quiz
         {
             Id = Guid.NewGuid(),
@@ -269,15 +303,28 @@ public class LecturerService : ILecturerService
             CloseTime = request.CloseTime,
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         };
 
         await _unitOfWork.QuizRepository.AddAsync(quiz);
         await _unitOfWork.SaveAsync();
 
-        return new QuizDTO
+        if (request.ClassId != Guid.Empty)
+        {
+            var classQuiz = new ClassQuiz
+            {
+                ClassId = request.ClassId,
+                QuizId = quiz.Id,
+                AssignedAt = now
+            };
+            await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+            await _unitOfWork.SaveAsync();
+        }
+
+        return new QuizDto
         {
             Id = quiz.Id,
+            ClassId = request.ClassId != Guid.Empty ? request.ClassId : Guid.Empty,
             Title = quiz.Title,
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
@@ -287,7 +334,7 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<QuizQuestionDTO> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDTO request)
+    public async Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
@@ -316,7 +363,7 @@ public class LecturerService : ILecturerService
         await _unitOfWork.QuizQuestionRepository.AddAsync(question);
         await _unitOfWork.SaveAsync();
 
-        return new QuizQuestionDTO
+        return new QuizQuestionDto
         {
             Id = question.Id,
             QuizId = question.QuizId,
@@ -519,17 +566,61 @@ public class LecturerService : ILecturerService
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {
-        var stats = await _unitOfWork.LearningStatisticRepository
-            .FindByCondition(s => s.ClassId == classId)
+        var studentIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.ClassId == classId)
+            .Select(e => e.StudentId)
             .ToListAsync();
 
-        var totalStudents = stats.Count;
-        var totalCasesViewed = stats.Sum(s => s.TotalCasesViewed ?? 0);
-        var totalQuestionsAsked = stats.Sum(s => s.TotalQuestionsAsked ?? 0);
-        double? avgQuizScore = null;
-        if (stats.Count > 0)
+        var totalStudents = studentIds.Count;
+
+        var totalCasesViewed = 0;
+        if (studentIds.Count > 0)
         {
-            avgQuizScore = stats.Average(s => s.AvgQuizScore ?? 0);
+            totalCasesViewed = await _unitOfWork.CaseViewLogRepository
+                .FindByCondition(v => studentIds.Contains(v.StudentId))
+                .CountAsync();
+        }
+
+        var totalQuestionsAsked = 0;
+        if (studentIds.Count > 0)
+        {
+            totalQuestionsAsked = await _unitOfWork.StudentQuestionRepository
+                .FindByCondition(q => studentIds.Contains(q.StudentId))
+                .CountAsync();
+        }
+
+        double? avgQuizScore = null;
+        if (studentIds.Count > 0)
+        {
+            var quizIdsInClass = await _unitOfWork.ClassQuizRepository
+                .FindByCondition(cq => cq.ClassId == classId)
+                .Select(cq => cq.QuizId)
+                .ToListAsync();
+
+            if (quizIdsInClass.Count > 0)
+            {
+                var scores = await _unitOfWork.QuizAttemptRepository
+                    .FindByCondition(a =>
+                        studentIds.Contains(a.StudentId)
+                        && quizIdsInClass.Contains(a.QuizId)
+                        && a.Score.HasValue
+                        && a.CompletedAt.HasValue)
+                    .Select(a => a.Score!.Value)
+                    .ToListAsync();
+
+                if (scores.Count > 0)
+                    avgQuizScore = scores.Average();
+            }
+        }
+
+        if (avgQuizScore == null)
+        {
+            var legacyStats = await _unitOfWork.LearningStatisticRepository
+                .FindByCondition(s => s.ClassId == classId && s.AvgQuizScore.HasValue)
+                .Select(s => s.AvgQuizScore!.Value)
+                .ToListAsync();
+            if (legacyStats.Count > 0)
+                avgQuizScore = legacyStats.Average();
         }
 
         return new ClassStatsDto
@@ -642,5 +733,159 @@ public class LecturerService : ILecturerService
                 CreatedAt = a.CreatedAt
             })
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId)
+    {
+        // Get all classes owned by this lecturer
+        var classIds = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+        {
+            return new List<ClassQuizDto>();
+        }
+
+        // Get all quizzes assigned to these classes
+        var classQuizzes = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => classIds.Contains(cq.ClassId))
+            .Include(cq => cq.Quiz)
+            .Include(cq => cq.Class)
+            .OrderByDescending(cq => cq.AssignedAt)
+            .ToListAsync();
+
+        return classQuizzes
+            .Select(cq => new ClassQuizDto
+            {
+                ClassId = cq.ClassId,
+                QuizId = cq.QuizId,
+                QuizName = cq.Quiz?.Title,
+                ClassName = cq.Class?.ClassName,
+                AssignedAt = cq.AssignedAt
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId)
+    {
+        var quizIds = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => cq.ClassId == classId)
+            .Select(cq => cq.QuizId)
+            .ToListAsync();
+
+        if (quizIds.Count == 0)
+            return new List<QuizDto>();
+
+        var quizzes = await _unitOfWork.QuizRepository
+            .FindByCondition(q => quizIds.Contains(q.Id))
+            .ToListAsync();
+
+        return quizzes
+            .Select(q => new QuizDto
+            {
+                Id = q.Id,
+                ClassId = classId,
+                Title = q.Title,
+                OpenTime = q.OpenTime,
+                CloseTime = q.CloseTime,
+                TimeLimit = q.TimeLimit,
+                PassingScore = q.PassingScore,
+                CreatedAt = q.CreatedAt
+            })
+            .ToList();
+    }
+
+    public async Task<QuizDto?> GetQuizByIdAsync(Guid quizId)
+    {
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
+        if (quiz == null)
+            return null;
+
+        var classLink = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => cq.QuizId == quizId)
+            .FirstOrDefaultAsync();
+
+        return new QuizDto
+        {
+            Id = quiz.Id,
+            ClassId = classLink?.ClassId ?? Guid.Empty,
+            Title = quiz.Title,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimit = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore,
+            CreatedAt = quiz.CreatedAt
+        };
+    }
+
+    public async Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds)
+    {
+        if (quizIds == null || quizIds.Count == 0)
+            return new List<QuizDto>();
+
+        var distinct = quizIds.Distinct().ToList();
+        var quizzes = await _unitOfWork.QuizRepository
+            .FindByCondition(q => distinct.Contains(q.Id))
+            .ToListAsync();
+
+        var classByQuiz = await _unitOfWork.ClassQuizRepository
+            .FindByCondition(cq => distinct.Contains(cq.QuizId))
+            .ToListAsync();
+
+        return quizzes
+            .Select(q =>
+            {
+                var link = classByQuiz.FirstOrDefault(c => c.QuizId == q.Id);
+                return new QuizDto
+                {
+                    Id = q.Id,
+                    ClassId = link?.ClassId ?? Guid.Empty,
+                    Title = q.Title,
+                    OpenTime = q.OpenTime,
+                    CloseTime = q.CloseTime,
+                    TimeLimit = q.TimeLimit,
+                    PassingScore = q.PassingScore,
+                    CreatedAt = q.CreatedAt
+                };
+            })
+            .ToList();
+    }
+
+    public async Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .GetByIdAsync(classId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+
+        var quiz = await _unitOfWork.QuizRepository
+            .GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        var existing = await _unitOfWork.ClassQuizRepository
+            .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
+
+        if (existing != null)
+            throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
+
+        var classQuiz = new ClassQuiz
+        {
+            ClassId = classId,
+            QuizId = quizId,
+            AssignedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+        await _unitOfWork.SaveAsync();
+
+        return new ClassQuizDto
+        {
+            ClassId = classQuiz.ClassId,
+            ClassName = academicClass.ClassName,
+            QuizId = classQuiz.QuizId,
+            QuizName = quiz.Title,
+            AssignedAt = classQuiz.AssignedAt
+        };
     }
 }
