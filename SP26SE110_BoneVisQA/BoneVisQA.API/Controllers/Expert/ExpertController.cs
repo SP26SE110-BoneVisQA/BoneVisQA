@@ -1,5 +1,6 @@
-﻿using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,7 +58,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes")]
-        public async Task<IActionResult> CreateQuiz([FromBody] QuizDTO request)
+        public async Task<IActionResult> CreateQuiz([FromBody] QuizDto request)
         {
             if (request == null)
             {
@@ -74,7 +75,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(Guid quizId,CreateQuizQuestionDTO request)
+        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDto request)
         {
             if (request == null)
             {

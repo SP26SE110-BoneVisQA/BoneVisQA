@@ -1,8 +1,10 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -15,10 +17,14 @@ namespace BoneVisQA.Services.Services.Admin
     public class UserManagementService : IUserManagementService
     {
         public readonly IUnitOfWork _unitOfWork;
+        private readonly IEmailService _emailService;
+        private readonly ILogger<UserManagementService> _logger;
 
-        public UserManagementService(IUnitOfWork unitOfWork)
+        public UserManagementService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<UserManagementService> logger)
         {
             _unitOfWork = unitOfWork;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         private readonly List<string> _validRoles = new()
@@ -139,6 +145,20 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRoleRepository.AddAsync(newUserRole);
 
             await _unitOfWork.SaveAsync();
+
+            // Gửi email thông báo khi được assign role (không chờ kết quả)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _emailService.SendRoleAssignedEmailAsync(user.Email, user.FullName, roleName);
+                    _logger.LogInformation("[AssignRoleAsync] Role assignment email sent to {Email} for role {Role}", user.Email, roleName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[AssignRoleAsync] Failed to send role assignment email to {Email}", user.Email);
+                }
+            });
 
             return new UserManagementDTO
             {

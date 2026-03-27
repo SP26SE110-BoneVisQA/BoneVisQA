@@ -1,4 +1,3 @@
-using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using System;
 using System.Collections.Generic;
@@ -33,10 +32,16 @@ public interface ILecturerService
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
     Task<ClassStatsDto> GetClassStatsAsync(Guid classId);
 
-
-    Task<QuizDTO> CreateQuizAsync(QuizDTO request);
-    Task<QuizQuestionDTO> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDTO request);
+    Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request);
+    Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
-    Task<List<QuizQuestionDTO>> GetQuizQuestionsAsync(Guid quizId);
+    Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
+    Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId);
+
+    Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
+    Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
+    Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
+    Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
 }
 

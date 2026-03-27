@@ -225,4 +225,129 @@ public class EmailService : IEmailService
             return false;
         }
     }
+
+    public async Task<bool> SendRoleAssignedEmailAsync(string toEmail, string fullName, string roleName)
+    {
+        _logger.LogInformation("[SendRoleAssignedEmailAsync] Attempting to send role assignment email to {ToEmail} for {FullName} with role {Role}", toEmail, fullName, roleName);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendRoleAssignedEmailAsync] FAIL: Email config missing. Username: {Username}, Password empty: {IsEmpty}",
+                _smtpUsername ?? "NULL", string.IsNullOrEmpty(_smtpPassword));
+            return false;
+        }
+
+        _logger.LogInformation("[SendRoleAssignedEmailAsync] SMTP config OK - connecting to {Host}:{Port}", _smtpHost, _smtpPort);
+
+        string roleDisplayName = roleName;
+        string roleDescription = "";
+
+        switch (roleName.ToLower())
+        {
+            case "student":
+                roleDisplayName = "Sinh viên";
+                roleDescription = "Bạn có thể truy cập và tham gia các bài kiểm tra, xem ca lâm sàng và đặt câu hỏi.";
+                break;
+            case "lecturer":
+                roleDisplayName = "Giảng viên";
+                roleDescription = "Bạn có thể quản lý lớp học, tạo bài kiểm tra, và theo dõi tiến độ học tập của sinh viên.";
+                break;
+            case "expert":
+                roleDisplayName = "Chuyên gia";
+                roleDescription = "Bạn có thể xem xét và phản hồi các câu hỏi của sinh viên về ca lâm sàng.";
+                break;
+            case "admin":
+                roleDisplayName = "Quản trị viên";
+                roleDescription = "Bạn có toàn quyền quản lý hệ thống, người dùng và nội dung.";
+                break;
+            default:
+                roleDescription = $"Vai trò của bạn hiện là: {roleName}.";
+                break;
+        }
+
+        try
+        {
+            var subject = $"BoneVisQA - Tài khoản của bạn đã được phê duyệt!";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #27ae60; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #f9f9f9; }}
+        .success-box {{ background-color: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 10px; margin: 20px 0; }}
+        .role-badge {{ display: inline-block; background-color: #3498db; color: white; padding: 10px 25px; border-radius: 20px; font-size: 18px; font-weight: bold; margin: 15px 0; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+        .features {{ background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <h2>Xin chúc mừng, {fullName}!</h2>
+            <p>Tài khoản của bạn đã được phê duyệt và kích hoạt bởi quản trị viên.</p>
+            
+            <div class='success-box' style='text-align: center;'>
+                <p><strong>Vai trò của bạn:</strong></p>
+                <div class='role-badge'>{roleDisplayName}</div>
+            </div>
+            
+            <div class='features'>
+                <p><strong>Quyền hạn của bạn:</strong></p>
+                <p>{roleDescription}</p>
+            </div>
+            
+            <p>Bạn có thể đăng nhập ngay bây giờ để bắt đầu sử dụng hệ thống.</p>
+            
+            <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
+            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+        </div>
+        <div class='footer'>
+            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
+            <p>Không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            _logger.LogInformation("[SendRoleAssignedEmailAsync] SMTP client ready, sending email to {ToEmail}...", toEmail);
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendRoleAssignedEmailAsync] SUCCESS: Role assignment email sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (SmtpException smtpEx)
+        {
+            _logger.LogError(smtpEx, "[SendRoleAssignedEmailAsync] SMTP ERROR sending to {ToEmail}: {Code} - {Message}",
+                toEmail, smtpEx.StatusCode, smtpEx.Message);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendRoleAssignedEmailAsync] GENERAL ERROR sending role assignment email to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
 }

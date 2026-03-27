@@ -1,5 +1,5 @@
 using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -95,7 +95,7 @@ public class StudentsController : ControllerBase
     [HttpPost("submit")]
     public async Task<IActionResult> SubmitAnswer(
         [FromQuery] Guid studentId,
-        [FromBody] StudentSubmitQuestionDTO submit)
+        [FromBody] StudentSubmitQuestionDto submit)
     {
         var result = await _studentService.SubmitQuizAsync(studentId, submit);
         return Ok(result);

@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -38,7 +38,7 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid QuizId { get; set; }
         public string? QuizTitle { get; set; }
         public Guid? CaseId { get; set; }
-        public string? CaseTitle { get; set; }  
+        public string? CaseTitle { get; set; }
         public string QuestionText { get; set; } = null!;
         public string? Type { get; set; }
         public string? OptionA { get; set; }

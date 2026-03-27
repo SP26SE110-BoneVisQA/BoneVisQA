@@ -1,5 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
-using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,15 +9,13 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
         public interface IQuizsService
     {
-        Task<QuizDTO> CreateQuizAsync(QuizDTO request);
+        Task<QuizDto> CreateQuizAsync(QuizDto request);
 
-        Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDTO request);
+        Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
 
-        Task<ClassQuizDTO> AssignQuizToClassAsync(Guid classId, Guid quizId);
+        Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
      
-        Task<QuizScoreResultDTO> CalculateScoreAsync(Guid attemptId);
+        Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId);
         
-       
-
     }
 }
