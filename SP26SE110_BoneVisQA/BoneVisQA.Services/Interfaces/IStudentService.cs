@@ -1,4 +1,4 @@
-using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System;
@@ -35,6 +35,6 @@ public interface IStudentService
 
     Task<StudentProgressDto> GetProgressAsync(Guid studentId);
 
-    Task<StudentSubmitQuestionResponseDTO> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDTO submit);
+    Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDto submit);
 }
 

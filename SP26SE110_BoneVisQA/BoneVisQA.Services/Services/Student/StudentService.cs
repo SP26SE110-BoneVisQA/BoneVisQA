@@ -3,7 +3,7 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
-using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System;
@@ -361,7 +361,7 @@ public class StudentService : IStudentService
         };
     }
 
-    public async Task<StudentSubmitQuestionResponseDTO> SubmitQuizAsync(Guid studentId, StudentSubmitQuestionDTO submit)
+    public async Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentId, StudentSubmitQuestionDto submit)
     {
         var attempt = await _unitOfWork.QuizAttemptRepository
             .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)
@@ -399,7 +399,7 @@ public class StudentService : IStudentService
         await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
         await _unitOfWork.SaveAsync();
 
-        return new StudentSubmitQuestionResponseDTO
+        return new StudentSubmitQuestionResponseDto
         {
             QuizTitle = quiz.Title,
             QuestionText = question.QuestionText,
