@@ -139,7 +139,7 @@ app.UseCors("AllowAll");
 // Swagger (bật cả Production để test API trên Render)
 app.UseSwagger();
 app.UseSwaggerUI();
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
