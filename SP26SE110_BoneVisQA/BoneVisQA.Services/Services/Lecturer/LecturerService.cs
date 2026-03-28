@@ -234,38 +234,42 @@ public class LecturerService : ILecturerService
     public async Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-           ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-        var question = await _unitOfWork.QuizQuestionRepository
-       .FindByCondition(q => q.QuizId == quizId)
-       .Include(q => q.Quiz)
-       .ToListAsync();
+        var questions = await _unitOfWork.QuizQuestionRepository
+            .FindIncludeAsync(
+                q => q.QuizId == quizId,
+                q => q.Quiz,
+                q => q.Case  // ✅ thêm include Case
+            );
 
-        return question
-            .Select(q => new QuizQuestionDto
-            {
-                Id = q.Id,
-                QuizId = q.QuizId,
-                QuizTitle = quiz.Title,
-                CaseId = q.CaseId,
-                QuestionText = q.QuestionText,
-                Type = q.Type,
-                OptionA = q.OptionA,
-                OptionB = q.OptionB,
-                OptionC = q.OptionC,
-                OptionD = q.OptionD,
-                CorrectAnswer = q.CorrectAnswer
-            })
-            .ToList();
+        return questions.Select(q => new QuizQuestionDto
+        {
+            Id = q.Id,
+            QuizId = q.QuizId,
+            QuizTitle = quiz.Title,
+            CaseId = q.CaseId,
+            CaseTitle = q.Case?.Title,  // ✅ có data rồi
+            QuestionText = q.QuestionText,
+            Type = q.Type,
+            OptionA = q.OptionA,
+            OptionB = q.OptionB,
+            OptionC = q.OptionC,
+            OptionD = q.OptionD,
+            CorrectAnswer = q.CorrectAnswer
+        }).ToList();
     }
 
     public async Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId)
     {
-        var question = await _unitOfWork.QuizQuestionRepository
-            .FindByCondition(q => q.Id == questionId)
-            .Include(q => q.Quiz)
-            .FirstOrDefaultAsync();
+        var questions = await _unitOfWork.QuizQuestionRepository
+            .FindIncludeAsync(
+                q => q.Id == questionId,
+                q => q.Quiz,
+                q => q.Case  
+            );
 
+        var question = questions.FirstOrDefault();
         if (question == null)
             return null;
 
@@ -275,6 +279,7 @@ public class LecturerService : ILecturerService
             QuizId = question.QuizId,
             QuizTitle = question.Quiz?.Title,
             CaseId = question.CaseId,
+            CaseTitle = question.Case?.Title,  
             QuestionText = question.QuestionText,
             Type = question.Type,
             OptionA = question.OptionA,
