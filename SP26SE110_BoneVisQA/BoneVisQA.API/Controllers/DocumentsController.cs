@@ -24,17 +24,15 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpPost("upload")]
-    [RequestSizeLimit(104857600)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
+    [RequestSizeLimit(52428800)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<DocumentDto>> Upload([FromForm] DocumentUploadRequest request)
     {
-        Console.WriteLine("=> [DEBUG] Starting file upload processing...");
-
         if (request.File == null || request.File.Length == 0)
-        {
-            return BadRequest(new { message = "File is required." });
-        }
+            return BadRequest(new { message = "File không được để trống." });
+        if (request.File.Length > 52428800)
+            return BadRequest(new { message = "File quá lớn. Dung lượng tối đa là 50MB." });
 
         var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
         if (extension != ".pdf")
@@ -45,15 +43,11 @@ public class DocumentsController : ControllerBase
             });
         }
 
-        Console.WriteLine("--> [DEBUG] File extension validated...");
-
         var metadata = new DocumentUploadDto
         {
             Title = request.Title,
             CategoryId = request.CategoryId
         };
-
-        Console.WriteLine("--> [DEBUG] Passing to DocumentService...");
 
         var document = await _documentService.UploadDocumentAsync(request.File, metadata);
         return CreatedAtAction(nameof(GetById), new { id = document.Id }, document);

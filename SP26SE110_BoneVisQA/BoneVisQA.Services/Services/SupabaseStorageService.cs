@@ -27,9 +27,15 @@ public class SupabaseStorageService : ISupabaseStorageService
 
         var uploadUrl = $"{_supabaseUrl}/storage/v1/object/{bucket}/{filePath}";
 
-        using var stream = file.OpenReadStream();
-        using var content = new StreamContent(stream);
-        content.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+        var capacity = file.Length is > 0 and <= int.MaxValue ? (int)file.Length : 0;
+        var buffer = new MemoryStream(capacity);
+        await file.CopyToAsync(buffer);
+        buffer.Position = 0;
+        using var content = new StreamContent(buffer);
+        var mediaType = string.IsNullOrWhiteSpace(file.ContentType)
+            ? "application/octet-stream"
+            : file.ContentType;
+        content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
@@ -40,8 +46,10 @@ public class SupabaseStorageService : ISupabaseStorageService
 
         if (!response.IsSuccessStatusCode)
         {
-            var error = await response.Content.ReadAsStringAsync();
-            throw new InvalidOperationException($"Supabase upload failed: {error}");
+            var errorBody = await response.Content.ReadAsStringAsync();
+            var message =
+                $"Supabase upload failed ({(int)response.StatusCode} {response.ReasonPhrase}): {errorBody}";
+            throw new HttpRequestException(message, inner: null, statusCode: response.StatusCode);
         }
 
         var publicUrl = $"{_supabaseUrl}/storage/v1/object/public/{bucket}/{filePath}";
