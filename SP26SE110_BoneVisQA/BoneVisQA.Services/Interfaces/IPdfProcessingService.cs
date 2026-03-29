@@ -3,7 +3,7 @@ namespace BoneVisQA.Services.Interfaces;
 public interface IPdfProcessingService
 {
     /// <summary>
-    /// Downloads a PDF from URL and returns text chunks (1000 chars, 200 overlap).
+    /// Downloads a PDF from URL and returns the full extracted text.
     /// </summary>
-    Task<IReadOnlyList<string>> DownloadAndChunkPdfAsync(string fileUrl, CancellationToken cancellationToken = default);
+    Task<string> DownloadAndExtractPdfTextAsync(string fileUrl, CancellationToken cancellationToken = default);
 }

@@ -34,28 +34,35 @@ public class ImageProcessingService : IImageProcessingService
         if (imageBytes.Length == 0)
             return null;
 
-        using var image = Image.Load<Rgba32>(imageBytes);
-
-        var box = ParseBox(coordinatesJson);
-        if (box.HasValue)
+        try
         {
-            var (x, y, w, h) = box.Value;
-            var iw = image.Width;
-            var ih = image.Height;
-            x = Math.Clamp(x, 0, Math.Max(0, iw - 1));
-            y = Math.Clamp(y, 0, Math.Max(0, ih - 1));
-            w = Math.Clamp(w, 1, Math.Max(1, iw - x));
-            h = Math.Clamp(h, 1, Math.Max(1, ih - y));
+            using var image = Image.Load<Rgba32>(imageBytes);
 
-            image.Mutate(ctx =>
+            var box = ParseBox(coordinatesJson);
+            if (box.HasValue)
             {
-                ctx.Draw(Color.Red, 3f, new Rectangle(x, y, w, h));
-            });
-        }
+                var (x, y, w, h) = box.Value;
+                var iw = image.Width;
+                var ih = image.Height;
+                x = Math.Clamp(x, 0, Math.Max(0, iw - 1));
+                y = Math.Clamp(y, 0, Math.Max(0, ih - 1));
+                w = Math.Clamp(w, 1, Math.Max(1, iw - x));
+                h = Math.Clamp(h, 1, Math.Max(1, ih - y));
 
-        await using var outStream = new MemoryStream();
-        await image.SaveAsJpegAsync(outStream, cancellationToken);
-        return Convert.ToBase64String(outStream.ToArray());
+                image.Mutate(ctx =>
+                {
+                    ctx.Draw(Color.Red, 3f, new Rectangle(x, y, w, h));
+                });
+            }
+
+            await using var outStream = new MemoryStream();
+            await image.SaveAsJpegAsync(outStream, cancellationToken);
+            return Convert.ToBase64String(outStream.ToArray());
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static (int X, int Y, int W, int H)? ParseBox(string? json)
