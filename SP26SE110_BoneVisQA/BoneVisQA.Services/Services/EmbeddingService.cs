@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,9 @@ namespace BoneVisQA.Services.Services;
 public class EmbeddingService : IEmbeddingService
 {
     private const int Dimensions = 768;
-    private const string HfModelPath = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2";
+    private const string DefaultEmbeddingUrl =
+        "https://router.huggingface.co/hf-inference/models/sentence-transformers/paraphrase-multilingual-mpnet-base-v2/pipeline/feature-extraction";
+
     public const string HttpClientName = "HuggingFace";
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -29,22 +32,22 @@ public class EmbeddingService : IEmbeddingService
     public async Task<float[]> EmbedTextAsync(string text, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return CreateMockEmbedding(string.Empty);
+            throw new ArgumentException("Cannot embed empty or whitespace text.", nameof(text));
 
         var apiKey = _configuration["HuggingFace:ApiKey"]
                      ?? _configuration["HF_API_KEY"];
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("HuggingFace embedding API key missing (HuggingFace:ApiKey or HF_API_KEY). Using deterministic mock embeddings (768-d).");
-            return CreateMockEmbedding(text);
+            _logger.LogError("HuggingFace API key missing (HuggingFace:ApiKey or HF_API_KEY).");
+            throw new EmbeddingFailedException(
+                "HuggingFace API key is not configured (HuggingFace:ApiKey or HF_API_KEY).");
         }
 
         try
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
-            // Canonical router URL format: model path + pipeline.
-            var url = "https://router.huggingface.co/hf-inference/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2/pipeline/feature-extraction";
+            var url = _configuration["HuggingFace:EmbeddingUrl"] ?? DefaultEmbeddingUrl;
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {apiKey}");
             request.Content = new StringContent(
@@ -53,73 +56,94 @@ public class EmbeddingService : IEmbeddingService
                 "application/json");
 
             var response = await client.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var jsonString = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("HuggingFace embedding failed {Status}: {Body}. Mock fallback.", response.StatusCode, body);
-                return CreateMockEmbedding(text);
+                _logger.LogError(
+                    "HuggingFace embedding failed {Status}: {Body}",
+                    response.StatusCode,
+                    jsonString.Length > 2000 ? jsonString[..2000] : jsonString);
+                throw new EmbeddingFailedException(
+                    $"HuggingFace embedding HTTP {(int)response.StatusCode} {response.StatusCode}.");
             }
 
-            var parsed = ParseHuggingFaceEmbedding(body);
-            if (parsed is { Length: Dimensions })
-                return parsed;
+            float[] parsed;
+            try
+            {
+                parsed = ExtractEmbeddingVectorFromHuggingFaceJson(jsonString);
+            }
+            catch (JsonException ex)
+            {
+                throw new EmbeddingFailedException(
+                    $"Invalid JSON in HuggingFace embedding response. Raw HF Response: {jsonString}",
+                    ex);
+            }
 
-            return CreateMockEmbedding(text);
+            if (parsed.Length != Dimensions)
+            {
+                throw new EmbeddingFailedException(
+                    $"Expected embedding dimension {Dimensions}, received {parsed.Length}. Raw HF Response: {jsonString}");
+            }
+
+            return parsed;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (EmbeddingFailedException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Embedding API error; mock fallback.");
-            return CreateMockEmbedding(text);
+            _logger.LogError(ex, "Embedding API request failed.");
+            throw new EmbeddingFailedException("Embedding request failed.", ex);
         }
     }
 
-    private static float[]? ParseHuggingFaceEmbedding(string json)
+    /// <summary>
+    /// HF feature-extraction may return <c>[float,...]</c>, <c>[[float,...]]</c>, or deeper nesting; drill to the first 1D float array.
+    /// </summary>
+    private static float[] ExtractEmbeddingVectorFromHuggingFaceJson(string jsonString)
     {
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        JsonElement vec = root;
-        if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
+        using var doc = JsonDocument.Parse(jsonString);
+        var current = doc.RootElement;
+
+        while (current.ValueKind == JsonValueKind.Array
+               && current.GetArrayLength() > 0
+               && current[0].ValueKind == JsonValueKind.Array)
         {
-            var first = root[0];
-            vec = first.ValueKind == JsonValueKind.Array ? first : root;
+            current = current[0];
         }
 
-        if (vec.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var list = new List<float>();
-        foreach (var item in vec.EnumerateArray())
+        if (current.ValueKind != JsonValueKind.Array
+            || current.GetArrayLength() == 0
+            || current[0].ValueKind != JsonValueKind.Number)
         {
-            if (item.ValueKind == JsonValueKind.Number)
-                list.Add(item.GetSingle());
+            throw new EmbeddingFailedException(
+                $"Failed to extract embedding (expected a nested or flat JSON array of numbers). Raw HF Response: {jsonString}");
         }
 
-        if (list.Count == Dimensions)
-            return list.ToArray();
-        return list.Count > 0 ? PadOrTruncate(list) : null;
-    }
+        float[]? vector;
+        try
+        {
+            vector = current.Deserialize<float[]>();
+        }
+        catch (JsonException ex)
+        {
+            throw new EmbeddingFailedException(
+                $"Failed to deserialize embedding float array. Raw HF Response: {jsonString}",
+                ex);
+        }
 
-    private static float[] PadOrTruncate(List<float> list)
-    {
-        var arr = new float[Dimensions];
-        for (var i = 0; i < Dimensions; i++)
-            arr[i] = i < list.Count ? list[i] : 0f;
-        return arr;
-    }
+        if (vector == null || vector.Length == 0)
+        {
+            throw new EmbeddingFailedException(
+                $"HuggingFace response did not contain a valid embedding array. Raw HF Response: {jsonString}");
+        }
 
-    private static float[] CreateMockEmbedding(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        var rng = new Random(BitConverter.ToInt32(hash, 0));
-        var v = new float[Dimensions];
-        for (var i = 0; i < Dimensions; i++)
-            v[i] = (float)(rng.NextDouble() * 2 - 1);
-        var norm = Math.Sqrt(v.Sum(x => x * x));
-        if (norm > 1e-6)
-            for (var i = 0; i < Dimensions; i++)
-                v[i] /= (float)norm;
-        return v;
+        return vector;
     }
 }
