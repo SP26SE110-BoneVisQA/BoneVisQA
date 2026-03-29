@@ -4,6 +4,7 @@ using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Domain.Settings;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
@@ -18,15 +19,16 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Large PDF uploads (100 MB) — avoids multipart / Kestrel default limits during Swagger tests.
-builder.WebHost.ConfigureKestrel(serverOptions =>
+// Align with Supabase free-tier storage limits (50 MB max upload).
+builder.WebHost.ConfigureKestrel(options =>
 {
-    serverOptions.Limits.MaxRequestBodySize = 104857600; // 100 MB
+    options.Limits.MaxRequestBodySize = 52428800;
 });
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 104857600; // 100 MB
+    options.MultipartBodyLengthLimit = 52428800;
+    options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
 });
 
 builder.Services.AddCors(options =>
@@ -99,7 +101,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
 {
-    client.Timeout = TimeSpan.FromMinutes(5);
+    // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
+    client.Timeout = TimeSpan.FromMinutes(60);
 });
 builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
 {
@@ -107,7 +110,12 @@ builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
 });
 
 builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
-builder.Services.AddHttpClient<IOpenRouterService, OpenRouterService>();
+builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
+builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
+builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
@@ -117,8 +125,13 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
-builder.Services.AddScoped<IDocumentService, DocumentService>();
-builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>();
+builder.Services.AddScoped<DocumentService>();
+builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
+builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
+{
+    // Streaming uploads to Supabase may run for a long time on large PDFs / slow links.
+    client.Timeout = TimeSpan.FromMinutes(60);
+});
 
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<BoneVisQA.Services.Interfaces.IQuizService, BoneVisQA.Services.Services.QuizService>();
@@ -129,21 +142,6 @@ builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 
 var app = builder.Build();
-
-// Global exception logging (catches unhandled exceptions in the pipeline before silent process exit).
-app.Use(async (context, next) =>
-{
-    try
-    {
-        await next.Invoke();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"\n[FATAL CRASH] {ex.GetType().Name}: {ex.Message}");
-        Console.WriteLine(ex.StackTrace);
-        throw; // Re-throw so default host behavior still applies
-    }
-});
 
 app.UseCors("AllowAll");
 app.UseSwagger();

@@ -7,8 +7,17 @@
     <UserSecretsId>9f8d8c29-474d-4df7-bff0-0b9e6496733b</UserSecretsId>
   </PropertyGroup>
 
+  <!-- Debug: skip native apphost (BoneVisQA.API.exe) to avoid MSB3021 when AV/anti-cheat (e.g. vgc) locks the exe. Run via `dotnet run` / DLL. Release still emits an apphost for deployment. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
@@ -16,6 +25,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BoneVisQA.Services\BoneVisQA.Services.csproj" />
+  </ItemGroup>
+
+  <!-- Safety net: dotnet watch / Hot Reload should ignore transient extensions if any appear under the project tree -->
+  <ItemGroup>
+    <Watch Remove="**\*.tmp" />
+    <Watch Remove="**\*.temp" />
   </ItemGroup>
 
 </Project>
