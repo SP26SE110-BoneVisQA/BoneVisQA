@@ -3,7 +3,7 @@ using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
-namespace BoneVisQA.Services.Services;
+namespace BoneVisQA.Services.Services.Storage;
 
 public class SupabaseStorageService : ISupabaseStorageService
 {

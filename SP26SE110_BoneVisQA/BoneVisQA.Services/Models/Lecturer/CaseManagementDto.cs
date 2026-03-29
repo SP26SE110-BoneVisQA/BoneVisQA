@@ -34,6 +34,7 @@ public class LectStudentQuestionDto
     public Guid CaseId { get; set; }
     public string CaseTitle { get; set; } = string.Empty;
     public string QuestionText { get; set; } = string.Empty;
+    public string? Language { get; set; }
     public DateTime? CreatedAt { get; set; }
     public string? AnswerText { get; set; }
     public string? AnswerStatus { get; set; }

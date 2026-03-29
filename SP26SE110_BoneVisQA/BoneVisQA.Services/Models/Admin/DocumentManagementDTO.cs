@@ -32,10 +32,10 @@ namespace BoneVisQA.Services.Models.Admin
         public int Version { get; set; }
         public bool IsOutdated { get; set; }
         public DateTime? CreatedAt { get; set; }
+        public string? IndexingStatus { get; set; } 
         public Guid? CategoryId { get; set; }
         public string? CategoryName { get; set; }
         public List<string> TagNames { get; set; } = new();  
-        public int? ChunkCount { get; set; }
     }
 
     public class PagedResultDTO<T>

@@ -25,6 +25,9 @@ public class VisualQARequestDto
     /// (Coordinates will be fetched from DB). Leave null for NEW personal uploads.
     /// </summary>
     public Guid? AnnotationId { get; set; }
+
+    /// <summary>Optional language hint (e.g. vi, en). Defaults to Vietnamese when null or empty.</summary>
+    public string? Language { get; set; }
 }
 
 public class CitationItemDto

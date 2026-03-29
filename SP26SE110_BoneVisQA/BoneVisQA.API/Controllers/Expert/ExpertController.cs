@@ -1,5 +1,6 @@
-﻿using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +13,10 @@ namespace BoneVisQA.API.Controllers.Expert
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;
-        private readonly IQuizService _quizService;
+        private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizService quizService, ITagCaseService tagCaseService)
+        public ExpertController(IMedicalCaseService medicalService, IQuizsService quizService, ITagCaseService tagCaseService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
@@ -23,7 +24,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(MedicalCaseDTO dto)
+        public async Task<IActionResult> CreateCase(MedicalCaseDTOResponse dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
@@ -34,8 +35,30 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
+        [HttpPost("images")]
+        public async Task<IActionResult> AddImage([FromForm] AddMedicalImageDTOResponse dto)
+        {
+            var result = await _medicalcaseService.AddImageAsync(dto);
+            return Ok(new
+            {
+                message = "Medical_Image created successfully",
+                result
+            });
+        }
+
+        [HttpPost("annotations")]
+        public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTOResponse dto)
+        {
+            var result = await _medicalcaseService.AddAnnotationAsync(dto);
+            return Ok(new
+            {
+                message = "Medical_Annotation created successfully",
+                result
+            });
+        }
+
         [HttpPost("quizzes")]
-        public async Task<IActionResult> CreateQuiz([FromBody] QuizDTO request)
+        public async Task<IActionResult> CreateQuiz([FromBody] QuizDto request)
         {
             if (request == null)
             {
@@ -52,9 +75,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(
-            Guid quizId,
-            [FromBody] QuizQuestionDTO request)
+        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDto request)
         {
             if (request == null)
             {
@@ -68,7 +89,7 @@ namespace BoneVisQA.API.Controllers.Expert
                 message = "Quiz_Question created successfully",
                 result
             });
-        }
+        }        
 
         [HttpPost("class/{classId}/assign/{quizId}")]
         public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)

@@ -39,11 +39,14 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<UserRole> _userroleRepository = null!;
         private GenericRepository<CaseTag> _casetagRepository = null!;
         private GenericRepository<Tag> _tagRepository = null!;
+        private GenericRepository<PasswordResetToken> _passwordresetTokenRepository = null!;
 
         public UnitOfWork(BoneVisQADbContext context)
         {
             _context = context;
         }
+
+        public BoneVisQADbContext Context => _context;
 
         public GenericRepository<AcademicClass> AcademicClassRepository => _academicclassRepository ??= new GenericRepository<AcademicClass>(_context);
         public GenericRepository<Announcement> AnnouncementRepository => _announcementRepository ??= new GenericRepository<Announcement>(_context);
@@ -71,6 +74,7 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<CaseTag> CaseTagRepository => _casetagRepository ??= new GenericRepository<CaseTag>(_context);
         public GenericRepository<Tag> TagRepository => _tagRepository ??= new GenericRepository<Tag>(_context);
         public GenericRepository<DocumentTag> DocumentTagRepository => _documenttagRepository ??= new GenericRepository<DocumentTag>(_context);
+        public GenericRepository<PasswordResetToken> PasswordResetTokenRepository => _passwordresetTokenRepository ??= new GenericRepository<PasswordResetToken>(_context);
 
         public int Save() => _context.SaveChanges();
 

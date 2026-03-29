@@ -1,4 +1,5 @@
 ﻿using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Models.Student;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,8 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface IMedicalCaseService
     {
-        Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTO dto);
+        Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTOResponse dto);
+        Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
+        Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
     }
 }

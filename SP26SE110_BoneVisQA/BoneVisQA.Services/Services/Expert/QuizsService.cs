@@ -1,7 +1,6 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
-using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -12,16 +11,16 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Expert
 {
-    public class QuizService : IQuizService
+    public class QuizsService : IQuizsService
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        public QuizService(IUnitOfWork unitOfWork)
+        public QuizsService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<QuizDTO> CreateQuizAsync(QuizDTO request)
+        public async Task<QuizDto> CreateQuizAsync(QuizDto request)
         {
             var quiz = new Quiz
             {
@@ -37,7 +36,7 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.QuizRepository.AddAsync(quiz);
             await _unitOfWork.SaveAsync();
 
-            return new QuizDTO
+            return new QuizDto
             {
                 Id = quiz.Id,
                 Title = quiz.Title,
@@ -49,14 +48,21 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, QuizQuestionDTO request)
+        public async Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
+            MedicalCase? medicalCase = null;
+            if (request.CaseId.HasValue)
+            {
+                medicalCase = await _unitOfWork.MedicalCaseRepository
+                    .GetByIdAsync(request.CaseId.Value)
+                    ?? throw new KeyNotFoundException("Không tìm thấy medical case.");
+            }
+
             var question = new QuizQuestion
             {
-                Id = Guid.NewGuid(),
                 QuizId = quizId,
                 CaseId = request.CaseId,
                 QuestionText = request.QuestionText,
@@ -71,11 +77,13 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
             await _unitOfWork.SaveAsync();
 
-            return new QuizQuestionDTO
+            return new QuizQuestionDto
             {
                 Id = question.Id,
                 QuizId = question.QuizId,
+                QuizTitle = quiz.Title,
                 CaseId = question.CaseId,
+                CaseTitle = medicalCase?.Title, 
                 QuestionText = question.QuestionText,
                 Type = question.Type,
                 OptionA = question.OptionA,
@@ -85,7 +93,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CorrectAnswer = question.CorrectAnswer
             };
         }
-        public async Task<ClassQuizDTO> AssignQuizToClassAsync(Guid classId, Guid quizId)
+        public async Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId)
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
                 .GetByIdAsync(classId)
@@ -111,14 +119,16 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
            
-            return new ClassQuizDTO
+            return new ClassQuizDto
             {
                 ClassId = classQuiz.ClassId,
+                ClassName = academicClass.ClassName, 
                 QuizId = classQuiz.QuizId,
+                QuizName = quiz.Title,  
                 AssignedAt = classQuiz.AssignedAt
             };
         }
-        public async Task<QuizScoreResultDTO> CalculateScoreAsync(Guid attemptId)
+        public async Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId)
         {
             var attempt = await _unitOfWork.QuizAttemptRepository
                 .GetByIdAsync(attemptId)
@@ -149,7 +159,7 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
             await _unitOfWork.SaveAsync();
 
-            return new QuizScoreResultDTO
+            return new QuizScoreResultDto
             {
                 AttemptId = attempt.Id,
                 StudentId = attempt.StudentId,
