@@ -67,10 +67,10 @@ namespace BoneVisQA.Services.Services.Expert
                 CaseId = request.CaseId,
                 QuestionText = request.QuestionText,
                 Type = request.Type,
-                OptionA = request.OptionA,       
-                OptionB = request.OptionB,       
-                OptionC = request.OptionC,      
-                OptionD = request.OptionD,       
+                OptionA = request.OptionA,
+                OptionB = request.OptionB,
+                OptionC = request.OptionC,
+                OptionD = request.OptionD,
                 CorrectAnswer = request.CorrectAnswer
             };
 
@@ -83,7 +83,7 @@ namespace BoneVisQA.Services.Services.Expert
                 QuizId = question.QuizId,
                 QuizTitle = quiz.Title,
                 CaseId = question.CaseId,
-                CaseTitle = medicalCase?.Title, 
+                CaseTitle = medicalCase?.Title,
                 QuestionText = question.QuestionText,
                 Type = question.Type,
                 OptionA = question.OptionA,
@@ -118,13 +118,13 @@ namespace BoneVisQA.Services.Services.Expert
 
             await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
-           
+
             return new ClassQuizDto
             {
                 ClassId = classQuiz.ClassId,
-                ClassName = academicClass.ClassName, 
+                ClassName = academicClass.ClassName,
                 QuizId = classQuiz.QuizId,
-                QuizName = quiz.Title,  
+                QuizName = quiz.Title,
                 AssignedAt = classQuiz.AssignedAt
             };
         }

@@ -14,9 +14,9 @@ public class SupabaseStorageService : ISupabaseStorageService
     public SupabaseStorageService(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _supabaseUrl = configuration["Supabase:Url"] 
+        _supabaseUrl = configuration["Supabase:Url"]
             ?? throw new InvalidOperationException("Supabase:Url not configured");
-        _supabaseKey = configuration["Supabase:ServiceKey"] 
+        _supabaseKey = configuration["Supabase:ServiceKey"]
             ?? throw new InvalidOperationException("Supabase:ServiceKey not configured");
     }
 

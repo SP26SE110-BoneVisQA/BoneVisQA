@@ -89,14 +89,14 @@ namespace BoneVisQA.API.Controllers.Expert
                 message = "Quiz_Question created successfully",
                 result
             });
-        }        
+        }
 
         [HttpPost("class/{classId}/assign/{quizId}")]
         public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
-        { 
+        {
             var result = await _quizService.AssignQuizToClassAsync(classId, quizId);
             return Ok(new
-            { 
+            {
                 Message = "AssignQuiz successfully.",
                 result
             });
@@ -108,7 +108,7 @@ namespace BoneVisQA.API.Controllers.Expert
             var result = await _quizService.CalculateScoreAsync(attemptId);
             return Ok(new
             {
-                Message = "Calculate score successfully.", 
+                Message = "Calculate score successfully.",
                 result
             });
         }

@@ -60,7 +60,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CaseId = caseTag.CaseId,
                 CaseTitle = medicalCase.Title,
                 TagId = caseTag.TagId,
-                TagName = tageCase.Name,    
+                TagName = tageCase.Name,
                 CreatedAt = caseTag.CreatedAt
             };
         }

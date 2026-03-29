@@ -49,12 +49,12 @@ namespace BoneVisQA.Services.Services.Admin
                 Version = doc.Version,
                 IsOutdated = doc.IsOutdated,
                 CreatedAt = doc.CreatedAt,
-                IndexingStatus = doc.IndexingStatus,    
+                IndexingStatus = doc.IndexingStatus,
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
             };
-        }      
+        }
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
@@ -98,7 +98,7 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
 
-            return await MapToDTOAsync(doc);    
+            return await MapToDTOAsync(doc);
         }
 
         // ── UploadNewVersionAsync: tăng version ──────────────

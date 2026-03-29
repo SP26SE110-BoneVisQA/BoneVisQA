@@ -80,7 +80,7 @@ namespace BoneVisQA.Services.Services.Admin
             return new ActivityStatDTO
             {
                 TotalCaseViews = stats.Sum(s => s.TotalCasesViewed ?? 0),
-                TotalStudentQuestions = stats.Sum(s => s.TotalQuestionsAsked ?? 0), 
+                TotalStudentQuestions = stats.Sum(s => s.TotalQuestionsAsked ?? 0),
                 TotalQuizAttempts = quizAttempts.Count,
                 AvgQuizScore = stats.Any(s => s.AvgQuizScore.HasValue)
                     ? (float)stats.Where(s => s.AvgQuizScore.HasValue)

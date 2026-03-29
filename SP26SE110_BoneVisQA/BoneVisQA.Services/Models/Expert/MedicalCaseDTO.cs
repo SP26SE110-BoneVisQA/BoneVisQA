@@ -38,10 +38,10 @@ namespace BoneVisQA.Services.Models.Expert
     //===============================================================================
     public class AddMedicalImageDTO
     {
-        public Guid Id { get; set; }                              
+        public Guid Id { get; set; }
         public string ImageUrl { get; set; } = null!;
         public string? Modality { get; set; }
-        public string CaseTitle { get; set; } = null!;   
+        public string CaseTitle { get; set; } = null!;
         public List<AddAnnotationDTO> Annotations { get; set; } = new();
     }
     public class AddMedicalImageDTOResponse

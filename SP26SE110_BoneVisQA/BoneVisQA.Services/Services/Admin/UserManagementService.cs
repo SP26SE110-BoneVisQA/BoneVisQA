@@ -38,7 +38,7 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<List<UserManagementDTO>> GetUserByRoleAsync(string role)
         {
             if (!_validRoles.Contains(role)) throw new ArgumentException("Role not found");
-          
+
             var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
                 q.Include(u => u.UserRoles)
                  .ThenInclude(ur => ur.Role)
@@ -117,7 +117,7 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<UserManagementDTO> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");
-           
+
             var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);
             if (user == null) return null;
 

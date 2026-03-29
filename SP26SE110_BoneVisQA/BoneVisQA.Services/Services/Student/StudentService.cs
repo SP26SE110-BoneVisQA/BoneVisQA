@@ -473,7 +473,7 @@ public class StudentService : IStudentService
     //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
 
     //===================== phan nam =====================   
-   
+
     private string? GetOptionText(QuizQuestion question, string? optionKey)
     {
         return optionKey?.ToUpper() switch
@@ -533,14 +533,14 @@ public class StudentService : IStudentService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             StudentAnswer = submit.StudentAnswer?.ToUpper(),
-            StudentAnswerText = GetOptionText(question, submit.StudentAnswer), 
+            StudentAnswerText = GetOptionText(question, submit.StudentAnswer),
             CorrectAnswer = question.CorrectAnswer,
             CorrectAnswerText = GetOptionText(question, question.CorrectAnswer),
             IsCorrect = isCorrect
         };
     }
 
-                                       //===================== phan tran =====================   
+    //===================== phan tran =====================   
     //public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
     //{
     //    await _unitOfWork.BeginTransactionAsync();

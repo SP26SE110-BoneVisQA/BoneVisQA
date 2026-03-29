@@ -17,4 +17,3 @@ public interface IGeminiService
         string imageUrl,
         CancellationToken cancellationToken = default);
 }
-

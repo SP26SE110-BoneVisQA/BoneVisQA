@@ -9,7 +9,7 @@ namespace BoneVisQA.Services.Models.Admin
 {
     public class SaveDocumentDTO
     {
-        public Guid? Id { get; set; }              
+        public Guid? Id { get; set; }
         public string Title { get; set; } = null!;
         public IFormFile? File { get; set; }
         public Guid? CategoryId { get; set; }
@@ -32,10 +32,10 @@ namespace BoneVisQA.Services.Models.Admin
         public int Version { get; set; }
         public bool IsOutdated { get; set; }
         public DateTime? CreatedAt { get; set; }
-        public string? IndexingStatus { get; set; } 
+        public string? IndexingStatus { get; set; }
         public Guid? CategoryId { get; set; }
         public string? CategoryName { get; set; }
-        public List<string> TagNames { get; set; } = new();  
+        public List<string> TagNames { get; set; } = new();
     }
 
     public class PagedResultDTO<T>

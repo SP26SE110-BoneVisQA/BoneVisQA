@@ -91,7 +91,7 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 Id = Guid.NewGuid(),
                 CaseId = dto.CaseId,
-                ImageUrl = imageUrl,         
+                ImageUrl = imageUrl,
                 Modality = dto.Modality,
                 CreatedAt = DateTime.UtcNow
             };
@@ -104,7 +104,7 @@ namespace BoneVisQA.Services.Services.Expert
                 Id = image.Id,
                 ImageUrl = image.ImageUrl,
                 Modality = image.Modality,
-                CaseTitle = medicalCase.Title,   
+                CaseTitle = medicalCase.Title,
                 Annotations = new List<AddAnnotationDTO>()
             };
         }
