@@ -9,16 +9,21 @@ public class VisualQARequestDto
     [DefaultValue("Vùng khoanh đỏ trên ảnh có dấu hiệu gãy xương không?")]
     public string QuestionText { get; set; } = string.Empty;
 
-    [DefaultValue("https://example.com/sample-xray.jpg")]
+    [DefaultValue(null)]
     public string? ImageUrl { get; set; }
 
-    [DefaultValue("{\"x\": 10, \"y\": 20, \"w\": 100, \"h\": 150}")]
+    [DefaultValue(null)]
     public string? Coordinates { get; set; }
 
-    [DefaultValue("3fa85f64-5717-4562-b3fc-2c963f66afa6")]
+    /// <summary>
+    /// Optional Case ID. Leave null for NEW personal uploads.
+    /// </summary>
     public Guid? CaseId { get; set; }
 
-    [DefaultValue("3fa85f64-5717-4562-b3fc-2c963f66afa6")]
+    /// <summary>
+    /// Optional Annotation ID. Provide for inquiries on existing cases
+    /// (Coordinates will be fetched from DB). Leave null for NEW personal uploads.
+    /// </summary>
     public Guid? AnnotationId { get; set; }
 }
 

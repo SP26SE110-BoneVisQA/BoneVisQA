@@ -27,6 +27,9 @@ public partial class StudentQuestion
     [Column("question_text")]
     public string QuestionText { get; set; } = null!;
 
+    [Column("language")]
+    public string? Language { get; set; }
+
     [Column("custom_image_url")]
     public string? CustomImageUrl { get; set; }
 
