@@ -208,8 +208,18 @@ public class AuthService : IAuthService
         await _unitOfWork.PasswordResetTokenRepository.AddAsync(resetToken);
         await _unitOfWork.SaveAsync();
 
-        var baseUrl = _configuration["App:BaseUrl"] ?? "http://localhost:3000";
-        var resetLink = $"{baseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+
+        //    var baseUrl = _configuration["App:BaseUrl"] ?? "http://localhost:3000";
+        //         var resetLink = $"{baseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+        //var feBaseUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:3000";
+        //var resetLink = $"{feBaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+
+
+        // Development: dùng localhost:3000 | Production: dùng FrontendUrl
+        var feBaseUrl = _env.IsDevelopment() 
+            ? "http://localhost:3000" 
+            : (_configuration["App:FrontendUrl"] ?? "http://localhost:3000");
+        var resetLink = $"{feBaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
 
         var emailSent = await _emailService.SendPasswordResetEmailAsync(user.Email, resetLink);
 
