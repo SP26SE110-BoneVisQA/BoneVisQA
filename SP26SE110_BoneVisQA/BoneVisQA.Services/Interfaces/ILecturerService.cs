@@ -17,13 +17,13 @@ public interface ILecturerService
     Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid classId);
     Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request);
 
-   
+
     //Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);
     //Task<QuizQuestionDto> AddQuizQuestionAsync(CreateQuizQuestionRequestDto request);
     //Task<IReadOnlyList<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
     //Task<bool> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizQuestionRequestDto request)
 
-    
+
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);

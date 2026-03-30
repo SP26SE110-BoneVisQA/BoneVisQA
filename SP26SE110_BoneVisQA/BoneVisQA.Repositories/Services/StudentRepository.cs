@@ -129,10 +129,10 @@ public class StudentRepository : IStudentRepository
             .ToListAsync();
 
 
-    //    if (classIds.Count == 0)
-    //    {
-    //        return new List<Quiz>();
-    //    }
+        //    if (classIds.Count == 0)
+        //    {
+        //        return new List<Quiz>();
+        //    }
 
         var quizIds = await _unitOfWork.ClassQuizRepository
             .FindByCondition(cq => classIds.Contains(cq.ClassId))

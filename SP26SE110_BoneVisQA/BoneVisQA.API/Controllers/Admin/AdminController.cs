@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using BoneVisQA.Services.Services;
@@ -43,7 +43,7 @@ namespace BoneVisQA.API.Controllers.Admin
         [HttpPut("{id}/activate")]
         public async Task<IActionResult> Activate(Guid id)
         {
-           var result = await _userservice.ActivateUserAccountAsync(id);
+            var result = await _userservice.ActivateUserAccountAsync(id);
             return Ok(new
             {
                 Message = "Actice user successfully.",
@@ -88,7 +88,7 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetMostReferenced([FromQuery] int top = 10)
         {
             var result = await _qualityservice.GetMostReferencedDocumentsAsync(top);
-           
+
             return Ok(new
             {
                 Message = "Get most reference document successfully.",
@@ -101,7 +101,7 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetNegativeReviews()
         {
             var result = await _qualityservice.GetDocumentsWithNegativeExpertReviewsAsync();
-          
+
             return Ok(new
             {
                 Message = "Get documents negative review successfully.",
@@ -115,7 +115,7 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetDocumentsFlaggedForReview()
         {
             var result = await _qualityservice.GetDocumentsFlaggedForReviewAsync();
-           
+
             return Ok(new
             {
                 Message = "Get documents flagged for review successfully.",
@@ -128,7 +128,7 @@ namespace BoneVisQA.API.Controllers.Admin
         public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
         {
             var result = await _qualityservice.GetOutdatedDocumentsAsync(yearsThreshold);
-           
+
             return Ok(new
             {
                 Message = "Get outdated document successfully.",
@@ -138,11 +138,11 @@ namespace BoneVisQA.API.Controllers.Admin
 
         //==========================================================================================================================================
 
-        
+
 
         // PUT api/admin/documents/{id}/tags
         [HttpPut("tags")]
-        public async Task<IActionResult> UpdateTags([FromQuery] Guid documentId,[FromQuery] List<Guid> tagIds)
+        public async Task<IActionResult> UpdateTags([FromQuery] Guid documentId, [FromQuery] List<Guid> tagIds)
         {
             var result = await _documentservice.UpdateTagsAsync(documentId, tagIds);
             return Ok(new
@@ -154,7 +154,7 @@ namespace BoneVisQA.API.Controllers.Admin
 
         // PUT api/admin/documents/{id}/category
         [HttpPut("{id}/category/{categoryId}")]
-        public async Task<IActionResult> ChangeCategory(Guid id, Guid categoryId)
+        public async Task<IActionResult> ChangeCategory(Guid id, [FromRoute] Guid categoryId)
         {
             var result = await _documentservice.ChangeCategoryAsync(id, categoryId);
 
@@ -246,6 +246,8 @@ namespace BoneVisQA.API.Controllers.Admin
 
         //===========================================================================================================================================
         [HttpPost("document-upload")]
+        [RequestSizeLimit(52428800)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<DocumentDto>> Upload([FromForm] DocumentUploadRequest request)
         {

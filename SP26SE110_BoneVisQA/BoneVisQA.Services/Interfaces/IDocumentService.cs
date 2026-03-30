@@ -23,6 +23,11 @@ public class DocumentDto
 
 public interface IDocumentService
 {
+    /// <summary>
+    /// Downloads the file from storage and runs RAG ingestion. Intended for use inside a new DI scope (e.g. background <c>Task.Run</c>), not from the HTTP request scope.
+    /// </summary>
+    Task IngestDocumentInBackgroundAsync(Guid documentId, string fileUrl);
+
     Task<DocumentDto> UploadDocumentAsync(IFormFile file, DocumentUploadDto metadata);
     Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync();
     Task<DocumentDto?> GetDocumentByIdAsync(Guid id);

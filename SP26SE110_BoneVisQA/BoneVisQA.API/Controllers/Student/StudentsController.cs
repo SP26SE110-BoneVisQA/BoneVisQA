@@ -91,7 +91,7 @@ public class StudentsController : ControllerBase
         return Ok(result);
     }
 
-                                                            //  phan nam 
+    //  phan nam 
     [HttpPost("submit")]
     public async Task<IActionResult> SubmitAnswer(
         [FromQuery] Guid studentId,
@@ -102,7 +102,7 @@ public class StudentsController : ControllerBase
     }
 
 
-                                                             //code tran
+    //code tran
     //[HttpPost("quizzes/submit")]
     //public async Task<ActionResult<QuizResultDto>> SubmitQuiz([FromQuery] Guid? studentId, [FromBody] SubmitQuizRequestDto request)
     //{

@@ -7,11 +7,16 @@
     <UserSecretsId>9f8d8c29-474d-4df7-bff0-0b9e6496733b</UserSecretsId>
   </PropertyGroup>
 
+  <!-- Debug: skip native apphost (BoneVisQA.API.exe) to avoid MSB3021 when AV/anti-cheat (e.g. vgc) locks the exe. Run via `dotnet run` / DLL. Release still emits an apphost for deployment. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth.AspNetCore3" Version="1.68.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -22,6 +27,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BoneVisQA.Services\BoneVisQA.Services.csproj" />
+  </ItemGroup>
+
+  <!-- Safety net: dotnet watch / Hot Reload should ignore transient extensions if any appear under the project tree -->
+  <ItemGroup>
+    <Watch Remove="**\*.tmp" />
+    <Watch Remove="**\*.temp" />
   </ItemGroup>
 
 </Project>

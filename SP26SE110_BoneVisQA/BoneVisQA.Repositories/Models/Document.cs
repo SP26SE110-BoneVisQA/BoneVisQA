@@ -24,7 +24,7 @@ public partial class Document
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
-   
+
     [Column("version")]
     public int Version { get; set; } = 1;
 

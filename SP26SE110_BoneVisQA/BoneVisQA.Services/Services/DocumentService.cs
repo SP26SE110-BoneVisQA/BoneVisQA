@@ -1,10 +1,11 @@
-using System.Text;
-using System.Text.Json;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Pgvector;
 
 namespace BoneVisQA.Services.Services;
 
@@ -12,21 +13,26 @@ public class DocumentService : IDocumentService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
-    private readonly HttpClient _httpClient;
-    private readonly string _aiServiceBaseUrl;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<DocumentService> _logger;
 
     public DocumentService(
         IUnitOfWork unitOfWork,
         ISupabaseStorageService storageService,
-        IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IServiceScopeFactory scopeFactory,
+        ILogger<DocumentService> logger)
     {
         _unitOfWork = unitOfWork;
         _storageService = storageService;
-        _httpClient = httpClientFactory.CreateClient();
-        _aiServiceBaseUrl = configuration["AIService:BaseUrl"] ?? "http://localhost:8000";
+        _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
+    /// <summary>
+    /// Uploads the PDF to storage, persists metadata with <see cref="Document.IndexingStatus"/> = Processing,
+    /// then returns immediately. Text extraction, chunking, and embeddings run in a fire-and-forget background task
+    /// so the HTTP response is not blocked by heavy RAG ingestion.
+    /// </summary>
     public async Task<DocumentDto> UploadDocumentAsync(IFormFile file, DocumentUploadDto metadata)
     {
         var fileUrl = await _storageService.UploadFileAsync(file, "knowledge_base", "documents");
@@ -46,15 +52,21 @@ public class DocumentService : IDocumentService
         await _unitOfWork.DocumentRepository.AddAsync(document);
         await _unitOfWork.SaveAsync();
 
+        var docId = document.Id;
+        var url = fileUrl;
+        var scopeFactory = _scopeFactory;
         _ = Task.Run(async () =>
         {
+            using var scope = scopeFactory.CreateScope();
+            var scopedService = scope.ServiceProvider.GetRequiredService<DocumentService>();
             try
             {
-                await TriggerPythonIngestionAsync(document.Id, fileUrl);
+                await scopedService.IngestDocumentInBackgroundAsync(docId, url).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                await UpdateIndexingStatusAsync(document.Id, "Failed");
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<DocumentService>>();
+                logger.LogError(ex, "Background ingestion failed for Document ID {DocumentId}.", docId);
             }
         });
 
@@ -78,6 +90,12 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document == null) return false;
 
+        var chunks = await _unitOfWork.DocumentChunkRepository.FindAsync(c => c.DocId == id);
+        if (chunks.Count > 0)
+        {
+            await _unitOfWork.DocumentChunkRepository.RemoveRangeAsync(chunks);
+        }
+
         await _unitOfWork.DocumentRepository.DeleteAsync(id);
         await _unitOfWork.SaveAsync();
         return true;
@@ -93,15 +111,21 @@ public class DocumentService : IDocumentService
         await _unitOfWork.DocumentRepository.UpdateAsync(document);
         await _unitOfWork.SaveAsync();
 
+        var docId = document.Id;
+        var url = document.FilePath;
+        var scopeFactory = _scopeFactory;
         _ = Task.Run(async () =>
         {
+            using var scope = scopeFactory.CreateScope();
+            var scopedService = scope.ServiceProvider.GetRequiredService<DocumentService>();
             try
             {
-                await TriggerPythonIngestionAsync(document.Id, document.FilePath);
+                await scopedService.IngestDocumentInBackgroundAsync(docId, url).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                await UpdateIndexingStatusAsync(document.Id, "Failed");
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<DocumentService>>();
+                logger.LogError(ex, "Background ingestion failed for Document ID {DocumentId}.", docId);
             }
         });
 
@@ -119,30 +143,92 @@ public class DocumentService : IDocumentService
         }
     }
 
-    private async Task TriggerPythonIngestionAsync(Guid docId, string fileUrl)
+    public async Task IngestDocumentInBackgroundAsync(Guid docId, string fileUrl)
     {
-        var payload = new
+        try
         {
-            docId = docId.ToString(),
-            fileUrl = fileUrl
-        };
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var pdf = scope.ServiceProvider.GetRequiredService<IPdfProcessingService>();
+            var embedding = scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
 
-        var content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+            _logger.LogInformation("Background ingestion started for Document ID {DocumentId}", docId);
 
-        var response = await _httpClient.PostAsync(
-            $"{_aiServiceBaseUrl}/api/v1/documents/ingest",
-            content);
+            await SetStatusAsync(uow, docId, "Processing");
 
-        if (response.IsSuccessStatusCode)
-        {
-            await UpdateIndexingStatusAsync(docId, "Completed");
+            var fullText = await pdf.DownloadAndExtractPdfTextAsync(fileUrl);
+            var chunkTexts = SplitTextRecursively(fullText, maxSize: 800, overlap: 150);
+            _logger.LogInformation("Extracted {ChunkCount} chunks. Starting embedding generation...", chunkTexts.Count);
+
+            var existing = await uow.DocumentChunkRepository.FindAsync(c => c.DocId == docId);
+            if (existing.Count > 0)
+            {
+                await uow.DocumentChunkRepository.RemoveRangeAsync(existing);
+                await uow.SaveAsync();
+            }
+
+            var entities = new List<DocumentChunk>();
+            for (var i = 0; i < chunkTexts.Count; i++)
+            {
+                var vec = await embedding.EmbedTextAsync(chunkTexts[i]);
+                entities.Add(new DocumentChunk
+                {
+                    Id = Guid.NewGuid(),
+                    DocId = docId,
+                    Content = chunkTexts[i],
+                    ChunkOrder = i,
+                    Embedding = new Vector(vec),
+                    IsFlagged = false
+                });
+            }
+
+            _logger.LogInformation("Embeddings generated. Saving to database...");
+
+            if (entities.Count > 0)
+                await uow.DocumentChunkRepository.AddRangeAsync(entities);
+
+            await uow.SaveAsync();
+            await SetStatusAsync(uow, docId, "Completed");
+            _logger.LogInformation("Background ingestion completed successfully for Document ID {DocumentId}", docId);
         }
-        else
+        catch (EmbeddingFailedException ex)
         {
-            await UpdateIndexingStatusAsync(docId, "Failed");
+            _logger.LogError(ex, "Embedding failed; aborting ingestion for Document ID {DocumentId}", docId);
+            await MarkIndexingFailedInNewScopeAsync(docId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "FATAL ERROR in background ingestion for Document ID {DocumentId}", docId);
+            await MarkIndexingFailedInNewScopeAsync(docId);
+        }
+    }
+
+    /// <summary>
+    /// Uses a fresh scope so Failed status is persisted even if the ingestion scope/DbContext is faulted.
+    /// </summary>
+    private async Task MarkIndexingFailedInNewScopeAsync(Guid docId)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await SetStatusAsync(uow, docId, "Failed");
+            _logger.LogWarning("Document {DocumentId} IndexingStatus set to Failed (new DbContext scope).", docId);
+        }
+        catch (Exception inner)
+        {
+            _logger.LogError(inner, "Could not update IndexingStatus to Failed for Document ID {DocumentId}", docId);
+        }
+    }
+
+    private static async Task SetStatusAsync(IUnitOfWork uow, Guid docId, string status)
+    {
+        var doc = await uow.DocumentRepository.GetByIdAsync(docId);
+        if (doc != null)
+        {
+            doc.IndexingStatus = status;
+            await uow.DocumentRepository.UpdateAsync(doc);
+            await uow.SaveAsync();
         }
     }
 
@@ -157,4 +243,96 @@ public class DocumentService : IDocumentService
         IsOutdated = doc.IsOutdated,
         CreatedAt = doc.CreatedAt
     };
+
+    /// <summary>
+    /// Recursive character text splitter for better RAG:
+    /// try paragraph (\n\n) then newline (\n) then sentence (. ! ?) then spaces, with character overlap.
+    /// </summary>
+    private static List<string> SplitTextRecursively(string text, int maxSize, int overlap)
+    {
+        var chunks = new List<string>();
+        if (string.IsNullOrWhiteSpace(text))
+            return chunks;
+
+        text = text.Trim()
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
+
+        var remaining = text;
+        while (remaining.Length > 0)
+        {
+            if (remaining.Length <= maxSize)
+            {
+                var last = remaining.Trim();
+                if (last.Length > 0)
+                    chunks.Add(last);
+                break;
+            }
+
+            var cutIndex = FindBestSplitIndex(remaining, maxSize);
+            if (cutIndex <= 0 || cutIndex > remaining.Length)
+                cutIndex = maxSize;
+
+            var chunk = remaining.Substring(0, cutIndex).Trim();
+            if (chunk.Length > 0)
+                chunks.Add(chunk);
+
+            if (cutIndex >= remaining.Length)
+                break;
+
+            if (overlap <= 0)
+            {
+                remaining = remaining.Substring(cutIndex).TrimStart();
+                continue;
+            }
+
+            var overlapLen = Math.Min(overlap, chunk.Length);
+            var overlapTail = overlapLen > 0 ? chunk.Substring(chunk.Length - overlapLen) : string.Empty;
+            var rest = remaining.Substring(cutIndex);
+
+            remaining = (overlapTail + rest).TrimStart();
+
+            // Safety: ensure forward progress.
+            if (remaining.Length == 0)
+                break;
+        }
+
+        return chunks;
+    }
+
+    private static int FindBestSplitIndex(string text, int maxSize)
+    {
+        var windowLen = Math.Min(maxSize, text.Length);
+        var window = text.Substring(0, windowLen);
+
+        // 1) Paragraph boundary.
+        var paraIdx = window.LastIndexOf("\n\n", StringComparison.Ordinal);
+        if (paraIdx >= 0)
+            return paraIdx + 2;
+
+        // 2) Newline boundary.
+        var newLineIdx = window.LastIndexOf('\n');
+        if (newLineIdx >= 0)
+            return newLineIdx + 1;
+
+        // 3) Sentence boundary.
+        var bestSentenceIdx = -1;
+        var sentenceDelims = new[] { ". ", "? ", "! " };
+        foreach (var delim in sentenceDelims)
+        {
+            var idx = window.LastIndexOf(delim, StringComparison.Ordinal);
+            if (idx > bestSentenceIdx)
+                bestSentenceIdx = idx;
+        }
+        if (bestSentenceIdx >= 0)
+            return bestSentenceIdx + 2; // keep delimiter trailing space
+
+        // 4) Space boundary.
+        var spaceIdx = window.LastIndexOf(' ');
+        if (spaceIdx > 0)
+            return spaceIdx;
+
+        // Absolute fallback: hard cut.
+        return windowLen;
+    }
 }

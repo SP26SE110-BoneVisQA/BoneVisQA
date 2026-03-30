@@ -1,1 +1,0 @@
-# BoneVisQA AI services

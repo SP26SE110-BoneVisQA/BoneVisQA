@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -27,7 +27,7 @@ public partial class CaseAnswer
     public string? DifferentialDiagnoses { get; set; }
 
     [Column("status")]
-    public string? Status { get; set; }
+    public string Status { get; set; } = "Pending";
 
     [Column("reviewed_by_id")]
     public Guid? ReviewedById { get; set; }

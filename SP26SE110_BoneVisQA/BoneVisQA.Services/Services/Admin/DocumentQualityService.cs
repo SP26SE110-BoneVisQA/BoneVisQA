@@ -32,7 +32,7 @@ namespace BoneVisQA.Services.Services.Admin
 
             // Đếm NegativeReview qua citations → case_answers → expert_reviews
             var answerIds = citations.Select(c => c.AnswerId).Distinct().ToHashSet();
-          
+
             var negativeReviews = await _unitOfWork.ExpertReviewRepository
                 .FindAsync(r => answerIds.Contains(r.AnswerId) && r.Action == "Reject");
             int negativeReviewCount = negativeReviews.Count;

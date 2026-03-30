@@ -1,8 +1,8 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Hosting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,12 +15,19 @@ namespace BoneVisQA.Services.Services.Admin
     public class DocumentManagementService : IDocumentManagementService
     {
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IWebHostEnvironment _env;
+        private readonly ISupabaseStorageService _storageService;
 
-        public DocumentManagementService(IUnitOfWork unitOfWork, IWebHostEnvironment env)
+        public DocumentManagementService(IUnitOfWork unitOfWork, ISupabaseStorageService storageService)
         {
             _unitOfWork = unitOfWork;
-            _env = env;
+            _storageService = storageService;
+        }
+
+        // ── Helper: upload file directly to Supabase (no local disk writes) ─────────────────────────
+        private async Task<string> SaveFileAsync(IFormFile file)
+        {
+            // Avoid FileSystemWatcher/Hot Reload restarts caused by writing into project directories.
+            return await _storageService.UploadFileAsync(file, "knowledge_base", "documents/admin");
         }
 
         // ── Helper: map Entity → DTO ─────────────────────────
@@ -42,12 +49,12 @@ namespace BoneVisQA.Services.Services.Admin
                 Version = doc.Version,
                 IsOutdated = doc.IsOutdated,
                 CreatedAt = doc.CreatedAt,
-                IndexingStatus = doc.IndexingStatus,    
+                IndexingStatus = doc.IndexingStatus,
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
             };
-        }      
+        }
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
         {
@@ -91,7 +98,7 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();
 
-            return await MapToDTOAsync(doc);    
+            return await MapToDTOAsync(doc);
         }
 
         // ── UploadNewVersionAsync: tăng version ──────────────

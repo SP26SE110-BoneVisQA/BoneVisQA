@@ -5,6 +5,7 @@ using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Domain.Settings;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
@@ -18,16 +19,27 @@ using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Align with Supabase free-tier storage limits (50 MB max upload).
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 52428800;
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 52428800;
+    options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
+});
+
 // Add User Secrets cho development (Google OAuth credentials)
 builder.Configuration.AddUserSecrets<Program>();
-
-// Add services to the container.
 
 builder.Services.AddCors(options =>
 {
@@ -82,12 +94,10 @@ builder.Services.AddDbContext<BoneVisQADbContext>(options =>
         }))
     .AddScoped<BoneVisQADbContext>();
 
-// JWT Configuration - HS256 requires at least 256 bits (32 bytes). Derive key via SHA256 if needed.
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 if (keyBytes.Length < 32)
     keyBytes = SHA256.HashData(keyBytes);
-var key = keyBytes;
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -95,7 +105,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(key),
+            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
             ValidateIssuer = false,
             ValidateAudience = false,
             ValidateLifetime = true,
@@ -109,20 +119,41 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.CallbackPath = "/signin-google";
     });
 
+builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
+{
+    // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
+    client.Timeout = TimeSpan.FromMinutes(60);
+});
+builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
+
+builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
+builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
+builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
+builder.Services.AddScoped<IGeminiService, GeminiService>();
+builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
+builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
+builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
+
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
-builder.Services.AddScoped<IDocumentService, DocumentService>();
-builder.Services.AddHttpClient<IAIService, BoneVisQA.Services.Services.AIService>(client =>
+builder.Services.AddScoped<DocumentService>();
+builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
+builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["AIService:BaseUrl"] ?? "http://localhost:8000");
+    // Streaming uploads to Supabase may run for a long time on large PDFs / slow links.
+    client.Timeout = TimeSpan.FromMinutes(60);
 });
-builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>();
 
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
@@ -133,16 +164,12 @@ builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 
 var app = builder.Build();
 
-// CORS
 app.UseCors("AllowAll");
-
-// Swagger (bật cả Production để test API trên Render)
 app.UseSwagger();
 app.UseSwaggerUI();
 //app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)

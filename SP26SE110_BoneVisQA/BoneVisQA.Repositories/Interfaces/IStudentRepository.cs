@@ -24,7 +24,7 @@ public interface IStudentRepository
     Task<List<Announcement>> GetAnnouncementsForStudentAsync(Guid studentId);
 
     Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
-   // Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
+    // Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
 
     Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId);
 

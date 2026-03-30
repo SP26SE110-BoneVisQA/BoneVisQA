@@ -23,7 +23,6 @@ public class AskQuestionRequestDto
     public Guid CaseId { get; set; }
     public Guid? AnnotationId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
-    public string? Language { get; set; }
 }
 
 public class StudentQuestionDto
@@ -33,7 +32,6 @@ public class StudentQuestionDto
     public Guid StudentId { get; set; }
     public Guid? AnnotationId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
-    public string? Language { get; set; }
     public DateTime? CreatedAt { get; set; }
 }
 

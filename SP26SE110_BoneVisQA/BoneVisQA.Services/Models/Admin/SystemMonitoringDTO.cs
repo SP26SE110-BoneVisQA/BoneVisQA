@@ -14,16 +14,16 @@ namespace BoneVisQA.Services.Models.Admin
         public int InactiveUsers { get; set; }
         public int PendingUsers { get; set; }
         public int NewUsersThisMonth { get; set; }
-        public Dictionary<string, int> UsersByRole { get; set; } = new(); 
+        public Dictionary<string, int> UsersByRole { get; set; } = new();
     }
 
     // Thống kê hoạt động
     public class ActivityStatDTO
     {
-        public int TotalCaseViews { get; set; }        
-        public int TotalStudentQuestions { get; set; } 
-        public int TotalQuizAttempts { get; set; }     
-        public float AvgQuizScore { get; set; }        
+        public int TotalCaseViews { get; set; }
+        public int TotalStudentQuestions { get; set; }
+        public int TotalQuizAttempts { get; set; }
+        public float AvgQuizScore { get; set; }
         public List<DailyActivityDTO> DailyActivity { get; set; } = new();
     }
 
@@ -58,6 +58,6 @@ namespace BoneVisQA.Services.Models.Admin
         public int TotalReviews { get; set; }
         public int ApprovedReviews { get; set; }
         public int RejectedReviews { get; set; }
-        public int PendingAnswers { get; set; }     
+        public int PendingAnswers { get; set; }
     }
 }

@@ -1,16 +1,32 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 
 namespace BoneVisQA.Services.Models.VisualQA;
 
 public class VisualQARequestDto
 {
-    public Guid StudentId { get; set; }
+    [DefaultValue("Vùng khoanh đỏ trên ảnh có dấu hiệu gãy xương không?")]
     public string QuestionText { get; set; } = string.Empty;
+
+    [DefaultValue(null)]
     public string? ImageUrl { get; set; }
+
+    [DefaultValue(null)]
     public string? Coordinates { get; set; }
+
+    /// <summary>
+    /// Optional Case ID. Leave null for NEW personal uploads.
+    /// </summary>
     public Guid? CaseId { get; set; }
+
+    /// <summary>
+    /// Optional Annotation ID. Provide for inquiries on existing cases
+    /// (Coordinates will be fetched from DB). Leave null for NEW personal uploads.
+    /// </summary>
     public Guid? AnnotationId { get; set; }
+
+    /// <summary>Optional language hint (e.g. vi, en). Defaults to Vietnamese when null or empty.</summary>
     public string? Language { get; set; }
 }
 

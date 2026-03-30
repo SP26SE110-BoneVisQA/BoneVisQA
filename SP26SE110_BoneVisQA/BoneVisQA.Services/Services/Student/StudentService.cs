@@ -11,6 +11,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace BoneVisQA.Services.Services.Student;
 
@@ -18,11 +21,16 @@ public class StudentService : IStudentService
 {
     private readonly IStudentRepository _studentRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<StudentService> _logger;
 
-    public StudentService(IStudentRepository studentRepository, IUnitOfWork unitOfWork)
+    public StudentService(
+        IStudentRepository studentRepository,
+        IUnitOfWork unitOfWork,
+        ILogger<StudentService> logger)
     {
         _studentRepository = studentRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
@@ -136,8 +144,6 @@ public class StudentService : IStudentService
 
     public async Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request)
     {
-        var language = NormalizeLanguage(request.Language);
-
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
@@ -145,7 +151,7 @@ public class StudentService : IStudentService
             CaseId = request.CaseId == Guid.Empty ? null : request.CaseId,
             AnnotationId = request.AnnotationId,
             QuestionText = request.QuestionText,
-            Language = language,
+            Language = "vi",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -158,7 +164,6 @@ public class StudentService : IStudentService
             CaseId = created.CaseId ?? Guid.Empty,
             AnnotationId = created.AnnotationId,
             QuestionText = created.QuestionText,
-            Language = created.Language,
             CreatedAt = created.CreatedAt
         };
     }
@@ -166,17 +171,54 @@ public class StudentService : IStudentService
 
     public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
     {
+        var isPersonalUpload = !request.CaseId.HasValue;
+
+        // Personal uploads must not reference existing case/annotation rows.
+        // This prevents FK violations for dummy or invalid GUIDs coming from the client.
+        var caseIdToSave = isPersonalUpload ? null : request.CaseId;
+        var annotationIdToSave = isPersonalUpload ? null : request.AnnotationId;
+
+        string? coordsToSave = request.Coordinates;
+        string? imageUrlToSave = request.ImageUrl;
+
+        if (request.AnnotationId.HasValue && !isPersonalUpload)
+        {
+            var annotationId = request.AnnotationId.Value;
+
+            // Validate existence and fetch authoritative coordinates (and image URL) from DB.
+            // Includes are needed so we can also derive the image URL for vision processing.
+            var annotations = await _unitOfWork.CaseAnnotationRepository
+                .FindIncludeAsync(a => a.Id == annotationId, a => a.Image);
+
+            var annotation = annotations.FirstOrDefault();
+            if (annotation == null)
+            {
+                throw new ArgumentException($"AnnotationId '{annotationId}' does not exist.");
+            }
+
+            coordsToSave = annotation.Coordinates;
+            request.Coordinates = coordsToSave; // keep pipeline in sync with the saved/authoritative coordinates
+
+            if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
+            {
+                request.ImageUrl = annotation.Image.ImageUrl;
+            }
+
+            imageUrlToSave = request.ImageUrl;
+        }
+
         var language = NormalizeLanguage(request.Language);
 
         var question = new StudentQuestion
         {
             Id = Guid.NewGuid(),
             StudentId = studentId,
-            CaseId = request.CaseId,
-            AnnotationId = request.AnnotationId,
+            CaseId = caseIdToSave,
+            AnnotationId = annotationIdToSave,
             QuestionText = request.QuestionText,
-
             Language = language,
+            CustomImageUrl = imageUrlToSave,
+            CustomCoordinates = coordsToSave,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -189,13 +231,15 @@ public class StudentService : IStudentService
             CaseId = created.CaseId ?? Guid.Empty,
             AnnotationId = created.AnnotationId,
             QuestionText = created.QuestionText,
-            Language = created.Language,
             CreatedAt = created.CreatedAt
         };
     }
 
     public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
     {
+        // PostgreSQL case_answers_status_check: only 'Pending', 'Approved', 'Edited', 'Rejected'.
+        var status = ClassifyVisualQaAnswerStatus(response);
+
         var answer = new CaseAnswer
         {
             Id = Guid.NewGuid(),
@@ -203,8 +247,7 @@ public class StudentService : IStudentService
             AnswerText = response.AnswerText,
             StructuredDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = response.DifferentialDiagnoses,
-
-            Status = "answered",
+            Status = status,
             GeneratedAt = DateTime.UtcNow
         };
 
@@ -223,15 +266,97 @@ public class StudentService : IStudentService
 
             await _studentRepository.AddCitationsAsync(citations);
         }
+
+        try
+        {
+            await _unitOfWork.SaveAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            if (ex.InnerException is PostgresException pg)
+            {
+                _logger.LogError(
+                    ex,
+                    "SaveVisualQAAnswerAsync: database update failed (SQL state {SqlState}) for question {QuestionId}.",
+                    pg.SqlState,
+                    questionId);
+            }
+            else
+            {
+                _logger.LogError(ex, "SaveVisualQAAnswerAsync: database update failed for question {QuestionId}.", questionId);
+            }
+
+            throw new InvalidOperationException(
+                "Không thể lưu câu trả lời AI vào cơ sở dữ liệu. Vui lòng thử lại sau.",
+                ex);
+        }
     }
 
-    private static string? NormalizeLanguage(string? value)
+    /// <summary>
+    /// Maps AI outcomes to <c>case_answers.status</c> values allowed by PostgreSQL (<c>case_answers_status_check</c>).
+    /// </summary>
+    private static string ClassifyVisualQaAnswerStatus(VisualQAResponseDto response)
     {
-        if (string.IsNullOrWhiteSpace(value)) return "vi";
-        var v = value.Trim().ToLowerInvariant();
-        if (v == "vi" || v == "vie") return "vi";
-        if (v == "en" || v == "eng") return "en";
-        return "vi";
+        return IsVisualQaRejectedResponse(response) ? "Rejected" : "Pending";
+    }
+
+    /// <summary>
+    /// Detects pipeline rejections / fallbacks (must stay in sync with GeminiService + VisualQaAiService copy).
+    /// </summary>
+    private static bool IsVisualQaRejectedResponse(VisualQAResponseDto response)
+    {
+        var t = response.AnswerText?.Trim() ?? string.Empty;
+        if (t.Length == 0)
+            return true;
+
+        // Exact / prefix matches for standardized messages.
+        const string noContext =
+            "Dữ liệu y khoa hiện có không chứa thông tin để trả lời câu hỏi này.";
+        if (string.Equals(t, noContext, StringComparison.Ordinal))
+            return true;
+
+        if (t.StartsWith("Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp", StringComparison.Ordinal))
+            return true;
+
+        if (t.StartsWith("Hình ảnh bạn gửi không phải là phim X-quang", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (t.Contains("Không thể truy cập hình ảnh y khoa từ bộ lưu trữ", StringComparison.Ordinal))
+            return true;
+
+        var noDiagnosis = string.IsNullOrWhiteSpace(response.SuggestedDiagnosis)
+                          && string.IsNullOrWhiteSpace(response.DifferentialDiagnoses);
+        var noCitations = response.Citations == null || response.Citations.Count == 0;
+
+        // Typical rejection path: no RAG citations and no structured diagnosis, plus refusal-like wording or short reply.
+        if (noDiagnosis && noCitations)
+        {
+            if (t.Length <= 480)
+                return true;
+
+            if (ContainsRefusalHeuristic(t))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsRefusalHeuristic(string t)
+    {
+        return t.Contains("không chứa thông tin để trả lời", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("không tìm thấy thông tin đủ tin cậy", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("không phải là phim X-quang", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("Tôi chỉ hỗ trợ phân tích các vấn đề về hệ vận động", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("ngoài phạm vi", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("không thuộc chuyên ngành", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLanguage(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language))
+            return "vi";
+        var t = language.Trim();
+        return t.Length >= 2 ? t[..2].ToLowerInvariant() : "vi";
     }
 
     private static string? TryParseCoordinatesJson(string? value)
@@ -348,7 +473,7 @@ public class StudentService : IStudentService
     //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
 
     //===================== phan nam =====================   
-   
+
     private string? GetOptionText(QuizQuestion question, string? optionKey)
     {
         return optionKey?.ToUpper() switch
@@ -408,14 +533,14 @@ public class StudentService : IStudentService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             StudentAnswer = submit.StudentAnswer?.ToUpper(),
-            StudentAnswerText = GetOptionText(question, submit.StudentAnswer), 
+            StudentAnswerText = GetOptionText(question, submit.StudentAnswer),
             CorrectAnswer = question.CorrectAnswer,
             CorrectAnswerText = GetOptionText(question, question.CorrectAnswer),
             IsCorrect = isCorrect
         };
     }
 
-                                       //===================== phan tran =====================   
+    //===================== phan tran =====================   
     //public async Task<QuizResultDto> SubmitQuizAsync(Guid studentId, SubmitQuizRequestDto request)
     //{
     //    await _unitOfWork.BeginTransactionAsync();
