@@ -75,6 +75,8 @@ public class VisualQaAiService : IVisualQaAiService
             {
                 ChunkId = c.Id,
                 SimilarityScore = CalculateCosineSimilarity(queryEmbedding, c.Embedding!.ToArray()),
+                DocumentUrl = c.Doc.FilePath,
+                ChunkOrder = c.ChunkOrder,
                 SourceText = c.Content
             })
             .ToList();
@@ -94,26 +96,40 @@ public class VisualQaAiService : IVisualQaAiService
             imageB64 ?? string.Empty,
             cancellationToken);
 
-        // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
-        if (response.Citations == null || response.Citations.Count == 0)
+        var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
+
+        if (isNonMedicalRefusal)
         {
-            response.Citations = citationsFromChunks;
+            // We cannot provide medical citations for rejected/invalid queries.
+            response.Citations = new List<CitationItemDto>();
+            response.SuggestedDiagnosis = null;
+            response.DifferentialDiagnoses = null;
         }
         else
         {
-            var metaByChunkId = citationsFromChunks.ToDictionary(c => c.ChunkId, c => c);
-            foreach (var citation in response.Citations)
+            // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
+            if (response.Citations == null || response.Citations.Count == 0)
             {
-                if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
+                response.Citations = citationsFromChunks;
+            }
+            else
+            {
+                var metaByChunkId = citationsFromChunks.ToDictionary(c => c.ChunkId, c => c);
+                foreach (var citation in response.Citations)
                 {
-                    citation.SimilarityScore = meta.SimilarityScore;
-                    citation.SourceText = meta.SourceText;
+                    if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
+                    {
+                        citation.SimilarityScore = meta.SimilarityScore;
+                        citation.SourceText = meta.SourceText;
+                        citation.DocumentUrl = meta.DocumentUrl;
+                        citation.ChunkOrder = meta.ChunkOrder;
+                    }
                 }
             }
         }
 
         // If retrieved context is weak, do not trust a confident medical answer — unless the model already refused (e.g. invalid image).
-        if (maxSimilarity < 0.7d)
+        if (!isNonMedicalRefusal && maxSimilarity < 0.7d)
         {
             var answer = response.AnswerText ?? string.Empty;
             if (!string.Equals(answer.Trim(), InvalidMedicalImageAnswer, StringComparison.Ordinal))
@@ -126,6 +142,15 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         return response;
+    }
+
+    private static bool IsNonMedicalRefusalAnswer(string? answerText)
+    {
+        if (string.IsNullOrWhiteSpace(answerText))
+            return false;
+
+        return answerText.Contains("không phải dữ liệu y khoa hợp lệ", StringComparison.OrdinalIgnoreCase)
+               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildGeminiPrompt(
