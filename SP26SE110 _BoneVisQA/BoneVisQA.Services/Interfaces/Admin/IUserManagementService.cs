@@ -9,6 +9,7 @@ namespace BoneVisQA.Services.Interfaces.Admin
 {
     public interface IUserManagementService
     {
+        Task<List<UserManagementDTO>> GetAllUsersAsync();
         Task<List<UserManagementDTO>> GetUserByRoleAsync(string role);
 
         Task<UserManagementDTO> ActivateUserAccountAsync(Guid userId);

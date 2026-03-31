@@ -57,6 +57,28 @@ namespace BoneVisQA.Services.Services.Admin
             return result;
         }
 
+        public async Task<List<UserManagementDTO>> GetAllUsersAsync()
+        {
+
+            var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
+                q.Include(u => u.UserRoles)
+                 .ThenInclude(ur => ur.Role)
+            );
+
+            return users.Select(u => new UserManagementDTO 
+            {
+                    Id = u.Id,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    SchoolCohort = u.SchoolCohort,
+                    LastLogin = u.LastLogin,
+                    Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+            }).ToList();
+        }
+
         public async Task<UserManagementDTO> ActivateUserAccountAsync(Guid userId)
         {
             var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);

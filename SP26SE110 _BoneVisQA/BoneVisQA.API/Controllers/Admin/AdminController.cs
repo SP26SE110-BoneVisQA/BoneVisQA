@@ -22,6 +22,16 @@ namespace BoneVisQA.API.Controllers.Admin
             _qualityservice = qualityservice;
             _systemservice = systemservice;
         }
+        [HttpGet]
+        public async Task<IActionResult> GetAllUsers()
+        {
+            var users = await _userservice.GetAllUsersAsync();
+            return Ok(new
+            {
+                Message = "Get All Users  successfully.",
+                users
+            });
+        }
 
         [HttpGet("role/{role}")]
         public async Task<IActionResult> GetUsersByRole(string role)
