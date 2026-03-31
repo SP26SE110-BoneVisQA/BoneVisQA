@@ -29,6 +29,7 @@ public class LecturerService : ILecturerService
             ClassName = request.ClassName,
             Semester = request.Semester,
             LecturerId = request.LecturerId,
+            ExpertId = request.ExpertId,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -42,6 +43,7 @@ public class LecturerService : ILecturerService
             ClassName = entity.ClassName,
             Semester = entity.Semester,
             LecturerId = entity.LecturerId,
+            ExpertId = entity.ExpertId,
             CreatedAt = entity.CreatedAt
         };
     }
@@ -59,6 +61,7 @@ public class LecturerService : ILecturerService
                 ClassName = c.ClassName,
                 Semester = c.Semester,
                 LecturerId = c.LecturerId,
+                ExpertId = c.ExpertId,
                 CreatedAt = c.CreatedAt
             })
             .ToList();
@@ -714,7 +717,10 @@ public class LecturerService : ILecturerService
                 Language = q.Language,
                 CreatedAt = q.CreatedAt,
                 AnswerText = q.CaseAnswers?.FirstOrDefault()?.AnswerText,
-                AnswerStatus = q.CaseAnswers?.FirstOrDefault()?.Status
+                AnswerStatus = q.CaseAnswers?.FirstOrDefault()?.Status,
+                EscalatedById = q.CaseAnswers?.FirstOrDefault()?.EscalatedById,
+                EscalatedAt = q.CaseAnswers?.FirstOrDefault()?.EscalatedAt,
+                AiConfidenceScore = q.CaseAnswers?.FirstOrDefault()?.AiConfidenceScore
             })
             .ToList();
     }

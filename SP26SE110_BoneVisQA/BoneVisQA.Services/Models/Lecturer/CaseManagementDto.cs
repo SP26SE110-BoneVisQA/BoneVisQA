@@ -38,4 +38,7 @@ public class LectStudentQuestionDto
     public DateTime? CreatedAt { get; set; }
     public string? AnswerText { get; set; }
     public string? AnswerStatus { get; set; }
+    public Guid? EscalatedById { get; set; }
+    public DateTime? EscalatedAt { get; set; }
+    public double? AiConfidenceScore { get; set; }
 }
