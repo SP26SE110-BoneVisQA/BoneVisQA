@@ -22,6 +22,9 @@ public partial class AcademicClass
     [Column("lecturer_id")]
     public Guid? LecturerId { get; set; }
 
+    [Column("expert_id")]
+    public Guid? ExpertId { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -43,6 +46,10 @@ public partial class AcademicClass
     [ForeignKey("LecturerId")]
     [InverseProperty("AcademicClasses")]
     public virtual User? Lecturer { get; set; }
+
+    [ForeignKey("ExpertId")]
+    [InverseProperty("ExpertAcademicClasses")]
+    public virtual User? Expert { get; set; }
 
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuiz> ClassQuizzes { get; set; } = new List<ClassQuiz>();

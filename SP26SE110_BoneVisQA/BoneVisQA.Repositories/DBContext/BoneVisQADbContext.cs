@@ -101,6 +101,10 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Lecturer).WithMany(p => p.AcademicClasses)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("academic_classes_lecturer_id_fkey");
+
+            entity.HasOne(d => d.Expert).WithMany(p => p.ExpertAcademicClasses)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("academic_classes_expert_id_fkey");
         });
 
         modelBuilder.Entity<Announcement>(entity =>
@@ -136,6 +140,10 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.ReviewedBy).WithMany(p => p.CaseAnswers)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("case_answers_reviewed_by_id_fkey");
+
+            entity.HasOne(d => d.EscalatedBy).WithMany(p => p.EscalatedCaseAnswers)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("case_answers_escalated_by_id_fkey");
         });
 
         modelBuilder.Entity<CaseTag>(entity =>

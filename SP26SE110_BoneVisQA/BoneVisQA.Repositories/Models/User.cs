@@ -51,8 +51,14 @@ public partial class User
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
 
+    [InverseProperty("Expert")]
+    public virtual ICollection<AcademicClass> ExpertAcademicClasses { get; set; } = new List<AcademicClass>();
+
     [InverseProperty("ReviewedBy")]
     public virtual ICollection<CaseAnswer> CaseAnswers { get; set; } = new List<CaseAnswer>();
+
+    [InverseProperty("EscalatedBy")]
+    public virtual ICollection<CaseAnswer> EscalatedCaseAnswers { get; set; } = new List<CaseAnswer>();
 
     [InverseProperty("Student")]
     public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();
