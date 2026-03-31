@@ -52,6 +52,28 @@ public class DocumentService : IDocumentService
         await _unitOfWork.DocumentRepository.AddAsync(document);
         await _unitOfWork.SaveAsync();
 
+        // documents.category_id is 1-to-many, while document_tags is the many-to-many mapping.
+        if (metadata.TagIds != null && metadata.TagIds.Count > 0)
+        {
+            var tagIds = metadata.TagIds
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (tagIds.Count > 0)
+            {
+                var toAdd = tagIds.Select(tagId => new DocumentTag
+                {
+                    DocumentId = document.Id,
+                    TagId = tagId,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+
+                await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
+                await _unitOfWork.SaveAsync();
+            }
+        }
+
         var docId = document.Id;
         var url = fileUrl;
         var scopeFactory = _scopeFactory;
@@ -158,6 +180,16 @@ public class DocumentService : IDocumentService
 
             var fullText = await pdf.DownloadAndExtractPdfTextAsync(fileUrl);
             var chunkTexts = SplitTextRecursively(fullText, maxSize: 800, overlap: 150);
+
+            if (chunkTexts.Count == 0)
+            {
+                const string message =
+                    "Tài liệu dạng ảnh chụp, không có văn bản (text-base) hợp lệ. RAG không thể trích xuất.";
+                _logger.LogError(message);
+                await SetStatusAsync(uow, docId, "Failed");
+                throw new EmbeddingFailedException(message);
+            }
+
             _logger.LogInformation("Extracted {ChunkCount} chunks. Starting embedding generation...", chunkTexts.Count);
 
             var existing = await uow.DocumentChunkRepository.FindAsync(c => c.DocId == docId);

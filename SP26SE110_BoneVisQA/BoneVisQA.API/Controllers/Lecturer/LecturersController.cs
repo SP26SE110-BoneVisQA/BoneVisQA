@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace BoneVisQA.API.Controllers.Lecturer;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/lecturer/[controller]")]
 [Authorize(Roles = "Lecturer")]
 public class LecturersController : ControllerBase
 {

@@ -11,7 +11,7 @@ namespace BoneVisQA.API.Controllers.Admin
     [Authorize(Roles = "Admin")]
 
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/admin/[controller]")]
     public class AdminController : ControllerBase
     {
         private readonly IUserManagementService _userservice;
@@ -256,6 +256,12 @@ namespace BoneVisQA.API.Controllers.Admin
                 return BadRequest(new { message = "File is required." });
             }
 
+            // Custom 50MB error response (framework may still return 413 for extreme oversize cases).
+            if (request.File.Length > 52428800)
+            {
+                return BadRequest(new { message = "File tải lên vượt quá giới hạn 50MB. Vui lòng chọn file nhỏ hơn." });
+            }
+
             var allowedExtensions = new[] { ".pdf" };
             var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
             if (!allowedExtensions.Contains(extension))
@@ -266,7 +272,8 @@ namespace BoneVisQA.API.Controllers.Admin
             var metadata = new DocumentUploadDto
             {
                 Title = request.Title,
-                CategoryId = request.CategoryId
+                CategoryId = request.CategoryId,
+                TagIds = request.TagIds
             };
 
             var document = await _documentService.UploadDocumentAsync(request.File, metadata);
@@ -330,5 +337,6 @@ public class DocumentUploadRequest
     public IFormFile File { get; set; } = null!;
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
+    public List<Guid> TagIds { get; set; } = new();
 }
 

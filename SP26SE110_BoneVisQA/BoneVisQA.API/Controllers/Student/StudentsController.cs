@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace BoneVisQA.API.Controllers.Student;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/student/[controller]")]
 [Authorize(Roles = "Student")]
 public class StudentsController : ControllerBase
 {
