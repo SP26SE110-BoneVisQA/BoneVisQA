@@ -219,19 +219,19 @@ public class AuthService : IAuthService
         var feBaseUrl = _env.IsDevelopment() 
             ? "http://localhost:3000" 
             : (_configuration["App:FrontendUrl"] ?? "http://localhost:3000");
-        var resetLink = $"{feBaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+        var resetLink = $"{feBaseUrl.TrimEnd('/')}/auth/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
 
         var emailSent = await _emailService.SendPasswordResetEmailAsync(user.Email, resetLink);
 
         if (!emailSent)
         {
             var devMessage = _env.IsDevelopment()
-                ? $"Không thể gửi email. Token test (chỉ dev): {resetToken.Token}"
+                ? $"Email gửi thất bại. Token dev: {resetToken.Token}"
                 : "Không thể gửi email. Vui lòng thử lại sau.";
             return new AuthResultDto
             {
-                Success = false,
-                Message = devMessage
+                Success = true, // vẫn true để UI không hiện "lỗi" rõ ràng
+                Message = $"Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi.\n[Dev: {devMessage}]"
             };
         }
 
