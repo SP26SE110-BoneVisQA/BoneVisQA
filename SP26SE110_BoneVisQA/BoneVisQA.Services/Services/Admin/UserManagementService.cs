@@ -89,7 +89,7 @@ namespace BoneVisQA.Services.Services.Admin
             {
                     Id = u.Id,
                     FullName = u.FullName,
-                    Email = u.Email,
+                    Email = u.Email ?? "",
                     SchoolCohort = u.SchoolCohort,
                     LastLogin = u.LastLogin,
                     Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
@@ -99,7 +99,7 @@ namespace BoneVisQA.Services.Services.Admin
             }).ToList();
         }
 
-        public async Task<UserManagementDTO> ActivateUserAccountAsync(Guid userId)
+        public async Task<UserManagementDTO?> ActivateUserAccountAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId);
 
@@ -114,7 +114,7 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
-        public async Task<UserManagementDTO> DeactivateUserAccountAsync(Guid userId)
+        public async Task<UserManagementDTO?> DeactivateUserAccountAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId);
 
@@ -129,7 +129,7 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
-        public async Task<UserManagementDTO> ToggleUserStatusAsync(Guid userId, bool? isActive)
+        public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
         {
             var user = await GetUserWithRolesAsync(userId);
             if (user == null) return null;
@@ -142,7 +142,7 @@ namespace BoneVisQA.Services.Services.Admin
 
             return MapUser(user);
         }
-        public async Task<UserManagementDTO> AssignRoleAsync(Guid userId, string roleName)
+        public async Task<UserManagementDTO?> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");
 
@@ -202,7 +202,7 @@ namespace BoneVisQA.Services.Services.Admin
             };
         }
 
-        public async Task<UserManagementDTO> RevokeRoleAsync(Guid userId)
+        public async Task<UserManagementDTO?> RevokeRoleAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId)
                 ?? throw new KeyNotFoundException("User not found");

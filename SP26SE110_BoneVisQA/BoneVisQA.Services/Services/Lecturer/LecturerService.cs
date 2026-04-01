@@ -252,7 +252,7 @@ public class LecturerService : ILecturerService
             QuizId = q.QuizId,
             QuizTitle = quiz.Title,
             CaseId = q.CaseId,
-            CaseTitle = q.Case?.Title,  // ✅ có data rồi
+            CaseTitle = q.Case?.Title ?? "",
             QuestionText = q.QuestionText,
             Type = q.Type,
             OptionA = q.OptionA,
@@ -280,7 +280,7 @@ public class LecturerService : ILecturerService
         {
             Id = question.Id,
             QuizId = question.QuizId,
-            QuizTitle = question.Quiz?.Title,
+            QuizTitle = question.Quiz?.Title ?? "",
             CaseId = question.CaseId,
             CaseTitle = question.Case?.Title,
             QuestionText = question.QuestionText,
