@@ -1,0 +1,6 @@
+@BoneVisQA.API_HostAddress = http://localhost:5259
+
+GET {{BoneVisQA.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
