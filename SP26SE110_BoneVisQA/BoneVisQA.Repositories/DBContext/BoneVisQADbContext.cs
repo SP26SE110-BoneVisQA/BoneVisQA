@@ -203,25 +203,6 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Tag).WithMany(p => p.ClassTags).HasConstraintName("class_tags_tag_id_fkey");
         });
 
-        modelBuilder.Entity<ClassQuiz>(entity =>
-        {
-            entity.HasKey(cq => new { cq.ClassId, cq.QuizId });
-
-            entity.HasOne(cq => cq.Class)
-                  .WithMany(c => c.ClassQuizzes)
-                  .HasForeignKey(cq => cq.ClassId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(cq => cq.Quiz)
-                  .WithMany(q => q.ClassQuizzes)
-                  .HasForeignKey(cq => cq.QuizId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            entity.Property(e => e.AssignedAt)
-                  .HasDefaultValueSql("NOW()");
-        });
-
-
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("documents_pkey");
