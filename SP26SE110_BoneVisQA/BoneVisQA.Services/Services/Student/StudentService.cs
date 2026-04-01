@@ -35,9 +35,53 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
     {
-        var cases = await _studentRepository.GetAllCasesAsync();
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
 
+        if (classIds.Count == 0)
+            return new List<CaseListItemDto>();
+
+        var cases = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Where(cc => classIds.Contains(cc.ClassId))
+            .Select(cc => cc.Case)
+            .Where(c => c.IsApproved == true && c.IsActive == true)
+            .Include(c => c.Category)
+            .Include(c => c.CaseTags)
+                .ThenInclude(ct => ct.Tag)
+            .Include(c => c.MedicalImages)
+            .Distinct()
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+        return MapCaseList(cases);
+    }
+
+    public async Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null)
+    {
+        if (filter == null)
+        {
+            var allCases = await _studentRepository.GetAllCasesAsync();
+            return MapCaseList(allCases);
+        }
+
+        var repoFilter = new CaseFilter
+        {
+            CategoryId = filter.CategoryId,
+            Difficulty = filter.Difficulty,
+            Location = filter.Location,
+            LessonType = filter.LessonType
+        };
+        var filteredCases = await _studentRepository.GetFilteredCasesAsync(repoFilter);
+        return MapCaseList(filteredCases);
+    }
+
+    private static IReadOnlyList<CaseListItemDto> MapCaseList(IEnumerable<MedicalCase> cases)
+    {
         return cases
+
             .Select(c => new CaseListItemDto
             {
                 Id = c.Id,
@@ -115,6 +159,66 @@ public class StudentService : IStudentService
                 })
                 .ToList()
         };
+    }
+
+    public async Task<IReadOnlyList<StudentCaseHistoryItemDto>> GetCaseHistoryAsync(Guid studentId)
+    {
+        var questions = await _unitOfWork.Context.StudentQuestions
+            .AsNoTracking()
+            .Include(q => q.Case)
+            .Include(q => q.CaseAnswers)
+            .Where(q => q.StudentId == studentId && q.CaseId.HasValue)
+            .ToListAsync();
+
+        var views = await _unitOfWork.Context.CaseViewLogs
+            .AsNoTracking()
+            .Include(v => v.Case)
+            .Where(v => v.StudentId == studentId)
+            .ToListAsync();
+
+        var history = new Dictionary<Guid, StudentCaseHistoryItemDto>();
+
+        foreach (var view in views.Where(v => v.Case != null))
+        {
+            history[view.CaseId] = new StudentCaseHistoryItemDto
+            {
+                CaseId = view.CaseId,
+                CaseTitle = view.Case!.Title,
+                CategoryName = view.Case.Category?.Name,
+                Difficulty = view.Case.Difficulty,
+                LastInteractedAt = view.ViewedAt ?? DateTime.MinValue,
+                InteractionType = "Viewed case"
+            };
+        }
+
+        foreach (var question in questions.Where(q => q.Case != null))
+        {
+            var latestAnswer = question.CaseAnswers
+                .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                .FirstOrDefault();
+
+            var item = new StudentCaseHistoryItemDto
+            {
+                CaseId = question.CaseId!.Value,
+                CaseTitle = question.Case!.Title,
+                CategoryName = question.Case.Category?.Name,
+                Difficulty = question.Case.Difficulty,
+                LastInteractedAt = question.CreatedAt ?? DateTime.MinValue,
+                InteractionType = "Asked question",
+                LatestQuestionText = question.QuestionText,
+                LatestAnswerStatus = latestAnswer?.Status,
+                ReviewedAt = latestAnswer?.ReviewedAt
+            };
+
+            if (!history.TryGetValue(item.CaseId, out var existing) || item.LastInteractedAt >= existing.LastInteractedAt)
+            {
+                history[item.CaseId] = item;
+            }
+        }
+
+        return history.Values
+            .OrderByDescending(x => x.LastInteractedAt)
+            .ToList();
     }
 
     public async Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request)
@@ -260,7 +364,7 @@ public class StudentService : IStudentService
                 Id = Guid.NewGuid(),
                 AnswerId = answer.Id,
                 ChunkId = c.ChunkId,
-                SimilarityScore = c.SimilarityScore
+                SimilarityScore = 0d
 
             });
 
@@ -376,7 +480,12 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)
     {
-        var items = await _studentRepository.GetQuestionsByStudentAsync(studentId);
+        var items = await _unitOfWork.Context.StudentQuestions
+            .AsNoTracking()
+            .Include(q => q.CaseAnswers)
+            .Where(q => q.StudentId == studentId)
+            .OrderByDescending(q => q.CreatedAt)
+            .ToListAsync();
 
         return items
             .Select(q => new StudentQuestionHistoryItemDto
@@ -384,7 +493,19 @@ public class StudentService : IStudentService
                 Id = q.Id,
                 CaseId = q.CaseId ?? Guid.Empty,
                 QuestionText = q.QuestionText,
-                CreatedAt = q.CreatedAt
+                CreatedAt = q.CreatedAt,
+                AnswerText = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.AnswerText)
+                    .FirstOrDefault(),
+                AnswerStatus = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.Status)
+                    .FirstOrDefault(),
+                ReviewedAt = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.ReviewedAt)
+                    .FirstOrDefault()
             })
             .ToList();
     }

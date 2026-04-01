@@ -10,6 +10,11 @@ namespace BoneVisQA.Services.Services;
 
 public class VisualQaAiService : IVisualQaAiService
 {
+    private const double MinimumRelevantSimilarity = 0.72d;
+    private const string InvalidMedicalImageAnswer = "Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.";
+    private const string MissingMedicalKnowledgeAnswer =
+        "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
+
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
     private readonly IImageProcessingService _imageProcessingService;
@@ -29,9 +34,6 @@ public class VisualQaAiService : IVisualQaAiService
 
     public async Task<VisualQAResponseDto> RunPipelineAsync(VisualQARequestDto request, CancellationToken cancellationToken = default)
     {
-        const string InvalidMedicalImageAnswer =
-            "Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.";
-
         // Bounding box overlay when coordinates exist (single image fetch for the generation call).
         string? imageB64 = null;
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
@@ -74,17 +76,30 @@ public class VisualQaAiService : IVisualQaAiService
             .Select(c => new CitationItemDto
             {
                 ChunkId = c.Id,
-                SimilarityScore = CalculateCosineSimilarity(queryEmbedding, c.Embedding!.ToArray()),
+                ReferenceUrl = BuildCitationUrl(c.Doc.FilePath, c.ChunkOrder),
+                PageNumber = c.ChunkOrder + 1,
                 SourceText = c.Content
             })
             .ToList();
 
-        var maxSimilarity = citationsFromChunks.Count > 0
-            ? citationsFromChunks.Max(c => c.SimilarityScore)
+        var maxSimilarity = topChunks.Count > 0
+            ? topChunks
+                .Where(c => c.Embedding != null)
+                .Select(c => CalculateCosineSimilarity(queryEmbedding, c.Embedding!.ToArray()))
+                .DefaultIfEmpty(0d)
+                .Max()
             : 0d;
 
-        const string MissingMedicalKnowledgeAnswer =
-            "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
+        if (maxSimilarity < MinimumRelevantSimilarity)
+        {
+            return new VisualQAResponseDto
+            {
+                AnswerText = MissingMedicalKnowledgeAnswer,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                Citations = new List<CitationItemDto>()
+            };
+        }
 
         var prompt = BuildGeminiPrompt(request, topChunks);
 
@@ -94,38 +109,47 @@ public class VisualQaAiService : IVisualQaAiService
             imageB64 ?? string.Empty,
             cancellationToken);
 
-        // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
-        if (response.Citations == null || response.Citations.Count == 0)
+        var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
+
+        if (isNonMedicalRefusal)
         {
-            response.Citations = citationsFromChunks;
+            // We cannot provide medical citations for rejected/invalid queries.
+            response.Citations = new List<CitationItemDto>();
+            response.SuggestedDiagnosis = null;
+            response.DifferentialDiagnoses = null;
         }
         else
         {
-            var metaByChunkId = citationsFromChunks.ToDictionary(c => c.ChunkId, c => c);
-            foreach (var citation in response.Citations)
+            // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
+            if (response.Citations == null || response.Citations.Count == 0)
             {
-                if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
+                response.Citations = citationsFromChunks;
+            }
+            else
+            {
+                var metaByChunkId = citationsFromChunks.ToDictionary(c => c.ChunkId, c => c);
+                foreach (var citation in response.Citations)
                 {
-                    citation.SimilarityScore = meta.SimilarityScore;
-                    citation.SourceText = meta.SourceText;
+                    if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
+                    {
+                        citation.SourceText = meta.SourceText;
+                        citation.ReferenceUrl = meta.ReferenceUrl;
+                        citation.PageNumber = meta.PageNumber;
+                    }
                 }
             }
         }
 
-        // If retrieved context is weak, do not trust a confident medical answer — unless the model already refused (e.g. invalid image).
-        if (maxSimilarity < 0.7d)
-        {
-            var answer = response.AnswerText ?? string.Empty;
-            if (!string.Equals(answer.Trim(), InvalidMedicalImageAnswer, StringComparison.Ordinal))
-            {
-                response.AnswerText = MissingMedicalKnowledgeAnswer;
-                response.SuggestedDiagnosis = null;
-                response.DifferentialDiagnoses = null;
-                response.Citations = new List<CitationItemDto>();
-            }
-        }
-
         return response;
+    }
+
+    private static bool IsNonMedicalRefusalAnswer(string? answerText)
+    {
+        if (string.IsNullOrWhiteSpace(answerText))
+            return false;
+
+        return answerText.Contains("không phải dữ liệu y khoa hợp lệ", StringComparison.OrdinalIgnoreCase)
+               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildGeminiPrompt(
@@ -227,5 +251,14 @@ public class VisualQaAiService : IVisualQaAiService
         if (double.IsNaN(cos) || double.IsInfinity(cos)) return 0d;
 
         return cos;
+    }
+
+    private static string? BuildCitationUrl(string? filePath, int chunkOrder)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return null;
+
+        var pageNumber = chunkOrder + 1;
+        return $"{filePath}#page={pageNumber}";
     }
 }

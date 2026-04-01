@@ -32,11 +32,20 @@ public partial class CaseAnswer
     [Column("reviewed_by_id")]
     public Guid? ReviewedById { get; set; }
 
+    [Column("escalated_by_id")]
+    public Guid? EscalatedById { get; set; }
+
     [Column("generated_at")]
     public DateTime? GeneratedAt { get; set; }
 
     [Column("reviewed_at")]
     public DateTime? ReviewedAt { get; set; }
+
+    [Column("escalated_at")]
+    public DateTime? EscalatedAt { get; set; }
+
+    [Column("ai_confidence_score")]
+    public double? AiConfidenceScore { get; set; }
 
     [InverseProperty("Answer")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
@@ -47,6 +56,10 @@ public partial class CaseAnswer
     [ForeignKey("QuestionId")]
     [InverseProperty("CaseAnswers")]
     public virtual StudentQuestion Question { get; set; } = null!;
+
+    [ForeignKey("EscalatedById")]
+    [InverseProperty("EscalatedCaseAnswers")]
+    public virtual User? EscalatedBy { get; set; }
 
     [ForeignKey("ReviewedById")]
     [InverseProperty("CaseAnswers")]

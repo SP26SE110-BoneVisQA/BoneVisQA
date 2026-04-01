@@ -25,6 +25,12 @@ public partial class MedicalCase
     [Column("category_id")]
     public Guid? CategoryId { get; set; }
 
+    [Column("created_by_expert_id")]
+    public Guid? CreatedByExpertId { get; set; }
+
+    [Column("assigned_expert_id")]
+    public Guid? AssignedExpertId { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -48,6 +54,9 @@ public partial class MedicalCase
     public string? ReflectiveQuestions { get; set; }
 
     [InverseProperty("Case")]
+    public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
+
+    [InverseProperty("Case")]
     public virtual ICollection<CaseTag> CaseTags { get; set; } = new List<CaseTag>();
 
     [InverseProperty("Case")]
@@ -56,6 +65,14 @@ public partial class MedicalCase
     [ForeignKey("CategoryId")]
     [InverseProperty("MedicalCases")]
     public virtual Category? Category { get; set; }
+
+    [ForeignKey("CreatedByExpertId")]
+    [InverseProperty("CreatedMedicalCases")]
+    public virtual User? CreatedByExpert { get; set; }
+
+    [ForeignKey("AssignedExpertId")]
+    [InverseProperty("AssignedMedicalCases")]
+    public virtual User? AssignedExpert { get; set; }
 
     [InverseProperty("Case")]
     public virtual ICollection<MedicalImage> MedicalImages { get; set; } = new List<MedicalImage>();

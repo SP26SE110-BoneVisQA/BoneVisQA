@@ -1,5 +1,6 @@
 using BoneVisQA.Repositories.Models;
 using Microsoft.AspNetCore.Http;
+using System.Collections.Generic;
 
 namespace BoneVisQA.Services.Interfaces;
 
@@ -7,6 +8,7 @@ public class DocumentUploadDto
 {
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
+    public List<Guid> TagIds { get; set; } = new();
 }
 
 public class DocumentDto
@@ -34,4 +36,5 @@ public interface IDocumentService
     Task<bool> DeleteDocumentAsync(Guid id);
     Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
+    string MapStatusForApi(string? rawStatus);
 }

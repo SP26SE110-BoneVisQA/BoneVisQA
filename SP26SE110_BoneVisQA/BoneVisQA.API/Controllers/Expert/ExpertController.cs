@@ -9,7 +9,7 @@ namespace BoneVisQA.API.Controllers.Expert
 {
     [Authorize(Roles = "Expert")]
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/expert")]
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;

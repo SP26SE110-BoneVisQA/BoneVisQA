@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -23,6 +23,12 @@ public partial class Citation
 
     [Column("similarity_score")]
     public double SimilarityScore { get; set; }
+
+    [NotMapped]
+    public string? ReferenceUrl { get; set; }
+
+    [NotMapped]
+    public int? PageNumber { get; set; }
 
     [ForeignKey("AnswerId")]
     [InverseProperty("Citations")]

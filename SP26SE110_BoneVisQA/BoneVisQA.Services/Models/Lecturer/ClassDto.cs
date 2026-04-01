@@ -8,6 +8,7 @@ public class ClassDto
     public string ClassName { get; set; } = string.Empty;
     public string Semester { get; set; } = string.Empty;
     public Guid? LecturerId { get; set; }
+    public Guid? ExpertId { get; set; }
     public DateTime? CreatedAt { get; set; }
 }
 
