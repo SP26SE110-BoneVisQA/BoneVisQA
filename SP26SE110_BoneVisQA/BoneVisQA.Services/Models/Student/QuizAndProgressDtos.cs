@@ -54,7 +54,18 @@ public class QuizResultDto
 
 public class StudentProgressDto
 {
+    /// <summary>Số lần xem case (case_view_logs).</summary>
     public int TotalCasesViewed { get; set; }
+
+    /// <summary>Số câu hỏi đã gửi trong ngữ cảnh case / RAG (student_questions).</summary>
     public int TotalQuestionsAsked { get; set; }
+
+    /// <summary>Số quiz đã hoàn thành (quiz_attempts có điểm hoặc completed_at).</summary>
+    public int QuizzesCompleted { get; set; }
+
+    /// <summary>Số câu hỏi trắc nghiệm trong quiz đã trả lời (student_quiz_answers).</summary>
+    public int TotalQuizAnswersSubmitted { get; set; }
+
+    /// <summary>Điểm trung bình các quiz đã chấm điểm.</summary>
     public double? AvgQuizScore { get; set; }
 }
