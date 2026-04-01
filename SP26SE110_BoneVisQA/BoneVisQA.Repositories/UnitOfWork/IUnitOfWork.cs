@@ -19,8 +19,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<CaseViewLog> CaseViewLogRepository { get; }
         GenericRepository<Category> CategoryRepository { get; }
         GenericRepository<Citation> CitationRepository { get; }
+        GenericRepository<ClassCase> ClassCaseRepository { get; }
         GenericRepository<ClassEnrollment> ClassEnrollmentRepository { get; }
         GenericRepository<ClassQuiz> ClassQuizRepository { get; }
+        GenericRepository<ClassQuizSession> ClassQuizSessionRepository { get; }
         GenericRepository<Document> DocumentRepository { get; }
         GenericRepository<DocumentChunk> DocumentChunkRepository { get; }
         GenericRepository<ExpertReview> ExpertReviewRepository { get; }

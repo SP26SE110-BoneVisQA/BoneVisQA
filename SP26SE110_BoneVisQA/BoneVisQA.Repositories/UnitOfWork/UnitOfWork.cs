@@ -20,8 +20,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<CaseViewLog> _caseviewlogRepository = null!;
         private GenericRepository<Category> _categoryRepository = null!;
         private GenericRepository<Citation> _citationRepository = null!;
+        private GenericRepository<ClassCase> _classcaseRepository = null!;
         private GenericRepository<ClassEnrollment> _classenrollmentRepository = null!;
         private GenericRepository<ClassQuiz> _classquizRepository = null!;
+        private GenericRepository<ClassQuizSession> _classquizsessionRepository = null!;
         private GenericRepository<Document> _documentRepository = null!;
         private GenericRepository<DocumentChunk> _documentchunkRepository = null!;
         private GenericRepository<DocumentTag> _documenttagRepository = null!;
@@ -55,8 +57,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<CaseViewLog> CaseViewLogRepository => _caseviewlogRepository ??= new GenericRepository<CaseViewLog>(_context);
         public GenericRepository<Category> CategoryRepository => _categoryRepository ??= new GenericRepository<Category>(_context);
         public GenericRepository<Citation> CitationRepository => _citationRepository ??= new GenericRepository<Citation>(_context);
+        public GenericRepository<ClassCase> ClassCaseRepository => _classcaseRepository ??= new GenericRepository<ClassCase>(_context);
         public GenericRepository<ClassEnrollment> ClassEnrollmentRepository => _classenrollmentRepository ??= new GenericRepository<ClassEnrollment>(_context);
         public GenericRepository<ClassQuiz> ClassQuizRepository => _classquizRepository ??= new GenericRepository<ClassQuiz>(_context);
+        public GenericRepository<ClassQuizSession> ClassQuizSessionRepository => _classquizsessionRepository ??= new GenericRepository<ClassQuizSession>(_context);
         public GenericRepository<Document> DocumentRepository => _documentRepository ??= new GenericRepository<Document>(_context);
         public GenericRepository<DocumentChunk> DocumentChunkRepository => _documentchunkRepository ??= new GenericRepository<DocumentChunk>(_context);
         public GenericRepository<ExpertReview> ExpertReviewRepository => _expertreviewRepository ??= new GenericRepository<ExpertReview>(_context);

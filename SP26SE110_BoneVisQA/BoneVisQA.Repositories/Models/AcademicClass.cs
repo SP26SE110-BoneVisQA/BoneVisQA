@@ -35,6 +35,9 @@ public partial class AcademicClass
     public virtual ICollection<Announcement> Announcements { get; set; } = new List<Announcement>();
 
     [InverseProperty("Class")]
+    public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
+
+    [InverseProperty("Class")]
     public virtual ICollection<ClassEnrollment> ClassEnrollments { get; set; } = new List<ClassEnrollment>();
 
     [InverseProperty("Class")]
@@ -50,6 +53,9 @@ public partial class AcademicClass
     [ForeignKey("ExpertId")]
     [InverseProperty("ExpertAcademicClasses")]
     public virtual User? Expert { get; set; }
+
+    [InverseProperty("Class")]
+    public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
 
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuiz> ClassQuizzes { get; set; } = new List<ClassQuiz>();

@@ -20,7 +20,7 @@ public class VisualQAFileUploadRequest
 }
 
 [ApiController]
-[Route("api/student/[controller]")]
+[Route("api/student/visual-qa")]
 [Authorize]
 public class VisualQAController : ControllerBase
 {

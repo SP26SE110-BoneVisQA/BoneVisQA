@@ -32,3 +32,16 @@ public class CaseDetailDto
     public bool IsApproved { get; set; }
     public IReadOnlyList<MedicalImageDto> Images { get; set; } = Array.Empty<MedicalImageDto>();
 }
+
+public class StudentCaseHistoryItemDto
+{
+    public Guid CaseId { get; set; }
+    public string CaseTitle { get; set; } = string.Empty;
+    public string? CategoryName { get; set; }
+    public string? Difficulty { get; set; }
+    public DateTime LastInteractedAt { get; set; }
+    public string InteractionType { get; set; } = string.Empty;
+    public string? LatestQuestionText { get; set; }
+    public string? LatestAnswerStatus { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+}

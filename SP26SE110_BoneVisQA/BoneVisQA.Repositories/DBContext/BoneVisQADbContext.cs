@@ -30,9 +30,13 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<Citation> Citations { get; set; }
 
+    public virtual DbSet<ClassCase> ClassCases { get; set; }
+
     public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
 
     public virtual DbSet<ClassQuiz> ClassQuizzes { get; set; }
+
+    public virtual DbSet<ClassQuizSession> ClassQuizSessions { get; set; }
 
     public virtual DbSet<ClassTag> ClassTags { get; set; }
 
@@ -130,6 +134,9 @@ public partial class BoneVisQADbContext : DbContext
         modelBuilder.Entity<CaseAnswer>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("case_answers_pkey");
+            entity.ToTable(t => t.HasCheckConstraint(
+                "case_answers_status_check",
+                "status = ANY (ARRAY['Pending'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'Revised'::text])"));
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.GeneratedAt).HasDefaultValueSql("now()");
@@ -200,6 +207,24 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Student).WithMany(p => p.ClassEnrollments).HasConstraintName("class_enrollments_student_id_fkey");
         });
 
+        modelBuilder.Entity<ClassCase>(entity =>
+        {
+            entity.HasKey(e => new { e.ClassId, e.CaseId }).HasName("class_cases_pkey");
+
+            entity.Property(e => e.AssignedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsMandatory).HasDefaultValue(false);
+
+            entity.HasOne(d => d.Class).WithMany(p => p.ClassCases)
+                .HasForeignKey(d => d.ClassId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("class_cases_class_id_fkey");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.ClassCases)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("class_cases_case_id_fkey");
+        });
+
         modelBuilder.Entity<ClassTag>(entity =>
         {
             entity.HasKey(e => new { e.ClassId, e.TagId }).HasName("class_tags_pkey");
@@ -227,6 +252,24 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.AssignedAt)
                   .HasDefaultValueSql("NOW()");
+        });
+
+        modelBuilder.Entity<ClassQuizSession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("class_quiz_sessions_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizSessions)
+                .HasForeignKey(d => d.ClassId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("class_quiz_sessions_class_id_fkey");
+
+            entity.HasOne(d => d.Quiz).WithMany(p => p.ClassQuizSessions)
+                .HasForeignKey(d => d.QuizId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("class_quiz_sessions_quiz_id_fkey");
         });
 
 
@@ -318,6 +361,16 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Category).WithMany(p => p.MedicalCases)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("medical_cases_category_id_fkey");
+
+            entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedMedicalCases)
+                .HasForeignKey(d => d.CreatedByExpertId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("medical_cases_created_by_expert_id_fkey");
+
+            entity.HasOne(d => d.AssignedExpert).WithMany(p => p.AssignedMedicalCases)
+                .HasForeignKey(d => d.AssignedExpertId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("medical_cases_assigned_expert_id_fkey");
         });
 
         modelBuilder.Entity<MedicalImage>(entity =>
@@ -345,6 +398,16 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedQuizzes)
+                .HasForeignKey(d => d.CreatedByExpertId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("quizzes_created_by_expert_id_fkey");
+
+            entity.HasOne(d => d.AssignedExpert).WithMany(p => p.AssignedQuizzes)
+                .HasForeignKey(d => d.AssignedExpertId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("quizzes_assigned_expert_id_fkey");
         });
 
         modelBuilder.Entity<QuizAttempt>(entity =>

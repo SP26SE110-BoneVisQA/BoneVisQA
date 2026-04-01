@@ -9,11 +9,14 @@ namespace BoneVisQA.Services.Interfaces;
 
 public interface IStudentService
 {
+    Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null);
     Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId);
 
     Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter);
 
     Task<CaseDetailDto?> GetCaseDetailAsync(Guid caseId, Guid studentId);
+
+    Task<IReadOnlyList<StudentCaseHistoryItemDto>> GetCaseHistoryAsync(Guid studentId);
 
     Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request);
 

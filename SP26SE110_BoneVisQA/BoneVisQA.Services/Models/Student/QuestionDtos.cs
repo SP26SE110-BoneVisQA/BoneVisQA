@@ -41,4 +41,7 @@ public class StudentQuestionHistoryItemDto
     public Guid? CaseId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
+    public string? AnswerText { get; set; }
+    public string? AnswerStatus { get; set; }
+    public DateTime? ReviewedAt { get; set; }
 }

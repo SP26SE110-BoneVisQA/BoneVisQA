@@ -35,6 +35,31 @@ namespace BoneVisQA.Services.Services.Admin
           "Expert",
           "Lecturer",
         };
+
+        private static UserManagementDTO MapUser(User user)
+        {
+            return new UserManagementDTO
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                SchoolCohort = user.SchoolCohort,
+                LastLogin = user.LastLogin,
+                Roles = user.UserRoles.Select(r => r.Role.Name).ToList(),
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt
+            };
+        }
+
+        private async Task<User?> GetUserWithRolesAsync(Guid userId)
+        {
+            return await _unitOfWork.Context.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
         public async Task<List<UserManagementDTO>> GetUserByRoleAsync(string role)
         {
             if (!_validRoles.Contains(role)) throw new ArgumentException("Role not found");
@@ -46,18 +71,7 @@ namespace BoneVisQA.Services.Services.Admin
 
             var result = users
                 .Where(u => u.UserRoles.Any(r => r.Role.Name == role))
-                .Select(u => new UserManagementDTO
-                {
-                    Id = u.Id,
-                    FullName = u.FullName,
-                    Email = u.Email,
-                    SchoolCohort = u.SchoolCohort,
-                    LastLogin = u.LastLogin,
-                    Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
-                    IsActive = u.IsActive,
-                    CreatedAt = u.CreatedAt,
-                    UpdatedAt = u.UpdatedAt
-                })
+                .Select(MapUser)
                 .ToList();
 
             return result;
@@ -65,7 +79,7 @@ namespace BoneVisQA.Services.Services.Admin
 
         public async Task<UserManagementDTO> ActivateUserAccountAsync(Guid userId)
         {
-            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);
+            var user = await GetUserWithRolesAsync(userId);
 
             if (user == null) return null;
 
@@ -75,23 +89,12 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
 
-            return new UserManagementDTO
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email,
-                SchoolCohort = user.SchoolCohort,
-                LastLogin = user.LastLogin,
-                IsActive = user.IsActive,
-                Roles = user.UserRoles.Select(r => r.Role.Name).ToList(),
-                CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt
-            };
+            return MapUser(user);
         }
 
         public async Task<UserManagementDTO> DeactivateUserAccountAsync(Guid userId)
         {
-            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);
+            var user = await GetUserWithRolesAsync(userId);
 
             if (user == null) return null;
 
@@ -101,24 +104,27 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
 
-            return new UserManagementDTO
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email,
-                Roles = user.UserRoles.Select(r => r.Role.Name).ToList(),
-                SchoolCohort = user.SchoolCohort,
-                LastLogin = user.LastLogin,
-                IsActive = user.IsActive,
-                CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt
-            };
+            return MapUser(user);
+        }
+
+        public async Task<UserManagementDTO> ToggleUserStatusAsync(Guid userId, bool? isActive)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return null;
+
+            user.IsActive = isActive ?? !user.IsActive;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.UserRepository.UpdateAsync(user);
+            await _unitOfWork.SaveAsync();
+
+            return MapUser(user);
         }
         public async Task<UserManagementDTO> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");
 
-            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId);
+            var user = await GetUserWithRolesAsync(userId);
             if (user == null) return null;
 
             var role = await _unitOfWork.RoleRepository
@@ -176,7 +182,7 @@ namespace BoneVisQA.Services.Services.Admin
 
         public async Task<UserManagementDTO> RevokeRoleAsync(Guid userId)
         {
-            var user = await _unitOfWork.UserRepository.GetByIdAsync(userId)
+            var user = await GetUserWithRolesAsync(userId)
                 ?? throw new KeyNotFoundException("User not found");
 
             var pendingRole = await _unitOfWork.RoleRepository

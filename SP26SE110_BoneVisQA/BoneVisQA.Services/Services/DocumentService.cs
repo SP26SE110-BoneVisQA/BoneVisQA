@@ -11,6 +11,11 @@ namespace BoneVisQA.Services.Services;
 
 public class DocumentService : IDocumentService
 {
+    private const string InternalProcessingStatus = "Processing";
+    private const string CompletedStatus = "Completed";
+    private const string FailedStatus = "Failed";
+    private const string NoExtractableTextLog = "Uploaded PDF contains no extractable text-base content.";
+
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -29,7 +34,7 @@ public class DocumentService : IDocumentService
     }
 
     /// <summary>
-    /// Uploads the PDF to storage, persists metadata with <see cref="Document.IndexingStatus"/> = Processing,
+    /// Uploads the PDF to storage, persists metadata with an internal processing state,
     /// then returns immediately. Text extraction, chunking, and embeddings run in a fire-and-forget background task
     /// so the HTTP response is not blocked by heavy RAG ingestion.
     /// </summary>
@@ -43,7 +48,7 @@ public class DocumentService : IDocumentService
             Title = metadata.Title,
             FilePath = fileUrl,
             CategoryId = metadata.CategoryId,
-            IndexingStatus = "Processing",
+            IndexingStatus = InternalProcessingStatus,
             Version = 1,
             IsOutdated = false,
             CreatedAt = DateTime.UtcNow
@@ -128,7 +133,7 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document == null || string.IsNullOrEmpty(document.FilePath)) return false;
 
-        document.IndexingStatus = "Processing";
+        document.IndexingStatus = InternalProcessingStatus;
         document.Version += 1;
         await _unitOfWork.DocumentRepository.UpdateAsync(document);
         await _unitOfWork.SaveAsync();
@@ -159,10 +164,15 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document != null)
         {
-            document.IndexingStatus = status;
+            document.IndexingStatus = NormalizeStoredStatus(status);
             await _unitOfWork.DocumentRepository.UpdateAsync(document);
             await _unitOfWork.SaveAsync();
         }
+    }
+
+    public string MapStatusForApi(string? rawStatus)
+    {
+        return NormalizeApiStatus(rawStatus);
     }
 
     public async Task IngestDocumentInBackgroundAsync(Guid docId, string fileUrl)
@@ -176,18 +186,23 @@ public class DocumentService : IDocumentService
 
             _logger.LogInformation("Background ingestion started for Document ID {DocumentId}", docId);
 
-            await SetStatusAsync(uow, docId, "Processing");
+            await SetStatusAsync(uow, docId, InternalProcessingStatus);
 
             var fullText = await pdf.DownloadAndExtractPdfTextAsync(fileUrl);
+            if (string.IsNullOrWhiteSpace(fullText))
+            {
+                _logger.LogError(NoExtractableTextLog);
+                await SetStatusAsync(uow, docId, FailedStatus);
+                throw new EmbeddingFailedException(NoExtractableTextLog);
+            }
+
             var chunkTexts = SplitTextRecursively(fullText, maxSize: 800, overlap: 150);
 
-            if (chunkTexts.Count == 0)
+            if (chunkTexts.Count == 0 || chunkTexts.Sum(c => c.Length) == 0)
             {
-                const string message =
-                    "Tài liệu dạng ảnh chụp, không có văn bản (text-base) hợp lệ. RAG không thể trích xuất.";
-                _logger.LogError(message);
-                await SetStatusAsync(uow, docId, "Failed");
-                throw new EmbeddingFailedException(message);
+                _logger.LogError(NoExtractableTextLog);
+                await SetStatusAsync(uow, docId, FailedStatus);
+                throw new EmbeddingFailedException(NoExtractableTextLog);
             }
 
             _logger.LogInformation("Extracted {ChunkCount} chunks. Starting embedding generation...", chunkTexts.Count);
@@ -220,7 +235,7 @@ public class DocumentService : IDocumentService
                 await uow.DocumentChunkRepository.AddRangeAsync(entities);
 
             await uow.SaveAsync();
-            await SetStatusAsync(uow, docId, "Completed");
+            await SetStatusAsync(uow, docId, CompletedStatus);
             _logger.LogInformation("Background ingestion completed successfully for Document ID {DocumentId}", docId);
         }
         catch (EmbeddingFailedException ex)
@@ -244,7 +259,7 @@ public class DocumentService : IDocumentService
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            await SetStatusAsync(uow, docId, "Failed");
+            await SetStatusAsync(uow, docId, FailedStatus);
             _logger.LogWarning("Document {DocumentId} IndexingStatus set to Failed (new DbContext scope).", docId);
         }
         catch (Exception inner)
@@ -258,7 +273,7 @@ public class DocumentService : IDocumentService
         var doc = await uow.DocumentRepository.GetByIdAsync(docId);
         if (doc != null)
         {
-            doc.IndexingStatus = status;
+            doc.IndexingStatus = NormalizeStoredStatus(status);
             await uow.DocumentRepository.UpdateAsync(doc);
             await uow.SaveAsync();
         }
@@ -270,11 +285,28 @@ public class DocumentService : IDocumentService
         Title = doc.Title,
         FilePath = doc.FilePath,
         CategoryId = doc.CategoryId,
-        IndexingStatus = doc.IndexingStatus,
+        IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
         Version = doc.Version,
         IsOutdated = doc.IsOutdated,
         CreatedAt = doc.CreatedAt
     };
+
+    private static string NormalizeStoredStatus(string? status)
+    {
+        if (string.Equals(status, CompletedStatus, StringComparison.OrdinalIgnoreCase))
+            return CompletedStatus;
+        if (string.Equals(status, FailedStatus, StringComparison.OrdinalIgnoreCase))
+            return FailedStatus;
+
+        return InternalProcessingStatus;
+    }
+
+    private static string NormalizeApiStatus(string? status)
+    {
+        return string.Equals(status, CompletedStatus, StringComparison.OrdinalIgnoreCase)
+            ? CompletedStatus
+            : FailedStatus;
+    }
 
     /// <summary>
     /// Recursive character text splitter for better RAG:
