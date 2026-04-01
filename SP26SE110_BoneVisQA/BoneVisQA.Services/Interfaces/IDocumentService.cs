@@ -36,4 +36,5 @@ public interface IDocumentService
     Task<bool> DeleteDocumentAsync(Guid id);
     Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
+    string MapStatusForApi(string? rawStatus);
 }

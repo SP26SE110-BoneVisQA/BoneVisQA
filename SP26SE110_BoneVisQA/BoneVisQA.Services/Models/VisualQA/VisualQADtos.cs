@@ -33,15 +33,14 @@ public class VisualQARequestDto
 public class CitationItemDto
 {
     public Guid ChunkId { get; set; }
-    public double SimilarityScore { get; set; }
     /// <summary>
     /// Public URL to the underlying document file stored in Supabase.
     /// </summary>
-    public string? DocumentUrl { get; set; }
+    public string? ReferenceUrl { get; set; }
     /// <summary>
-    /// Pseudo-page/order number mapped from document_chunks.chunk_order.
+    /// Best-effort page hint derived from `document_chunks.chunk_order` when true page metadata is unavailable.
     /// </summary>
-    public int ChunkOrder { get; set; }
+    public int? PageNumber { get; set; }
     public string? SourceText { get; set; }
 }
 

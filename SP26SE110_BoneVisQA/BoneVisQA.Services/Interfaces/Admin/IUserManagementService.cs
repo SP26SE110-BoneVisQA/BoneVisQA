@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Services.Models.Admin;
+using BoneVisQA.Services.Models.Admin;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +15,8 @@ namespace BoneVisQA.Services.Interfaces.Admin
         Task<UserManagementDTO> ActivateUserAccountAsync(Guid userId);
 
         Task<UserManagementDTO> DeactivateUserAccountAsync(Guid userId);
+
+        Task<UserManagementDTO> ToggleUserStatusAsync(Guid userId, bool? isActive);
 
         Task<UserManagementDTO> AssignRoleAsync(Guid userId, string roleName);
 

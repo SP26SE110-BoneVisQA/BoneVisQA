@@ -145,7 +145,12 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
+builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService>();
+builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
+builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
+builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -155,6 +160,7 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
 });
 
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
+builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();

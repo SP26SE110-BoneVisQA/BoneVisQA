@@ -319,13 +319,18 @@ public class LecturerService : ILecturerService
 
         if (request.ClassId != Guid.Empty)
         {
-            var classQuiz = new ClassQuiz
+            var classQuizSession = new ClassQuizSession
             {
+                Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                AssignedAt = now
+                OpenTime = request.OpenTime,
+                CloseTime = request.CloseTime,
+                TimeLimitMinutes = request.TimeLimit,
+                PassingScore = request.PassingScore,
+                CreatedAt = now
             };
-            await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+            await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuizSession);
             await _unitOfWork.SaveAsync();
         }
 
@@ -600,9 +605,10 @@ public class LecturerService : ILecturerService
         double? avgQuizScore = null;
         if (studentIds.Count > 0)
         {
-            var quizIdsInClass = await _unitOfWork.ClassQuizRepository
-                .FindByCondition(cq => cq.ClassId == classId)
-                .Select(cq => cq.QuizId)
+            var quizIdsInClass = await _unitOfWork.Context.ClassQuizSessions
+                .Where(cqs => cqs.ClassId == classId)
+                .Select(cqs => cqs.QuizId)
+                .Distinct()
                 .ToListAsync();
 
             if (quizIdsInClass.Count > 0)
@@ -643,22 +649,58 @@ public class LecturerService : ILecturerService
 
     public async Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request)
     {
-        foreach (var caseId in request.CaseIds)
-        {
-            var caseTags = await _unitOfWork.CaseTagRepository
-                .FindByCondition(ct => ct.CaseId == caseId)
-                .ToListAsync();
+        var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
 
-            foreach (var caseTag in caseTags)
+        var caseIds = request.CaseIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (caseIds.Count == 0)
+            return new List<CaseDto>();
+
+        var existing = await _unitOfWork.Context.ClassCases
+            .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
+            .Select(cc => cc.CaseId)
+            .ToListAsync();
+
+        var toAdd = caseIds
+            .Except(existing)
+            .Select(caseId => new ClassCase
             {
-                var existingClassTag = await _unitOfWork.CaseTagRepository
-                    .FindByCondition(ct => ct.CaseId == caseTag.CaseId && ct.TagId == caseTag.TagId)
-                    .FirstOrDefaultAsync();
-            }
+                ClassId = classEntity.Id,
+                CaseId = caseId,
+                AssignedAt = DateTime.UtcNow,
+                IsMandatory = false
+            })
+            .ToList();
+
+        if (toAdd.Count > 0)
+        {
+            await _unitOfWork.ClassCaseRepository.AddRangeAsync(toAdd);
         }
 
         await _unitOfWork.SaveAsync();
-        return await GetAllCasesAsync();
+
+        var assignedCases = await _unitOfWork.Context.ClassCases
+            .Where(cc => cc.ClassId == classId)
+            .Select(cc => cc.Case)
+            .Include(c => c.Category)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+        return assignedCases.Select(c => new CaseDto
+        {
+            Id = c.Id,
+            Title = c.Title,
+            Description = c.Description,
+            Difficulty = c.Difficulty,
+            CategoryName = c.Category?.Name,
+            IsApproved = c.IsApproved ?? false,
+            IsActive = c.IsActive ?? false,
+            CreatedAt = c.CreatedAt
+        }).ToList();
     }
 
     public async Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request)
@@ -760,11 +802,11 @@ public class LecturerService : ILecturerService
         }
 
         // Get all quizzes assigned to these classes
-        var classQuizzes = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => classIds.Contains(cq.ClassId))
-            .Include(cq => cq.Quiz)
-            .Include(cq => cq.Class)
-            .OrderByDescending(cq => cq.AssignedAt)
+        var classQuizzes = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Class)
+            .OrderByDescending(cqs => cqs.CreatedAt)
             .ToListAsync();
 
         return classQuizzes
@@ -774,16 +816,17 @@ public class LecturerService : ILecturerService
                 QuizId = cq.QuizId,
                 QuizName = cq.Quiz?.Title,
                 ClassName = cq.Class?.ClassName,
-                AssignedAt = cq.AssignedAt
+                AssignedAt = cq.CreatedAt
             })
             .ToList();
     }
 
     public async Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId)
     {
-        var quizIds = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => cq.ClassId == classId)
-            .Select(cq => cq.QuizId)
+        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
             .ToListAsync();
 
         if (quizIds.Count == 0)
@@ -814,8 +857,8 @@ public class LecturerService : ILecturerService
         if (quiz == null)
             return null;
 
-        var classLink = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => cq.QuizId == quizId)
+        var classLink = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.QuizId == quizId)
             .FirstOrDefaultAsync();
 
         return new QuizDto
@@ -841,8 +884,8 @@ public class LecturerService : ILecturerService
             .FindByCondition(q => distinct.Contains(q.Id))
             .ToListAsync();
 
-        var classByQuiz = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => distinct.Contains(cq.QuizId))
+        var classByQuiz = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => distinct.Contains(cqs.QuizId))
             .ToListAsync();
 
         return quizzes
@@ -874,20 +917,25 @@ public class LecturerService : ILecturerService
             .GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-        var existing = await _unitOfWork.ClassQuizRepository
+        var existing = await _unitOfWork.ClassQuizSessionRepository
             .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
 
         if (existing != null)
             throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
 
-        var classQuiz = new ClassQuiz
+        var classQuiz = new ClassQuizSession
         {
+            Id = Guid.NewGuid(),
             ClassId = classId,
             QuizId = quizId,
-            AssignedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimitMinutes = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore
         };
 
-        await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+        await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
         await _unitOfWork.SaveAsync();
 
         return new ClassQuizDto
@@ -896,7 +944,7 @@ public class LecturerService : ILecturerService
             ClassName = academicClass.ClassName,
             QuizId = classQuiz.QuizId,
             QuizName = quiz.Title,
-            AssignedAt = classQuiz.AssignedAt
+            AssignedAt = classQuiz.CreatedAt
         };
     }
 }

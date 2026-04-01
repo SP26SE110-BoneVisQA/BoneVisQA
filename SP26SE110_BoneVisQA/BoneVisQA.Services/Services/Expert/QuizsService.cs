@@ -103,20 +103,25 @@ namespace BoneVisQA.Services.Services.Expert
                 .GetByIdAsync(quizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-            var existing = await _unitOfWork.ClassQuizRepository
+            var existing = await _unitOfWork.ClassQuizSessionRepository
                 .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
 
             if (existing != null)
                 throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
 
-            var classQuiz = new ClassQuiz
+            var classQuiz = new ClassQuizSession
             {
+                Id = Guid.NewGuid(),
                 ClassId = classId,
                 QuizId = quizId,
-                AssignedAt = DateTime.UtcNow
+                OpenTime = quiz.OpenTime,
+                CloseTime = quiz.CloseTime,
+                TimeLimitMinutes = quiz.TimeLimit,
+                PassingScore = quiz.PassingScore,
+                CreatedAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+            await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
 
             return new ClassQuizDto
@@ -125,7 +130,7 @@ namespace BoneVisQA.Services.Services.Expert
                 ClassName = academicClass.ClassName,
                 QuizId = classQuiz.QuizId,
                 QuizName = quiz.Title,
-                AssignedAt = classQuiz.AssignedAt
+                AssignedAt = classQuiz.CreatedAt
             };
         }
         public async Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId)
