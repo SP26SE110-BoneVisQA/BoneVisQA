@@ -38,13 +38,18 @@ public class QuizService : IQuizService
 
         if (request.ClassId != Guid.Empty)
         {
-            var classQuiz = new ClassQuiz
+            var classQuiz = new ClassQuizSession
             {
+                Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                AssignedAt = now
+                OpenTime = request.OpenTime,
+                CloseTime = request.CloseTime,
+                PassingScore = request.PassingScore,
+                TimeLimitMinutes = request.TimeLimit,
+                CreatedAt = now
             };
-            await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+            await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
         }
 
@@ -82,9 +87,10 @@ public class QuizService : IQuizService
 
     public async Task<List<QuizDto>> GetQuizzesByClassAsync(Guid classId)
     {
-        var quizIds = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => cq.ClassId == classId)
-            .Select(cq => cq.QuizId)
+        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
             .ToListAsync();
 
         if (quizIds.Count == 0)

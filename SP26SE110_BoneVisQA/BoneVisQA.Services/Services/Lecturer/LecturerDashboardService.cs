@@ -46,6 +46,9 @@ public class LecturerDashboardService : ILecturerDashboardService
 
         var avgQuizScore = await _unitOfWork.Context.QuizAttempts
             .Where(a => studentIds.Contains(a.StudentId) && a.Score.HasValue)
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                cqs.QuizId == a.QuizId))
             .AverageAsync(a => (double?)a.Score);
 
         return new LecturerDashboardStatsDto
@@ -93,6 +96,9 @@ public class LecturerDashboardService : ILecturerDashboardService
 
         var quizScores = await _unitOfWork.Context.QuizAttempts
             .Where(a => studentIds.Contains(a.StudentId) && a.Score.HasValue)
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                cqs.ClassId == classId &&
+                cqs.QuizId == a.QuizId))
             .GroupBy(a => a.StudentId)
             .Select(g => new { StudentId = g.Key, Average = g.Average(x => x.Score) })
             .ToDictionaryAsync(x => x.StudentId, x => x.Average);

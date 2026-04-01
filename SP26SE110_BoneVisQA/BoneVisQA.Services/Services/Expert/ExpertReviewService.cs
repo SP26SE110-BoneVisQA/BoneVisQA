@@ -24,6 +24,9 @@ public class ExpertReviewService : IExpertReviewService
             .Include(a => a.Question)
                 .ThenInclude(q => q.Case)
             .Include(a => a.ExpertReviews)
+            .Include(a => a.Citations)
+                .ThenInclude(c => c.Chunk)
+                    .ThenInclude(ch => ch.Doc)
             .Where(a => a.Status == "Escalated")
             .Where(a =>
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
@@ -62,7 +65,8 @@ public class ExpertReviewService : IExpertReviewService
             AiConfidenceScore = x.Answer.AiConfidenceScore,
             ClassId = x.Enrollment?.ClassId,
             ClassName = x.Enrollment?.Class?.ClassName ?? string.Empty,
-            ReviewNote = x.Review?.ReviewNote
+            ReviewNote = x.Review?.ReviewNote,
+            Citations = MapCitations(x.Answer.Citations)
         }).ToList();
     }
 
@@ -74,6 +78,9 @@ public class ExpertReviewService : IExpertReviewService
             .Include(a => a.Question)
                 .ThenInclude(q => q.Case)
             .Include(a => a.ExpertReviews)
+            .Include(a => a.Citations)
+                .ThenInclude(c => c.Chunk)
+                    .ThenInclude(ch => ch.Doc)
             .FirstOrDefaultAsync(a => a.Id == answerId)
             ?? throw new KeyNotFoundException("Không tìm thấy câu trả lời cần xử lý.");
 
@@ -137,8 +144,38 @@ public class ExpertReviewService : IExpertReviewService
             AiConfidenceScore = answer.AiConfidenceScore,
             ClassId = enrollment?.ClassId,
             ClassName = enrollment?.Class?.ClassName ?? string.Empty,
-            ReviewNote = existingReview.ReviewNote
+            ReviewNote = existingReview.ReviewNote,
+            Citations = MapCitations(answer.Citations)
         };
+    }
+
+    public async Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new InvalidOperationException("Lý do flag chunk là bắt buộc.");
+
+        var chunk = await _unitOfWork.Context.DocumentChunks
+            .FirstOrDefaultAsync(ch => ch.Id == chunkId)
+            ?? throw new KeyNotFoundException("Không tìm thấy document chunk.");
+
+        var canReviewChunk = await _unitOfWork.Context.Citations
+            .Where(c => c.ChunkId == chunkId)
+            .AnyAsync(c =>
+                (c.Answer.Status == "Escalated" || c.Answer.Status == "Approved" || c.Answer.Status == "Revised") &&
+                (_unitOfWork.Context.ClassEnrollments.Any(e =>
+                    e.StudentId == c.Answer.Question.StudentId &&
+                    e.Class.ExpertId == expertId) ||
+                 c.Answer.ExpertReviews.Any(r => r.ExpertId == expertId)));
+
+        if (!canReviewChunk)
+            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+
+        if (!chunk.IsFlagged)
+        {
+            chunk.IsFlagged = true;
+            await _unitOfWork.DocumentChunkRepository.UpdateAsync(chunk);
+            await _unitOfWork.SaveAsync();
+        }
     }
 
     private static string DetermineResolvedStatus(CaseAnswer answer, ResolveEscalatedAnswerRequestDto request)
@@ -149,5 +186,27 @@ public class ExpertReviewService : IExpertReviewService
             !string.Equals(answer.DifferentialDiagnoses ?? string.Empty, request.DifferentialDiagnoses ?? string.Empty, StringComparison.Ordinal);
 
         return answerChanged ? "Revised" : "Approved";
+    }
+
+    private static List<ExpertCitationDto> MapCitations(IEnumerable<Citation> citations)
+    {
+        return citations
+            .OrderBy(c => c.Chunk?.ChunkOrder ?? int.MaxValue)
+            .Select(c => new ExpertCitationDto
+            {
+                ChunkId = c.ChunkId,
+                SourceText = c.Chunk?.Content,
+                ReferenceUrl = BuildCitationUrl(c.Chunk?.Doc?.FilePath),
+                PageNumber = c.Chunk == null ? null : c.Chunk.ChunkOrder + 1
+            })
+            .ToList();
+    }
+
+    private static string? BuildCitationUrl(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return null;
+
+        return filePath;
     }
 }

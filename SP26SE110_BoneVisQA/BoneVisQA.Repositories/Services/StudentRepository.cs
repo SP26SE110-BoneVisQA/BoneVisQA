@@ -126,26 +126,22 @@ public class StudentRepository : IStudentRepository
             .Select(e => e.ClassId)
             .ToListAsync();
 
+        if (classIds.Count == 0)
+            return new List<Quiz>();
 
-        //    if (classIds.Count == 0)
-        //    {
-        //        return new List<Quiz>();
-        //    }
-
-        var quizIds = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => classIds.Contains(cq.ClassId))
-            .Select(cq => cq.QuizId)
+        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
             .ToListAsync();
 
         if (quizIds.Count == 0)
-        {
             return new List<Quiz>();
-        }
 
-        return await _unitOfWork.QuizRepository
-            .FindByCondition(q => quizIds.Contains(q.Id)
-                        && (q.OpenTime == null || q.OpenTime <= utcNow)
-                        && (q.CloseTime == null || q.CloseTime >= utcNow))
+        return await _unitOfWork.Context.Quizzes
+            .Where(q => quizIds.Contains(q.Id))
             .Include(q => q.QuizAttempts)
             .ToListAsync();
     }

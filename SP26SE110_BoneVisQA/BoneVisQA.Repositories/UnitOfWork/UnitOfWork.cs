@@ -22,7 +22,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<Citation> _citationRepository = null!;
         private GenericRepository<ClassCase> _classcaseRepository = null!;
         private GenericRepository<ClassEnrollment> _classenrollmentRepository = null!;
-        private GenericRepository<ClassQuiz> _classquizRepository = null!;
         private GenericRepository<ClassQuizSession> _classquizsessionRepository = null!;
         private GenericRepository<Document> _documentRepository = null!;
         private GenericRepository<DocumentChunk> _documentchunkRepository = null!;
@@ -59,7 +58,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<Citation> CitationRepository => _citationRepository ??= new GenericRepository<Citation>(_context);
         public GenericRepository<ClassCase> ClassCaseRepository => _classcaseRepository ??= new GenericRepository<ClassCase>(_context);
         public GenericRepository<ClassEnrollment> ClassEnrollmentRepository => _classenrollmentRepository ??= new GenericRepository<ClassEnrollment>(_context);
-        public GenericRepository<ClassQuiz> ClassQuizRepository => _classquizRepository ??= new GenericRepository<ClassQuiz>(_context);
         public GenericRepository<ClassQuizSession> ClassQuizSessionRepository => _classquizsessionRepository ??= new GenericRepository<ClassQuizSession>(_context);
         public GenericRepository<Document> DocumentRepository => _documentRepository ??= new GenericRepository<Document>(_context);
         public GenericRepository<DocumentChunk> DocumentChunkRepository => _documentchunkRepository ??= new GenericRepository<DocumentChunk>(_context);

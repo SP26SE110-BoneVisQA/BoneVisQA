@@ -35,7 +35,26 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
     {
-        var cases = await _studentRepository.GetAllCasesAsync();
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+            return new List<CaseListItemDto>();
+
+        var cases = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Where(cc => classIds.Contains(cc.ClassId))
+            .Select(cc => cc.Case)
+            .Where(c => c.IsApproved == true && c.IsActive == true)
+            .Include(c => c.Category)
+            .Include(c => c.CaseTags)
+                .ThenInclude(ct => ct.Tag)
+            .Include(c => c.MedicalImages)
+            .Distinct()
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
 
         return MapCaseList(cases);
     }

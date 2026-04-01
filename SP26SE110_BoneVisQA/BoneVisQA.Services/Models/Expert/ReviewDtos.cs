@@ -10,6 +10,19 @@ public class ResolveEscalatedAnswerRequestDto
     public string? ReviewNote { get; set; }
 }
 
+public class FlagChunkRequestDto
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class ExpertCitationDto
+{
+    public Guid ChunkId { get; set; }
+    public string? SourceText { get; set; }
+    public string? ReferenceUrl { get; set; }
+    public int? PageNumber { get; set; }
+}
+
 public class ExpertEscalatedAnswerDto
 {
     public Guid AnswerId { get; set; }
@@ -30,4 +43,5 @@ public class ExpertEscalatedAnswerDto
     public Guid? ClassId { get; set; }
     public string ClassName { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }
+    public List<ExpertCitationDto> Citations { get; set; } = new();
 }

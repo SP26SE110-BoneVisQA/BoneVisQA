@@ -27,9 +27,11 @@ public class StudentLearningService : IStudentLearningService
             .Include(q => q.QuizQuestions)
                 .ThenInclude(qq => qq.Case)
                     .ThenInclude(c => c!.Category)
-            .Include(q => q.ClassQuizzes)
-            .Where(q => q.ClassQuizzes.Any(cq => classIds.Contains(cq.ClassId)))
-            .Where(q => (q.OpenTime == null || q.OpenTime <= utcNow) && (q.CloseTime == null || q.CloseTime >= utcNow))
+            .Include(q => q.ClassQuizSessions)
+            .Where(q => q.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                (cqs.CloseTime == null || cqs.CloseTime >= utcNow)))
             .Where(q => q.QuizQuestions.Any());
 
         if (!string.IsNullOrWhiteSpace(topic))

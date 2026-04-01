@@ -145,6 +145,7 @@ builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
+builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService>();
 builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<IStudentService, StudentService>();

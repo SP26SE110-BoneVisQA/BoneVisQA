@@ -1,3 +1,4 @@
+using System;
 using System.Security.Claims;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
@@ -18,6 +19,11 @@ public class ExpertReviewsController : ControllerBase
         _expertReviewService = expertReviewService;
     }
 
+    /// <summary>
+    /// Gets the expert's escalated review queue together with the retrieved RAG evidence chunks.
+    /// </summary>
+    [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [HttpGet("escalated")]
     public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetEscalated()
     {
@@ -29,6 +35,13 @@ public class ExpertReviewsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Resolves an escalated answer and stores the expert-reviewed outcome.
+    /// </summary>
+    [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [HttpPost("{answerId:guid}/resolve")]
     public async Task<ActionResult<ExpertEscalatedAnswerDto>> Resolve(Guid answerId, [FromBody] ResolveEscalatedAnswerRequestDto request)
     {
@@ -48,6 +61,38 @@ public class ExpertReviewsController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Flags a retrieved document chunk as low quality for later knowledge base review.
+    /// </summary>
+    [HttpPost("chunks/{chunkId:guid}/flag")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> FlagChunk(Guid chunkId, [FromBody] FlagChunkRequestDto request)
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _expertReviewService.FlagChunkAsync(expertId.Value, chunkId, request);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex.Message.Contains("bắt buộc", StringComparison.OrdinalIgnoreCase)
+                ? BadRequest(new { message = ex.Message })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }
 
