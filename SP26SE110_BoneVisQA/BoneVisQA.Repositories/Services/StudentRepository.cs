@@ -191,7 +191,7 @@ public class StudentRepository : IStudentRepository
         }
     }
 
-    public async Task<(int totalCasesViewed, int totalQuestionsAsked, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)
+    public async Task<(int totalCasesViewed, int totalQuestionsAsked, int quizzesCompleted, int totalQuizAnswersSubmitted, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)
     {
         var totalCasesViewed = await _unitOfWork.CaseViewLogRepository
             .FindByCondition(v => v.StudentId == studentId)
@@ -199,6 +199,14 @@ public class StudentRepository : IStudentRepository
 
         var totalQuestionsAsked = await _unitOfWork.StudentQuestionRepository
             .FindByCondition(q => q.StudentId == studentId)
+            .CountAsync();
+
+        var quizzesCompleted = await _unitOfWork.QuizAttemptRepository
+            .FindByCondition(a => a.StudentId == studentId && (a.CompletedAt != null || a.Score != null))
+            .CountAsync();
+
+        var totalQuizAnswersSubmitted = await _unitOfWork.StudentQuizAnswerRepository
+            .FindByCondition(a => a.Attempt.StudentId == studentId)
             .CountAsync();
 
         var quizAttempts = await _unitOfWork.QuizAttemptRepository
@@ -211,7 +219,7 @@ public class StudentRepository : IStudentRepository
             avgQuizScore = quizAttempts.Average(a => a.Score ?? 0);
         }
 
-        return (totalCasesViewed, totalQuestionsAsked, avgQuizScore);
+        return (totalCasesViewed, totalQuestionsAsked, quizzesCompleted, totalQuizAnswersSubmitted, avgQuizScore);
     }
 
     public async Task<CaseAnswer> CreateCaseAnswerAsync(CaseAnswer answer)

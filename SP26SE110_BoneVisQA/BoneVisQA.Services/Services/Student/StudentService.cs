@@ -768,13 +768,15 @@ public class StudentService : IStudentService
 
     public async Task<StudentProgressDto> GetProgressAsync(Guid studentId)
     {
-        var (totalCasesViewed, totalQuestionsAsked, avgQuizScore) =
+        var (totalCasesViewed, totalQuestionsAsked, quizzesCompleted, totalQuizAnswersSubmitted, avgQuizScore) =
             await _studentRepository.GetStudentAggregateStatsAsync(studentId);
 
         return new StudentProgressDto
         {
             TotalCasesViewed = totalCasesViewed,
             TotalQuestionsAsked = totalQuestionsAsked,
+            QuizzesCompleted = quizzesCompleted,
+            TotalQuizAnswersSubmitted = totalQuizAnswersSubmitted,
             AvgQuizScore = avgQuizScore
         };
     }

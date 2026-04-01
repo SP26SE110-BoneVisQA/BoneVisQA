@@ -252,7 +252,6 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("class_quiz_sessions_quiz_id_fkey");
         });
 
-
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("documents_pkey");

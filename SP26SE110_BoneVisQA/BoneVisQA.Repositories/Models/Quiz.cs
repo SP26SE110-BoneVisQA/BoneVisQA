@@ -45,7 +45,6 @@ public partial class Quiz
 
     [InverseProperty("Quiz")]
     public virtual ICollection<QuizQuestion> QuizQuestions { get; set; } = new List<QuizQuestion>();
-
     [ForeignKey("CreatedByExpertId")]
     [InverseProperty("CreatedQuizzes")]
     public virtual User? CreatedByExpert { get; set; }
@@ -53,5 +52,4 @@ public partial class Quiz
     [ForeignKey("AssignedExpertId")]
     [InverseProperty("AssignedQuizzes")]
     public virtual User? AssignedExpert { get; set; }
-
 }
