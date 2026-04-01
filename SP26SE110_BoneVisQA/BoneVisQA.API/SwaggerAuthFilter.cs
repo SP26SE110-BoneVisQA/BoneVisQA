@@ -9,7 +9,7 @@ namespace BoneVisQA.API;
 /// </summary>
 public class SwaggerAuthFilter : IOperationFilter
 {
-    private static readonly string[] NoAuthEndpoints = { "register", "login", "forgot-password", "reset-password" };
+    private static readonly string[] NoAuthEndpoints = { "register", "login", "forgot-password", "reset-password", "google" };
 
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {

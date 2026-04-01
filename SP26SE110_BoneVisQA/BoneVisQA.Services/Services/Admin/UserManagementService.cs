@@ -155,36 +155,45 @@ namespace BoneVisQA.Services.Services.Admin
             if (role == null) return null;
 
             var currentRoles = await _unitOfWork.UserRoleRepository
-         .FindAsync(x => x.UserId == userId);
+                .FindAsync(x => x.UserId == userId);
 
-            // xóa role cũ
+            // Xóa role cũ
             foreach (var ur in currentRoles)
             {
                 await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
             }
 
-            // thêm role mới
+            // Thêm role mới
             var newUserRole = new UserRole
             {
                 UserId = userId,
                 RoleId = role.Id
             };
-
             await _unitOfWork.UserRoleRepository.AddAsync(newUserRole);
+
+            // Tự động kích hoạt tài khoản khi được gán vai trò hợp lệ
+            var wasInactive = !user.IsActive;
+            user.IsActive = true;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.UserRepository.UpdateAsync(user);
 
             await _unitOfWork.SaveAsync();
 
-            // Gửi email thông báo khi được assign role (không chờ kết quả)
+            // Gửi email thông báo (không chờ kết quả)
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _emailService.SendRoleAssignedEmailAsync(user.Email, user.FullName, roleName);
-                    _logger.LogInformation("[AssignRoleAsync] Role assignment email sent to {Email} for role {Role}", user.Email, roleName);
+                    await _emailService.SendRoleAssignedEmailAsync(
+                        user.Email, user.FullName, roleName, wasInactive);
+                    _logger.LogInformation(
+                        "[AssignRoleAsync] Role '{Role}' assigned + account activated. Email sent to {Email}",
+                        roleName, user.Email);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[AssignRoleAsync] Failed to send role assignment email to {Email}", user.Email);
+                    _logger.LogError(ex,
+                        "[AssignRoleAsync] Failed to send role assignment email to {Email}", user.Email);
                 }
             });
 

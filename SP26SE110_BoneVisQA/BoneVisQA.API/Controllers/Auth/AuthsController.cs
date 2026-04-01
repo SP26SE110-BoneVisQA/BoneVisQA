@@ -127,6 +127,21 @@ public class AuthsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Đăng ký bằng Google: tạo tài khoản Pending, gửi email chào mừng, chờ admin gán vai trò.
+    /// </summary>
+    [HttpPost("google-register")]
+    public async Task<IActionResult> GoogleRegister([FromBody] GoogleLoginRequestDto request)
+    {
+        var result = await _authService.GoogleRegisterAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     private string GenerateJwtToken(AuthResultDto authResult)
     {
         var jwtSection = _configuration.GetSection("Jwt");

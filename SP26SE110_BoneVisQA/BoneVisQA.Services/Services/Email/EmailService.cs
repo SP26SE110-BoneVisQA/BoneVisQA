@@ -226,18 +226,22 @@ public class EmailService : IEmailService
         }
     }
 
-    public async Task<bool> SendRoleAssignedEmailAsync(string toEmail, string fullName, string roleName)
+    public async Task<bool> SendRoleAssignedEmailAsync(
+        string toEmail, string fullName, string roleName, bool accountActivated = false)
     {
-        _logger.LogInformation("[SendRoleAssignedEmailAsync] Attempting to send role assignment email to {ToEmail} for {FullName} with role {Role}", toEmail, fullName, roleName);
+        _logger.LogInformation(
+            "[SendRoleAssignedEmailAsync] Attempting to send role assignment email to {ToEmail} "
+                + "for {FullName} with role {Role}, accountActivated={Activated}",
+            toEmail, fullName, roleName, accountActivated);
 
         if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
         {
-            _logger.LogError("[SendRoleAssignedEmailAsync] FAIL: Email config missing. Username: {Username}, Password empty: {IsEmpty}",
+            _logger.LogError(
+                "[SendRoleAssignedEmailAsync] FAIL: Email config missing. "
+                + "Username: {Username}, Password empty: {IsEmpty}",
                 _smtpUsername ?? "NULL", string.IsNullOrEmpty(_smtpPassword));
             return false;
         }
-
-        _logger.LogInformation("[SendRoleAssignedEmailAsync] SMTP config OK - connecting to {Host}:{Port}", _smtpHost, _smtpPort);
 
         string roleDisplayName = roleName;
         string roleDescription = "";
@@ -245,29 +249,40 @@ public class EmailService : IEmailService
         switch (roleName.ToLower())
         {
             case "student":
-                roleDisplayName = "Sinh viên";
-                roleDescription = "Bạn có thể truy cập và tham gia các bài kiểm tra, xem ca lâm sàng và đặt câu hỏi.";
+                roleDisplayName = "Student";
+                roleDescription = "You can access the case library, take quizzes, and ask questions about clinical cases.";
                 break;
             case "lecturer":
-                roleDisplayName = "Giảng viên";
-                roleDescription = "Bạn có thể quản lý lớp học, tạo bài kiểm tra, và theo dõi tiến độ học tập của sinh viên.";
+                roleDisplayName = "Lecturer";
+                roleDescription = "You can manage classes, create quizzes, and monitor student progress.";
                 break;
             case "expert":
-                roleDisplayName = "Chuyên gia";
-                roleDescription = "Bạn có thể xem xét và phản hồi các câu hỏi của sinh viên về ca lâm sàng.";
+                roleDisplayName = "Expert";
+                roleDescription = "You can review and respond to student questions about clinical cases.";
                 break;
             case "admin":
-                roleDisplayName = "Quản trị viên";
-                roleDescription = "Bạn có toàn quyền quản lý hệ thống, người dùng và nội dung.";
+                roleDisplayName = "Administrator";
+                roleDescription = "You have full access to system administration, user management, and content.";
                 break;
             default:
-                roleDescription = $"Vai trò của bạn hiện là: {roleName}.";
+                roleDescription = $"Your assigned role is: {roleName}.";
                 break;
         }
 
+        string statusLine = accountActivated
+            ? "Your account has been <strong>approved and activated</strong> by the administrator."
+            : "Your role has been updated by the administrator.";
+
+        string loginLine = accountActivated
+            ? "You can now log in to BoneVisQA with your email and start using the platform."
+            : "Your account remains active — you can continue using BoneVisQA as usual.";
+
         try
         {
-            var subject = $"BoneVisQA - Tài khoản của bạn đã được phê duyệt!";
+            var subject = accountActivated
+                ? "BoneVisQA - Your account has been approved!"
+                : $"BoneVisQA - Role updated: {roleDisplayName}";
+
             var body = $@"
 <!DOCTYPE html>
 <html>
@@ -276,10 +291,10 @@ public class EmailService : IEmailService
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #27ae60; color: white; padding: 20px; text-align: center; }}
+        .header {{ background-color: {(accountActivated ? "#27ae60" : "#2980b9")}; color: white; padding: 20px; text-align: center; }}
         .content {{ padding: 30px; background-color: #f9f9f9; }}
-        .success-box {{ background-color: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 10px; margin: 20px 0; }}
-        .role-badge {{ display: inline-block; background-color: #3498db; color: white; padding: 10px 25px; border-radius: 20px; font-size: 18px; font-weight: bold; margin: 15px 0; }}
+        .status-box {{ background-color: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 10px; margin: 20px 0; }}
+        .role-badge {{ display: inline-block; background-color: {(accountActivated ? "#27ae60" : "#2980b9")}; color: white; padding: 10px 25px; border-radius: 20px; font-size: 18px; font-weight: bold; margin: 15px 0; }}
         .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
         .features {{ background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin: 15px 0; }}
     </style>
@@ -290,33 +305,35 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Xin chúc mừng, {fullName}!</h2>
-            <p>Tài khoản của bạn đã được phê duyệt và kích hoạt bởi quản trị viên.</p>
-            
-            <div class='success-box' style='text-align: center;'>
-                <p><strong>Vai trò của bạn:</strong></p>
+            <h2>Hello, {fullName}!</h2>
+            <p>{statusLine}</p>
+
+            <div class='status-box' style='text-align: center;'>
+                <p><strong>Your role:</strong></p>
                 <div class='role-badge'>{roleDisplayName}</div>
             </div>
-            
+
             <div class='features'>
-                <p><strong>Quyền hạn của bạn:</strong></p>
+                <p><strong>What you can do:</strong></p>
                 <p>{roleDescription}</p>
             </div>
-            
-            <p>Bạn có thể đăng nhập ngay bây giờ để bắt đầu sử dụng hệ thống.</p>
-            
-            <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+
+            <p>{loginLine}</p>
+
+            <p>If you have any questions, please contact us.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This is an automated email from the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
 </html>";
 
-            _logger.LogInformation("[SendRoleAssignedEmailAsync] SMTP client ready, sending email to {ToEmail}...", toEmail);
+            _logger.LogInformation(
+                "[SendRoleAssignedEmailAsync] SMTP config OK — connecting to {Host}:{Port}",
+                _smtpHost, _smtpPort);
 
             using var client = new SmtpClient(_smtpHost, _smtpPort)
             {
@@ -335,18 +352,22 @@ public class EmailService : IEmailService
             message.To.Add(toEmail);
 
             await client.SendMailAsync(message);
-            _logger.LogInformation("[SendRoleAssignedEmailAsync] SUCCESS: Role assignment email sent to {ToEmail}", toEmail);
+            _logger.LogInformation(
+                "[SendRoleAssignedEmailAsync] SUCCESS: Role assignment email sent to {ToEmail}", toEmail);
             return true;
         }
         catch (SmtpException smtpEx)
         {
-            _logger.LogError(smtpEx, "[SendRoleAssignedEmailAsync] SMTP ERROR sending to {ToEmail}: {Code} - {Message}",
+            _logger.LogError(smtpEx,
+                "[SendRoleAssignedEmailAsync] SMTP ERROR sending to {ToEmail}: {Code} - {Message}",
                 toEmail, smtpEx.StatusCode, smtpEx.Message);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SendRoleAssignedEmailAsync] GENERAL ERROR sending role assignment email to {ToEmail}: {Message}", toEmail, ex.Message);
+            _logger.LogError(ex,
+                "[SendRoleAssignedEmailAsync] GENERAL ERROR sending role assignment email to {ToEmail}: {Message}",
+                toEmail, ex.Message);
             return false;
         }
     }
