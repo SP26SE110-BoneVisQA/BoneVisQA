@@ -57,4 +57,7 @@ public partial class AcademicClass
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
 
+    [InverseProperty(nameof(ClassQuiz.Class))]
+    public virtual ICollection<ClassQuiz> ClassQuizzes { get; set; } = new List<ClassQuiz>();
+
 }

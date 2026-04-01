@@ -40,6 +40,9 @@ public partial class Quiz
     [InverseProperty("Quiz")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
 
+    [InverseProperty(nameof(ClassQuiz.Quiz))]
+    public virtual ICollection<ClassQuiz> ClassQuizzes { get; set; } = new List<ClassQuiz>();
+
     [InverseProperty("Quiz")]
     public virtual ICollection<QuizAttempt> QuizAttempts { get; set; } = new List<QuizAttempt>();
 
