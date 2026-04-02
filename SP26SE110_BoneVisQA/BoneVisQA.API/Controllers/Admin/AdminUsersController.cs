@@ -17,6 +17,17 @@ public class AdminUsersController : ControllerBase
         _userManagementService = userManagementService;
     }
 
+    [HttpGet("users")]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _userManagementService.GetAllUsersAsync();
+        return Ok(new
+        {
+            Message = "Get All Users successfully.",
+            users
+        });
+    }
+
     [HttpGet("roles/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
     {
@@ -54,15 +65,15 @@ public class AdminUsersController : ControllerBase
             });
     }
 
-    [HttpPut("{id:guid}/toggle-status")]
-    public async Task<ActionResult<UserManagementDTO>> ToggleStatus(Guid id, [FromBody] ToggleUserStatusRequestDto? request)
-    {
-        var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
-        if (result == null)
-            return NotFound(new { message = "Không tìm thấy người dùng." });
+    //[HttpPut("{id:guid}/toggle-status")]
+    //public async Task<ActionResult<UserManagementDTO>> ToggleStatus(Guid id, [FromBody] ToggleUserStatusRequestDto? request)
+    //{
+    //    var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
+    //    if (result == null)
+    //        return NotFound(new { message = "Không tìm thấy người dùng." });
 
-        return Ok(result);
-    }
+    //    return Ok(result);
+    //}
 
     [HttpPost("{id:guid}/assign-role")]
     public async Task<IActionResult> AssignRole(Guid id, [FromQuery] string role)

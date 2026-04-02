@@ -129,19 +129,19 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
-        public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
-        {
-            var user = await GetUserWithRolesAsync(userId);
-            if (user == null) return null;
+        //public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
+        //{
+        //    var user = await GetUserWithRolesAsync(userId);
+        //    if (user == null) return null;
 
-            user.IsActive = isActive ?? !user.IsActive;
-            user.UpdatedAt = DateTime.UtcNow;
+        //    user.IsActive = isActive ?? !user.IsActive;
+        //    user.UpdatedAt = DateTime.UtcNow;
 
-            await _unitOfWork.UserRepository.UpdateAsync(user);
-            await _unitOfWork.SaveAsync();
+        //    await _unitOfWork.UserRepository.UpdateAsync(user);
+        //    await _unitOfWork.SaveAsync();
 
-            return MapUser(user);
-        }
+        //    return MapUser(user);
+        //}
         public async Task<UserManagementDTO?> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");
