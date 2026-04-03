@@ -28,6 +28,30 @@
         }
       }
     },
+    "/api/admin/documents/categories": {
+      "get": {
+        "tags": [
+          "AdminDocuments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/documents/tags": {
+      "get": {
+        "tags": [
+          "AdminDocuments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/documents/quality/negative-reviews": {
       "get": {
         "tags": [
@@ -1400,6 +1424,140 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/stats": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/pending-reviews": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/recent-cases": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/activity": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              }
+            }
           }
         }
       }
@@ -5281,6 +5439,24 @@
         },
         "additionalProperties": false
       },
+      "DailyActivityItemDto": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cases": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "DocumentDto": {
         "type": "object",
         "properties": {
@@ -5456,6 +5632,133 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardActivityDto": {
+        "type": "object",
+        "properties": {
+          "weeklyActivity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyActivityItemDto"
+            },
+            "nullable": true
+          },
+          "avgDailyReviews": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardPendingReviewDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionSnippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiAnswerSnippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "priority": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardRecentCaseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "boneLocation": {
+            "type": "string",
+            "nullable": true
+          },
+          "lesionType": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "addedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "addedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "viewCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "usageCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardStatsDto": {
+        "type": "object",
+        "properties": {
+          "totalCases": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalReviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pendingReviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "approvedThisMonth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "studentInteractions": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

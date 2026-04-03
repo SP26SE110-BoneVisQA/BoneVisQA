@@ -31,6 +31,20 @@ public class AdminDocumentsController : ControllerBase
         return Ok(new { Message = "Get most reference document successfully.", result });
     }
 
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetCategories()
+    {
+        var categories = await _documentManagementService.GetCategoriesAsync();
+        return Ok(new { result = categories });
+    }
+
+    [HttpGet("tags")]
+    public async Task<IActionResult> GetTags()
+    {
+        var tags = await _documentManagementService.GetTagsAsync();
+        return Ok(new { result = tags });
+    }
+
     [HttpGet("quality/negative-reviews")]
     public async Task<IActionResult> GetNegativeReviews()
     {

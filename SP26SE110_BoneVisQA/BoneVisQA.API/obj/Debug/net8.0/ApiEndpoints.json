@@ -179,6 +179,16 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
+    "Method": "GetCategories",
+    "RelativePath": "api/admin/documents/categories",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
     "Method": "GetDocumentsFlaggedForReview",
     "RelativePath": "api/admin/documents/quality/flagged-for-review",
     "HttpMethod": "GET",
@@ -233,6 +243,16 @@
         "IsRequired": false
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
+    "Method": "GetTags",
+    "RelativePath": "api/admin/documents/tags",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {
@@ -780,6 +800,86 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetActivity",
+    "RelativePath": "api/expert/dashboard/activity",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertDashboardActivityDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetPendingReviews",
+    "RelativePath": "api/expert/dashboard/pending-reviews",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Expert.ExpertDashboardPendingReviewDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetRecentCases",
+    "RelativePath": "api/expert/dashboard/recent-cases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Expert.ExpertDashboardRecentCaseDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetStats",
+    "RelativePath": "api/expert/dashboard/stats",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertDashboardStatsDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
