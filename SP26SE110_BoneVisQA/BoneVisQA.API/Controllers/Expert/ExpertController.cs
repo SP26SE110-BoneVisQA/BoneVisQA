@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-    //[Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/expert")]
     public class ExpertController : ControllerBase
@@ -24,7 +24,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(MedicalCaseDTOResponse dto)
+        public async Task<IActionResult> CreateCase(MedicalCaseDTORequest dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
