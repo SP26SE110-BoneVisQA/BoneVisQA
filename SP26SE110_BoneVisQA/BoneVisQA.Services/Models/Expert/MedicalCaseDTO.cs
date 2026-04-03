@@ -10,29 +10,35 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Expert
 {
-    public class MedicalCaseDTO
+    public class MedicalCaseDTORequest
     {
-        public Guid Id { get; set; }
         public string Title { get; set; } = null!;
+        public Guid? CreatedByExpertId { get; set; }
         public string Description { get; set; } = null!;
         public string? Difficulty { get; set; }
-        public Guid? CategoryId { get; set; }
         public bool? IsApproved { get; set; }
         public bool? IsActive { get; set; }
+        public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
+        public string? ReflectiveQuestions { get; set; }
         public string? KeyFindings { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
-    public class MedicalCaseDTOResponse
+    public class MedicalCaseDTO
     {
+        public Guid Id { get; set; }
+        public Guid? CreatedByExpertId { get; set; }
+        public string? ExpertName { get; set; }
         public string Title { get; set; } = null!;
         public string Description { get; set; } = null!;
         public string? Difficulty { get; set; }
+        public Guid? CategoryId { get; set; }
         public bool? IsApproved { get; set; }
         public bool? IsActive { get; set; }
-        public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
+        public string? ReflectiveQuestions { get; set; }
         public string? KeyFindings { get; set; }
+        public DateTime? CreatedAt { get; set; }
     }
 
     //===============================================================================
