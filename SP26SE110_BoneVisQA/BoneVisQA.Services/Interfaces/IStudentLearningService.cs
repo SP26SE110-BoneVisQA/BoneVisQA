@@ -9,4 +9,5 @@ public interface IStudentLearningService
     Task<StudentProgressDto> GetProgressSummaryAsync(Guid studentId);
     Task<IReadOnlyList<StudentTopicStatDto>> GetTopicStatsAsync(Guid studentId);
     Task<IReadOnlyList<StudentRecentActivityDto>> GetRecentActivityAsync(Guid studentId);
+    Task AutoCloseExpiredAttemptsAsync();
 }

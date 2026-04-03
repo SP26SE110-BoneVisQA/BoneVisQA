@@ -146,6 +146,54 @@ public class StudentRepository : IStudentRepository
             .ToListAsync();
     }
 
+    public async Task<List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>> GetQuizzesWithSessionForStudentAsync(Guid studentId, DateTime utcNow)
+    {
+        var classIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+            return new List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>();
+
+        return await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Class)
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
+            {
+                QuizId = cqs.QuizId,
+                Title = cqs.Quiz != null ? cqs.Quiz.Title : string.Empty,
+                ClassId = cqs.ClassId,
+                ClassName = cqs.Class != null ? cqs.Class.ClassName : string.Empty,
+                OpenTime = cqs.OpenTime,
+                CloseTime = cqs.CloseTime,
+                TimeLimitMinutes = cqs.TimeLimitMinutes,
+                PassingScore = cqs.PassingScore
+            })
+            .ToListAsync();
+    }
+
+    public async Task<bool> IsStudentEligibleForAssignedQuizAsync(Guid studentId, Guid quizId, DateTime utcNow)
+    {
+        var classIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+            return false;
+
+        return await _unitOfWork.Context.ClassQuizSessions
+            .AnyAsync(cqs => cqs.QuizId == quizId
+                && classIds.Contains(cqs.ClassId)
+                && (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                && (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+    }
+
     public async Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId)
     {
         return await _unitOfWork.QuizRepository

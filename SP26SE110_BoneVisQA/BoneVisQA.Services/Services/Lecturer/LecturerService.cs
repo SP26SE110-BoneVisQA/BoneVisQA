@@ -450,13 +450,8 @@ public class LecturerService : ILecturerService
     //    await _unitOfWork.QuizRepository.AddAsync(entity);
     //    await _unitOfWork.SaveAsync();
 
-    //    var classQuiz = new ClassQuiz
-    //    {
-    //        ClassId = classId,
-    //        QuizId = entity.Id,
-    //        AssignedAt = now
-    //    };
-    //    await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+    //    var session = new ClassQuizSession { ClassId = classId, QuizId = entity.Id, CreatedAt = now };
+    //    await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
     //    await _unitOfWork.SaveAsync();
 
     //    return new QuizDto
@@ -823,30 +818,23 @@ public class LecturerService : ILecturerService
 
     public async Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId)
     {
-        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+        var sessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
             .Where(cqs => cqs.ClassId == classId)
-            .Select(cqs => cqs.QuizId)
-            .Distinct()
             .ToListAsync();
 
-        if (quizIds.Count == 0)
-            return new List<QuizDto>();
-
-        var quizzes = await _unitOfWork.QuizRepository
-            .FindByCondition(q => quizIds.Contains(q.Id))
-            .ToListAsync();
-
-        return quizzes
-            .Select(q => new QuizDto
+        return sessions
+            .Select(cqs => new QuizDto
             {
-                Id = q.Id,
+                Id = cqs.QuizId,
                 ClassId = classId,
-                Title = q.Title,
-                OpenTime = q.OpenTime,
-                CloseTime = q.CloseTime,
-                TimeLimit = q.TimeLimit,
-                PassingScore = q.PassingScore,
-                CreatedAt = q.CreatedAt
+                Title = cqs.Quiz?.Title ?? string.Empty,
+                OpenTime = cqs.OpenTime,
+                CloseTime = cqs.CloseTime,
+                TimeLimit = cqs.TimeLimitMinutes,
+                PassingScore = (int?)cqs.PassingScore,
+                CreatedAt = cqs.CreatedAt
             })
             .ToList();
     }
@@ -928,11 +916,8 @@ public class LecturerService : ILecturerService
             Id = Guid.NewGuid(),
             ClassId = classId,
             QuizId = quizId,
-            CreatedAt = DateTime.UtcNow,
-            OpenTime = quiz.OpenTime,
-            CloseTime = quiz.CloseTime,
-            TimeLimitMinutes = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore
+            CreatedAt = DateTime.UtcNow
+            // open/close time sẽ được lecturer đặt riêng qua AssignQuizSessionAsync
         };
 
         await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);

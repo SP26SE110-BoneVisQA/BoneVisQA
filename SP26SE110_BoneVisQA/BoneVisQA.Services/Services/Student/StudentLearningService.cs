@@ -113,13 +113,31 @@ public class StudentLearningService : IStudentLearningService
             .FirstOrDefaultAsync(a => a.Id == request.AttemptId && a.StudentId == studentId)
             ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
 
+        if (attempt.CompletedAt.HasValue)
+            throw new InvalidOperationException("Quiz này đã được nộp.");
+
+        var utcNow = DateTime.UtcNow;
+
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        // Kiểm tra quiz còn đang mở không
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(cqs =>
+                cqs.QuizId == attempt.QuizId &&
+                classIds.Contains(cqs.ClassId) &&
+                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+
+        if (session == null)
+            throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
+
         var quiz = await _unitOfWork.Context.Quizzes
             .Include(q => q.QuizQuestions)
             .FirstOrDefaultAsync(q => q.Id == attempt.QuizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
-
-        if (attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Quiz này đã được nộp.");
 
         var questionMap = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
         var incomingAnswers = request.Answers
@@ -332,6 +350,61 @@ public class StudentLearningService : IStudentLearningService
             .OrderByDescending(x => x.OccurredAt)
             .Take(10)
             .ToList();
+    }
+
+    public async Task AutoCloseExpiredAttemptsAsync()
+    {
+        var utcNow = DateTime.UtcNow;
+
+        // Tìm tất cả quiz sessions đã đóng
+        var expiredSessions = await _unitOfWork.Context.ClassQuizSessions
+            .Where(s => s.CloseTime != null && s.CloseTime < utcNow)
+            .Select(s => new { s.QuizId, s.ClassId })
+            .ToListAsync();
+
+        if (expiredSessions.Count == 0)
+            return;
+
+        var expiredQuizClassPairs = expiredSessions
+            .Select(s => new { s.QuizId, s.ClassId })
+            .ToList();
+
+        // Tìm các attempt chưa nộp và thuộc quiz đã đóng
+        var expiredAttempts = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.StudentQuizAnswers)
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q.QuizQuestions)
+            .Where(a => a.CompletedAt == null)
+            .Where(a => expiredQuizClassPairs.Any(p => p.QuizId == a.QuizId))
+            .ToListAsync();
+
+        foreach (var attempt in expiredAttempts)
+        {
+            var quiz = attempt.Quiz;
+            if (quiz == null) continue;
+
+            // Kiểm tra student có trong lớp của quiz đã đóng không
+            var isStudentInClass = await _unitOfWork.Context.ClassEnrollments
+                .AnyAsync(e => e.StudentId == attempt.StudentId &&
+                              expiredQuizClassPairs.Any(p => p.QuizId == attempt.QuizId && p.ClassId == e.ClassId));
+
+            if (!isStudentInClass) continue;
+
+            // Tính điểm dựa trên các câu đã làm
+            var totalQuestions = quiz.QuizQuestions.Count;
+            var correctAnswers = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true);
+            var score = totalQuestions == 0 ? 0 : (double)correctAnswers * 100 / totalQuestions;
+
+            // Tự động nộp
+            attempt.Score = score;
+            attempt.CompletedAt = attempt.StartedAt.HasValue
+                ? (attempt.StartedAt.Value > utcNow ? utcNow : attempt.StartedAt.Value.AddMinutes(quiz.TimeLimit ?? 0))
+                : utcNow;
+
+            await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
+        }
+
+        await _unitOfWork.SaveAsync();
     }
 
     private static StudentTopicStatAccumulator GetOrCreateTopicBucket(

@@ -7,12 +7,29 @@ public class QuizListItemDto
 {
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
     public DateTime? OpenTime { get; set; }
     public DateTime? CloseTime { get; set; }
     public int? TimeLimit { get; set; }
     public int? PassingScore { get; set; }
     public bool IsCompleted { get; set; }
     public double? Score { get; set; }
+}
+
+/// <summary>
+/// Kết quả trả về từ repository: quiz + session + class (dùng cho danh sách quiz của student).
+/// </summary>
+public class QuizWithSessionDto
+{
+    public Guid QuizId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int? TimeLimit { get; set; }
+    public int? PassingScore { get; set; }
 }
 
 public class StudentQuizQuestionDto

@@ -13,3 +13,18 @@ D:\SP26_SEP490_SP26SE110 _BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.R
 D:\SP26_SEP490_SP26SE110 _BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.pdb
 D:\SP26_SEP490_SP26SE110 _BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.genruntimeconfig.cache
 D:\SP26_SEP490_SP26SE110 _BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\ref\BoneVisQA.Repositories.dll
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\bin\Debug\net8.0\BoneVisQA.Repositories.deps.json
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\bin\Debug\net8.0\BoneVisQA.Repositories.runtimeconfig.json
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\bin\Debug\net8.0\BoneVisQA.Repositories.dll
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\bin\Debug\net8.0\BoneVisQA.Repositories.pdb
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.csproj.AssemblyReference.cache
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.GeneratedMSBuildEditorConfig.editorconfig
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.AssemblyInfoInputs.cache
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.AssemblyInfo.cs
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.csproj.CoreCompileInputs.cache
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.sourcelink.json
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.dll
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\refint\BoneVisQA.Repositories.dll
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.pdb
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\BoneVisQA.Repositories.genruntimeconfig.cache
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.Repositories\obj\Debug\net8.0\ref\BoneVisQA.Repositories.dll

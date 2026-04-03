@@ -22,15 +22,18 @@ public class StudentService : IStudentService
     private readonly IStudentRepository _studentRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<StudentService> _logger;
+    private readonly IStudentLearningService _studentLearningService;
 
     public StudentService(
         IStudentRepository studentRepository,
         IUnitOfWork unitOfWork,
-        ILogger<StudentService> logger)
+        ILogger<StudentService> logger,
+        IStudentLearningService studentLearningService)
     {
         _studentRepository = studentRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _studentLearningService = studentLearningService;
     }
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
@@ -530,27 +533,49 @@ public class StudentService : IStudentService
     public async Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId)
     {
         var utcNow = DateTime.UtcNow;
-        var quizzes = await _studentRepository.GetQuizzesForStudentAsync(studentId, utcNow);
-        return quizzes.Select(q => new QuizListItemDto
+        var sessions = await _studentRepository.GetQuizzesWithSessionForStudentAsync(studentId, utcNow);
+
+        var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
+        var attempts = await _unitOfWork.QuizAttemptRepository
+            .FindByCondition(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
+            .ToListAsync();
+
+        return sessions.Select(s =>
         {
-            QuizId = q.Id,
-            Title = q.Title ?? string.Empty,
-            OpenTime = q.OpenTime,
-            CloseTime = q.CloseTime,
-            TimeLimit = q.TimeLimit,
-            PassingScore = q.PassingScore,
-            IsCompleted = false,
-            Score = null
+            var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
+            return new QuizListItemDto
+            {
+                QuizId = s.QuizId,
+                Title = s.Title,
+                ClassId = s.ClassId,
+                ClassName = s.ClassName,
+                OpenTime = s.OpenTime,
+                CloseTime = s.CloseTime,
+                TimeLimit = s.TimeLimitMinutes,
+                PassingScore = (int?)s.PassingScore,
+                IsCompleted = attempt?.CompletedAt != null,
+                Score = attempt?.Score
+            };
         }).ToList();
     }
 
 
     public async Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId)
     {
+        // Tự động nộp các quiz đã hết hạn trước khi bắt đầu quiz mới
+        await _studentLearningService.AutoCloseExpiredAttemptsAsync();
+
         var quiz = await _studentRepository.GetQuizWithQuestionsAsync(quizId);
         if (quiz == null)
         {
             throw new InvalidOperationException("Quiz không tồn tại.");
+        }
+
+        var utcNow = DateTime.UtcNow;
+        if (!await _studentRepository.IsStudentEligibleForAssignedQuizAsync(studentId, quizId, utcNow))
+        {
+            throw new InvalidOperationException(
+                "Bạn chưa được gán quiz này qua lớp đã đăng ký, hoặc quiz không nằm trong thời gian mở.");
         }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
@@ -620,6 +645,23 @@ public class StudentService : IStudentService
         var quiz = await _unitOfWork.QuizRepository
             .GetByIdAsync(attempt.QuizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        var utcNow = DateTime.UtcNow;
+
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(cqs =>
+                cqs.QuizId == attempt.QuizId &&
+                classIds.Contains(cqs.ClassId) &&
+                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+
+        if (session == null)
+            throw new InvalidOperationException("Quiz đã hết thời gian làm bài.");
 
         var existing = await _unitOfWork.StudentQuizAnswerRepository
             .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId

@@ -4,7 +4,7 @@ namespace BoneVisQA.Services.Models.Lecturer;
 
 /// <summary>
 /// Body tạo quiz cho giảng viên. Không cần gửi Id — server tự tạo.
-/// Gửi <see cref="ClassId"/> để gán quiz vào lớp (tạo bản ghi class_quizzes).
+/// Gửi <see cref="ClassId"/> để gán quiz vào lớp (tạo bản ghi class_quiz_sessions).
 /// </summary>
 public class CreateQuizRequestDto
 {

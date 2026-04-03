@@ -24,7 +24,13 @@ public interface IStudentRepository
     Task<List<Announcement>> GetAnnouncementsForStudentAsync(Guid studentId);
 
     Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
-    // Task<List<Quiz>> GetQuizzesForStudentAsync(Guid studentId, DateTime utcNow);
+
+    Task<List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>> GetQuizzesWithSessionForStudentAsync(Guid studentId, DateTime utcNow);
+
+    /// <summary>
+    /// Student đã đăng ký lớp có <see cref="ClassQuizSession"/> cho quiz này và đang trong cửa sổ mở (open/close).
+    /// </summary>
+    Task<bool> IsStudentEligibleForAssignedQuizAsync(Guid studentId, Guid quizId, DateTime utcNow);
 
     Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId);
 
