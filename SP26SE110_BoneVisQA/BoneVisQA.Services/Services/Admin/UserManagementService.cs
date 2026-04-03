@@ -160,39 +160,39 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
-        public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
-        {
-            var user = await GetUserWithRolesAsync(userId);
-            if (user == null) return null;
+        //public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
+        //{
+        //    var user = await GetUserWithRolesAsync(userId);
+        //    if (user == null) return null;
 
-            var newState = isActive ?? !user.IsActive;
-            var wasChanging = user.IsActive != newState;
-            user.IsActive = newState;
-            user.UpdatedAt = DateTime.UtcNow;
-            await _unitOfWork.UserRepository.UpdateAsync(user);
-            await _unitOfWork.SaveAsync();
+        //    var newState = isActive ?? !user.IsActive;
+        //    var wasChanging = user.IsActive != newState;
+        //    user.IsActive = newState;
+        //    user.UpdatedAt = DateTime.UtcNow;
+        //    await _unitOfWork.UserRepository.UpdateAsync(user);
+        //    await _unitOfWork.SaveAsync();
 
-            // Send notification email (fire-and-forget)
-            if (wasChanging)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        if (newState)
-                            await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
-                        else
-                            await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[ToggleUserStatusAsync] Failed to send status email to {Email}", user.Email);
-                    }
-                });
-            }
+        //    // Send notification email (fire-and-forget)
+        //    if (wasChanging)
+        //    {
+        //        _ = Task.Run(async () =>
+        //        {
+        //            try
+        //            {
+        //                if (newState)
+        //                    await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
+        //                else
+        //                    await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                _logger.LogError(ex, "[ToggleUserStatusAsync] Failed to send status email to {Email}", user.Email);
+        //            }
+        //        });
+        //    }
 
-            return MapUser(user);
-        }
+        //    return MapUser(user);
+        //}
         public async Task<UserManagementDTO?> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");

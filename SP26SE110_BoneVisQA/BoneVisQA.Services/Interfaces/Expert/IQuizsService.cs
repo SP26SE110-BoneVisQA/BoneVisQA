@@ -1,3 +1,4 @@
+using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
 
-        Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
+        Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto);
 
         Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId);
 
