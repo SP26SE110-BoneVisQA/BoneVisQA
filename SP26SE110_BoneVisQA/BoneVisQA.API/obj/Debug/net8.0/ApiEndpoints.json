@@ -329,6 +329,16 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetAllUsers",
+    "RelativePath": "api/admin/users",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
     "Method": "Activate",
     "RelativePath": "api/admin/users/{id}/activate",
     "HttpMethod": "PUT",

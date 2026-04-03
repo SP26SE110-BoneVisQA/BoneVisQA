@@ -516,6 +516,18 @@
         }
       }
     },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/users/roles/{role}": {
       "get": {
         "tags": [
@@ -5545,6 +5557,14 @@
             "format": "uuid"
           },
           "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "classId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "className": {
             "type": "string",
             "nullable": true
           },

@@ -1,17 +1,17 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\",
+  "WorkspaceRootPath": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{6312B54B-125A-4F73-AFDA-6C2E742E4AA7}|BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj|d:\\sp26_sep490_sp26se110 _bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.repositories\\models\\classquiz.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{6312B54B-125A-4F73-AFDA-6C2E742E4AA7}|BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj|solutionrelative:bonevisqa.repositories\\models\\classquiz.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.services\\services\\lecturer\\lecturerservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|solutionrelative:bonevisqa.services\\services\\lecturer\\lecturerservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|d:\\sp26_sep490_sp26se110 _bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|solutionrelative:bonevisqa.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|d:\\sp26_sep490_sp26se110 _bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.api\\bonevisqa.api.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "AbsoluteMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.api\\bonevisqa.api.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
       "RelativeMoniker": "D:0:0:{35D57499-A35A-4B2E-9AB0-3512306D2435}|BoneVisQA.API\\BoneVisQA.API.csproj|solutionrelative:bonevisqa.api\\bonevisqa.api.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
     }
   ],
@@ -111,23 +111,23 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "ClassQuiz.cs",
-              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\Models\\ClassQuiz.cs",
-              "RelativeDocumentMoniker": "BoneVisQA.Repositories\\Models\\ClassQuiz.cs",
-              "ToolTip": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\Models\\ClassQuiz.cs",
-              "RelativeToolTip": "BoneVisQA.Repositories\\Models\\ClassQuiz.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABcAAAAqAAAAAAAAAA==",
+              "Title": "LecturerService.cs",
+              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
+              "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
+              "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
+              "RelativeToolTip": "BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
+              "ViewState": "AgIAACcDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-01T19:42:40.13Z",
+              "WhenOpened": "2026-04-03T06:23:45.2Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
               "Title": "Program.cs",
-              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\Program.cs",
+              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\Program.cs",
               "RelativeDocumentMoniker": "BoneVisQA.API\\Program.cs",
-              "ToolTip": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\Program.cs",
+              "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\Program.cs",
               "RelativeToolTip": "BoneVisQA.API\\Program.cs",
               "ViewState": "AgIAAJAAAAAAAAAAAAAAAK8AAAAXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
@@ -137,15 +137,14 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "BoneVisQA.API",
-              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\BoneVisQA.API.csproj",
+              "Title": "BoneVisQA.API.csproj",
+              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\BoneVisQA.API.csproj",
               "RelativeDocumentMoniker": "BoneVisQA.API\\BoneVisQA.API.csproj",
-              "ToolTip": "D:\\SP26_SEP490_SP26SE110 _BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\BoneVisQA.API.csproj",
+              "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\BoneVisQA.API.csproj",
               "RelativeToolTip": "BoneVisQA.API\\BoneVisQA.API.csproj",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-04-01T19:42:06.047Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-01T19:42:06.047Z"
             }
           ]
         },

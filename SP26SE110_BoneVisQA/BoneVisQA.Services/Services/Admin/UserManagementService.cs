@@ -102,14 +102,29 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<UserManagementDTO?> ActivateUserAccountAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId);
-
             if (user == null) return null;
 
+            var wasInactive = !user.IsActive;
             user.IsActive = true;
             user.UpdatedAt = DateTime.UtcNow;
-
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
+
+            // Send notification email (fire-and-forget)
+            if (wasInactive)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[ActivateUserAccountAsync] Failed to send activation email to {Email}", user.Email);
+                    }
+                });
+            }
 
             return MapUser(user);
         }
@@ -117,14 +132,29 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<UserManagementDTO?> DeactivateUserAccountAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId);
-
             if (user == null) return null;
 
+            var wasActive = user.IsActive;
             user.IsActive = false;
             user.UpdatedAt = DateTime.UtcNow;
-
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
+
+            // Send notification email (fire-and-forget)
+            if (wasActive)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[DeactivateUserAccountAsync] Failed to send deactivation email to {Email}", user.Email);
+                    }
+                });
+            }
 
             return MapUser(user);
         }
@@ -134,11 +164,31 @@ namespace BoneVisQA.Services.Services.Admin
             var user = await GetUserWithRolesAsync(userId);
             if (user == null) return null;
 
-            user.IsActive = isActive ?? !user.IsActive;
+            var newState = isActive ?? !user.IsActive;
+            var wasChanging = user.IsActive != newState;
+            user.IsActive = newState;
             user.UpdatedAt = DateTime.UtcNow;
-
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
+
+            // Send notification email (fire-and-forget)
+            if (wasChanging)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (newState)
+                            await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
+                        else
+                            await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[ToggleUserStatusAsync] Failed to send status email to {Email}", user.Email);
+                    }
+                });
+            }
 
             return MapUser(user);
         }

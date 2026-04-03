@@ -365,9 +365,164 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
+                _logger.LogError(ex,
                 "[SendRoleAssignedEmailAsync] GENERAL ERROR sending role assignment email to {ToEmail}: {Message}",
                 toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    // ── Account activated by admin (without role change) ───────────────────
+    public async Task<bool> SendAccountActivatedEmailAsync(string toEmail, string fullName)
+    {
+        _logger.LogInformation("[SendAccountActivatedEmailAsync] Sending to {ToEmail}", toEmail);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendAccountActivatedEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        try
+        {
+            var subject = "BoneVisQA - Your account has been approved!";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #27ae60; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #f9f9f9; }}
+        .status-box {{ background-color: #d4edda; border: 1px solid #c3e6cb; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <h2>Hello, {fullName}!</h2>
+            <p>Great news — your BoneVisQA account has been <strong>approved and activated</strong> by the administrator.</p>
+            <div class='status-box'>
+                <p>Your account is now active.</p>
+            </div>
+            <p>You can now log in to BoneVisQA with your email and start using the platform.</p>
+            <p>If you have any questions, please contact us.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
+        </div>
+        <div class='footer'>
+            <p>This is an automated email from BoneVisQA.</p>
+            <p>Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendAccountActivatedEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendAccountActivatedEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    // ── Account deactivated by admin ──────────────────────────────────────
+    public async Task<bool> SendAccountDeactivatedEmailAsync(string toEmail, string fullName)
+    {
+        _logger.LogInformation("[SendAccountDeactivatedEmailAsync] Sending to {ToEmail}", toEmail);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendAccountDeactivatedEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        try
+        {
+            var subject = "BoneVisQA - Account Deactivated";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #c0392b; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #f9f9f9; }}
+        .status-box {{ background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <h2>Hello, {fullName}!</h2>
+            <p>Your BoneVisQA account has been <strong>deactivated</strong> by the administrator.</p>
+            <div class='status-box'>
+                <p>You no longer have access to the platform.</p>
+            </div>
+            <p>If you believe this was a mistake, please contact the administrator for assistance.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
+        </div>
+        <div class='footer'>
+            <p>This is an automated email from BoneVisQA.</p>
+            <p>Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendAccountDeactivatedEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendAccountDeactivatedEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
             return false;
         }
     }

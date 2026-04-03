@@ -17,6 +17,17 @@ public class AdminUsersController : ControllerBase
         _userManagementService = userManagementService;
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _userManagementService.GetAllUsersAsync();
+        return Ok(new
+        {
+            Message = "Get all users successfully.",
+            Result = users
+        });
+    }
+
     [HttpGet("roles/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
     {
@@ -36,7 +47,7 @@ public class AdminUsersController : ControllerBase
             ? NotFound(new { message = "Không tìm thấy người dùng." })
             : Ok(new
             {
-                Message = "Actice user successfully.",
+                Message = "Account activated successfully.",
                 result
             });
     }
