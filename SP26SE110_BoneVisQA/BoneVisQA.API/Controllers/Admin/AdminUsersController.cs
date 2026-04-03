@@ -94,6 +94,69 @@ public class AdminUsersController : ControllerBase
         var result = await _userManagementService.RevokeRoleAsync(userId);
         return Ok(result);
     }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────
+    /// POST /api/admin/users  –  Create a new user
+    [HttpPost]
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        try
+        {
+            var result = await _userManagementService.CreateUserAsync(request);
+            return result == null
+                ? BadRequest(new { message = "Failed to create user." })
+                : CreatedAtAction(nameof(GetAllUsers), new { }, new
+                {
+                    Message = "User created successfully.",
+                    Result = result
+                });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// GET /api/admin/users/{id}  –  Get a single user
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetUser(Guid id)
+    {
+        var result = await _userManagementService.GetUserByIdAsync(id);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = "Get user successfully.", Result = result });
+    }
+
+    /// PUT /api/admin/users/{id}  –  Update user FullName / SchoolCohort
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        var result = await _userManagementService.UpdateUserAsync(id, request);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = "User updated successfully.", Result = result });
+    }
+
+    /// DELETE /api/admin/users/{id}  –  Permanently delete a user
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        var deleted = await _userManagementService.DeleteUserAsync(id);
+        if (!deleted)
+            return NotFound(new { message = "Không tìm thấy người dùng." });
+
+        return Ok(new { Message = "User permanently deleted." });
+    }
 }
 
 public class ToggleUserStatusRequestDto

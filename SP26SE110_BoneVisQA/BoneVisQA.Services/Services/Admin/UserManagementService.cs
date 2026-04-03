@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -301,6 +302,121 @@ namespace BoneVisQA.Services.Services.Admin
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt
             };
+        }
+
+        // ── GET by ID ───────────────────────────────────────────────────────
+        public async Task<UserManagementDTO?> GetUserByIdAsync(Guid userId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            return user == null ? null : MapUser(user);
+        }
+
+        // ── CREATE ─────────────────────────────────────────────────────────
+        public async Task<UserManagementDTO?> CreateUserAsync(CreateUserRequestDto request)
+        {
+            if (!_validRoles.Contains(request.Role))
+                throw new ArgumentException($"Invalid role '{request.Role}'.");
+
+            // Check duplicate email
+            var existing = await _unitOfWork.UserRepository
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+            if (existing != null)
+                throw new InvalidOperationException($"Email '{request.Email}' is already in use.");
+
+            var now = DateTime.UtcNow;
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                FullName = request.FullName,
+                Email = request.Email,
+                Password = HashPassword(request.Password),
+                SchoolCohort = request.SchoolCohort,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            var role = await _unitOfWork.RoleRepository
+                .FirstOrDefaultAsync(r => r.Name == request.Role)
+                ?? throw new InvalidOperationException($"Role '{request.Role}' not found in database.");
+
+            var userRole = new UserRole
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                RoleId = role.Id,
+                AssignedAt = now
+            };
+
+            await _unitOfWork.UserRepository.AddAsync(user);
+            await _unitOfWork.UserRoleRepository.AddAsync(userRole);
+            await _unitOfWork.SaveAsync();
+
+            _logger.LogInformation("[CreateUserAsync] User {Email} created with role {Role}.", user.Email, request.Role);
+
+            // Send welcome email (fire-and-forget)
+            if (request.SendWelcomeEmail)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _emailService.SendRoleAssignedEmailAsync(user.Email, user.FullName, request.Role, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[CreateUserAsync] Failed to send welcome email to {Email}", user.Email);
+                    }
+                });
+            }
+
+            return MapUser(user);
+        }
+
+        // ── UPDATE ─────────────────────────────────────────────────────────
+        public async Task<UserManagementDTO?> UpdateUserAsync(Guid userId, UpdateUserRequestDto request)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return null;
+
+            user.FullName = request.FullName;
+            user.SchoolCohort = request.SchoolCohort;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.UserRepository.UpdateAsync(user);
+            await _unitOfWork.SaveAsync();
+
+            _logger.LogInformation("[UpdateUserAsync] User {Id} updated by admin.", userId);
+            return MapUser(user);
+        }
+
+        // ── DELETE ─────────────────────────────────────────────────────────
+        public async Task<bool> DeleteUserAsync(Guid userId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return false;
+
+            // Remove all UserRole associations first
+            var userRoles = await _unitOfWork.UserRoleRepository.FindAsync(ur => ur.UserId == userId);
+            foreach (var ur in userRoles)
+                await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
+
+            // Remove the user
+            await _unitOfWork.UserRepository.RemoveAsync(user);
+            await _unitOfWork.SaveAsync();
+
+            _logger.LogWarning("[DeleteUserAsync] User {Id} ({Email}) permanently deleted by admin.",
+                userId, user.Email);
+            return true;
+        }
+
+        private static string HashPassword(string password)
+        {
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+            var sb = new StringBuilder();
+            foreach (var b in bytes) sb.Append(b.ToString("x2"));
+            return sb.ToString();
         }
     }
 }
