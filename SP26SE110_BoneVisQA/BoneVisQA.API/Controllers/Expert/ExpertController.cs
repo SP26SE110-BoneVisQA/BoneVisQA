@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-    [Authorize(Roles = "Expert")]
+    //[Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/expert")]
     public class ExpertController : ControllerBase
@@ -91,10 +91,10 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
-        [HttpPost("class/{classId}/assign/{quizId}")]
-        public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
+        [HttpPost("assign")]
+        public async Task<IActionResult> AssignToClass(AssignQuizRequestDTO dto)
         {
-            var result = await _quizService.AssignQuizToClassAsync(classId, quizId);
+            var result = await _quizService.AssignQuizToClassAsync(dto);
             return Ok(new
             {
                 Message = "AssignQuiz successfully.",
