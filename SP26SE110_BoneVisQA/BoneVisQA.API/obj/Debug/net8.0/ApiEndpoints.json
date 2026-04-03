@@ -492,6 +492,64 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetUserClasses",
+    "RelativePath": "api/admin/users/{userId}/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "AssignUserToClass",
+    "RelativePath": "api/admin/users/{userId}/classes",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Admin.AssignUserToClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "RemoveUserFromClass",
+    "RelativePath": "api/admin/users/{userId}/classes/{classId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
     "Method": "RevokeRole",
     "RelativePath": "api/admin/users/{userId}/revoke-role",
     "HttpMethod": "PUT",
@@ -504,6 +562,16 @@
         "IsRequired": true
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetAvailableClasses",
+    "RelativePath": "api/admin/users/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {

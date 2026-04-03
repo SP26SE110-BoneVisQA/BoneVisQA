@@ -157,6 +157,47 @@ public class AdminUsersController : ControllerBase
 
         return Ok(new { Message = "User permanently deleted." });
     }
+
+    // ── Class management ────────────────────────────────────────────────────────
+
+    /// GET /api/admin/users/{userId}/classes  –  Lấy danh sách lớp của user
+    [HttpGet("{userId:guid}/classes")]
+    public async Task<IActionResult> GetUserClasses(Guid userId)
+    {
+        var classes = await _userManagementService.GetUserClassesAsync(userId);
+        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+    }
+
+    /// GET /api/admin/users/classes  –  Lấy tất cả lớp có sẵn
+    [HttpGet("classes")]
+    public async Task<IActionResult> GetAvailableClasses()
+    {
+        var classes = await _userManagementService.GetAvailableClassesAsync();
+        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+    }
+
+    /// POST /api/admin/users/{userId}/classes  –  Gán user vào một lớp
+    [HttpPost("{userId:guid}/classes")]
+    public async Task<IActionResult> AssignUserToClass(Guid userId, [FromBody] AssignUserToClassRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        var result = await _userManagementService.AssignUserToClassAsync(userId, request.ClassId);
+        return result == null
+            ? BadRequest(new { message = "Không thể gán user vào lớp. Kiểm tra lại vai trò hoặc lớp học." })
+            : Ok(new { Message = "User đã được gán vào lớp.", Result = result });
+    }
+
+    /// DELETE /api/admin/users/{userId}/classes/{classId}  –  Xóa user khỏi một lớp
+    [HttpDelete("{userId:guid}/classes/{classId:guid}")]
+    public async Task<IActionResult> RemoveUserFromClass(Guid userId, Guid classId)
+    {
+        var removed = await _userManagementService.RemoveUserFromClassAsync(userId, classId);
+        return !removed
+            ? NotFound(new { message = "Không tìm thấy liên kết user-lớp." })
+            : Ok(new { Message = "User đã được xóa khỏi lớp." });
+    }
 }
 
 public class ToggleUserStatusRequestDto

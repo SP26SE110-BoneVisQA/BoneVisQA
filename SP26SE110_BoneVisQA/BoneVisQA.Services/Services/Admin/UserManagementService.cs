@@ -410,6 +410,153 @@ namespace BoneVisQA.Services.Services.Admin
             return true;
         }
 
+        // ── Class management ─────────────────────────────────────────────────────
+
+        public async Task<List<UserClassInfo>> GetUserClassesAsync(Guid userId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return new List<UserClassInfo>();
+
+            var result = new List<UserClassInfo>();
+
+            // Giảng viên → AcademicClass where LecturerId = userId
+            var lecturerClasses = await _unitOfWork.Context.AcademicClasses
+                .Where(c => c.LecturerId == userId)
+                .ToListAsync();
+            result.AddRange(lecturerClasses.Select(c => new UserClassInfo
+            {
+                Id = c.Id,
+                ClassName = c.ClassName,
+                RelationType = "Lecturer",
+                EnrolledAt = null
+            }));
+
+            // Sinh viên → ClassEnrollment where StudentId = userId
+            var enrollments = await _unitOfWork.Context.ClassEnrollments
+                .Include(e => e.Class)
+                .Where(e => e.StudentId == userId)
+                .ToListAsync();
+            result.AddRange(enrollments.Select(e => new UserClassInfo
+            {
+                Id = e.ClassId,
+                ClassName = e.Class?.ClassName ?? e.ClassName ?? "Unknown",
+                RelationType = "Student",
+                EnrolledAt = e.EnrolledAt
+            }));
+
+            return result;
+        }
+
+        public async Task<List<AvailableClassDto>> GetAvailableClassesAsync()
+        {
+            var classes = await _unitOfWork.Context.AcademicClasses
+                .Include(c => c.Lecturer)
+                .Include(c => c.ClassEnrollments)
+                .ToListAsync();
+
+            return classes.Select(c => new AvailableClassDto
+            {
+                Id = c.Id,
+                ClassName = c.ClassName,
+                LecturerName = c.Lecturer?.FullName,
+                StudentCount = c.ClassEnrollments.Count
+            }).ToList();
+        }
+
+        public async Task<UserClassInfo?> AssignUserToClassAsync(Guid userId, Guid classId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return null;
+
+            var ac = await _unitOfWork.Context.AcademicClasses
+                .FirstOrDefaultAsync(c => c.Id == classId);
+            if (ac == null) return null;
+
+            var isStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
+            var isLecturer = user.UserRoles.Any(r => r.Role.Name == "Lecturer");
+
+            if (isLecturer)
+            {
+                ac.LecturerId = userId;
+                await _unitOfWork.SaveAsync();
+                _logger.LogInformation("[AssignUserToClassAsync] Lecturer {UserId} assigned to class {ClassId}.", userId, classId);
+                return new UserClassInfo
+                {
+                    Id = ac.Id,
+                    ClassName = ac.ClassName,
+                    RelationType = "Lecturer",
+                    EnrolledAt = null
+                };
+            }
+
+            if (isStudent)
+            {
+                var existing = await _unitOfWork.Context.ClassEnrollments
+                    .FirstOrDefaultAsync(e => e.StudentId == userId && e.ClassId == classId);
+                if (existing != null) return new UserClassInfo
+                {
+                    Id = existing.ClassId,
+                    ClassName = existing.Class?.ClassName ?? existing.ClassName ?? ac.ClassName,
+                    RelationType = "Student",
+                    EnrolledAt = existing.EnrolledAt
+                };
+
+                var enrollment = new ClassEnrollment
+                {
+                    StudentId = userId,
+                    ClassId = classId,
+                    ClassName = ac.ClassName,
+                    EnrolledAt = DateTime.UtcNow
+                };
+                await _unitOfWork.Context.ClassEnrollments.AddAsync(enrollment);
+                await _unitOfWork.SaveAsync();
+                _logger.LogInformation("[AssignUserToClassAsync] Student {UserId} enrolled in class {ClassId}.", userId, classId);
+                return new UserClassInfo
+                {
+                    Id = ac.Id,
+                    ClassName = ac.ClassName,
+                    RelationType = "Student",
+                    EnrolledAt = enrollment.EnrolledAt
+                };
+            }
+
+            return null;
+        }
+
+        public async Task<bool> RemoveUserFromClassAsync(Guid userId, Guid classId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return false;
+
+            var isLecturer = user.UserRoles.Any(r => r.Role.Name == "Lecturer");
+            var isStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
+
+            if (isLecturer)
+            {
+                var ac = await _unitOfWork.Context.AcademicClasses
+                    .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == userId);
+                if (ac == null) return false;
+                ac.LecturerId = null;
+                await _unitOfWork.SaveAsync();
+                _logger.LogInformation("[RemoveUserFromClassAsync] Lecturer {UserId} removed from class {ClassId}.", userId, classId);
+                return true;
+            }
+
+            if (isStudent)
+            {
+                var enrollment = await _unitOfWork.Context.ClassEnrollments
+                    .FirstOrDefaultAsync(e => e.StudentId == userId && e.ClassId == classId);
+                if (enrollment == null) return false;
+                _unitOfWork.Context.ClassEnrollments.Remove(enrollment);
+                await _unitOfWork.SaveAsync();
+                _logger.LogInformation("[RemoveUserFromClassAsync] Student {UserId} removed from class {ClassId}.", userId, classId);
+                return true;
+            }
+
+            return false;
+        }
+
+        // ── Hash helper ─────────────────────────────────────────────────────────
         private static string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();

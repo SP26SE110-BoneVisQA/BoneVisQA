@@ -23,8 +23,29 @@ namespace BoneVisQA.Services.Interfaces.Admin
         /// <summary>Updates user FullName / SchoolCohort. Does NOT change role or password.</summary>
         Task<UserManagementDTO?> UpdateUserAsync(Guid userId, UpdateUserRequestDto request);
 
-        /// <summary>Soft-deletes a user by removing them (and their UserRole associations)
-        /// from the database. Only admins can call this.</summary>
+        /// <summary>Permanently deletes a user (and their UserRole associations) from the database. Only admins can call this.</summary>
         Task<bool> DeleteUserAsync(Guid userId);
+
+        // ── Class management ────────────────────────────────────────────────────
+
+        /// <summary>Lấy danh sách lớp (AcademicClass) mà giảng viên đang dạy.</summary>
+        Task<List<UserClassInfo>> GetUserClassesAsync(Guid userId);
+
+        /// <summary>Lấy tất cả lớp có sẵn trong hệ thống.</summary>
+        Task<List<AvailableClassDto>> GetAvailableClassesAsync();
+
+        /// <summary>
+        /// Gán user vào một lớp:
+        ///   - Lecturer → cập nhật AcademicClass.LecturerId
+        ///   - Student   → tạo / cập nhật ClassEnrollment
+        /// </summary>
+        Task<UserClassInfo?> AssignUserToClassAsync(Guid userId, Guid classId);
+
+        /// <summary>
+        /// Xóa user khỏi một lớp:
+        ///   - Lecturer → set AcademicClass.LecturerId = null
+        ///   - Student  → xóa ClassEnrollment
+        /// </summary>
+        Task<bool> RemoveUserFromClassAsync(Guid userId, Guid classId);
     }
 }
