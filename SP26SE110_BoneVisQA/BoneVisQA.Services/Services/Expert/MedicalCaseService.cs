@@ -45,11 +45,14 @@ namespace BoneVisQA.Services.Services.Expert
             return $"/uploads/images/{fileName}";
         }
 
-        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTOResponse dto)
+        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTORequest dto)
         {
+            var expert = await _unitOfWork.UserRepository.GetByIdAsync(dto.CreatedByExpertId.Value);
+           
             var medicalCase = new MedicalCase
             {
                 Id = Guid.NewGuid(),
+                CreatedByExpertId = dto.CreatedByExpertId,  
                 Title = dto.Title,
                 Description = dto.Description,
                 Difficulty = dto.Difficulty,
@@ -68,6 +71,7 @@ namespace BoneVisQA.Services.Services.Expert
             return new MedicalCaseDTO
             {
                 Id = medicalCase.Id,
+                ExpertName = expert?.FullName,  
                 Title = medicalCase.Title,
                 Description = medicalCase.Description,
                 Difficulty = medicalCase.Difficulty,

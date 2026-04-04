@@ -43,6 +43,7 @@ public class AdminUsersController : ControllerBase
         });
     }
 
+
     [HttpGet("roles/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
     {
@@ -111,6 +112,27 @@ public class AdminUsersController : ControllerBase
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _userManagementService.GetAllUsersAsync();
+        return Ok(new
+        {
+            Message = "Get all users successfully.",
+            Result = users
+
+        });
+    }
+
+    /// GET /api/admin/users/{id}  –  Get a single user
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetUser(Guid id)
+    {
+        var result = await _userManagementService.GetUserByIdAsync(id);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = "Get user successfully.", Result = result });
+    }
     /// POST /api/admin/users  –  Create a new user
     [HttpPost]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto request)
@@ -137,16 +159,6 @@ public class AdminUsersController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-    }
-
-    /// GET /api/admin/users/{id}  –  Get a single user
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetUser(Guid id)
-    {
-        var result = await _userManagementService.GetUserByIdAsync(id);
-        return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
-            : Ok(new { Message = "Get user successfully.", Result = result });
     }
 
     /// PUT /api/admin/users/{id}  –  Update user FullName / SchoolCohort
