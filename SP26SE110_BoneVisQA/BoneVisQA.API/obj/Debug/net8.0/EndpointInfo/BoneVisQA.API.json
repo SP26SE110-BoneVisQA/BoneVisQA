@@ -1151,6 +1151,46 @@
         }
       }
     },
+    "/api/Auths/request-medical-verification": {
+      "post": {
+        "tags": [
+          "Auths"
+        ],
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/reset-password": {
       "get": {
         "tags": [
@@ -1184,17 +1224,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             }
           }
@@ -6170,11 +6210,16 @@
         },
         "additionalProperties": false
       },
-      "MedicalCaseDTOResponse": {
+      "MedicalCaseDTORequest": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
+            "nullable": true
+          },
+          "createdByExpertId": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           },
           "description": {
@@ -6202,8 +6247,17 @@
             "type": "string",
             "nullable": true
           },
+          "reflectiveQuestions": {
+            "type": "string",
+            "nullable": true
+          },
           "keyFindings": {
             "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -6221,6 +6275,20 @@
             "nullable": true
           },
           "modality": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MedicalVerificationRequestDto": {
+        "type": "object",
+        "properties": {
+          "medicalSchool": {
+            "type": "string",
+            "nullable": true
+          },
+          "medicalStudentId": {
             "type": "string",
             "nullable": true
           }

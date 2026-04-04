@@ -529,6 +529,83 @@ public class EmailService : IEmailService
 
     // ── Medical Student Verification Emails ────────────────────────────────────
 
+    public async Task<bool> SendMedicalVerificationRequestedEmailAsync(string toEmail, string fullName)
+    {
+        _logger.LogInformation("[SendMedicalVerificationRequestedEmailAsync] Sending to {ToEmail}", toEmail);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendMedicalVerificationRequestedEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        try
+        {
+            var subject = "BoneVisQA - Yêu cầu xác nhận sinh viên y khoa đã được gửi";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #2980b9; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 30px; background-color: #f9f9f9; }}
+        .status-box {{ background-color: #d6eaf8; border: 1px solid #aed6f1; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <h2>Xin chào, {fullName}!</h2>
+            <p>Chúng tôi đã nhận được yêu cầu xác nhận <strong>sinh viên y khoa</strong> của bạn.</p>
+            <div class='status-box'>
+                <p><strong>Đang chờ duyệt</strong></p>
+                <p>Yêu cầu của bạn đang được admin xem xét.</p>
+            </div>
+            <p>Bạn sẽ nhận được email thông báo khi tài khoản được phê duyệt.</p>
+            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+        </div>
+        <div class='footer'>
+            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
+            <p>Không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendMedicalVerificationRequestedEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendMedicalVerificationRequestedEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
     public async Task<bool> SendMedicalVerificationApprovedEmailAsync(string toEmail, string fullName)
     {
         _logger.LogInformation("[SendMedicalVerificationApprovedEmailAsync] Sending to {ToEmail}", toEmail);

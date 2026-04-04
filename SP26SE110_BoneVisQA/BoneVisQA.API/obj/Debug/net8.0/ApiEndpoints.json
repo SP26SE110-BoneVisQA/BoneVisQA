@@ -703,6 +703,27 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Auth.AuthsController",
+    "Method": "RequestMedicalVerification",
+    "RelativePath": "api/Auths/request-medical-verification",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Auth.MedicalVerificationRequestDto",
+        "IsRequired": true
+      },
+      {
+        "Name": "X-User-Id",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Auth.AuthsController",
     "Method": "ResetPassword",
     "RelativePath": "api/Auths/reset-password",
     "HttpMethod": "POST",
@@ -801,7 +822,7 @@
     "Parameters": [
       {
         "Name": "dto",
-        "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTOResponse",
+        "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTORequest",
         "IsRequired": true
       }
     ],

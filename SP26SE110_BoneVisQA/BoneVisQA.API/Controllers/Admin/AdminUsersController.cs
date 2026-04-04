@@ -112,17 +112,6 @@ public class AdminUsersController : ControllerBase
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────
-    [HttpGet]
-    public async Task<IActionResult> GetAllUsers()
-    {
-        var users = await _userManagementService.GetAllUsersAsync();
-        return Ok(new
-        {
-            Message = "Get all users successfully.",
-            Result = users
-
-        });
-    }
 
     /// GET /api/admin/users/{id}  –  Get a single user
     [HttpGet("{id:guid}")]

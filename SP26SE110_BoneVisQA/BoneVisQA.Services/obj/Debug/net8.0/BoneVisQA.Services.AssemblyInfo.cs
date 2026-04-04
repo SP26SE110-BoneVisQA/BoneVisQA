@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BoneVisQA.Services")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8b26377527beeba8130b6a71444314370bb441a7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8a3c6152e8a51d8dc2a6363835be3d0bbacc7d39")]
 [assembly: System.Reflection.AssemblyProductAttribute("BoneVisQA.Services")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BoneVisQA.Services")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

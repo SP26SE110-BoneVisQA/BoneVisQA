@@ -9,6 +9,7 @@ public interface IEmailService
     Task<bool> SendAccountDeactivatedEmailAsync(string toEmail, string fullName);
 
     // Medical Student Verification Emails
+    Task<bool> SendMedicalVerificationRequestedEmailAsync(string toEmail, string fullName);
     Task<bool> SendMedicalVerificationApprovedEmailAsync(string toEmail, string fullName);
     Task<bool> SendMedicalVerificationRejectedEmailAsync(string toEmail, string fullName, string? reason);
 
