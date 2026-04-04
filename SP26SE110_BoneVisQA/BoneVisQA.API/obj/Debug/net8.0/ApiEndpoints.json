@@ -354,7 +354,18 @@
     "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
-    "Parameters": [],
+    "Parameters": [
+      {
+        "Name": "page",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "pageSize",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
     "ReturnTypes": []
   },
   {
@@ -481,8 +492,8 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
-    "Method": "ToggleStatus",
-    "RelativePath": "api/admin/users/{id}/toggle-status",
+    "Method": "ApproveMedicalVerification",
+    "RelativePath": "api/admin/users/{id}/verifications/approve",
     "HttpMethod": "PUT",
     "IsController": true,
     "Order": 0,
@@ -494,21 +505,11 @@
       },
       {
         "Name": "request",
-        "Type": "BoneVisQA.API.Controllers.Admin.ToggleUserStatusRequestDto",
-        "IsRequired": false
+        "Type": "BoneVisQA.Services.Models.Admin.ApproveMedicalVerificationRequestDto",
+        "IsRequired": true
       }
     ],
-    "ReturnTypes": [
-      {
-        "Type": "BoneVisQA.Services.Models.Admin.UserManagementDTO",
-        "MediaTypes": [
-          "text/plain",
-          "application/json",
-          "text/json"
-        ],
-        "StatusCode": 200
-      }
-    ]
+    "ReturnTypes": []
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
@@ -608,6 +609,16 @@
         "IsRequired": true
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetPendingVerifications",
+    "RelativePath": "api/admin/users/verifications/pending",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {
@@ -734,6 +745,22 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "AssignToClass",
+    "RelativePath": "api/expert/assign",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "BoneVisQA.Services.Models.Expert.AssignQuizRequestDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
     "Method": "CalculateScore",
     "RelativePath": "api/expert/attempts/{attemptId}/score",
     "HttpMethod": "POST",
@@ -775,27 +802,6 @@
       {
         "Name": "dto",
         "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTOResponse",
-        "IsRequired": true
-      }
-    ],
-    "ReturnTypes": []
-  },
-  {
-    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
-    "Method": "AssignToClass",
-    "RelativePath": "api/expert/class/{classId}/assign/{quizId}",
-    "HttpMethod": "POST",
-    "IsController": true,
-    "Order": 0,
-    "Parameters": [
-      {
-        "Name": "classId",
-        "Type": "System.Guid",
-        "IsRequired": true
-      },
-      {
-        "Name": "quizId",
-        "Type": "System.Guid",
         "IsRequired": true
       }
     ],
@@ -1396,6 +1402,37 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.StudentEnrollmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "ImportStudentsFromExcel",
+    "RelativePath": "api/lecturer/classes/{classId}/import-students",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "file",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ImportStudentsSummaryDto",
         "MediaTypes": [
           "text/plain",
           "application/json",

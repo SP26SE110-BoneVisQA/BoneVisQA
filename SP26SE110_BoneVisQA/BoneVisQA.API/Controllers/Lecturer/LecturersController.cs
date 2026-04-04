@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -73,6 +74,22 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetAvailableStudents(Guid classId)
     {
         var result = await _lecturerService.GetAvailableStudentsAsync(classId);
+        return Ok(result);
+    }
+
+    [HttpPost("classes/{classId:guid}/import-students")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "File không được để trống." });
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".xlsx" && extension != ".xls")
+            return BadRequest(new { message = "Chỉ chấp nhận file .xlsx hoặc .xls." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _lecturerService.ImportStudentsFromExcelAsync(classId, stream, file.FileName);
         return Ok(result);
     }
 

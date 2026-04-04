@@ -932,4 +932,137 @@ public class LecturerService : ILecturerService
             AssignedAt = classQuiz.CreatedAt
         };
     }
+
+    public async Task<ImportStudentsSummaryDto> ImportStudentsFromExcelAsync(Guid classId, Stream fileStream, string fileName)
+    {
+        var existingClass = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        if (existingClass == null)
+        {
+            return new ImportStudentsSummaryDto
+            {
+                FailedCount = 1,
+                Results = new List<ImportStudentsResultItemDto>
+                {
+                    new()
+                    {
+                        RowNumber = 0,
+                        Success = false,
+                        ErrorMessage = "Lớp không tồn tại.",
+                    },
+                },
+            };
+        }
+
+        var result = new ImportStudentsSummaryDto();
+
+        using var memoryStream = new MemoryStream();
+        await fileStream.CopyToAsync(memoryStream);
+        memoryStream.Position = 0;
+
+        var workbook = new ClosedXML.Excel.XLWorkbook(memoryStream);
+        var worksheet = workbook.Worksheet(1);
+
+        var rows = worksheet.RowsUsed().Skip(1).ToList();
+        result.TotalRows = rows.Count;
+
+        if (result.TotalRows == 0)
+        {
+            result.FailedCount = 1;
+            result.Results.Add(new ImportStudentsResultItemDto
+            {
+                RowNumber = 0,
+                Success = false,
+                ErrorMessage = "File Excel không có dữ liệu (chỉ có header).",
+            });
+            return result;
+        }
+
+        var emails = rows
+            .Select(r => r.Cell(1).GetString()?.Trim().ToLowerInvariant())
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Distinct()
+            .ToList();
+
+        var foundUsers = await _unitOfWork.UserRepository
+            .FindByCondition(u => emails!.Contains(u.Email.ToLower()))
+            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .ToListAsync();
+
+        var studentRoleName = "Student";
+        var studentUsers = foundUsers
+            .Where(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name == studentRoleName))
+            .ToDictionary(u => u.Email.ToLowerInvariant(), u => u);
+
+        var enrolledStudentIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(ce => ce.ClassId == classId)
+            .Select(ce => ce.StudentId)
+            .ToListAsync();
+
+        var enrolledSet = new HashSet<Guid>(enrolledStudentIds);
+
+        foreach (var row in rows)
+        {
+            var rowNumber = row.RowNumber();
+            var email = row.Cell(1).GetString()?.Trim();
+            var item = new ImportStudentsResultItemDto { RowNumber = rowNumber, Email = email };
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                item.Success = false;
+                item.ErrorMessage = "Email trống.";
+                result.Results.Add(item);
+                result.FailedCount++;
+                continue;
+            }
+
+            var emailLower = email.ToLowerInvariant();
+
+            if (!studentUsers.TryGetValue(emailLower, out var user))
+            {
+                item.Success = false;
+                item.ErrorMessage = $"Không tìm thấy sinh viên với email '{email}'.";
+                result.Results.Add(item);
+                result.NotFoundCount++;
+                result.FailedCount++;
+                continue;
+            }
+
+            if (enrolledSet.Contains(user.Id))
+            {
+                item.Success = false;
+                item.ErrorMessage = $"Sinh viên '{user.FullName}' đã có trong lớp.";
+                result.Results.Add(item);
+                result.AlreadyEnrolledCount++;
+                result.FailedCount++;
+                continue;
+            }
+
+            var enrollment = new ClassEnrollment
+            {
+                Id = Guid.NewGuid(),
+                ClassId = classId,
+                StudentId = user.Id,
+                EnrolledAt = DateTime.UtcNow
+            };
+
+            _unitOfWork.ClassEnrollmentRepository.Add(enrollment);
+            enrolledSet.Add(user.Id);
+
+            item.Success = true;
+            item.Student = new StudentEnrollmentDto
+            {
+                EnrollmentId = enrollment.Id,
+                StudentId = user.Id,
+                StudentName = user.FullName,
+                StudentEmail = user.Email,
+                StudentCode = user.SchoolCohort,
+                EnrolledAt = enrollment.EnrolledAt
+            };
+            result.Results.Add(item);
+            result.SuccessCount++;
+        }
+
+        await _unitOfWork.SaveAsync();
+        return result;
+    }
 }

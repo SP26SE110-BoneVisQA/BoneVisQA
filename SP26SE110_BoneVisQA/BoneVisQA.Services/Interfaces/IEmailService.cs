@@ -7,4 +7,11 @@ public interface IEmailService
     Task<bool> SendRoleAssignedEmailAsync(string toEmail, string fullName, string roleName, bool accountActivated = false);
     Task<bool> SendAccountActivatedEmailAsync(string toEmail, string fullName);
     Task<bool> SendAccountDeactivatedEmailAsync(string toEmail, string fullName);
+
+    // Medical Student Verification Emails
+    Task<bool> SendMedicalVerificationApprovedEmailAsync(string toEmail, string fullName);
+    Task<bool> SendMedicalVerificationRejectedEmailAsync(string toEmail, string fullName, string? reason);
+
+    // Welcome Email with Role (sent after both verification AND role assignment)
+    Task<bool> SendWelcomeWithRoleEmailAsync(string toEmail, string fullName, string roleName);
 }

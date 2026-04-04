@@ -18,15 +18,28 @@ public class AdminUsersController : ControllerBase
     }
 
     [HttpGet]
-
-    public async Task<IActionResult> GetAllUsers()
+    public async Task<IActionResult> GetAllUsers([FromQuery] int? page, [FromQuery] int? pageSize)
     {
+        if (page.HasValue || pageSize.HasValue)
+        {
+            var p = Math.Max(1, page ?? 1);
+            var ps = pageSize.HasValue ? Math.Clamp(pageSize.Value, 1, 100) : 10;
+            var paged = await _userManagementService.GetUsersPagedAsync(p, ps);
+            return Ok(new
+            {
+                Message = "Get users successfully.",
+                Result = paged.Items,
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
+        }
+
         var users = await _userManagementService.GetAllUsersAsync();
         return Ok(new
         {
             Message = "Get all users successfully.",
             Result = users
-
         });
     }
 
@@ -199,6 +212,31 @@ public class AdminUsersController : ControllerBase
         return !removed
             ? NotFound(new { message = "Không tìm thấy liên kết user-lớp." })
             : Ok(new { Message = "User đã được xóa khỏi lớp." });
+    }
+
+    // ── Medical Student Verification ─────────────────────────────────────────────
+
+    /// GET /api/admin/users/verifications/pending  –  Lấy danh sách chờ xác minh
+    [HttpGet("verifications/pending")]
+    public async Task<IActionResult> GetPendingVerifications()
+    {
+        var pending = await _userManagementService.GetPendingVerificationsAsync();
+        return Ok(new { Message = "Lấy danh sách xác minh thành công.", Result = pending });
+    }
+
+    /// PUT /api/admin/users/{id}/verifications/approve  –  Duyệt xác minh sinh viên y khoa
+    [HttpPut("{id:guid}/verifications/approve")]
+    public async Task<IActionResult> ApproveMedicalVerification(Guid id, [FromBody] ApproveMedicalVerificationRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        var adminId = Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+
+        var result = await _userManagementService.ApproveMedicalVerificationAsync(id, request.IsApproved, request.Notes, adminId);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = request.IsApproved ? "Xác minh được phê duyệt." : "Xác minh bị từ chối.", Result = result });
     }
 }
 

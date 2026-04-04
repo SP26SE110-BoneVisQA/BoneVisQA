@@ -69,6 +69,10 @@ public class AuthService : IAuthService
             Password = HashPassword(request.Password),
             SchoolCohort = request.SchoolCohort,
             IsActive = false,
+            IsMedicalStudent = request.IsMedicalStudent,
+            MedicalSchool = request.MedicalSchool,
+            MedicalStudentId = request.MedicalStudentId,
+            VerificationStatus = request.IsMedicalStudent ? "Pending" : null,
             CreatedAt = now,
             UpdatedAt = now
         };

@@ -100,6 +100,34 @@ namespace BoneVisQA.Services.Services.Admin
             }).ToList();
         }
 
+        public async Task<PagedUsersResultDto> GetUsersPagedAsync(int page, int pageSize)
+        {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+
+            var baseQuery = _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role);
+
+            var totalCount = await baseQuery.CountAsync();
+
+            var users = await baseQuery
+                .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(u => u.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedUsersResultDto
+            {
+                Items = users.Select(MapUser).ToList(),
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public async Task<UserManagementDTO?> ActivateUserAccountAsync(Guid userId)
         {
             var user = await GetUserWithRolesAsync(userId);
@@ -160,39 +188,39 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
-        //public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
-        //{
-        //    var user = await GetUserWithRolesAsync(userId);
-        //    if (user == null) return null;
+        public async Task<UserManagementDTO?> ToggleUserStatusAsync(Guid userId, bool? isActive)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return null;
 
-        //    var newState = isActive ?? !user.IsActive;
-        //    var wasChanging = user.IsActive != newState;
-        //    user.IsActive = newState;
-        //    user.UpdatedAt = DateTime.UtcNow;
-        //    await _unitOfWork.UserRepository.UpdateAsync(user);
-        //    await _unitOfWork.SaveAsync();
+            var newState = isActive ?? !user.IsActive;
+            var wasChanging = user.IsActive != newState;
+            user.IsActive = newState;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.UserRepository.UpdateAsync(user);
+            await _unitOfWork.SaveAsync();
 
-        //    // Send notification email (fire-and-forget)
-        //    if (wasChanging)
-        //    {
-        //        _ = Task.Run(async () =>
-        //        {
-        //            try
-        //            {
-        //                if (newState)
-        //                    await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
-        //                else
-        //                    await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                _logger.LogError(ex, "[ToggleUserStatusAsync] Failed to send status email to {Email}", user.Email);
-        //            }
-        //        });
-        //    }
+            if (wasChanging)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (newState)
+                            await _emailService.SendAccountActivatedEmailAsync(user.Email, user.FullName);
+                        else
+                            await _emailService.SendAccountDeactivatedEmailAsync(user.Email, user.FullName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[ToggleUserStatusAsync] Failed to send status email to {Email}", user.Email);
+                    }
+                });
+            }
 
-        //    return MapUser(user);
-        //}
+            return MapUser(user);
+        }
+
         public async Task<UserManagementDTO?> AssignRoleAsync(Guid userId, string roleName)
         {
             if (!_validRoles.Contains(roleName)) throw new ArgumentException("Role not found");
@@ -230,21 +258,34 @@ namespace BoneVisQA.Services.Services.Admin
 
             await _unitOfWork.SaveAsync();
 
-            // Gửi email thông báo (không chờ kết quả)
+            // Snapshot cho Task.Run — không đụng DbContext sau khi request kết thúc
+            var emailForMail = user.Email ?? string.Empty;
+            var fullNameForMail = user.FullName ?? string.Empty;
+            var verificationApproved = string.Equals(user.VerificationStatus, "Approved", StringComparison.Ordinal);
+            var assignedRoleName = roleName;
+
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _emailService.SendRoleAssignedEmailAsync(
-                        user.Email, user.FullName, roleName, wasInactive);
-                    _logger.LogInformation(
-                        "[AssignRoleAsync] Role '{Role}' assigned + account activated. Email sent to {Email}",
-                        roleName, user.Email);
+                    if (verificationApproved)
+                    {
+                        await _emailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, assignedRoleName);
+                        _logger.LogInformation(
+                            "[AssignRoleAsync] Role '{Role}' assigned + verified. Welcome email sent to {Email}",
+                            assignedRoleName, emailForMail);
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "[AssignRoleAsync] Role '{Role}' assigned but not verified yet. No email sent to {Email}",
+                            assignedRoleName, emailForMail);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex,
-                        "[AssignRoleAsync] Failed to send role assignment email to {Email}", user.Email);
+                        "[AssignRoleAsync] Failed to send email to {Email}", emailForMail);
                 }
             });
 
@@ -554,6 +595,93 @@ namespace BoneVisQA.Services.Services.Admin
             }
 
             return false;
+        }
+
+        // ── Medical Student Verification ─────────────────────────────────────────
+
+        public async Task<List<PendingVerificationDto>> GetPendingVerificationsAsync()
+        {
+            var pendingUsers = await _unitOfWork.UserRepository.GetAllAsync(q =>
+                q.Include(u => u.UserRoles)
+                 .ThenInclude(ur => ur.Role)
+                .Where(u => u.VerificationStatus == "Pending" && u.IsMedicalStudent)
+            );
+
+            return pendingUsers.Select(u => new PendingVerificationDto
+            {
+                UserId = u.Id,
+                FullName = u.FullName,
+                Email = u.Email,
+                SchoolCohort = u.SchoolCohort,
+                IsMedicalStudent = u.IsMedicalStudent,
+                MedicalSchool = u.MedicalSchool,
+                MedicalStudentId = u.MedicalStudentId,
+                VerificationStatus = u.VerificationStatus,
+                CreatedAt = u.CreatedAt
+            }).ToList();
+        }
+
+        public async Task<UserManagementDTO?> ApproveMedicalVerificationAsync(Guid userId, bool isApproved, string? notes, Guid adminId)
+        {
+            var user = await GetUserWithRolesAsync(userId);
+            if (user == null) return null;
+
+            user.VerificationStatus = isApproved ? "Approved" : "Rejected";
+            user.VerificationNotes = notes;
+            user.VerifiedAt = DateTime.UtcNow;
+            user.VerifiedBy = adminId;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            // Nếu duyệt → tự động kích hoạt tài khoản
+            if (isApproved)
+            {
+                user.IsActive = true;
+            }
+
+            await _unitOfWork.UserRepository.UpdateAsync(user);
+            await _unitOfWork.SaveAsync();
+
+            // Không được query DbContext trong Task.Run — scope/request đã dispose trước khi task chạy.
+            var emailForMail = user.Email ?? string.Empty;
+            var fullNameForMail = user.FullName ?? string.Empty;
+            string? welcomeRoleName = null;
+            if (isApproved)
+            {
+                welcomeRoleName = user.UserRoles
+                    .Where(ur => ur.Role != null && ur.Role.Name != "Pending")
+                    .Select(ur => ur.Role!.Name)
+                    .FirstOrDefault();
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (isApproved)
+                    {
+                        if (!string.IsNullOrEmpty(welcomeRoleName))
+                        {
+                            await _emailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, welcomeRoleName);
+                            _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved + role exists. Welcome email sent to {Email}", emailForMail);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved but no role assigned. Waiting for role assignment for {Email}", emailForMail);
+                        }
+                    }
+                    else
+                    {
+                        await _emailService.SendMedicalVerificationRejectedEmailAsync(emailForMail, fullNameForMail, notes);
+                        _logger.LogInformation("[ApproveMedicalVerificationAsync] Medical verification REJECTED for {Email}", emailForMail);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[ApproveMedicalVerificationAsync] Failed to send email to {Email}", emailForMail);
+                }
+            });
+
+            return MapUser(user);
         }
 
         // ── Hash helper ─────────────────────────────────────────────────────────

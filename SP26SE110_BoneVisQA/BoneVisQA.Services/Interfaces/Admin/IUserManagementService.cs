@@ -8,7 +8,10 @@ namespace BoneVisQA.Services.Interfaces.Admin
     public interface IUserManagementService
     {
         Task<List<UserManagementDTO>> GetAllUsersAsync();
-       
+
+        /// <summary>User mới nhất trước, có phân trang.</summary>
+        Task<PagedUsersResultDto> GetUsersPagedAsync(int page, int pageSize);
+
         Task<List<UserManagementDTO>> GetUserByRoleAsync(string role);
         Task<UserManagementDTO?> GetUserByIdAsync(Guid userId);
         Task<UserManagementDTO?> ActivateUserAccountAsync(Guid userId);
@@ -49,5 +52,13 @@ namespace BoneVisQA.Services.Interfaces.Admin
         ///   - Student  → xóa ClassEnrollment
         /// </summary>
         Task<bool> RemoveUserFromClassAsync(Guid userId, Guid classId);
+
+        // ── Medical Student Verification ─────────────────────────────────────────
+
+        /// <summary>Lấy danh sách user đang chờ xác minh sinh viên y khoa.</summary>
+        Task<List<PendingVerificationDto>> GetPendingVerificationsAsync();
+
+        /// <summary>Duyệt hoặc từ chối xác minh sinh viên y khoa của một user.</summary>
+        Task<UserManagementDTO?> ApproveMedicalVerificationAsync(Guid userId, bool isApproved, string? notes, Guid adminId);
     }
 }

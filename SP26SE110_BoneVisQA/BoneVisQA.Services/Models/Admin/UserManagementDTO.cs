@@ -15,6 +15,15 @@ namespace BoneVisQA.Services.Models.Admin
         public DateTime? UpdatedAt { get; set; }
     }
 
+    /// <summary>Danh sách user có phân trang (mới nhất theo CreatedAt).</summary>
+    public class PagedUsersResultDto
+    {
+        public List<UserManagementDTO> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+
     public class CreateUserRequestDto
     {
         [Required]
