@@ -862,6 +862,38 @@ public class LecturerService : ILecturerService
         };
     }
 
+    public async Task<QuizDto> UpdateQuizAsync(Guid quizId, UpdateQuizRequestDto request)
+    {
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
+        if (quiz == null)
+            throw new KeyNotFoundException("Quiz không tồn tại.");
+
+        quiz.Title = request.Title;
+        quiz.OpenTime = request.OpenTime;
+        quiz.CloseTime = request.CloseTime;
+        quiz.TimeLimit = request.TimeLimit;
+        quiz.PassingScore = request.PassingScore;
+
+        _unitOfWork.QuizRepository.Update(quiz);
+        await _unitOfWork.SaveAsync();
+
+        var classLink = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.QuizId == quizId)
+            .FirstOrDefaultAsync();
+
+        return new QuizDto
+        {
+            Id = quiz.Id,
+            ClassId = classLink?.ClassId ?? Guid.Empty,
+            Title = quiz.Title,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimit = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore,
+            CreatedAt = quiz.CreatedAt
+        };
+    }
+
     public async Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds)
     {
         if (quizIds == null || quizIds.Count == 0)

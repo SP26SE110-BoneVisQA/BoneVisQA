@@ -12,6 +12,7 @@ namespace BoneVisQA.API.Controllers.Lecturer;
 
 [ApiController]
 [Route("api/lecturer")]
+[Route("api/Lecturers")] // alias: FE cũ / cache bundle có thể vẫn gọi /api/Lecturers/...
 [Authorize(Roles = "Lecturer")]
 public class LecturersController : ControllerBase
 {
@@ -172,6 +173,24 @@ public class LecturersController : ControllerBase
         if (result == null)
             return NotFound(new { message = "Quiz không tồn tại." });
         return Ok(result);
+    }
+
+    /// <summary>Cập nhật thông tin quiz.</summary>
+    [HttpPut("quizzes/{quizId:guid}")]
+    public async Task<ActionResult<QuizDto>> UpdateQuiz(Guid quizId, [FromBody] UpdateQuizRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var result = await _lecturerService.UpdateQuizAsync(quizId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     /// <summary>Lấy danh sách câu hỏi của một quiz.</summary>

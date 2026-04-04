@@ -21,6 +21,16 @@ public class QuizDto
     public DateTime? CreatedAt { get; set; }
 }
 
+// Update Quiz Request Dto
+public class UpdateQuizRequestDto
+{
+    public string Title { get; set; } = string.Empty;
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int? TimeLimit { get; set; }
+    public int? PassingScore { get; set; }
+}
+
 public class UpdateQuizQuestionRequestDto
 {
     public string QuestionText { get; set; } = string.Empty;

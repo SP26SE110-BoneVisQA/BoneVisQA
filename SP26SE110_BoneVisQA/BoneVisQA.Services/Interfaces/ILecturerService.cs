@@ -42,6 +42,7 @@ public interface ILecturerService
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
+    Task<QuizDto> UpdateQuizAsync(Guid quizId, UpdateQuizRequestDto request);
     Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
     Task<ImportStudentsSummaryDto> ImportStudentsFromExcelAsync(Guid classId, Stream fileStream, string fileName);
 }

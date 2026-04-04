@@ -3,6 +3,10 @@
   "WorkspaceRootPath": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.services\\services\\auth\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|solutionrelative:bonevisqa.services\\services\\auth\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.services\\models\\auth\\medicalverificationrequestdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|solutionrelative:bonevisqa.services\\models\\auth\\medicalverificationrequestdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -119,6 +123,19 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "AuthService.cs",
+              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Auth\\AuthService.cs",
+              "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Auth\\AuthService.cs",
+              "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Auth\\AuthService.cs",
+              "RelativeToolTip": "BoneVisQA.Services\\Services\\Auth\\AuthService.cs",
+              "ViewState": "AgIAAEoCAAAAAAAAAAAQwEYCAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-04T17:43:18.013Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
               "Title": "MedicalVerificationRequestDto.cs",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Models\\Auth\\MedicalVerificationRequestDto.cs",
               "RelativeDocumentMoniker": "BoneVisQA.Services\\Models\\Auth\\MedicalVerificationRequestDto.cs",
@@ -131,7 +148,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "appsettings.json",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\appsettings.json",
               "RelativeDocumentMoniker": "BoneVisQA.API\\appsettings.json",
@@ -144,7 +161,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "LecturerService.cs",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
               "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Lecturer\\LecturerService.cs",
@@ -156,7 +173,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 4,
               "Title": "Program.cs",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\Program.cs",
               "RelativeDocumentMoniker": "BoneVisQA.API\\Program.cs",
@@ -168,7 +185,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "BoneVisQA.API.csproj",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.API\\BoneVisQA.API.csproj",
               "RelativeDocumentMoniker": "BoneVisQA.API\\BoneVisQA.API.csproj",
