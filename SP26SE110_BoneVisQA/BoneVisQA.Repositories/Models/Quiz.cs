@@ -34,6 +34,18 @@ public partial class Quiz
     [Column("assigned_expert_id")]
     public Guid? AssignedExpertId { get; set; }
 
+    [Column("topic")]
+    public string? Topic { get; set; }
+
+    [Column("is_ai_generated")]
+    public bool IsAiGenerated { get; set; }
+
+    [Column("difficulty")]
+    public string? Difficulty { get; set; }
+
+    [Column("classification")]
+    public string? Classification { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

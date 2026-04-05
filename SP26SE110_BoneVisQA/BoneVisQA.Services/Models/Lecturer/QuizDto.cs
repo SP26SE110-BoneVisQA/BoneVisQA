@@ -10,6 +10,14 @@ public class QuizDto
 
     public string Title { get; set; } = null!;
 
+    public string? Topic { get; set; }
+
+    public bool IsAiGenerated { get; set; }
+
+    public string? Difficulty { get; set; }
+
+    public string? Classification { get; set; }
+
     public DateTime? OpenTime { get; set; }
 
     public DateTime? CloseTime { get; set; }
@@ -49,6 +57,9 @@ public class ClassQuizDto
     public string? QuizName { get; set; }
     public string? ClassName { get; set; }
     public DateTime? AssignedAt { get; set; }
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int QuestionCount { get; set; }
 }
 
 // CreateQuizQuestionDto - For creating questions (with individual options)

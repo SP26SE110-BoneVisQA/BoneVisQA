@@ -53,7 +53,9 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 await _unitOfWork.ClassCaseRepository.AddAsync(existing);
             }
 
-            existing.DueDate = request.DueDate;
+            existing.DueDate = request.DueDate.HasValue
+                ? DateTime.SpecifyKind(request.DueDate.Value, DateTimeKind.Utc)
+                : null;
             existing.IsMandatory = request.IsMandatory;
         }
 
@@ -105,8 +107,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
         }
 
-        session.OpenTime = request.OpenTime;
-        session.CloseTime = request.CloseTime;
+        session.OpenTime = request.OpenTime.HasValue
+            ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc)
+            : null;
+        session.CloseTime = request.CloseTime.HasValue
+            ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc)
+            : null;
         session.TimeLimitMinutes = request.TimeLimitMinutes;
         session.PassingScore = request.PassingScore;
 

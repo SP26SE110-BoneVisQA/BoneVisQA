@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BoneVisQA.Repositories")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+77245d46c06bf6f6012e36d71f09ae242fa62929")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c869c287fe8619af5a66d578a770c7fac5ad87e")]
 [assembly: System.Reflection.AssemblyProductAttribute("BoneVisQA.Repositories")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BoneVisQA.Repositories")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

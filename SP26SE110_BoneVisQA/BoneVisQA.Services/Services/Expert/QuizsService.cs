@@ -27,8 +27,8 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 Id = Guid.NewGuid(),
                 Title = request.Title,
-                OpenTime = request.OpenTime,
-                CloseTime = request.CloseTime,
+                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
                 CreatedAt = DateTime.UtcNow
@@ -110,6 +110,9 @@ namespace BoneVisQA.Services.Services.Expert
             if (existing != null)
                 throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
 
+            var openTime = dto.OpenTime.HasValue ? DateTime.SpecifyKind(dto.OpenTime.Value, DateTimeKind.Utc) : quiz.OpenTime;
+            var closeTime = dto.CloseTime.HasValue ? DateTime.SpecifyKind(dto.CloseTime.Value, DateTimeKind.Utc) : quiz.CloseTime;
+
             var classQuiz = new ClassQuizSession
             {
                 Id = Guid.NewGuid(),
@@ -117,8 +120,8 @@ namespace BoneVisQA.Services.Services.Expert
                 ClassId = dto.ClassId,
                 QuizId = dto.QuizId,
 
-                OpenTime = dto.OpenTime ?? quiz.OpenTime,
-                CloseTime = dto.CloseTime ?? quiz.CloseTime,
+                OpenTime = openTime,
+                CloseTime = closeTime,
 
                 PassingScore = dto.PassingScore ?? quiz.PassingScore,
                 TimeLimitMinutes = dto.TimeLimitMinutes ?? quiz.TimeLimit,

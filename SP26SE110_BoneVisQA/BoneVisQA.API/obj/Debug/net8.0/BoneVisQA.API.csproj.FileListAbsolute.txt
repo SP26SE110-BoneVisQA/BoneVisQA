@@ -283,10 +283,10 @@ D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.AP
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.build.json.cache
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.development.json
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.build.endpoints.json
-D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQ.9EC9A509.Up2Date
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.dll
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\refint\BoneVisQA.API.dll
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.pdb
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.genruntimeconfig.cache
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\ref\BoneVisQA.API.dll
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

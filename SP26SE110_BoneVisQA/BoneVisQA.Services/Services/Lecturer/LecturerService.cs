@@ -307,8 +307,8 @@ public class LecturerService : ILecturerService
         {
             Id = Guid.NewGuid(),
             Title = request.Title,
-            OpenTime = request.OpenTime,
-            CloseTime = request.CloseTime,
+            OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+            CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
             CreatedAt = now
@@ -324,8 +324,8 @@ public class LecturerService : ILecturerService
                 Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                OpenTime = request.OpenTime,
-                CloseTime = request.CloseTime,
+                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
                 TimeLimitMinutes = request.TimeLimit,
                 PassingScore = request.PassingScore,
                 CreatedAt = now
@@ -715,6 +715,268 @@ public class LecturerService : ILecturerService
         return true;
     }
 
+    public async Task<ClassDto?> GetClassByIdAsync(Guid classId)
+    {
+        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        if (c == null) return null;
+        return new ClassDto
+        {
+            Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+        };
+    }
+
+    public async Task<ClassDto> UpdateClassAsync(Guid classId, UpdateClassRequestDto request)
+    {
+        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+        c.ClassName = request.ClassName;
+        c.Semester = request.Semester;
+        c.ExpertId = request.ExpertId;
+        c.UpdatedAt = DateTime.UtcNow;
+        _unitOfWork.AcademicClassRepository.Update(c);
+        await _unitOfWork.SaveAsync();
+        return new ClassDto
+        {
+            Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+        };
+    }
+
+    public async Task<bool> DeleteClassAsync(Guid classId)
+    {
+        var existing = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        if (existing == null) return false;
+        await _unitOfWork.AcademicClassRepository.DeleteAsync(classId);
+        await _unitOfWork.SaveAsync();
+        return true;
+    }
+
+    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId)
+    {
+        var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+
+        var studentIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.ClassId == classId)
+            .Select(e => e.StudentId)
+            .ToListAsync();
+
+        if (studentIds.Count == 0)
+            return new List<LecturerTriageRowDto>();
+
+        var answers = await _unitOfWork.Context.CaseAnswers
+            .Include(a => a.Question)
+                .ThenInclude(q => q.Student)
+            .Include(a => a.Question)
+                .ThenInclude(q => q.Case)
+                    .ThenInclude(c => c != null ? c.MedicalImages : null)
+            .Where(a => studentIds.Contains(a.Question.StudentId))
+            .OrderByDescending(a => a.Question.CreatedAt)
+            .ToListAsync();
+
+        var escalatedByIds = answers
+            .Where(a => a.EscalatedById.HasValue)
+            .Select(a => a.EscalatedById!.Value)
+            .Distinct()
+            .ToList();
+
+        var expertNames = await _unitOfWork.UserRepository
+            .FindByCondition(u => escalatedByIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName);
+
+        return answers
+            .Where(a => a.Question != null)
+            .Select(a => new LecturerTriageRowDto
+            {
+                AnswerId = a.Id,
+                QuestionId = a.QuestionId,
+                StudentId = a.Question.StudentId,
+                StudentName = a.Question.Student?.FullName ?? string.Empty,
+                StudentEmail = a.Question.Student?.Email,
+                ClassId = classId,
+                ClassName = cls.ClassName,
+                CaseId = a.Question.CaseId,
+                CaseTitle = a.Question.Case?.Title,
+                ThumbnailUrl = a.Question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
+                QuestionText = a.Question.QuestionText,
+                AnswerText = a.AnswerText,
+                Status = a.Status ?? "Pending",
+                AiConfidenceScore = a.AiConfidenceScore,
+                AskedAt = a.Question.CreatedAt,
+                IsEscalated = a.Status == "Escalated",
+                EscalatedByName = a.EscalatedById.HasValue
+                    ? expertNames.GetValueOrDefault(a.EscalatedById.Value)
+                    : null,
+                EscalatedAt = a.EscalatedAt
+            })
+            .ToList();
+    }
+
+    public async Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId)
+    {
+        var question = await _unitOfWork.StudentQuestionRepository
+            .FindByCondition(q => q.Id == questionId)
+            .Include(q => q.Student)
+            .Include(q => q.Case)
+                .ThenInclude(c => c != null ? c.MedicalImages : null)
+            .Include(q => q.CaseAnswers)
+                .ThenInclude(a => a != null ? a.ReviewedBy : null)
+            .FirstOrDefaultAsync();
+
+        if (question == null) return null;
+
+        // verify class ownership via enrollment
+        var enrollment = await _unitOfWork.ClassEnrollmentRepository
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == question.StudentId);
+        if (enrollment == null) return null;
+
+        var answer = question.CaseAnswers?.FirstOrDefault();
+        var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+
+        return new LectStudentQuestionDetailDto
+        {
+            Id = question.Id,
+            StudentId = question.StudentId,
+            StudentName = question.Student?.FullName ?? string.Empty,
+            StudentEmail = question.Student?.Email ?? string.Empty,
+            CaseId = question.CaseId,
+            CaseTitle = question.Case?.Title,
+            CaseDescription = question.Case?.Description,
+            CaseThumbnailUrl = question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
+            CaseDifficulty = question.Case?.Difficulty,
+            QuestionText = question.QuestionText,
+            Language = question.Language,
+            CreatedAt = question.CreatedAt,
+            AnswerId = answer?.Id,
+            AnswerText = answer?.AnswerText,
+            StructuredDiagnosis = answer?.StructuredDiagnosis,
+            DifferentialDiagnoses = answer?.DifferentialDiagnoses,
+            AnswerStatus = answer?.Status,
+            AiConfidenceScore = answer?.AiConfidenceScore,
+            ReviewedById = answer?.ReviewedById,
+            ReviewedByName = answer?.ReviewedBy?.FullName,
+            ReviewedAt = answer?.ReviewedAt,
+            IsEscalated = answer?.Status == "Escalated",
+            EscalatedByName = null,
+            EscalatedAt = answer?.EscalatedAt
+        };
+    }
+
+    public async Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request)
+    {
+        var question = await _unitOfWork.StudentQuestionRepository
+            .FindByCondition(q => q.Id == questionId)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+
+        // verify class ownership
+        var enrollment = await _unitOfWork.ClassEnrollmentRepository
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == question.StudentId)
+            ?? throw new InvalidOperationException("Giảng viên không có quyền trả lời câu hỏi này.");
+
+        var answer = await _unitOfWork.CaseAnswerRepository
+            .FindByCondition(a => a.QuestionId == questionId)
+            .FirstOrDefaultAsync();
+
+        if (answer == null)
+        {
+            answer = new BoneVisQA.Repositories.Models.CaseAnswer
+            {
+                Id = Guid.NewGuid(),
+                QuestionId = questionId,
+                AnswerText = request.AnswerText,
+                StructuredDiagnosis = request.StructuredDiagnosis,
+                DifferentialDiagnoses = request.DifferentialDiagnoses,
+                Status = request.Approve ? "Approved" : "Edited",
+                GeneratedAt = DateTime.UtcNow
+            };
+            await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
+        }
+        else
+        {
+            answer.AnswerText = request.AnswerText;
+            answer.StructuredDiagnosis = request.StructuredDiagnosis;
+            answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
+            answer.Status = request.Approve ? "Approved" : "Edited";
+            await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
+        }
+
+        await _unitOfWork.SaveAsync();
+
+        return new LecturerAnswerDto
+        {
+            AnswerId = answer.Id,
+            AnswerText = answer.AnswerText,
+            StructuredDiagnosis = answer.StructuredDiagnosis,
+            DifferentialDiagnoses = answer.DifferentialDiagnoses,
+            Status = answer.Status,
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
+
+    public async Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId)
+    {
+        var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+
+        var enrollments = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.ClassId == classId)
+            .Include(e => e.Student)
+            .ToListAsync();
+
+        var studentIds = enrollments.Select(e => e.StudentId).ToList();
+        var result = new List<ClassStudentProgressDto>();
+
+        foreach (var enrollment in enrollments)
+        {
+            var studentId = enrollment.StudentId;
+            var stats = await _unitOfWork.LearningStatisticRepository
+                .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ClassId == classId);
+
+            var casesViewed = await _unitOfWork.CaseViewLogRepository
+                .FindByCondition(v => v.StudentId == studentId)
+                .CountAsync();
+
+            var questionsAsked = await _unitOfWork.StudentQuestionRepository
+                .FindByCondition(q => q.StudentId == studentId)
+                .CountAsync();
+
+            var quizAttempts = await _unitOfWork.QuizAttemptRepository
+                .FindByCondition(a => a.StudentId == studentId)
+                .ToListAsync();
+
+            var escalatedCount = await _unitOfWork.Context.CaseAnswers
+                .CountAsync(a => a.Question != null &&
+                    a.Question.StudentId == studentId &&
+                    a.Status == "Escalated");
+
+            var lastActivity = await _unitOfWork.Context.CaseViewLogs
+                .Where(v => v.StudentId == studentId)
+                .OrderByDescending(v => v.ViewedAt)
+                .Select(v => (DateTime?)v.ViewedAt)
+                .FirstOrDefaultAsync();
+
+            result.Add(new ClassStudentProgressDto
+            {
+                StudentId = studentId,
+                StudentName = enrollment.Student?.FullName ?? string.Empty,
+                StudentEmail = enrollment.Student?.Email,
+                StudentCode = enrollment.Student?.SchoolCohort,
+                TotalCasesViewed = casesViewed,
+                TotalQuestionsAsked = questionsAsked,
+                AvgQuizScore = quizAttempts.Count > 0 && quizAttempts.Any(a => a.Score.HasValue)
+                    ? quizAttempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
+                    : null,
+                QuizAttempts = quizAttempts.Count,
+                EscalatedAnswers = escalatedCount,
+                LastActivityAt = lastActivity
+            });
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId)
     {
         var studentIdsInClass = await _unitOfWork.ClassEnrollmentRepository
@@ -804,6 +1066,14 @@ public class LecturerService : ILecturerService
             .OrderByDescending(cqs => cqs.CreatedAt)
             .ToListAsync();
 
+        var quizIds = classQuizzes.Select(cq => cq.QuizId).Distinct().ToList();
+        var questionCounts = await _unitOfWork.Context.QuizQuestions
+            .AsNoTracking()
+            .Where(qq => quizIds.Contains(qq.QuizId))
+            .GroupBy(qq => qq.QuizId)
+            .Select(g => new { QuizId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.QuizId, x => x.Count);
+
         return classQuizzes
             .Select(cq => new ClassQuizDto
             {
@@ -811,7 +1081,10 @@ public class LecturerService : ILecturerService
                 QuizId = cq.QuizId,
                 QuizName = cq.Quiz?.Title,
                 ClassName = cq.Class?.ClassName,
-                AssignedAt = cq.CreatedAt
+                AssignedAt = cq.CreatedAt,
+                OpenTime = cq.Quiz?.OpenTime,
+                CloseTime = cq.Quiz?.CloseTime,
+                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId)
             })
             .ToList();
     }
@@ -869,8 +1142,8 @@ public class LecturerService : ILecturerService
             throw new KeyNotFoundException("Quiz không tồn tại.");
 
         quiz.Title = request.Title;
-        quiz.OpenTime = request.OpenTime;
-        quiz.CloseTime = request.CloseTime;
+        quiz.OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null;
+        quiz.CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null;
         quiz.TimeLimit = request.TimeLimit;
         quiz.PassingScore = request.PassingScore;
 
@@ -955,13 +1228,20 @@ public class LecturerService : ILecturerService
         await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
         await _unitOfWork.SaveAsync();
 
+        var questionCount = await _unitOfWork.Context.QuizQuestions
+            .AsNoTracking()
+            .CountAsync(qq => qq.QuizId == quizId);
+
         return new ClassQuizDto
         {
             ClassId = classQuiz.ClassId,
             ClassName = academicClass.ClassName,
             QuizId = classQuiz.QuizId,
             QuizName = quiz.Title,
-            AssignedAt = classQuiz.CreatedAt
+            AssignedAt = classQuiz.CreatedAt,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            QuestionCount = questionCount
         };
     }
 

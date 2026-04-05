@@ -1,3 +1,4 @@
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
 
 namespace BoneVisQA.Services.Interfaces;
