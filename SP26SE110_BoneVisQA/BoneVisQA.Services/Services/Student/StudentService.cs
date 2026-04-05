@@ -604,7 +604,8 @@ public class StudentService : IStudentService
                 QuestionId = q.Id,
                 QuestionText = q.QuestionText,
                 Type = q.Type,
-                CaseId = q.CaseId ?? Guid.Empty
+                CaseId = q.CaseId ?? Guid.Empty,
+                ImageUrl = q.ImageUrl
             })
             .ToList();
 

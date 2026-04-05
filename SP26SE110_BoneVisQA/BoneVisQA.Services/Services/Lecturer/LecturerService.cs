@@ -259,7 +259,8 @@ public class LecturerService : ILecturerService
             OptionB = q.OptionB,
             OptionC = q.OptionC,
             OptionD = q.OptionD,
-            CorrectAnswer = q.CorrectAnswer
+            CorrectAnswer = q.CorrectAnswer,
+            ImageUrl = q.ImageUrl
         }).ToList();
     }
 
@@ -370,7 +371,8 @@ public class LecturerService : ILecturerService
             OptionB = request.OptionB,
             OptionC = request.OptionC,
             OptionD = request.OptionD,
-            CorrectAnswer = request.CorrectAnswer
+            CorrectAnswer = request.CorrectAnswer,
+            ImageUrl = request.ImageUrl
         };
 
         await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -389,7 +391,8 @@ public class LecturerService : ILecturerService
             OptionB = question.OptionB,
             OptionC = question.OptionC,
             OptionD = question.OptionD,
-            CorrectAnswer = question.CorrectAnswer
+            CorrectAnswer = question.CorrectAnswer,
+            ImageUrl = question.ImageUrl
         };
     }
     public async Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request)
@@ -411,6 +414,7 @@ public class LecturerService : ILecturerService
         entity.OptionC = request.OptionC;
         entity.OptionD = request.OptionD;
         entity.CorrectAnswer = request.CorrectAnswer;
+        entity.ImageUrl = request.ImageUrl;
 
         await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
         await _unitOfWork.SaveAsync();
@@ -425,6 +429,7 @@ public class LecturerService : ILecturerService
             OptionC = request.OptionC,
             OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer,
+            ImageUrl = request.ImageUrl,
         };
     }
 

@@ -144,7 +144,8 @@ public class StudentLearningService : IStudentLearningService
                     OptionA = q.OptionA,
                     OptionB = q.OptionB,
                     OptionC = q.OptionC,
-                    OptionD = q.OptionD
+                    OptionD = q.OptionD,
+                    ImageUrl = q.ImageUrl
                 })
                 .ToList()
         };

@@ -74,6 +74,7 @@ public class CreateQuizQuestionDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? CorrectAnswer { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 // UpdateQuizsQuestionRequestDto - For updating questions (expert style)
@@ -86,6 +87,7 @@ public class UpdateQuizsQuestionRequestDto
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 // UpdateQuizsQuestionResponseDto - Response for updating questions
@@ -99,6 +101,7 @@ public class UpdateQuizsQuestionResponseDto
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 // QuizQuestionDto - For quiz questions with individual options
@@ -116,6 +119,7 @@ public class QuizQuestionDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? CorrectAnswer { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 // QuizScoreResultDto - Used for quiz score calculation
