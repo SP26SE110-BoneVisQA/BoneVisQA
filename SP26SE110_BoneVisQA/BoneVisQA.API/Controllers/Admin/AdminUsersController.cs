@@ -81,15 +81,15 @@ public class AdminUsersController : ControllerBase
             });
     }
 
-    //[HttpPut("{id:guid}/toggle-status")]
-    //public async Task<ActionResult<UserManagementDTO>> ToggleStatus(Guid id, [FromBody] ToggleUserStatusRequestDto? request)
-    //{
-    //    var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
-    //    if (result == null)
-    //        return NotFound(new { message = "Không tìm thấy người dùng." });
+    [HttpPut("{id:guid}/toggle-status")]
+    public async Task<ActionResult<UserManagementDTO>> ToggleStatus(Guid id, [FromBody] ToggleUserStatusRequestDto? request)
+    {
+        var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
+        if (result == null)
+            return NotFound(new { message = "Không tìm thấy người dùng." });
 
-    //    return Ok(result);
-    //}
+        return Ok(result);
+    }
 
     [HttpPost("{id:guid}/assign-role")]
     public async Task<IActionResult> AssignRole(Guid id, [FromQuery] string role)
