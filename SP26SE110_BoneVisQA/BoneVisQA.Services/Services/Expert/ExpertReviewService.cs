@@ -1,5 +1,6 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.EntityFrameworkCore;
@@ -93,6 +94,10 @@ public class ExpertReviewService : IExpertReviewService
         var existingReview = answer.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
         if (enrollment == null && existingReview == null)
             throw new InvalidOperationException("Chuyên gia không có quyền xử lý câu trả lời này.");
+
+        // Concurrency guard: already resolved answers must not be resolved again.
+        if (!string.Equals(answer.Status, "Escalated", StringComparison.OrdinalIgnoreCase))
+            throw new ConflictException("Câu trả lời này đã được xử lý trước đó.");
 
         var resolvedStatus = DetermineResolvedStatus(answer, request);
         answer.AnswerText = request.AnswerText;

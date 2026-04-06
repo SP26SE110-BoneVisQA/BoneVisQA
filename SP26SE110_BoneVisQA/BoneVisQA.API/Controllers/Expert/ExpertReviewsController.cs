@@ -1,5 +1,6 @@
 using System;
 using System.Security.Claims;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
@@ -39,6 +40,7 @@ public class ExpertReviewsController : ControllerBase
     /// Resolves an escalated answer and stores the expert-reviewed outcome.
     /// </summary>
     [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -57,6 +59,10 @@ public class ExpertReviewsController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
