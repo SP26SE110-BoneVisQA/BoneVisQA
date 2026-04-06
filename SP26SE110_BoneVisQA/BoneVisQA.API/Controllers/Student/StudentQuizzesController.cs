@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
+using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,11 +15,16 @@ public class StudentQuizzesController : ControllerBase
 {
     private readonly IStudentLearningService _studentLearningService;
     private readonly IStudentService _studentService;
+    private readonly IAIQuizService _aiQuizService;
 
-    public StudentQuizzesController(IStudentLearningService studentLearningService, IStudentService studentService)
+    public StudentQuizzesController(
+        IStudentLearningService studentLearningService,
+        IStudentService studentService,
+        IAIQuizService aiQuizService)
     {
         _studentLearningService = studentLearningService;
         _studentService = studentService;
+        _aiQuizService = aiQuizService;
     }
 
     [HttpGet]
@@ -59,6 +65,34 @@ public class StudentQuizzesController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// AI Generate Practice Quiz: Student tự tạo quiz ôn luyện bằng AI
+    /// </summary>
+    [HttpPost("practice/generate")]
+    public async Task<ActionResult<AIQuizGenerationResultDto>> GeneratePracticeQuiz([FromBody] GeneratePracticeQuizRequestDto request)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        if (string.IsNullOrWhiteSpace(request.Topic))
+            return BadRequest(new { message = "Topic là bắt buộc." });
+
+        var result = await _aiQuizService.GenerateQuizQuestionsAsync(
+            request.Topic,
+            request.QuestionCount ?? 5,
+            request.Difficulty);
+
+        return Ok(result);
+    }
+
+    public class GeneratePracticeQuizRequestDto
+    {
+        public string Topic { get; set; } = string.Empty;
+        public int? QuestionCount { get; set; }
+        public string? Difficulty { get; set; }
     }
 
     [HttpPost("submit")]

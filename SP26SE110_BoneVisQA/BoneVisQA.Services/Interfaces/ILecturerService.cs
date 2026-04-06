@@ -8,7 +8,10 @@ namespace BoneVisQA.Services.Interfaces;
 public interface ILecturerService
 {
     Task<ClassDto> CreateClassAsync(CreateClassRequestDto request);
+    Task<ClassDto?> GetClassByIdAsync(Guid classId);
     Task<IReadOnlyList<ClassDto>> GetClassesForLecturerAsync(Guid lecturerId);
+    Task<ClassDto> UpdateClassAsync(Guid classId, UpdateClassRequestDto request);
+    Task<bool> DeleteClassAsync(Guid classId);
 
     Task<bool> EnrollStudentAsync(Guid classId, Guid studentId);
     Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid classId, EnrollStudentsRequestDto request);
@@ -28,6 +31,10 @@ public interface ILecturerService
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
+    Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId);
+    Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId);
+    Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request);
+    Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId);
     Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId);
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
     Task<ClassStatsDto> GetClassStatsAsync(Guid classId);
@@ -42,6 +49,8 @@ public interface ILecturerService
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
+    Task<QuizDto> UpdateQuizAsync(Guid quizId, UpdateQuizRequestDto request);
     Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
+    Task<ImportStudentsSummaryDto> ImportStudentsFromExcelAsync(Guid classId, Stream fileStream, string fileName);
 }
 

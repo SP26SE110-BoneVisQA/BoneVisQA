@@ -1,9 +1,11 @@
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
+using BoneVisQA.Services.Models.Quiz;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -16,10 +18,12 @@ namespace BoneVisQA.API.Controllers.Lecturer;
 public class LecturersController : ControllerBase
 {
     private readonly ILecturerService _lecturerService;
+    private readonly IAIQuizService _aiQuizService;
 
-    public LecturersController(ILecturerService lecturerService)
+    public LecturersController(ILecturerService lecturerService, IAIQuizService aiQuizService)
     {
         _lecturerService = lecturerService;
+        _aiQuizService = aiQuizService;
     }
 
     #region Class Management
@@ -29,6 +33,38 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.CreateClassAsync(request);
         return Ok(result);
+    }
+
+    [HttpGet("classes/{classId:guid}")]
+    public async Task<ActionResult<ClassDto>> GetClassById(Guid classId)
+    {
+        var result = await _lecturerService.GetClassByIdAsync(classId);
+        if (result == null)
+            return NotFound(new { message = "Lớp không tồn tại." });
+        return Ok(result);
+    }
+
+    [HttpPut("classes/{classId:guid}")]
+    public async Task<ActionResult<ClassDto>> UpdateClass(Guid classId, [FromBody] UpdateClassRequestDto request)
+    {
+        try
+        {
+            var result = await _lecturerService.UpdateClassAsync(classId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("classes/{classId:guid}")]
+    public async Task<IActionResult> DeleteClass(Guid classId)
+    {
+        var deleted = await _lecturerService.DeleteClassAsync(classId);
+        if (!deleted)
+            return NotFound(new { message = "Lớp không tồn tại." });
+        return NoContent();
     }
 
     [HttpGet("classes")]
@@ -74,6 +110,22 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetAvailableStudents(Guid classId)
     {
         var result = await _lecturerService.GetAvailableStudentsAsync(classId);
+        return Ok(result);
+    }
+
+    [HttpPost("classes/{classId:guid}/import-students")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "File không được để trống." });
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".xlsx" && extension != ".xls")
+            return BadRequest(new { message = "Chỉ chấp nhận file .xlsx hoặc .xls." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _lecturerService.ImportStudentsFromExcelAsync(classId, stream, file.FileName);
         return Ok(result);
     }
 
@@ -158,6 +210,24 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Cập nhật thông tin quiz.</summary>
+    [HttpPut("quizzes/{quizId:guid}")]
+    public async Task<ActionResult<QuizDto>> UpdateQuiz(Guid quizId, [FromBody] UpdateQuizRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var result = await _lecturerService.UpdateQuizAsync(quizId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     /// <summary>Lấy danh sách câu hỏi của một quiz.</summary>
     [HttpGet("quizzes/{quizId:guid}/questions")]
     public async Task<IActionResult> GetQuizQuestions(Guid quizId)
@@ -227,6 +297,115 @@ public class LecturersController : ControllerBase
 
     #endregion
 
+    #region AI Quiz Management
+
+    /// <summary>
+    /// AI Auto-Generate Quiz: Tạo quiz tự động từ topic
+    /// </summary>
+    [HttpPost("ai/generate-quiz")]
+    public async Task<ActionResult<AIQuizGenerationResultDto>> GenerateQuiz([FromBody] AIAutoGenerateQuizRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Topic))
+            return BadRequest(new { message = "Topic là bắt buộc." });
+
+        var result = await _aiQuizService.GenerateQuizQuestionsAsync(
+            request.Topic,
+            request.QuestionCount,
+            request.Difficulty);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// AI Suggest Questions: Gợi ý câu hỏi từ các cases đã chọn
+    /// </summary>
+    [HttpPost("ai/suggest-questions")]
+    public async Task<ActionResult<AIQuizGenerationResultDto>> SuggestQuestions([FromBody] AISuggestQuestionsRequestDto request)
+    {
+        if (request.Cases == null || request.Cases.Count == 0)
+            return BadRequest(new { message = "Cần chọn ít nhất 1 case." });
+
+        var result = await _aiQuizService.SuggestQuestionsFromCasesAsync(
+            request.Cases,
+            request.QuestionsPerCase);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Tạo quiz hoàn chỉnh từ AI (Auto-Generate + Save)
+    /// </summary>
+    [HttpPost("ai/create-quiz")]
+    public async Task<IActionResult> CreateQuizFromAI([FromBody] AIAutoGenerateQuizRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest(new { message = "Title là bắt buộc." });
+
+        if (string.IsNullOrWhiteSpace(request.Topic))
+            return BadRequest(new { message = "Topic là bắt buộc." });
+
+        try
+        {
+            // 1. Tạo quiz
+            var createRequest = new CreateQuizRequestDto
+            {
+                Title = request.Title,
+                Topic = request.Topic,
+                Difficulty = request.Difficulty,
+                Classification = request.Classification,
+                IsAiGenerated = true,
+                ClassId = request.ClassId ?? Guid.Empty,
+                OpenTime = request.OpenTime,
+                CloseTime = request.CloseTime,
+                TimeLimit = request.TimeLimit,
+                PassingScore = request.PassingScore
+            };
+
+            var quiz = await _lecturerService.CreateQuizAsync(createRequest);
+
+            // 2. Tạo questions từ AI
+            var questionsResult = await _aiQuizService.GenerateQuizQuestionsAsync(
+                request.Topic,
+                request.QuestionCount,
+                request.Difficulty);
+
+            if (questionsResult.Success && questionsResult.Questions.Count > 0)
+            {
+                foreach (var q in questionsResult.Questions)
+                {
+                    var questionRequest = new CreateQuizQuestionDto
+                    {
+                        QuizId = quiz.Id,
+                        CaseId = q.CaseId,
+                        QuestionText = q.QuestionText,
+                        Type = q.Type,
+                        OptionA = q.OptionA,
+                        OptionB = q.OptionB,
+                        OptionC = q.OptionC,
+                        OptionD = q.OptionD,
+                        CorrectAnswer = q.CorrectAnswer
+                    };
+
+                    await _lecturerService.AddQuizQuestionAsync(quiz.Id, questionRequest);
+                }
+            }
+
+            return Ok(new
+            {
+                quizId = quiz.Id,
+                title = quiz.Title,
+                questionsCreated = questionsResult.Questions.Count,
+                message = $"Đã tạo quiz với {questionsResult.Questions.Count} câu hỏi"
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    #endregion
+
     #region Cases & Student Questions
 
     [HttpGet("cases")]
@@ -250,6 +429,70 @@ public class LecturersController : ControllerBase
         if (!updated)
             return NotFound(new { message = "Case không tồn tại." });
         return NoContent();
+    }
+
+    #endregion
+
+    #region QA Triage
+
+    /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>
+    [HttpGet("triage")]
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetTriageListAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("classes/{classId:guid}/questions/{questionId:guid}")]
+    public async Task<ActionResult<LectStudentQuestionDetailDto>> GetQuestionDetail(Guid classId, Guid questionId)
+    {
+        var result = await _lecturerService.GetQuestionDetailAsync(classId, questionId);
+        if (result == null)
+            return NotFound(new { message = "Câu hỏi không tồn tại." });
+        return Ok(result);
+    }
+
+    [HttpPut("classes/{classId:guid}/questions/{questionId:guid}/respond")]
+    public async Task<ActionResult<LecturerAnswerDto>> RespondToQuestion(
+        Guid classId,
+        Guid questionId,
+        [FromBody] RespondToQuestionRequestDto request)
+    {
+        try
+        {
+            var result = await _lecturerService.RespondToQuestionAsync(classId, questionId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Tiến độ học tập của tất cả sinh viên trong một lớp.</summary>
+    [HttpGet("classes/{classId:guid}/student-progress")]
+    public async Task<ActionResult<IReadOnlyList<ClassStudentProgressDto>>> GetClassStudentProgress(Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetClassStudentProgressAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpGet("classes/{classId:guid}/questions")]

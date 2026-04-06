@@ -48,6 +48,31 @@ public partial class User
     [MaxLength(1024)]
     public string? AvatarUrl { get; set; }
 
+    // Medical Student Verification Fields
+    [Column("is_medical_student")]
+    public bool IsMedicalStudent { get; set; } = false;
+
+    [Column("medical_school")]
+    [MaxLength(256)]
+    public string? MedicalSchool { get; set; }
+
+    [Column("medical_student_id")]
+    [MaxLength(100)]
+    public string? MedicalStudentId { get; set; }
+
+    [Column("verification_status")]
+    [MaxLength(50)]
+    public string? VerificationStatus { get; set; } // "Pending", "Approved", "Rejected"
+
+    [Column("verification_notes")]
+    public string? VerificationNotes { get; set; }
+
+    [Column("verified_at")]
+    public DateTime? VerifiedAt { get; set; }
+
+    [Column("verified_by")]
+    public Guid? VerifiedBy { get; set; }
+
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
 

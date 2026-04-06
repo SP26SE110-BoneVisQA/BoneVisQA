@@ -11,5 +11,6 @@ public interface IAuthService
     Task<AuthResultDto> ResetPasswordAsync(ResetPasswordRequestDto request);
     Task<AuthResultDto> GoogleLoginAsync(GoogleLoginRequestDto request);
     Task<AuthResultDto> GoogleRegisterAsync(GoogleLoginRequestDto request);
+    Task<AuthResultDto> RequestMedicalVerificationAsync(Guid userId, MedicalVerificationRequestDto request);
 }
 

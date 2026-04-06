@@ -69,6 +69,10 @@ public class AuthService : IAuthService
             Password = HashPassword(request.Password),
             SchoolCohort = request.SchoolCohort,
             IsActive = false,
+            IsMedicalStudent = request.IsMedicalStudent,
+            MedicalSchool = request.MedicalSchool,
+            MedicalStudentId = request.MedicalStudentId,
+            VerificationStatus = request.IsMedicalStudent ? "Pending" : null,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -131,7 +135,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin để được hỗ trợ."
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
             };
         }
 
@@ -517,34 +521,31 @@ public class AuthService : IAuthService
                 await _unitOfWork.SaveAsync();
 
                 _ = _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
+
+                return new AuthResultDto
+                {
+                    Success = true,
+                    Message = "Đăng nhập Google thành công. Vui lòng xác nhận thông tin y khoa để hoàn tất đăng ký.",
+                    UserId = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    RequiresMedicalVerification = true
+                };
             }
         }
 
-        if (user == null)
-        {
-            return new AuthResultDto
-            {
-                Success = false,
-                Message = "Không thể xử lý đăng nhập Google."
-            };
-        }
-
-        var userWithRoles = await _unitOfWork.UserRepository
+        user = await _unitOfWork.UserRepository
             .FindByCondition(u => u.Id == user.Id)
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync();
-        if (userWithRoles != null)
-        {
-            user = userWithRoles;
-        }
+            .FirstOrDefaultAsync() ?? user;
 
         if (!user.IsActive)
         {
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin."
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
             };
         }
 
@@ -553,8 +554,10 @@ public class AuthService : IAuthService
         {
             return new AuthResultDto
             {
-                Success = false,
-                Message = "Tài khoản chưa được gán vai trò, liên hệ admin."
+                Success = true,
+                Message = "Tài khoản đang chờ xác minh y khoa. Vui lòng hoàn tất thông tin.",
+                UserId = user.Id,
+                RequiresMedicalVerification = true
             };
         }
 
@@ -573,6 +576,39 @@ public class AuthService : IAuthService
             FullName = user.FullName,
             Email = user.Email,
             Roles = roles
+        };
+    }
+
+    public async Task<AuthResultDto> RequestMedicalVerificationAsync(Guid userId, MedicalVerificationRequestDto request)
+    {
+        var user = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.Id == userId)
+            .FirstOrDefaultAsync();
+
+        if (user == null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Không tìm thấy người dùng."
+            };
+        }
+
+        user.IsMedicalStudent = true;
+        user.MedicalSchool = request.MedicalSchool;
+        user.MedicalStudentId = request.MedicalStudentId;
+        user.VerificationStatus = "Pending";
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.UserRepository.UpdateAsync(user);
+        await _unitOfWork.SaveAsync();
+
+        _ = _emailService.SendMedicalVerificationRequestedEmailAsync(user.Email, user.FullName);
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Yêu cầu xác nhận sinh viên y khoa đã được gửi. Vui lòng chờ admin duyệt."
         };
     }
 }

@@ -1,6 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -26,8 +27,8 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 Id = Guid.NewGuid(),
                 Title = request.Title,
-                OpenTime = request.OpenTime,
-                CloseTime = request.CloseTime,
+                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
                 CreatedAt = DateTime.UtcNow
@@ -93,44 +94,60 @@ namespace BoneVisQA.Services.Services.Expert
                 CorrectAnswer = question.CorrectAnswer
             };
         }
-        public async Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId)
+        public async Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto)
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
-                .GetByIdAsync(classId)
+                .GetByIdAsync(dto.ClassId)
                 ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
 
             var quiz = await _unitOfWork.QuizRepository
-                .GetByIdAsync(quizId)
+                .GetByIdAsync(dto.QuizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
             var existing = await _unitOfWork.ClassQuizSessionRepository
-                .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
+                .FirstOrDefaultAsync(cq => cq.ClassId == dto.ClassId && cq.QuizId == dto.QuizId);
 
             if (existing != null)
                 throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
 
+            var openTime = dto.OpenTime.HasValue ? DateTime.SpecifyKind(dto.OpenTime.Value, DateTimeKind.Utc) : quiz.OpenTime;
+            var closeTime = dto.CloseTime.HasValue ? DateTime.SpecifyKind(dto.CloseTime.Value, DateTimeKind.Utc) : quiz.CloseTime;
+
             var classQuiz = new ClassQuizSession
             {
                 Id = Guid.NewGuid(),
-                ClassId = classId,
-                QuizId = quizId,
-                OpenTime = quiz.OpenTime,
-                CloseTime = quiz.CloseTime,
-                TimeLimitMinutes = quiz.TimeLimit,
-                PassingScore = quiz.PassingScore,
+
+                ClassId = dto.ClassId,
+                QuizId = dto.QuizId,
+
+                OpenTime = openTime,
+                CloseTime = closeTime,
+
+                PassingScore = dto.PassingScore ?? quiz.PassingScore,
+                TimeLimitMinutes = dto.TimeLimitMinutes ?? quiz.TimeLimit,
+
                 CreatedAt = DateTime.UtcNow
             };
+
 
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
 
-            return new ClassQuizDto
+            return new ClassQuizSessionResponseDTO
             {
                 ClassId = classQuiz.ClassId,
                 ClassName = academicClass.ClassName,
+
                 QuizId = classQuiz.QuizId,
                 QuizName = quiz.Title,
-                AssignedAt = classQuiz.CreatedAt
+
+                AssignedAt = classQuiz.CreatedAt,
+
+                OpenTime = classQuiz.OpenTime,
+                CloseTime = classQuiz.CloseTime,
+
+                PassingScore = classQuiz.PassingScore,
+                TimeLimitMinutes = classQuiz.TimeLimitMinutes
             };
         }
         public async Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId)

@@ -28,6 +28,30 @@
         }
       }
     },
+    "/api/admin/documents/categories": {
+      "get": {
+        "tags": [
+          "AdminDocuments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/documents/tags": {
+      "get": {
+        "tags": [
+          "AdminDocuments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/documents/quality/negative-reviews": {
       "get": {
         "tags": [
@@ -521,6 +545,24 @@
         "tags": [
           "AdminUsers"
         ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -821,6 +863,167 @@
         }
       }
     },
+    "/api/admin/users/{userId}/classes": {
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignUserToClassRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignUserToClassRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignUserToClassRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/classes": {
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{userId}/classes/{classId}": {
+      "delete": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/verifications/pending": {
+      "get": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/verifications/approve": {
+      "put": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveMedicalVerificationRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveMedicalVerificationRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveMedicalVerificationRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Auths/register": {
       "post": {
         "tags": [
@@ -1007,6 +1210,46 @@
         }
       }
     },
+    "/api/Auths/request-medical-verification": {
+      "post": {
+        "tags": [
+          "Auths"
+        ],
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalVerificationRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/reset-password": {
       "get": {
         "tags": [
@@ -1040,17 +1283,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTOResponse"
+                "$ref": "#/components/schemas/MedicalCaseDTORequest"
               }
             }
           }
@@ -1211,31 +1454,30 @@
         }
       }
     },
-    "/api/expert/class/{classId}/assign/{quizId}": {
+    "/api/expert/assign": {
       "post": {
         "tags": [
           "Expert"
         ],
-        "parameters": [
-          {
-            "name": "classId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "quizId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignQuizRequestDTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignQuizRequestDTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignQuizRequestDTO"
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -1293,6 +1535,140 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/stats": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardStatsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/pending-reviews": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardPendingReviewDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/recent-cases": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExpertDashboardRecentCaseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expert/dashboard/activity": {
+      "get": {
+        "tags": [
+          "ExpertDashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertDashboardActivityDto"
+                }
+              }
+            }
           }
         }
       }
@@ -1934,7 +2310,379 @@
         }
       }
     },
+    "/api/Lecturers/classes": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClassRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClassRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClassRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "lecturerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/classes/{classId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/enroll": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/enroll": {
       "post": {
         "tags": [
           "Lecturers"
@@ -2044,6 +2792,74 @@
         }
       }
     },
+    "/api/Lecturers/classes/{classId}/enrollmany": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentsRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentsRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollStudentsRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/students/{studentId}": {
       "delete": {
         "tags": [
@@ -2076,7 +2892,88 @@
         }
       }
     },
+    "/api/Lecturers/classes/{classId}/students/{studentId}": {
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "studentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/students": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/students": {
       "get": {
         "tags": [
           "Lecturers"
@@ -2174,7 +3071,282 @@
         }
       }
     },
+    "/api/Lecturers/classes/{classId}/students/available": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentEnrollmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/classes/{classId}/import-students": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/import-students": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStudentsSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/announcements": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnnouncementDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnnouncementDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnnouncementDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/announcements": {
       "post": {
         "tags": [
           "Lecturers"
@@ -2320,7 +3492,78 @@
         }
       }
     },
+    "/api/Lecturers/classes/{classId}/stats": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassStatsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Lecturers": {
       "post": {
         "tags": [
           "Lecturers"
@@ -2399,7 +3642,104 @@
         }
       }
     },
+    "/api/Lecturers/quizzes": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "lecturerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassQuizDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassQuizDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassQuizDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/quizzes": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/quizzes": {
       "get": {
         "tags": [
           "Lecturers"
@@ -2499,6 +3839,57 @@
         }
       }
     },
+    "/api/Lecturers/quizzes/batch": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuizDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/quizzes/{quizId}": {
       "get": {
         "tags": [
@@ -2537,9 +3928,226 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/quizzes/{quizId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDto"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/lecturer/quizzes/{quizId}/questions": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizQuestionDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizQuestionDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateQuizQuestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Lecturers/quizzes/{quizId}/questions": {
       "get": {
         "tags": [
           "Lecturers"
@@ -2703,6 +4311,107 @@
         }
       }
     },
+    "/api/Lecturers/quizzes/questions/{questionId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizQuestionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizQuestionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizQuestionDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizsQuestionRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizsQuestionRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizsQuestionRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/quizzes/{quizId}": {
       "post": {
         "tags": [
@@ -2752,6 +4461,309 @@
         }
       }
     },
+    "/api/Lecturers/classes/{classId}/quizzes/{quizId}": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassQuizDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassQuizDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassQuizDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/ai/generate-quiz": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/ai/generate-quiz": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/ai/suggest-questions": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/ai/suggest-questions": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISuggestQuestionsRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/ai/create-quiz": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Lecturers/ai/create-quiz": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIAutoGenerateQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/lecturer/cases": {
       "get": {
         "tags": [
@@ -2790,7 +4802,113 @@
         }
       }
     },
+    "/api/Lecturers/cases": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/cases": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCasesToClassRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCasesToClassRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCasesToClassRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/cases": {
       "post": {
         "tags": [
           "Lecturers"
@@ -2900,7 +5018,542 @@
         }
       }
     },
+    "/api/Lecturers/cases/{caseId}/approve": {
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveCaseRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveCaseRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveCaseRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lecturer/triage": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/triage": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LecturerTriageRowDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/classes/{classId}/questions/{questionId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/questions/{questionId}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectStudentQuestionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/classes/{classId}/questions/{questionId}/respond": {
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/questions/{questionId}/respond": {
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondToQuestionRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LecturerAnswerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/classes/{classId}/student-progress": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/student-progress": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassStudentProgressDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/questions": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "caseId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "studentId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LectStudentQuestionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LectStudentQuestionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LectStudentQuestionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/questions": {
       "get": {
         "tags": [
           "Lecturers"
@@ -3816,6 +6469,54 @@
         }
       }
     },
+    "/api/student/quizzes/practice/generate": {
+      "post": {
+        "tags": [
+          "StudentQuizzes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/student/quizzes/submit": {
       "post": {
         "tags": [
@@ -4367,6 +7068,55 @@
         }
       }
     },
+    "/api/upload/image": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageUploadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageUploadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/student/visual-qa/ask": {
       "post": {
         "tags": [
@@ -4481,6 +7231,196 @@
   },
   "components": {
     "schemas": {
+      "AIAutoGenerateQuizRequestDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "classId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdByLecturerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timeLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AIQuizCaseInputDto": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "modality": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyFindings": {
+            "type": "string",
+            "nullable": true
+          },
+          "suggestedDiagnosis": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AIQuizGenerationResultDto": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AIQuizQuestionDto"
+            },
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AIQuizQuestionDto": {
+        "type": "object",
+        "properties": {
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionA": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionB": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionC": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionD": {
+            "type": "string",
+            "nullable": true
+          },
+          "correctAnswer": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "explanation": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AISuggestQuestionsRequestDto": {
+        "type": "object",
+        "properties": {
+          "cases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AIQuizCaseInputDto"
+            },
+            "nullable": true
+          },
+          "questionsPerCase": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AddAnnotationDTOResponse": {
         "type": "object",
         "properties": {
@@ -4566,6 +7506,19 @@
         },
         "additionalProperties": false
       },
+      "ApproveMedicalVerificationRequestDto": {
+        "type": "object",
+        "properties": {
+          "isApproved": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AskQuestionRequestDto": {
         "type": "object",
         "properties": {
@@ -4621,6 +7574,40 @@
         },
         "additionalProperties": false
       },
+      "AssignQuizRequestDTO": {
+        "type": "object",
+        "properties": {
+          "classId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "timeLimitMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AssignQuizSessionRequestDto": {
         "type": "object",
         "properties": {
@@ -4647,6 +7634,19 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssignUserToClassRequestDto": {
+        "required": [
+          "classId"
+        ],
+        "type": "object",
+        "properties": {
+          "classId": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -4915,6 +7915,20 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "questionCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -4988,6 +8002,54 @@
           "avgQuizScore": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClassStudentProgressDto": {
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCasesViewed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalQuestionsAsked": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "avgQuizScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "quizAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "escalatedAnswers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastActivityAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -5087,6 +8149,10 @@
           "correctAnswer": {
             "type": "string",
             "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5095,6 +8161,21 @@
         "type": "object",
         "properties": {
           "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "isAiGenerated": {
+            "type": "boolean"
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
             "type": "string",
             "nullable": true
           },
@@ -5157,6 +8238,24 @@
           },
           "sendWelcomeEmail": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DailyActivityItemDto": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cases": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -5340,6 +8439,133 @@
         },
         "additionalProperties": false
       },
+      "ExpertDashboardActivityDto": {
+        "type": "object",
+        "properties": {
+          "weeklyActivity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyActivityItemDto"
+            },
+            "nullable": true
+          },
+          "avgDailyReviews": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardPendingReviewDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionSnippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiAnswerSnippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "priority": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardRecentCaseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "boneLocation": {
+            "type": "string",
+            "nullable": true
+          },
+          "lesionType": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "addedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "addedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "viewCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "usageCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExpertDashboardStatsDto": {
+        "type": "object",
+        "properties": {
+          "totalCases": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalReviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pendingReviews": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "approvedThisMonth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "studentInteractions": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "ExpertEscalatedAnswerDto": {
         "type": "object",
         "properties": {
@@ -5450,11 +8676,205 @@
         },
         "additionalProperties": false
       },
+      "GeneratePracticeQuizRequestDto": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "GoogleLoginRequestDto": {
         "type": "object",
         "properties": {
           "idToken": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageUploadResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportStudentsResultItemDto": {
+        "type": "object",
+        "properties": {
+          "rowNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "student": {
+            "$ref": "#/components/schemas/StudentEnrollmentDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportStudentsSummaryDto": {
+        "type": "object",
+        "properties": {
+          "totalRows": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "successCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alreadyEnrolledCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "notFoundCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportStudentsResultItemDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LectStudentQuestionDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseThumbnailUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseDifficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "language": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "answerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "answerText": {
+            "type": "string",
+            "nullable": true
+          },
+          "structuredDiagnosis": {
+            "type": "string",
+            "nullable": true
+          },
+          "differentialDiagnoses": {
+            "type": "string",
+            "nullable": true
+          },
+          "answerStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiConfidenceScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reviewedById": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "reviewedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviewedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isEscalated": {
+            "type": "boolean"
+          },
+          "escalatedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "escalatedAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -5526,6 +8946,36 @@
         },
         "additionalProperties": false
       },
+      "LecturerAnswerDto": {
+        "type": "object",
+        "properties": {
+          "answerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "answerText": {
+            "type": "string",
+            "nullable": true
+          },
+          "structuredDiagnosis": {
+            "type": "string",
+            "nullable": true
+          },
+          "differentialDiagnoses": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "LecturerDashboardStatsDto": {
         "type": "object",
         "properties": {
@@ -5557,6 +9007,87 @@
         },
         "additionalProperties": false
       },
+      "LecturerTriageRowDto": {
+        "type": "object",
+        "properties": {
+          "answerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "classId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "className": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "answerText": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "aiConfidenceScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "askedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isEscalated": {
+            "type": "boolean"
+          },
+          "escalatedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "escalatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "LoginRequestDto": {
         "type": "object",
         "properties": {
@@ -5571,11 +9102,16 @@
         },
         "additionalProperties": false
       },
-      "MedicalCaseDTOResponse": {
+      "MedicalCaseDTORequest": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
+            "nullable": true
+          },
+          "createdByExpertId": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           },
           "description": {
@@ -5603,8 +9139,17 @@
             "type": "string",
             "nullable": true
           },
+          "reflectiveQuestions": {
+            "type": "string",
+            "nullable": true
+          },
           "keyFindings": {
             "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -5622,6 +9167,20 @@
             "nullable": true
           },
           "modality": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MedicalVerificationRequestDto": {
+        "type": "object",
+        "properties": {
+          "medicalSchool": {
+            "type": "string",
+            "nullable": true
+          },
+          "medicalStudentId": {
             "type": "string",
             "nullable": true
           }
@@ -5667,6 +9226,21 @@
             "format": "uuid"
           },
           "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "isAiGenerated": {
+            "type": "boolean"
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
             "type": "string",
             "nullable": true
           },
@@ -5799,6 +9373,10 @@
           "correctAnswer": {
             "type": "string",
             "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5885,6 +9463,17 @@
           "schoolCohort": {
             "type": "string",
             "nullable": true
+          },
+          "isMedicalStudent": {
+            "type": "boolean"
+          },
+          "medicalSchool": {
+            "type": "string",
+            "nullable": true
+          },
+          "medicalStudentId": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5921,6 +9510,27 @@
           "reviewNote": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RespondToQuestionRequestDto": {
+        "type": "object",
+        "properties": {
+          "answerText": {
+            "type": "string",
+            "nullable": true
+          },
+          "structuredDiagnosis": {
+            "type": "string",
+            "nullable": true
+          },
+          "differentialDiagnoses": {
+            "type": "string",
+            "nullable": true
+          },
+          "approve": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -6238,6 +9848,10 @@
           "optionD": {
             "type": "string",
             "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -6413,6 +10027,25 @@
         },
         "additionalProperties": false
       },
+      "UpdateClassRequestDto": {
+        "type": "object",
+        "properties": {
+          "className": {
+            "type": "string",
+            "nullable": true
+          },
+          "semester": {
+            "type": "string",
+            "nullable": true
+          },
+          "expertId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateDocumentTagsRequest": {
         "type": "object",
         "properties": {
@@ -6422,6 +10055,36 @@
               "type": "string",
               "format": "uuid"
             },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateQuizRequestDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timeLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },
@@ -6455,6 +10118,10 @@
             "nullable": true
           },
           "optionD": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageUrl": {
             "type": "string",
             "nullable": true
           }

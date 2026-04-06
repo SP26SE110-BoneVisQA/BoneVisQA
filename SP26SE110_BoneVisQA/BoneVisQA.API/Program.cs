@@ -17,6 +17,7 @@ using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
+using BoneVisQA.Services.Services.AiQuizServices;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
@@ -140,6 +141,7 @@ builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
+builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
@@ -152,6 +154,7 @@ builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
+builder.Services.AddScoped<IAIQuizService, AIQuizService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -162,6 +165,7 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
 
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
+builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
@@ -175,6 +179,8 @@ app.UseCors("AllowAll");
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
+//
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;

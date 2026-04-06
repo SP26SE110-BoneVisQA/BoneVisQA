@@ -135,5 +135,33 @@ namespace BoneVisQA.Services.Services.Admin
 
             return await MapToDTOAsync(doc);
         }
+
+        // ── GetCategoriesAsync ───────────────────────────────
+        public async Task<List<CategoryDto>> GetCategoriesAsync()
+        {
+            var categories = await _unitOfWork.CategoryRepository.GetAllAsync();
+            return categories
+                .OrderBy(c => c.Name)
+                .Select(c => new CategoryDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Description = c.Description
+                }).ToList();
+        }
+
+        // ── GetTagsAsync ────────────────────────────────────
+        public async Task<List<TagDto>> GetTagsAsync()
+        {
+            var tags = await _unitOfWork.TagRepository.GetAllAsync();
+            return tags
+                .OrderBy(t => t.Name)
+                .Select(t => new TagDto
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    Type = t.Type
+                }).ToList();
+        }
     }
 }

@@ -22,6 +22,24 @@ public class StudentLearningService : IStudentLearningService
             .Select(e => e.ClassId)
             .ToListAsync();
 
+        // 1. Tìm quiz AI-generated theo topic (ưu tiên cao nhất)
+        if (!string.IsNullOrWhiteSpace(topic))
+        {
+            var normalizedTopic = topic.Trim().ToLower();
+            var aiQuiz = await _unitOfWork.Context.Quizzes
+                .AsNoTracking()
+                .Include(q => q.QuizQuestions)
+                    .ThenInclude(qq => qq.Case)
+                        .ThenInclude(c => c!.Category)
+                .Where(q => q.IsAiGenerated && q.Topic != null && q.Topic.ToLower() == normalizedTopic)
+                .Where(q => q.QuizQuestions.Any())
+                .FirstOrDefaultAsync();
+
+            if (aiQuiz != null)
+                return await CreateSessionFromQuizAsync(aiQuiz, studentId);
+        }
+
+        // 2. Fallback: Tìm quiz lecturer theo topic (is_ai_generated = false)
         var query = _unitOfWork.Context.Quizzes
             .AsNoTracking()
             .Include(q => q.QuizQuestions)
@@ -32,25 +50,52 @@ public class StudentLearningService : IStudentLearningService
                 classIds.Contains(cqs.ClassId) &&
                 (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
                 (cqs.CloseTime == null || cqs.CloseTime >= utcNow)))
+            .Where(q => !q.IsAiGenerated)
             .Where(q => q.QuizQuestions.Any());
 
         if (!string.IsNullOrWhiteSpace(topic))
         {
             var normalizedTopic = topic.Trim().ToLower();
             query = query.Where(q =>
+                q.Topic != null && q.Topic.ToLower() == normalizedTopic ||
                 q.Title.ToLower().Contains(normalizedTopic) ||
                 q.QuizQuestions.Any(qq =>
                     qq.QuestionText.ToLower().Contains(normalizedTopic) ||
                     (qq.Case != null && qq.Case.Title.ToLower().Contains(normalizedTopic)) ||
-                    (qq.Case != null && qq.Case.Category != null && qq.Case.Category.Name.ToLower().Contains(normalizedTopic))));
+                    (qq.Case != null && qq.Case.Category != null && qq.Case.Category.Name.ToLower() == normalizedTopic)));
         }
 
         var candidateQuizzes = await query.ToListAsync();
-        if (candidateQuizzes.Count == 0)
-            throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
+        if (candidateQuizzes.Count > 0)
+        {
+            var quiz = candidateQuizzes[Random.Shared.Next(candidateQuizzes.Count)];
+            return await CreateSessionFromQuizAsync(quiz, studentId);
+        }
 
-        var quiz = candidateQuizzes[Random.Shared.Next(candidateQuizzes.Count)];
+        // 3. Fallback cuối: Tìm bất kỳ quiz nào (AI hoặc lecturer)
+        var anyQuiz = await _unitOfWork.Context.Quizzes
+            .AsNoTracking()
+            .Include(q => q.QuizQuestions)
+                .ThenInclude(qq => qq.Case)
+                    .ThenInclude(c => c!.Category)
+            .Include(q => q.ClassQuizSessions)
+            .Where(q => q.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                (cqs.CloseTime == null || cqs.CloseTime >= utcNow)))
+            .Where(q => q.QuizQuestions.Any())
+            .FirstOrDefaultAsync();
 
+        if (anyQuiz != null)
+            return await CreateSessionFromQuizAsync(anyQuiz, studentId);
+
+        throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
+    }
+
+    private async Task<QuizSessionDto> CreateSessionFromQuizAsync(
+        BoneVisQA.Repositories.Models.Quiz quiz, 
+        Guid studentId)
+    {
         var attempt = await _unitOfWork.Context.QuizAttempts
             .Include(a => a.StudentQuizAnswers)
             .FirstOrDefaultAsync(a => a.StudentId == studentId && a.QuizId == quiz.Id);
@@ -87,7 +132,7 @@ public class StudentLearningService : IStudentLearningService
             AttemptId = attempt.Id,
             QuizId = quiz.Id,
             Title = quiz.Title,
-            Topic = topic,
+            Topic = quiz.Topic,
             Questions = quiz.QuizQuestions
                 .OrderBy(q => q.QuestionText)
                 .Select(q => new StudentQuizQuestionDto
@@ -99,7 +144,8 @@ public class StudentLearningService : IStudentLearningService
                     OptionA = q.OptionA,
                     OptionB = q.OptionB,
                     OptionC = q.OptionC,
-                    OptionD = q.OptionD
+                    OptionD = q.OptionD,
+                    ImageUrl = q.ImageUrl
                 })
                 .ToList()
         };

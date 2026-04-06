@@ -179,6 +179,16 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
+    "Method": "GetCategories",
+    "RelativePath": "api/admin/documents/categories",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
     "Method": "GetDocumentsFlaggedForReview",
     "RelativePath": "api/admin/documents/quality/flagged-for-review",
     "HttpMethod": "GET",
@@ -233,6 +243,16 @@
         "IsRequired": false
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminDocumentsController",
+    "Method": "GetTags",
+    "RelativePath": "api/admin/documents/tags",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {
@@ -334,7 +354,18 @@
     "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
-    "Parameters": [],
+    "Parameters": [
+      {
+        "Name": "page",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "pageSize",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
     "ReturnTypes": []
   },
   {
@@ -492,6 +523,85 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "ApproveMedicalVerification",
+    "RelativePath": "api/admin/users/{id}/verifications/approve",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Admin.ApproveMedicalVerificationRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetUserClasses",
+    "RelativePath": "api/admin/users/{userId}/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "AssignUserToClass",
+    "RelativePath": "api/admin/users/{userId}/classes",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Admin.AssignUserToClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "RemoveUserFromClass",
+    "RelativePath": "api/admin/users/{userId}/classes/{classId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
     "Method": "RevokeRole",
     "RelativePath": "api/admin/users/{userId}/revoke-role",
     "HttpMethod": "PUT",
@@ -508,6 +618,16 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetAvailableClasses",
+    "RelativePath": "api/admin/users/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
     "Method": "GetUsersByRole",
     "RelativePath": "api/admin/users/roles/{role}",
     "HttpMethod": "GET",
@@ -520,6 +640,16 @@
         "IsRequired": true
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
+    "Method": "GetPendingVerifications",
+    "RelativePath": "api/admin/users/verifications/pending",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {
@@ -604,6 +734,27 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Auth.AuthsController",
+    "Method": "RequestMedicalVerification",
+    "RelativePath": "api/Auths/request-medical-verification",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Auth.MedicalVerificationRequestDto",
+        "IsRequired": true
+      },
+      {
+        "Name": "X-User-Id",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Auth.AuthsController",
     "Method": "ResetPassword",
     "RelativePath": "api/Auths/reset-password",
     "HttpMethod": "POST",
@@ -639,6 +790,22 @@
       {
         "Name": "dto",
         "Type": "BoneVisQA.Services.Models.Expert.AddAnnotationDTOResponse",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "AssignToClass",
+    "RelativePath": "api/expert/assign",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "BoneVisQA.Services.Models.Expert.AssignQuizRequestDTO",
         "IsRequired": true
       }
     ],
@@ -686,32 +853,91 @@
     "Parameters": [
       {
         "Name": "dto",
-        "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTOResponse",
+        "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTORequest",
         "IsRequired": true
       }
     ],
     "ReturnTypes": []
   },
   {
-    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
-    "Method": "AssignToClass",
-    "RelativePath": "api/expert/class/{classId}/assign/{quizId}",
-    "HttpMethod": "POST",
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetActivity",
+    "RelativePath": "api/expert/dashboard/activity",
+    "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
-    "Parameters": [
+    "Parameters": [],
+    "ReturnTypes": [
       {
-        "Name": "classId",
-        "Type": "System.Guid",
-        "IsRequired": true
-      },
-      {
-        "Name": "quizId",
-        "Type": "System.Guid",
-        "IsRequired": true
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertDashboardActivityDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
       }
-    ],
-    "ReturnTypes": []
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetPendingReviews",
+    "RelativePath": "api/expert/dashboard/pending-reviews",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Expert.ExpertDashboardPendingReviewDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetRecentCases",
+    "RelativePath": "api/expert/dashboard/recent-cases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Expert.ExpertDashboardRecentCaseDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertDashboardController",
+    "Method": "GetStats",
+    "RelativePath": "api/expert/dashboard/stats",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertDashboardStatsDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
@@ -944,6 +1170,74 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "CreateQuizFromAI",
+    "RelativePath": "api/lecturer/ai/create-quiz",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AIAutoGenerateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GenerateQuiz",
+    "RelativePath": "api/lecturer/ai/generate-quiz",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AIAutoGenerateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Quiz.AIQuizGenerationResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "SuggestQuestions",
+    "RelativePath": "api/lecturer/ai/suggest-questions",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AISuggestQuestionsRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Quiz.AIQuizGenerationResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetAllCases",
     "RelativePath": "api/lecturer/cases",
     "HttpMethod": "GET",
@@ -1034,6 +1328,79 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassById",
+    "RelativePath": "api/lecturer/classes/{classId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateClass",
+    "RelativePath": "api/lecturer/classes/{classId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteClass",
+    "RelativePath": "api/lecturer/classes/{classId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
@@ -1239,6 +1606,37 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "ImportStudentsFromExcel",
+    "RelativePath": "api/lecturer/classes/{classId}/import-students",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "file",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ImportStudentsSummaryDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetStudentQuestions",
     "RelativePath": "api/lecturer/classes/{classId}/questions",
     "HttpMethod": "GET",
@@ -1264,6 +1662,73 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.LectStudentQuestionDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuestionDetail",
+    "RelativePath": "api/lecturer/classes/{classId}/questions/{questionId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LectStudentQuestionDetailDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "RespondToQuestion",
+    "RelativePath": "api/lecturer/classes/{classId}/questions/{questionId}/respond",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.RespondToQuestionRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LecturerAnswerDto",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -1347,6 +1812,32 @@
     "ReturnTypes": [
       {
         "Type": "BoneVisQA.Services.Models.Lecturer.ClassStatsDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassStudentProgress",
+    "RelativePath": "api/lecturer/classes/{classId}/student-progress",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.ClassStudentProgressDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -1547,6 +2038,37 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateQuiz",
+    "RelativePath": "api/lecturer/quizzes/{quizId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetQuizQuestions",
     "RelativePath": "api/lecturer/quizzes/{quizId}/questions",
     "HttpMethod": "GET",
@@ -1672,6 +2194,32 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetTriageList",
+    "RelativePath": "api/lecturer/triage",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.LecturerTriageRowDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerTriageController",
     "Method": "Escalate",
     "RelativePath": "api/lecturer/triage/{answerId}/escalate",
@@ -1693,6 +2241,947 @@
     "ReturnTypes": [
       {
         "Type": "BoneVisQA.Services.Models.Lecturer.EscalatedAnswerDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "CreateQuiz",
+    "RelativePath": "api/Lecturers",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.CreateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "CreateQuizFromAI",
+    "RelativePath": "api/Lecturers/ai/create-quiz",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AIAutoGenerateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GenerateQuiz",
+    "RelativePath": "api/Lecturers/ai/generate-quiz",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AIAutoGenerateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Quiz.AIQuizGenerationResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "SuggestQuestions",
+    "RelativePath": "api/Lecturers/ai/suggest-questions",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Quiz.AISuggestQuestionsRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Quiz.AIQuizGenerationResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetAllCases",
+    "RelativePath": "api/Lecturers/cases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.CaseDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "ApproveCase",
+    "RelativePath": "api/Lecturers/cases/{caseId}/approve",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "caseId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.ApproveCaseRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "CreateClass",
+    "RelativePath": "api/Lecturers/classes",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.CreateClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClasses",
+    "RelativePath": "api/Lecturers/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "lecturerId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.ClassDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassById",
+    "RelativePath": "api/Lecturers/classes/{classId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateClass",
+    "RelativePath": "api/Lecturers/classes/{classId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteClass",
+    "RelativePath": "api/Lecturers/classes/{classId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "CreateAnnouncement",
+    "RelativePath": "api/Lecturers/classes/{classId}/announcements",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.CreateAnnouncementRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.AnnouncementDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassAnnouncements",
+    "RelativePath": "api/Lecturers/classes/{classId}/announcements",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.AnnouncementDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "AssignCasesToClass",
+    "RelativePath": "api/Lecturers/classes/{classId}/cases",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.AssignCasesToClassRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.CaseDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "EnrollStudent",
+    "RelativePath": "api/Lecturers/classes/{classId}/enroll",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.EnrollStudentRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "EnrollManyStudents",
+    "RelativePath": "api/Lecturers/classes/{classId}/enrollmany",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.EnrollStudentsRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.StudentEnrollmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "ImportStudentsFromExcel",
+    "RelativePath": "api/Lecturers/classes/{classId}/import-students",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "file",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ImportStudentsSummaryDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetStudentQuestions",
+    "RelativePath": "api/Lecturers/classes/{classId}/questions",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "caseId",
+        "Type": "System.Nullable\u00601[[System.Guid, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "studentId",
+        "Type": "System.Nullable\u00601[[System.Guid, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.LectStudentQuestionDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuestionDetail",
+    "RelativePath": "api/Lecturers/classes/{classId}/questions/{questionId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LectStudentQuestionDetailDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "RespondToQuestion",
+    "RelativePath": "api/Lecturers/classes/{classId}/questions/{questionId}/respond",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.RespondToQuestionRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LecturerAnswerDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuizzesForClass",
+    "RelativePath": "api/Lecturers/classes/{classId}/quizzes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.QuizDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "AssignQuizToClass",
+    "RelativePath": "api/Lecturers/classes/{classId}/quizzes/{quizId}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassQuizDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassStats",
+    "RelativePath": "api/Lecturers/classes/{classId}/stats",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.ClassStatsDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassStudentProgress",
+    "RelativePath": "api/Lecturers/classes/{classId}/student-progress",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.ClassStudentProgressDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetStudentsInClass",
+    "RelativePath": "api/Lecturers/classes/{classId}/students",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.StudentEnrollmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "RemoveStudent",
+    "RelativePath": "api/Lecturers/classes/{classId}/students/{studentId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "studentId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetAvailableStudents",
+    "RelativePath": "api/Lecturers/classes/{classId}/students/available",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.StudentEnrollmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuizzesForLecturer",
+    "RelativePath": "api/Lecturers/quizzes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "lecturerId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.ClassQuizDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuiz",
+    "RelativePath": "api/Lecturers/quizzes/{quizId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateQuiz",
+    "RelativePath": "api/Lecturers/quizzes/{quizId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuizQuestions",
+    "RelativePath": "api/Lecturers/quizzes/{quizId}/questions",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "AddQuizQuestion",
+    "RelativePath": "api/Lecturers/quizzes/{quizId}/questions",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.CreateQuizQuestionDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuizzesByIds",
+    "RelativePath": "api/Lecturers/quizzes/batch",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizIds",
+        "Type": "System.Guid[]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.QuizDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetQuizQuestionById",
+    "RelativePath": "api/Lecturers/quizzes/questions/{questionId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizQuestionDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateQuizQuestion",
+    "RelativePath": "api/Lecturers/quizzes/questions/{questionId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateQuizsQuestionRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteQuizQuestion",
+    "RelativePath": "api/Lecturers/quizzes/questions/{questionId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetTriageList",
+    "RelativePath": "api/Lecturers/triage",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.LecturerTriageRowDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -2179,6 +3668,32 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
+    "Method": "GeneratePracticeQuiz",
+    "RelativePath": "api/student/quizzes/practice/generate",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.API.Controllers.Student.StudentQuizzesController\u002BGeneratePracticeQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Quiz.AIQuizGenerationResultDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
     "Method": "SubmitQuiz",
     "RelativePath": "api/student/quizzes/submit",
     "HttpMethod": "POST",
@@ -2525,6 +4040,32 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.UploadController",
+    "Method": "UploadImage",
+    "RelativePath": "api/upload/image",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "file",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.API.Controllers.ImageUploadResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "Program\u002B\u003C\u003Ec",

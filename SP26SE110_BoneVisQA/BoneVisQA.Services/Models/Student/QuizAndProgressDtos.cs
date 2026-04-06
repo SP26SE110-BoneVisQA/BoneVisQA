@@ -42,6 +42,7 @@ public class StudentQuizQuestionDto
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 public class QuizSessionDto

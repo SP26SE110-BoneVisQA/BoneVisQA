@@ -18,8 +18,23 @@ public class AdminUsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAllUsers()
+    public async Task<IActionResult> GetAllUsers([FromQuery] int? page, [FromQuery] int? pageSize)
     {
+        if (page.HasValue || pageSize.HasValue)
+        {
+            var p = Math.Max(1, page ?? 1);
+            var ps = pageSize.HasValue ? Math.Clamp(pageSize.Value, 1, 100) : 10;
+            var paged = await _userManagementService.GetUsersPagedAsync(p, ps);
+            return Ok(new
+            {
+                Message = "Get users successfully.",
+                Result = paged.Items,
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
+        }
+
         var users = await _userManagementService.GetAllUsersAsync();
         return Ok(new
         {
@@ -27,6 +42,7 @@ public class AdminUsersController : ControllerBase
             Result = users
         });
     }
+
 
     [HttpGet("roles/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
@@ -96,6 +112,16 @@ public class AdminUsersController : ControllerBase
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────
+
+    /// GET /api/admin/users/{id}  –  Get a single user
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetUser(Guid id)
+    {
+        var result = await _userManagementService.GetUserByIdAsync(id);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = "Get user successfully.", Result = result });
+    }
     /// POST /api/admin/users  –  Create a new user
     [HttpPost]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequestDto request)
@@ -124,16 +150,6 @@ public class AdminUsersController : ControllerBase
         }
     }
 
-    /// GET /api/admin/users/{id}  –  Get a single user
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetUser(Guid id)
-    {
-        var result = await _userManagementService.GetUserByIdAsync(id);
-        return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
-            : Ok(new { Message = "Get user successfully.", Result = result });
-    }
-
     /// PUT /api/admin/users/{id}  –  Update user FullName / SchoolCohort
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequestDto request)
@@ -156,6 +172,72 @@ public class AdminUsersController : ControllerBase
             return NotFound(new { message = "Không tìm thấy người dùng." });
 
         return Ok(new { Message = "User permanently deleted." });
+    }
+
+    // ── Class management ────────────────────────────────────────────────────────
+
+    /// GET /api/admin/users/{userId}/classes  –  Lấy danh sách lớp của user
+    [HttpGet("{userId:guid}/classes")]
+    public async Task<IActionResult> GetUserClasses(Guid userId)
+    {
+        var classes = await _userManagementService.GetUserClassesAsync(userId);
+        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+    }
+
+    /// GET /api/admin/users/classes  –  Lấy tất cả lớp có sẵn
+    [HttpGet("classes")]
+    public async Task<IActionResult> GetAvailableClasses()
+    {
+        var classes = await _userManagementService.GetAvailableClassesAsync();
+        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+    }
+
+    /// POST /api/admin/users/{userId}/classes  –  Gán user vào một lớp
+    [HttpPost("{userId:guid}/classes")]
+    public async Task<IActionResult> AssignUserToClass(Guid userId, [FromBody] AssignUserToClassRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        var result = await _userManagementService.AssignUserToClassAsync(userId, request.ClassId);
+        return result == null
+            ? BadRequest(new { message = "Không thể gán user vào lớp. Kiểm tra lại vai trò hoặc lớp học." })
+            : Ok(new { Message = "User đã được gán vào lớp.", Result = result });
+    }
+
+    /// DELETE /api/admin/users/{userId}/classes/{classId}  –  Xóa user khỏi một lớp
+    [HttpDelete("{userId:guid}/classes/{classId:guid}")]
+    public async Task<IActionResult> RemoveUserFromClass(Guid userId, Guid classId)
+    {
+        var removed = await _userManagementService.RemoveUserFromClassAsync(userId, classId);
+        return !removed
+            ? NotFound(new { message = "Không tìm thấy liên kết user-lớp." })
+            : Ok(new { Message = "User đã được xóa khỏi lớp." });
+    }
+
+    // ── Medical Student Verification ─────────────────────────────────────────────
+
+    /// GET /api/admin/users/verifications/pending  –  Lấy danh sách chờ xác minh
+    [HttpGet("verifications/pending")]
+    public async Task<IActionResult> GetPendingVerifications()
+    {
+        var pending = await _userManagementService.GetPendingVerificationsAsync();
+        return Ok(new { Message = "Lấy danh sách xác minh thành công.", Result = pending });
+    }
+
+    /// PUT /api/admin/users/{id}/verifications/approve  –  Duyệt xác minh sinh viên y khoa
+    [HttpPut("{id:guid}/verifications/approve")]
+    public async Task<IActionResult> ApproveMedicalVerification(Guid id, [FromBody] ApproveMedicalVerificationRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        var adminId = Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
+
+        var result = await _userManagementService.ApproveMedicalVerificationAsync(id, request.IsApproved, request.Notes, adminId);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            : Ok(new { Message = request.IsApproved ? "Xác minh được phê duyệt." : "Xác minh bị từ chối.", Result = result });
     }
 }
 

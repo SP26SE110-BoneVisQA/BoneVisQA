@@ -24,7 +24,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(MedicalCaseDTOResponse dto)
+        public async Task<IActionResult> CreateCase(MedicalCaseDTORequest dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
@@ -91,10 +91,10 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
-        [HttpPost("class/{classId}/assign/{quizId}")]
-        public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
+        [HttpPost("assign")]
+        public async Task<IActionResult> AssignToClass(AssignQuizRequestDTO dto)
         {
-            var result = await _quizService.AssignQuizToClassAsync(classId, quizId);
+            var result = await _quizService.AssignQuizToClassAsync(dto);
             return Ok(new
             {
                 Message = "AssignQuiz successfully.",
