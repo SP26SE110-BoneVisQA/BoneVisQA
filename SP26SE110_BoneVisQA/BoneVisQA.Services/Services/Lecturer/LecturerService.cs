@@ -932,55 +932,69 @@ public class LecturerService : ILecturerService
             .ToListAsync();
 
         var studentIds = enrollments.Select(e => e.StudentId).ToList();
-        var result = new List<ClassStudentProgressDto>();
+        if (studentIds.Count == 0)
+            return new List<ClassStudentProgressDto>();
 
-        foreach (var enrollment in enrollments)
-        {
-            var studentId = enrollment.StudentId;
-            var stats = await _unitOfWork.LearningStatisticRepository
-                .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ClassId == classId);
-
-            var casesViewed = await _unitOfWork.CaseViewLogRepository
-                .FindByCondition(v => v.StudentId == studentId)
-                .CountAsync();
-
-            var questionsAsked = await _unitOfWork.StudentQuestionRepository
-                .FindByCondition(q => q.StudentId == studentId)
-                .CountAsync();
-
-            var quizAttempts = await _unitOfWork.QuizAttemptRepository
-                .FindByCondition(a => a.StudentId == studentId)
-                .ToListAsync();
-
-            var escalatedCount = await _unitOfWork.Context.CaseAnswers
-                .CountAsync(a => a.Question != null &&
-                    a.Question.StudentId == studentId &&
-                    a.Status == "Escalated");
-
-            var lastActivity = await _unitOfWork.Context.CaseViewLogs
-                .Where(v => v.StudentId == studentId)
-                .OrderByDescending(v => v.ViewedAt)
-                .Select(v => (DateTime?)v.ViewedAt)
-                .FirstOrDefaultAsync();
-
-            result.Add(new ClassStudentProgressDto
+        var casesViewedMap = await _unitOfWork.Context.CaseViewLogs
+            .AsNoTracking()
+            .Where(v => studentIds.Contains(v.StudentId))
+            .GroupBy(v => v.StudentId)
+            .Select(g => new
             {
-                StudentId = studentId,
-                StudentName = enrollment.Student?.FullName ?? string.Empty,
-                StudentEmail = enrollment.Student?.Email,
-                StudentCode = enrollment.Student?.SchoolCohort,
-                TotalCasesViewed = casesViewed,
-                TotalQuestionsAsked = questionsAsked,
-                AvgQuizScore = quizAttempts.Count > 0 && quizAttempts.Any(a => a.Score.HasValue)
-                    ? quizAttempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
-                    : null,
-                QuizAttempts = quizAttempts.Count,
-                EscalatedAnswers = escalatedCount,
-                LastActivityAt = lastActivity
-            });
-        }
+                StudentId = g.Key,
+                Count = g.Count(),
+                LastViewedAt = g.Max(x => x.ViewedAt)
+            })
+            .ToDictionaryAsync(x => x.StudentId, x => new { x.Count, x.LastViewedAt });
 
-        return result;
+        var questionsAskedMap = await _unitOfWork.Context.StudentQuestions
+            .AsNoTracking()
+            .Where(q => studentIds.Contains(q.StudentId))
+            .GroupBy(q => q.StudentId)
+            .Select(g => new { StudentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StudentId, x => x.Count);
+
+        var quizAggMap = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => studentIds.Contains(a.StudentId))
+            .GroupBy(a => a.StudentId)
+            .Select(g => new
+            {
+                StudentId = g.Key,
+                Attempts = g.Count(),
+                AvgScore = g.Where(x => x.Score.HasValue).Average(x => (double?)x.Score)
+            })
+            .ToDictionaryAsync(x => x.StudentId, x => new { x.Attempts, x.AvgScore });
+
+        var escalatedMap = await _unitOfWork.Context.CaseAnswers
+            .AsNoTracking()
+            .Where(a => a.Status == "Escalated" && a.Question != null && studentIds.Contains(a.Question.StudentId))
+            .GroupBy(a => a.Question.StudentId)
+            .Select(g => new { StudentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StudentId, x => x.Count);
+
+        return enrollments
+            .Select(enrollment =>
+            {
+                var studentId = enrollment.StudentId;
+                var casesAgg = casesViewedMap.GetValueOrDefault(studentId);
+                var quizAgg = quizAggMap.GetValueOrDefault(studentId);
+
+                return new ClassStudentProgressDto
+                {
+                    StudentId = studentId,
+                    StudentName = enrollment.Student?.FullName ?? string.Empty,
+                    StudentEmail = enrollment.Student?.Email,
+                    StudentCode = enrollment.Student?.SchoolCohort,
+                    TotalCasesViewed = casesAgg?.Count ?? 0,
+                    TotalQuestionsAsked = questionsAskedMap.GetValueOrDefault(studentId),
+                    AvgQuizScore = quizAgg?.AvgScore,
+                    QuizAttempts = quizAgg?.Attempts ?? 0,
+                    EscalatedAnswers = escalatedMap.GetValueOrDefault(studentId),
+                    LastActivityAt = casesAgg?.LastViewedAt
+                };
+            })
+            .ToList();
     }
 
     public async Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId)

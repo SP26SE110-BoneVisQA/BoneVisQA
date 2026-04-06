@@ -14,6 +14,10 @@ public class VisualQaAiService : IVisualQaAiService
     private const string InvalidMedicalImageAnswer = "Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.";
     private const string MissingMedicalKnowledgeAnswer =
         "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
+    private const string TemporaryVectorSearchUnavailableAnswer =
+        "Vector search is temporarily unavailable due to high network demand. Please try again later.";
+    private const string TemporaryAiGenerationUnavailableAnswer =
+        "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
 
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
@@ -45,7 +49,21 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         var ragQueryText = request.QuestionText;
-        var embedding = await _embeddingService.EmbedTextAsync(ragQueryText, cancellationToken);
+        float[] embedding;
+        try
+        {
+            embedding = await _embeddingService.EmbedTextAsync(ragQueryText, cancellationToken);
+        }
+        catch
+        {
+            return new VisualQAResponseDto
+            {
+                AnswerText = TemporaryVectorSearchUnavailableAnswer,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                Citations = new List<CitationItemDto>()
+            };
+        }
         var queryEmbedding = embedding;
         var queryVector = new Vector(queryEmbedding);
 
@@ -104,10 +122,24 @@ public class VisualQaAiService : IVisualQaAiService
         var prompt = BuildGeminiPrompt(request, topChunks);
 
         // GeminiService expects "imageUrl" input, but we pass Base64 for our inlineData workflow.
-        var response = await _geminiService.GenerateMedicalAnswerAsync(
-            prompt,
-            imageB64 ?? string.Empty,
-            cancellationToken);
+        VisualQAResponseDto response;
+        try
+        {
+            response = await _geminiService.GenerateMedicalAnswerAsync(
+                prompt,
+                imageB64 ?? string.Empty,
+                cancellationToken);
+        }
+        catch
+        {
+            return new VisualQAResponseDto
+            {
+                AnswerText = TemporaryAiGenerationUnavailableAnswer,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                Citations = new List<CitationItemDto>()
+            };
+        }
 
         var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
 
