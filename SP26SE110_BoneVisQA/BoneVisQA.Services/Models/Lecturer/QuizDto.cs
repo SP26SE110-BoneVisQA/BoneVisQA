@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
@@ -29,13 +30,22 @@ public class QuizDto
     public DateTime? CreatedAt { get; set; }
 }
 
-// Update Quiz Request Dto
+// Update Quiz Request Dto — dùng JsonPropertyName để nhận cả PascalCase (BE) lẫn camelCase (FE)
 public class UpdateQuizRequestDto
 {
+    [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("openTime")]
     public DateTime? OpenTime { get; set; }
+
+    [JsonPropertyName("closeTime")]
     public DateTime? CloseTime { get; set; }
+
+    [JsonPropertyName("timeLimit")]
     public int? TimeLimit { get; set; }
+
+    [JsonPropertyName("passingScore")]
     public int? PassingScore { get; set; }
 }
 
@@ -65,28 +75,62 @@ public class ClassQuizDto
 // CreateQuizQuestionDto - For creating questions (with individual options)
 public class CreateQuizQuestionDto
 {
+    [JsonPropertyName("quizId")]
     public Guid QuizId { get; set; }
+
+    [JsonPropertyName("caseId")]
     public Guid? CaseId { get; set; }
+
+    [JsonPropertyName("questionText")]
     public string QuestionText { get; set; } = null!;
+
+    [JsonPropertyName("type")]
     public string? Type { get; set; }
+
+    [JsonPropertyName("optionA")]
     public string? OptionA { get; set; }
+
+    [JsonPropertyName("optionB")]
     public string? OptionB { get; set; }
+
+    [JsonPropertyName("optionC")]
     public string? OptionC { get; set; }
+
+    [JsonPropertyName("optionD")]
     public string? OptionD { get; set; }
+
+    [JsonPropertyName("correctAnswer")]
     public string? CorrectAnswer { get; set; }
+
+    [JsonPropertyName("imageUrl")]
     public string? ImageUrl { get; set; }
 }
 
 // UpdateQuizsQuestionRequestDto - For updating questions (expert style)
 public class UpdateQuizsQuestionRequestDto
 {
+    [JsonPropertyName("questionText")]
     public string QuestionText { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
     public string? Type { get; set; }
+
+    [JsonPropertyName("correctAnswer")]
     public string? CorrectAnswer { get; set; }
+
+    [JsonPropertyName("optionA")]
     public string? OptionA { get; set; }
+
+    [JsonPropertyName("optionB")]
     public string? OptionB { get; set; }
+
+    [JsonPropertyName("optionC")]
     public string? OptionC { get; set; }
+
+    [JsonPropertyName("optionD")]
     public string? OptionD { get; set; }
+
+    [JsonPropertyName("imageUrl")]
     public string? ImageUrl { get; set; }
 }
 

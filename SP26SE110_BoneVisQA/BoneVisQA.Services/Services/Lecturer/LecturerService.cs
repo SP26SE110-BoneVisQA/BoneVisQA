@@ -290,7 +290,8 @@ public class LecturerService : ILecturerService
             OptionB = question.OptionB,
             OptionC = question.OptionC,
             OptionD = question.OptionD,
-            CorrectAnswer = question.CorrectAnswer
+            CorrectAnswer = question.CorrectAnswer,
+            ImageUrl = question.ImageUrl
         };
     }
 
