@@ -23,6 +23,13 @@ public class DocumentDto
     public DateTime? CreatedAt { get; set; }
 }
 
+public class DocumentIngestionStatusDto
+{
+    public string Status { get; set; } = "Processing";
+    public int ProgressPercentage { get; set; }
+    public string CurrentOperation { get; set; } = string.Empty;
+}
+
 public interface IDocumentService
 {
     /// <summary>
@@ -36,5 +43,6 @@ public interface IDocumentService
     Task<bool> DeleteDocumentAsync(Guid id);
     Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
+    Task<DocumentIngestionStatusDto?> GetIngestionStatusAsync(Guid id);
     string MapStatusForApi(string? rawStatus);
 }
