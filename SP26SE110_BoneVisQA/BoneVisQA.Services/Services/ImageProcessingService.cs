@@ -41,9 +41,9 @@ public class ImageProcessingService : IImageProcessingService
             var box = ParseBox(coordinatesJson);
             if (box.HasValue)
             {
-                var (x, y, w, h) = box.Value;
                 var iw = image.Width;
                 var ih = image.Height;
+                var (x, y, w, h) = ToPixelBox(box.Value, iw, ih);
                 x = Math.Clamp(x, 0, Math.Max(0, iw - 1));
                 y = Math.Clamp(y, 0, Math.Max(0, ih - 1));
                 w = Math.Clamp(w, 1, Math.Max(1, iw - x));
@@ -65,7 +65,7 @@ public class ImageProcessingService : IImageProcessingService
         }
     }
 
-    private static (int X, int Y, int W, int H)? ParseBox(string? json)
+    private static (double X, double Y, double W, double H)? ParseBox(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
             return null;
@@ -76,11 +76,40 @@ public class ImageProcessingService : IImageProcessingService
             if (!r.TryGetProperty("x", out var x) || !r.TryGetProperty("y", out var y) ||
                 !r.TryGetProperty("w", out var w) || !r.TryGetProperty("h", out var h))
                 return null;
-            return (x.GetInt32(), y.GetInt32(), w.GetInt32(), h.GetInt32());
+
+            var xd = x.GetDouble();
+            var yd = y.GetDouble();
+            var wd = w.GetDouble();
+            var hd = h.GetDouble();
+            return (xd, yd, wd, hd);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static (int X, int Y, int W, int H) ToPixelBox((double X, double Y, double W, double H) box, int imageWidth, int imageHeight)
+    {
+        var (x, y, w, h) = box;
+        var looksNormalized = x <= 1d && y <= 1d && w <= 1d && h <= 1d;
+        var looksPercent = !looksNormalized && x <= 100d && y <= 100d && w <= 100d && h <= 100d;
+
+        if (looksNormalized)
+        {
+            x *= imageWidth;
+            y *= imageHeight;
+            w *= imageWidth;
+            h *= imageHeight;
+        }
+        else if (looksPercent)
+        {
+            x = x / 100d * imageWidth;
+            y = y / 100d * imageHeight;
+            w = w / 100d * imageWidth;
+            h = h / 100d * imageHeight;
+        }
+
+        return ((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(w), (int)Math.Round(h));
     }
 }
