@@ -24,18 +24,18 @@ public class GeminiService : IGeminiService
         "BẮT BUỘC PHÂN TÍCH CÂU HỎI VÀ HÌNH ẢNH (TỪ CHỐI TUYỆT ĐỐI):\n" +
         "Nếu câu hỏi KHÔNG liên quan đến y khoa cơ xương khớp, sức khỏe hoặc chẩn đoán hình ảnh cơ xương khớp (ví dụ: hỏi giá xăng, thời tiết, chính trị, code lập trình...), BẮT BUỘC phải trả lời chính xác bằng câu này: 'Câu hỏi của bạn không liên quan đến lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn hợp lệ.'\n" +
         "Tuyệt đối không được trả lời là 'Cơ sở dữ liệu không có thông tin'.\n" +
-        "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis và differentialDiagnoses thành null, BỎ QUA MỌI YÊU CẦU KHÁC và KHÔNG được trả citations.\n" +
+        "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null, BỎ QUA MỌI YÊU CẦU KHÁC và KHÔNG được trả citations.\n" +
         "\n" +
         "BẮT BUỘC KIỂM TRA HÌNH ẢNH (NẾU CÓ):\n" +
-        "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt `suggestedDiagnosis` và `differentialDiagnoses` thành null. KHÔNG được trả citations. Bỏ qua mọi yêu cầu khác.\n" +
+        "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null. KHÔNG được trả citations. Bỏ qua mọi yêu cầu khác.\n" +
         "\n" +
         "Bắt đầu câu trả lời ngay lập tức. KHÔNG chào hỏi. KHÔNG giới thiệu.\n" +
-        "KHÔNG trả lời nằm ngoài 3 trường JSON: answerText, suggestedDiagnosis, differentialDiagnoses.\n" +
+        "KHÔNG trả lời nằm ngoài các trường JSON: answerText, suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
         "You must return a raw JSON object without any markdown wrapping like ```json.\n" +
         "Khi trả lời hợp lệ về chuyên ngành, trả lời bằng tiếng Việt chuyên ngành y khoa chuẩn xác.\n" +
         "\n" +
-        "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis / differentialDiagnoses.\n" +
-        "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses là null.\n" +
+        "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
+        "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions là null.\n" +
         "\n" +
         "CHỈ TRẢ VỀ DUY NHẤT 1 ĐỐI TƯỢNG JSON và không chèn thêm bất kỳ nội dung nào khác.\n" +
         "Không thêm các trường phụ như citationChunkIds vào bên trong answerText.";
@@ -70,6 +70,8 @@ public class GeminiService : IGeminiService
                 AnswerText = FallbackNoReliableInfoAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -93,6 +95,8 @@ public class GeminiService : IGeminiService
                     AnswerText = "Không thể truy cập hình ảnh y khoa từ bộ lưu trữ.",
                     SuggestedDiagnosis = null,
                     DifferentialDiagnoses = null,
+                    KeyImagingFindings = null,
+                    ReflectiveQuestions = null,
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -137,6 +141,8 @@ public class GeminiService : IGeminiService
                         AnswerText = FallbackNoReliableInfoAnswer,
                         SuggestedDiagnosis = null,
                         DifferentialDiagnoses = null,
+                        KeyImagingFindings = null,
+                        ReflectiveQuestions = null,
                         Citations = new List<CitationItemDto>()
                     };
                 }
@@ -153,6 +159,8 @@ public class GeminiService : IGeminiService
                         AnswerText = FallbackNoReliableInfoAnswer,
                         SuggestedDiagnosis = null,
                         DifferentialDiagnoses = null,
+                        KeyImagingFindings = null,
+                        ReflectiveQuestions = null,
                         Citations = new List<CitationItemDto>()
                     };
                 }
@@ -175,6 +183,8 @@ public class GeminiService : IGeminiService
                     AnswerText = FallbackNoReliableInfoAnswer,
                     SuggestedDiagnosis = null,
                     DifferentialDiagnoses = null,
+                    KeyImagingFindings = null,
+                    ReflectiveQuestions = null,
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -186,6 +196,8 @@ public class GeminiService : IGeminiService
             AnswerText = FallbackNoReliableInfoAnswer,
             SuggestedDiagnosis = null,
             DifferentialDiagnoses = null,
+            KeyImagingFindings = null,
+            ReflectiveQuestions = null,
             Citations = new List<CitationItemDto>()
         };
     }
@@ -295,6 +307,8 @@ public class GeminiService : IGeminiService
                 AnswerText = FallbackNoReliableInfoAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -314,6 +328,8 @@ public class GeminiService : IGeminiService
                     AnswerText = FallbackNoReliableInfoAnswer,
                     SuggestedDiagnosis = null,
                     DifferentialDiagnoses = null,
+                    KeyImagingFindings = null,
+                    ReflectiveQuestions = null,
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -328,6 +344,8 @@ public class GeminiService : IGeminiService
                 AnswerText = FallbackNoReliableInfoAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -342,11 +360,19 @@ public class GeminiService : IGeminiService
         var differentialDiagnoses = result.TryGetProperty("differentialDiagnoses", out var d) && d.ValueKind != JsonValueKind.Null
             ? d.GetString()
             : null;
+        var keyImagingFindings = result.TryGetProperty("keyImagingFindings", out var kfi) && kfi.ValueKind != JsonValueKind.Null
+            ? kfi.GetString()
+            : null;
+        var reflectiveQuestions = result.TryGetProperty("reflectiveQuestions", out var rq) && rq.ValueKind != JsonValueKind.Null
+            ? rq.GetString()
+            : null;
 
         if (ShouldNullifyDiagnosisFields(answerText))
         {
             suggestedDiagnosis = null;
             differentialDiagnoses = null;
+            keyImagingFindings = null;
+            reflectiveQuestions = null;
         }
 
         var citations = new List<CitationItemDto>();
@@ -370,6 +396,8 @@ public class GeminiService : IGeminiService
             AnswerText = !string.IsNullOrWhiteSpace(answerText) ? answerText : FallbackNoReliableInfoAnswer,
             SuggestedDiagnosis = suggestedDiagnosis,
             DifferentialDiagnoses = differentialDiagnoses,
+            KeyImagingFindings = keyImagingFindings,
+            ReflectiveQuestions = reflectiveQuestions,
             Citations = citations
         };
     }

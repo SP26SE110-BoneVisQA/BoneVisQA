@@ -49,5 +49,9 @@ public class VisualQAResponseDto
     public string? AnswerText { get; set; }
     public string? SuggestedDiagnosis { get; set; }
     public string? DifferentialDiagnoses { get; set; }
+    /// <summary>Key imaging signs to focus on (SEPS).</summary>
+    public string? KeyImagingFindings { get; set; }
+    /// <summary>Reflective questions for student self-assessment (SEPS).</summary>
+    public string? ReflectiveQuestions { get; set; }
     public List<CitationItemDto> Citations { get; set; } = new();
 }

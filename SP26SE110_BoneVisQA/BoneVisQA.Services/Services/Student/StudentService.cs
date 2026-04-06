@@ -354,6 +354,8 @@ public class StudentService : IStudentService
             AnswerText = response.AnswerText,
             StructuredDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = response.DifferentialDiagnoses,
+            KeyImagingFindings = response.KeyImagingFindings,
+            ReflectiveQuestions = response.ReflectiveQuestions,
             Status = status,
             GeneratedAt = DateTime.UtcNow
         };
@@ -483,14 +485,10 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)
     {
-        var items = await _unitOfWork.Context.StudentQuestions
+        return await _unitOfWork.Context.StudentQuestions
             .AsNoTracking()
-            .Include(q => q.CaseAnswers)
             .Where(q => q.StudentId == studentId)
             .OrderByDescending(q => q.CreatedAt)
-            .ToListAsync();
-
-        return items
             .Select(q => new StudentQuestionHistoryItemDto
             {
                 Id = q.Id,
@@ -501,6 +499,22 @@ public class StudentService : IStudentService
                     .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
                     .Select(a => a.AnswerText)
                     .FirstOrDefault(),
+                StructuredDiagnosis = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.StructuredDiagnosis)
+                    .FirstOrDefault(),
+                DifferentialDiagnoses = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.DifferentialDiagnoses)
+                    .FirstOrDefault(),
+                KeyImagingFindings = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.KeyImagingFindings)
+                    .FirstOrDefault(),
+                ReflectiveQuestions = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.ReflectiveQuestions)
+                    .FirstOrDefault(),
                 AnswerStatus = q.CaseAnswers
                     .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
                     .Select(a => a.Status)
@@ -510,7 +524,7 @@ public class StudentService : IStudentService
                     .Select(a => a.ReviewedAt)
                     .FirstOrDefault()
             })
-            .ToList();
+            .ToListAsync();
     }
 
     public async Task<IReadOnlyList<StudentAnnouncementDto>> GetAnnouncementsAsync(Guid studentId)

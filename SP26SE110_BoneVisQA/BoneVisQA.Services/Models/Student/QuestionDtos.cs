@@ -42,6 +42,10 @@ public class StudentQuestionHistoryItemDto
     public string QuestionText { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
     public string? AnswerText { get; set; }
+    public string? StructuredDiagnosis { get; set; }
+    public string? DifferentialDiagnoses { get; set; }
+    public string? KeyImagingFindings { get; set; }
+    public string? ReflectiveQuestions { get; set; }
     public string? AnswerStatus { get; set; }
     public DateTime? ReviewedAt { get; set; }
 }

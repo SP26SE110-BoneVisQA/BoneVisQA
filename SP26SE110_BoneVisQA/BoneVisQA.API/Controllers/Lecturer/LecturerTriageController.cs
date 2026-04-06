@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,11 @@ public class LecturerTriageController : ControllerBase
     }
 
     [HttpPost("{answerId:guid}/escalate")]
+    [ProducesResponseType(typeof(EscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<EscalatedAnswerDto>> Escalate(Guid answerId, [FromBody] EscalateAnswerRequestDto? request)
     {
         var lecturerId = GetUserIdFromClaims();
@@ -33,6 +39,10 @@ public class LecturerTriageController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

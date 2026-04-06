@@ -60,6 +60,8 @@ public class ExpertReviewService : IExpertReviewService
             CurrentAnswerText = x.Answer.AnswerText,
             StructuredDiagnosis = x.Answer.StructuredDiagnosis,
             DifferentialDiagnoses = x.Answer.DifferentialDiagnoses,
+            KeyImagingFindings = x.Answer.KeyImagingFindings,
+            ReflectiveQuestions = x.Answer.ReflectiveQuestions,
             Status = x.Answer.Status,
             EscalatedById = x.Answer.EscalatedById,
             EscalatedAt = x.Answer.EscalatedAt,
@@ -103,6 +105,8 @@ public class ExpertReviewService : IExpertReviewService
         answer.AnswerText = request.AnswerText;
         answer.StructuredDiagnosis = request.StructuredDiagnosis;
         answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
+        answer.KeyImagingFindings = request.KeyImagingFindings;
+        answer.ReflectiveQuestions = request.ReflectiveQuestions;
         answer.ReviewedById = expertId;
         answer.ReviewedAt = DateTime.UtcNow;
         answer.Status = resolvedStatus;
@@ -143,6 +147,8 @@ public class ExpertReviewService : IExpertReviewService
             CurrentAnswerText = answer.AnswerText,
             StructuredDiagnosis = answer.StructuredDiagnosis,
             DifferentialDiagnoses = answer.DifferentialDiagnoses,
+            KeyImagingFindings = answer.KeyImagingFindings,
+            ReflectiveQuestions = answer.ReflectiveQuestions,
             Status = answer.Status,
             EscalatedById = answer.EscalatedById,
             EscalatedAt = answer.EscalatedAt,
@@ -188,7 +194,9 @@ public class ExpertReviewService : IExpertReviewService
         var answerChanged =
             !string.Equals(answer.AnswerText ?? string.Empty, request.AnswerText ?? string.Empty, StringComparison.Ordinal) ||
             !string.Equals(answer.StructuredDiagnosis ?? string.Empty, request.StructuredDiagnosis ?? string.Empty, StringComparison.Ordinal) ||
-            !string.Equals(answer.DifferentialDiagnoses ?? string.Empty, request.DifferentialDiagnoses ?? string.Empty, StringComparison.Ordinal);
+            !string.Equals(answer.DifferentialDiagnoses ?? string.Empty, request.DifferentialDiagnoses ?? string.Empty, StringComparison.Ordinal) ||
+            !string.Equals(answer.KeyImagingFindings ?? string.Empty, request.KeyImagingFindings ?? string.Empty, StringComparison.Ordinal) ||
+            !string.Equals(answer.ReflectiveQuestions ?? string.Empty, request.ReflectiveQuestions ?? string.Empty, StringComparison.Ordinal);
 
         return answerChanged ? "Revised" : "Approved";
     }

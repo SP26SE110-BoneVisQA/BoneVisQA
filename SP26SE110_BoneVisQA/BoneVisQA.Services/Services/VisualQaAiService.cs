@@ -48,7 +48,8 @@ public class VisualQaAiService : IVisualQaAiService
                 cancellationToken);
         }
 
-        var ragQueryText = request.QuestionText;
+        // SEPS: combine question with ROI/image context for retrieval (text embedding; vision model handles image in Gemini).
+        var ragQueryText = BuildRagEmbeddingQuery(request);
         float[] embedding;
         try
         {
@@ -61,6 +62,8 @@ public class VisualQaAiService : IVisualQaAiService
                 AnswerText = TemporaryVectorSearchUnavailableAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -115,6 +118,8 @@ public class VisualQaAiService : IVisualQaAiService
                 AnswerText = MissingMedicalKnowledgeAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -137,6 +142,8 @@ public class VisualQaAiService : IVisualQaAiService
                 AnswerText = TemporaryAiGenerationUnavailableAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -149,6 +156,8 @@ public class VisualQaAiService : IVisualQaAiService
             response.Citations = new List<CitationItemDto>();
             response.SuggestedDiagnosis = null;
             response.DifferentialDiagnoses = null;
+            response.KeyImagingFindings = null;
+            response.ReflectiveQuestions = null;
         }
         else
         {
@@ -173,6 +182,25 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Enriches the text used for vector retrieval so ROI and image-backed questions bias toward relevant chunks (SEPS Image + RAG).
+    /// </summary>
+    private static string BuildRagEmbeddingQuery(VisualQARequestDto request)
+    {
+        var q = request.QuestionText?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(request.Coordinates))
+        {
+            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: có vùng ROI/annotation trên ảnh; ưu tiên tài liệu liên quan chẩn đoán hình ảnh cơ xương khớp tại vùng được đánh dấu.]";
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+        {
+            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: câu hỏi kèm hình ảnh y khoa.]";
+        }
+
+        return q;
     }
 
     private static bool IsNonMedicalRefusalAnswer(string? answerText)
@@ -243,12 +271,14 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("Bạn bắt buộc phải suy luận, giải thích và trả lời hoàn toàn bằng Tiếng Việt (Vietnamese) theo đúng chuẩn Y khoa.");
 
         sb.AppendLine();
-        sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for suggestedDiagnosis and differentialDiagnoses when refusing or when not applicable):");
+        sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for optional fields when refusing or when not applicable):");
         sb.AppendLine(@"
 {
   ""answerText"": ""Your full educational answer here."",
   ""suggestedDiagnosis"": ""Primary suggested diagnosis or null."",
-  ""differentialDiagnoses"": ""Other differential diagnoses or null.""
+  ""differentialDiagnoses"": ""Other differential diagnoses or null."",
+  ""keyImagingFindings"": ""Key imaging signs to focus on, or null."",
+  ""reflectiveQuestions"": ""1-3 reflective questions for the student, or null.""
 }
 ");
 
