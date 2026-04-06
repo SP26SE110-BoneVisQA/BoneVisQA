@@ -348,6 +348,52 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminProfileController",
+    "Method": "GetProfile",
+    "RelativePath": "api/admin/profile",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.API.Controllers.Admin.AdminProfileController\u002BAdminProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminProfileController",
+    "Method": "UpdateProfile",
+    "RelativePath": "api/admin/profile",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.API.Controllers.Admin.AdminProfileController\u002BUpdateAdminProfileRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.API.Controllers.Admin.AdminProfileController\u002BAdminProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "BoneVisQA.API.Controllers.Admin.AdminUsersController",
     "Method": "GetAllUsers",
     "RelativePath": "api/admin/users",
@@ -966,6 +1012,52 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertProfileController",
+    "Method": "GetProfile",
+    "RelativePath": "api/expert/profile",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertProfileController",
+    "Method": "UpdateProfile",
+    "RelativePath": "api/expert/profile",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Expert.UpdateExpertProfileRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Expert.ExpertProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
     "Method": "CreateQuiz",
     "RelativePath": "api/expert/quizzes",
@@ -1458,6 +1550,63 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateAnnouncement",
+    "RelativePath": "api/lecturer/classes/{classId}/announcements/{announcementId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "announcementId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateAnnouncementRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.AnnouncementDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteAnnouncement",
+    "RelativePath": "api/lecturer/classes/{classId}/announcements/{announcementId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "announcementId",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerAssignmentsController",
@@ -1981,6 +2130,52 @@
           "text/json"
         ],
         "StatusCode": 404
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerProfileController",
+    "Method": "GetProfile",
+    "RelativePath": "api/lecturer/profile",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LecturerProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerProfileController",
+    "Method": "UpdateProfile",
+    "RelativePath": "api/lecturer/profile",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateLecturerProfileRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LecturerProfileDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
       }
     ]
   },
@@ -2556,6 +2751,63 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "UpdateAnnouncement",
+    "RelativePath": "api/Lecturers/classes/{classId}/announcements/{announcementId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "announcementId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateAnnouncementRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.AnnouncementDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteAnnouncement",
+    "RelativePath": "api/Lecturers/classes/{classId}/announcements/{announcementId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "announcementId",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",

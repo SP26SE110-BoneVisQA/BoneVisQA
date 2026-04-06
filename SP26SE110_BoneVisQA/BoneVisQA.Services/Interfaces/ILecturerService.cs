@@ -19,6 +19,8 @@ public interface ILecturerService
     Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid classId);
     Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid classId);
     Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request);
+    Task<AnnouncementDto> UpdateAnnouncementAsync(Guid classId, Guid announcementId, UpdateAnnouncementRequestDto request);
+    Task<bool> DeleteAnnouncementAsync(Guid classId, Guid announcementId);
 
 
     //Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);

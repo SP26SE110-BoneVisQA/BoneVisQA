@@ -14,10 +14,12 @@ namespace BoneVisQA.Services.Services.Lecturer;
 public class LecturerService : ILecturerService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IEmailService _emailService;
 
-    public LecturerService(IUnitOfWork unitOfWork)
+    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService)
     {
         _unitOfWork = unitOfWork;
+        _emailService = emailService;
     }
 
     public async Task<ClassDto> CreateClassAsync(CreateClassRequestDto request)
@@ -211,17 +213,33 @@ public class LecturerService : ILecturerService
     public async Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request)
     {
         var now = DateTime.UtcNow;
+
+        // Lấy thông tin lớp và giảng viên
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .Include(c => c.Lecturer)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Khong tim thay lop.");
+
+        var lecturerName = academicClass.Lecturer?.FullName ?? "Giảng viên";
+        var className = academicClass.ClassName;
+
+        // Tạo announcement entity
         var entity = new Announcement
         {
             Id = Guid.NewGuid(),
             ClassId = classId,
             Title = request.Title,
             Content = request.Content,
+            SendEmail = request.SendEmail,
             CreatedAt = now
         };
 
         await _unitOfWork.AnnouncementRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
+
+        if (request.SendEmail)
+            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, request.Title, request.Content);
 
         return new AnnouncementDto
         {
@@ -229,8 +247,81 @@ public class LecturerService : ILecturerService
             ClassId = entity.ClassId,
             Title = entity.Title,
             Content = entity.Content,
+            SendEmail = entity.SendEmail,
             CreatedAt = entity.CreatedAt
         };
+    }
+
+    public async Task<AnnouncementDto> UpdateAnnouncementAsync(Guid classId, Guid announcementId, UpdateAnnouncementRequestDto request)
+    {
+        var entity = await _unitOfWork.AnnouncementRepository
+            .FindByCondition(a => a.Id == announcementId && a.ClassId == classId)
+            .Include(a => a.Class)
+                .ThenInclude(c => c!.Lecturer)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Khong tim thay thong bao.");
+
+        entity.Title = request.Title.Trim();
+        entity.Content = request.Content.Trim();
+
+        await _unitOfWork.AnnouncementRepository.UpdateAsync(entity);
+        await _unitOfWork.SaveAsync();
+
+        var lecturerName = entity.Class?.Lecturer?.FullName ?? "Giảng viên";
+        var className = entity.Class?.ClassName ?? "";
+        if (request.SendEmail)
+            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, entity.Title, entity.Content);
+
+        return new AnnouncementDto
+        {
+            Id = entity.Id,
+            ClassId = entity.ClassId,
+            ClassName = entity.Class?.ClassName,
+            Title = entity.Title,
+            Content = entity.Content,
+            SendEmail = entity.SendEmail,
+            CreatedAt = entity.CreatedAt
+        };
+    }
+
+    public async Task<bool> DeleteAnnouncementAsync(Guid classId, Guid announcementId)
+    {
+        var entity = await _unitOfWork.AnnouncementRepository
+            .FindByCondition(a => a.Id == announcementId && a.ClassId == classId)
+            .FirstOrDefaultAsync();
+        if (entity == null)
+            return false;
+
+        await _unitOfWork.AnnouncementRepository.RemoveAsync(entity);
+        await _unitOfWork.SaveAsync();
+        return true;
+    }
+
+    private async Task SendAnnouncementEmailsToEnrolledStudentsAsync(
+        Guid classId,
+        string lecturerName,
+        string className,
+        string title,
+        string content)
+    {
+        var enrolledStudents = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Student)
+            .Where(e => e.ClassId == classId)
+            .Select(e => e.Student)
+            .ToListAsync();
+
+        foreach (var student in enrolledStudents)
+        {
+            if (student == null || string.IsNullOrWhiteSpace(student.Email)) continue;
+            var studentName = student.FullName ?? "Sinh viên";
+            _ = _emailService.SendAnnouncementEmailAsync(
+                student.Email,
+                studentName,
+                lecturerName,
+                className,
+                title,
+                content);
+        }
     }
 
     //====================================================================================================
@@ -1046,6 +1137,7 @@ public class LecturerService : ILecturerService
                 ClassName = a.Class?.ClassName,
                 Title = a.Title,
                 Content = a.Content,
+                SendEmail = a.SendEmail,
                 CreatedAt = a.CreatedAt
             })
             .ToList();

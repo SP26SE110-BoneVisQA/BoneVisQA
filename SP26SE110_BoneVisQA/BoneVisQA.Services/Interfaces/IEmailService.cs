@@ -15,4 +15,7 @@ public interface IEmailService
 
     // Welcome Email with Role (sent after both verification AND role assignment)
     Task<bool> SendWelcomeWithRoleEmailAsync(string toEmail, string fullName, string roleName);
+
+    // Announcement Emails
+    Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent);
 }

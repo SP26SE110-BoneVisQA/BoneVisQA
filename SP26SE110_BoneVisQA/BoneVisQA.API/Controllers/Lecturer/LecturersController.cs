@@ -150,6 +150,37 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Không dùng :guid trên route — nếu id sai sẽ trả 400 thay vì 404 do router.</summary>
+    [HttpPut("classes/{classId}/announcements/{announcementId}")]
+    public async Task<ActionResult<AnnouncementDto>> UpdateAnnouncement(
+        string classId,
+        string announcementId,
+        [FromBody] UpdateAnnouncementRequestDto request)
+    {
+        if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
+            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+        try
+        {
+            var result = await _lecturerService.UpdateAnnouncementAsync(cId, aId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("classes/{classId}/announcements/{announcementId}")]
+    public async Task<IActionResult> DeleteAnnouncement(string classId, string announcementId)
+    {
+        if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
+            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+        var deleted = await _lecturerService.DeleteAnnouncementAsync(cId, aId);
+        if (!deleted)
+            return NotFound(new { message = "Thông báo không tồn tại." });
+        return NoContent();
+    }
+
     #endregion
 
     #region Quiz Management
