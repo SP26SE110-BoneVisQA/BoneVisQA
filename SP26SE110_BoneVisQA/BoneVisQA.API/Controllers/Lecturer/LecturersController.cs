@@ -11,6 +11,7 @@ namespace BoneVisQA.API.Controllers.Lecturer;
 
 [ApiController]
 [Route("api/lecturer")]
+[Route("api/Lecturers")] // Legacy FE path: plural + PascalCase; prefer GET /api/lecturer/classes
 [Authorize(Roles = "Lecturer")]
 public class LecturersController : ControllerBase
 {

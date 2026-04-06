@@ -1,5 +1,7 @@
+using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,15 +15,59 @@ public class AdminDocumentsController : ControllerBase
     private readonly IDocumentManagementService _documentManagementService;
     private readonly IDocumentQualityService _documentQualityService;
     private readonly IDocumentService _documentService;
+    private readonly IUnitOfWork _unitOfWork;
 
     public AdminDocumentsController(
         IDocumentManagementService documentManagementService,
         IDocumentQualityService documentQualityService,
-        IDocumentService documentService)
+        IDocumentService documentService,
+        IUnitOfWork unitOfWork)
     {
         _documentManagementService = documentManagementService;
         _documentQualityService = documentQualityService;
         _documentService = documentService;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <summary>
+    /// Lists all document categories for admin dropdowns (empty list if none).
+    /// </summary>
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminCategoryListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminCategoryListItemDto>>> GetCategories()
+    {
+        var rows = await _unitOfWork.CategoryRepository.GetAllAsync();
+        var list = rows
+            .OrderBy(c => c.Name)
+            .Select(c => new AdminCategoryListItemDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Description = c.Description
+            })
+            .ToList();
+        return Ok(list);
+    }
+
+    /// <summary>
+    /// Lists all tags for admin dropdowns (empty list if none).
+    /// </summary>
+    [HttpGet("tags")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminTagListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminTagListItemDto>>> GetTags()
+    {
+        var rows = await _unitOfWork.TagRepository.GetAllAsync();
+        var list = rows
+            .OrderBy(t => t.Type)
+            .ThenBy(t => t.Name)
+            .Select(t => new AdminTagListItemDto
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Type = t.Type
+            })
+            .ToList();
+        return Ok(list);
     }
 
     [HttpGet("quality/most-referenced")]
@@ -124,6 +170,21 @@ public class AdminDocumentsController : ControllerBase
             return NotFound(new { message = "Document not found." });
 
         return Ok(document);
+    }
+
+    /// <summary>
+    /// Gets granular ingestion status/progress for a document.
+    /// </summary>
+    [HttpGet("{id:guid}/status")]
+    [ProducesResponseType(typeof(DocumentIngestionStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DocumentIngestionStatusDto>> GetIngestionStatus(Guid id)
+    {
+        var status = await _documentService.GetIngestionStatusAsync(id);
+        if (status == null)
+            return NotFound(new { message = "Document not found." });
+
+        return Ok(status);
     }
 
     [HttpDelete("{id:guid}")]
