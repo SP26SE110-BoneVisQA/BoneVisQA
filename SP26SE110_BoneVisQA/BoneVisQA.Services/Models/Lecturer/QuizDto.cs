@@ -66,6 +66,8 @@ public class ClassQuizDto
     public Guid QuizId { get; set; }
     public string? QuizName { get; set; }
     public string? ClassName { get; set; }
+    /// <summary>Chủ đề quiz (Quiz.Topic), khác với tên lớp.</summary>
+    public string? Topic { get; set; }
     public DateTime? AssignedAt { get; set; }
     public DateTime? OpenTime { get; set; }
     public DateTime? CloseTime { get; set; }
