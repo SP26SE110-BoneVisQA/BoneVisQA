@@ -3,6 +3,10 @@
   "WorkspaceRootPath": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.services\\services\\student\\studentlearningservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CB4B02B2-C133-4A16-80A6-16AF91713937}|BoneVisQA.Services\\BoneVisQA.Services.csproj|solutionrelative:bonevisqa.services\\services\\student\\studentlearningservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{6312B54B-125A-4F73-AFDA-6C2E742E4AA7}|BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj|d:\\sp26_sep490_sp26se110_bonevisqa\\be\\bonevisqa\\sp26se110_bonevisqa\\bonevisqa.repositories\\models\\quiz.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{6312B54B-125A-4F73-AFDA-6C2E742E4AA7}|BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj|solutionrelative:bonevisqa.repositories\\models\\quiz.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -107,6 +111,19 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "StudentLearningService.cs",
+              "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
+              "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
+              "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
+              "RelativeToolTip": "BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
+              "ViewState": "AgIAAKACAAAAAAAAAAAiwLMCAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-07T10:57:51.332Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
               "Title": "Quiz.cs",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\Models\\Quiz.cs",
               "RelativeDocumentMoniker": "BoneVisQA.Repositories\\Models\\Quiz.cs",
@@ -119,13 +136,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "StudentService.cs",
               "DocumentMoniker": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Student\\StudentService.cs",
               "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Student\\StudentService.cs",
               "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Student\\StudentService.cs",
               "RelativeToolTip": "BoneVisQA.Services\\Services\\Student\\StudentService.cs",
-              "ViewState": "AgIAAGADAAAAAAAAAAASwG0DAAAzAAAAAAAAAA==",
+              "ViewState": "AgIAAF4DAAAAAAAAAAASwGsDAAAzAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-07T08:07:24.079Z",
               "EditorCaption": ""

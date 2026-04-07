@@ -28,6 +28,4 @@ public interface IEmailService
         string assignmentType,
         DateTime? dueDate,
         string? dueDateDisplay);
-
-    Task SendAssignmentEmailsToClassAsync(Guid classId, string className, string assignmentTitle, string assignmentType, DateTime? dueDate);
 }

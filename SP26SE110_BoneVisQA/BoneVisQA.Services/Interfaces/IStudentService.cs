@@ -44,5 +44,10 @@ public interface IStudentService
     /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
     /// </summary>
     Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId);
+
+    /// <summary>
+    /// Trả về chi tiết đầy đủ của một lớp học (quiz, sinh viên, thông báo) — chỉ khi student đã đăng ký lớp đó.
+    /// </summary>
+    Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId);
 }
 

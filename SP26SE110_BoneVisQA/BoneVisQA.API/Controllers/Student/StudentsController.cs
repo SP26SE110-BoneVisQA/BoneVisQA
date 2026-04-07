@@ -153,4 +153,24 @@ public class StudentsController : ControllerBase
         var enrollments = await _studentService.GetEnrolledClassesAsync(studentId);
         return Ok(enrollments);
     }
+
+    /// <summary>
+    /// Trả về chi tiết đầy đủ của một lớp học (quiz, sinh viên, thông báo).
+    /// </summary>
+    [HttpGet("classes/{classId:guid}")]
+    public async Task<ActionResult<StudentClassDetailDto>> GetClassDetail(Guid classId)
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        try
+        {
+            var result = await _studentService.GetClassDetailAsync(studentId, classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 }

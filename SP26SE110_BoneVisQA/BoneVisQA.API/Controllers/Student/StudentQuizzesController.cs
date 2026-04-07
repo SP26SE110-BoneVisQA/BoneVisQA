@@ -204,6 +204,27 @@ public class StudentQuizzesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Xóa một quiz attempt của student.
+    /// </summary>
+    [HttpDelete("{attemptId}")]
+    public async Task<ActionResult> DeleteQuizAttempt(Guid attemptId)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Unauthorized." });
+
+        try
+        {
+            await _studentLearningService.DeleteQuizAttemptAsync(studentId.Value, attemptId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     private Guid? GetUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);

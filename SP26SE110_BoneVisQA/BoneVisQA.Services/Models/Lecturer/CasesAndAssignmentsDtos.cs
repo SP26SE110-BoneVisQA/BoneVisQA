@@ -131,3 +131,69 @@ public class ClassAssignmentDto
     /// <summary>Số sv đã được chấm điểm (quiz có score)</summary>
     public int GradedCount { get; set; }
 }
+
+// ── Quiz Review DTOs ───────────────────────────────────────────────────────────
+
+/// <summary>Tóm tắt 1 bài quiz của sinh viên (dùng cho danh sách).</summary>
+public class StudentQuizAttemptDto
+{
+    public Guid AttemptId { get; set; }
+    public Guid StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+    public string StudentEmail { get; set; } = string.Empty;
+    public double? Score { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public int TotalQuestions { get; set; }
+    public int CorrectCount { get; set; }
+    public bool IsGraded { get; set; }
+}
+
+/// <summary>Chi tiết 1 bài quiz: câu hỏi + câu trả lời sinh viên.</summary>
+public class QuizAttemptDetailDto
+{
+    public Guid AttemptId { get; set; }
+    public Guid QuizId { get; set; }
+    public string QuizTitle { get; set; } = string.Empty;
+    public Guid StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+    public double? Score { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public int? PassingScore { get; set; }
+    public List<QuestionWithAnswerDto> Questions { get; set; } = new();
+}
+
+/// <summary>Câu hỏi + câu trả lời sinh viên (cho FE hiển thị + chỉnh sửa).</summary>
+public class QuestionWithAnswerDto
+{
+    public Guid QuestionId { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string? Type { get; set; }
+    public string? OptionA { get; set; }
+    public string? OptionB { get; set; }
+    public string? OptionC { get; set; }
+    public string? OptionD { get; set; }
+    public string? CorrectAnswer { get; set; }
+    public string? StudentAnswer { get; set; }
+    public bool? IsCorrect { get; set; }
+    public Guid AnswerId { get; set; }
+}
+
+/// <summary>Request chỉnh sửa điểm / câu trả lời của một quiz attempt.</summary>
+public class UpdateQuizAttemptRequestDto
+{
+    /// <summary>Điểm mới (null = giữ nguyên).</summary>
+    public double? Score { get; set; }
+
+    /// <summary>Danh sách câu trả lời cần cập nhật.</summary>
+    public List<UpdateAnswerDto> Answers { get; set; } = new();
+}
+
+/// <summary>Cập nhật 1 câu trả lời cụ thể.</summary>
+public class UpdateAnswerDto
+{
+    public Guid AnswerId { get; set; }
+    public string? StudentAnswer { get; set; }
+    public bool? IsCorrect { get; set; }
+}
