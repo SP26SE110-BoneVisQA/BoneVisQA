@@ -20,7 +20,16 @@ public class LecturerService : ILecturerService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ClassDto> CreateClassAsync(CreateClassRequestDto request)
+    private async Task EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
+    {
+        var ownsClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .AnyAsync();
+        if (!ownsClass)
+            throw new UnauthorizedAccessException("Giảng viên không có quyền truy cập lớp học này.");
+    }
+
+    public async Task<ClassDto> CreateClassAsync(Guid lecturerId, CreateClassRequestDto request)
     {
         var now = DateTime.UtcNow;
         var entity = new AcademicClass
@@ -28,7 +37,7 @@ public class LecturerService : ILecturerService
             Id = Guid.NewGuid(),
             ClassName = request.ClassName,
             Semester = request.Semester,
-            LecturerId = request.LecturerId,
+            LecturerId = lecturerId,
             ExpertId = request.ExpertId,
             CreatedAt = now,
             UpdatedAt = now
@@ -67,8 +76,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<bool> EnrollStudentAsync(Guid classId, Guid studentId)
+    public async Task<bool> EnrollStudentAsync(Guid lecturerId, Guid classId, Guid studentId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var existing = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId && e.StudentId == studentId)
             .FirstOrDefaultAsync();
@@ -97,8 +107,9 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid classId, EnrollStudentsRequestDto request)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid lecturerId, Guid classId, EnrollStudentsRequestDto request)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         // Get class info to store class name
         var classEntity = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId)
@@ -130,11 +141,12 @@ public class LecturerService : ILecturerService
         }
 
         await _unitOfWork.SaveAsync();
-        return await GetStudentsInClassAsync(classId);
+        return await GetStudentsInClassAsync(lecturerId, classId);
     }
 
-    public async Task<bool> RemoveStudentAsync(Guid classId, Guid studentId)
+    public async Task<bool> RemoveStudentAsync(Guid lecturerId, Guid classId, Guid studentId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId && e.StudentId == studentId)
             .FirstOrDefaultAsync();
@@ -149,8 +161,9 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid classId)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid lecturerId, Guid classId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrollments = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Include(e => e.Student)
@@ -170,8 +183,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid classId)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid lecturerId, Guid classId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrolledStudentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Select(e => e.StudentId)
@@ -208,8 +222,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request)
+    public async Task<AnnouncementDto> CreateAnnouncementAsync(Guid lecturerId, Guid classId, CreateAnnouncementRequestDto request)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var now = DateTime.UtcNow;
         var entity = new Announcement
         {
@@ -721,9 +736,11 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<ClassDto?> GetClassByIdAsync(Guid classId)
+    public async Task<ClassDto?> GetClassByIdAsync(Guid lecturerId, Guid classId)
     {
-        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        var c = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync();
         if (c == null) return null;
         return new ClassDto
         {
@@ -732,9 +749,11 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<ClassDto> UpdateClassAsync(Guid classId, UpdateClassRequestDto request)
+    public async Task<ClassDto> UpdateClassAsync(Guid lecturerId, Guid classId, UpdateClassRequestDto request)
     {
-        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+        var c = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
         c.ClassName = request.ClassName;
         c.Semester = request.Semester;
@@ -749,9 +768,11 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<bool> DeleteClassAsync(Guid classId)
+    public async Task<bool> DeleteClassAsync(Guid lecturerId, Guid classId)
     {
-        var existing = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        var existing = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync();
         if (existing == null) return false;
         await _unitOfWork.AcademicClassRepository.DeleteAsync(classId);
         await _unitOfWork.SaveAsync();

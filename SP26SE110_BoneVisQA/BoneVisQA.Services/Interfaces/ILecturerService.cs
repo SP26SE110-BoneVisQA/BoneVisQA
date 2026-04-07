@@ -7,18 +7,18 @@ namespace BoneVisQA.Services.Interfaces;
 
 public interface ILecturerService
 {
-    Task<ClassDto> CreateClassAsync(CreateClassRequestDto request);
-    Task<ClassDto?> GetClassByIdAsync(Guid classId);
+    Task<ClassDto> CreateClassAsync(Guid lecturerId, CreateClassRequestDto request);
+    Task<ClassDto?> GetClassByIdAsync(Guid lecturerId, Guid classId);
     Task<IReadOnlyList<ClassDto>> GetClassesForLecturerAsync(Guid lecturerId);
-    Task<ClassDto> UpdateClassAsync(Guid classId, UpdateClassRequestDto request);
-    Task<bool> DeleteClassAsync(Guid classId);
+    Task<ClassDto> UpdateClassAsync(Guid lecturerId, Guid classId, UpdateClassRequestDto request);
+    Task<bool> DeleteClassAsync(Guid lecturerId, Guid classId);
 
-    Task<bool> EnrollStudentAsync(Guid classId, Guid studentId);
-    Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid classId, EnrollStudentsRequestDto request);
-    Task<bool> RemoveStudentAsync(Guid classId, Guid studentId);
-    Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid classId);
-    Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid classId);
-    Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request);
+    Task<bool> EnrollStudentAsync(Guid lecturerId, Guid classId, Guid studentId);
+    Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid lecturerId, Guid classId, EnrollStudentsRequestDto request);
+    Task<bool> RemoveStudentAsync(Guid lecturerId, Guid classId, Guid studentId);
+    Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid lecturerId, Guid classId);
+    Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid lecturerId, Guid classId);
+    Task<AnnouncementDto> CreateAnnouncementAsync(Guid lecturerId, Guid classId, CreateAnnouncementRequestDto request);
 
 
     //Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);
