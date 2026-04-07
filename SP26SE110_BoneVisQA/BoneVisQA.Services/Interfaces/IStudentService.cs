@@ -49,5 +49,10 @@ public interface IStudentService
     /// Trả về chi tiết đầy đủ của một lớp học (quiz, sinh viên, thông báo) — chỉ khi student đã đăng ký lớp đó.
     /// </summary>
     Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId);
+
+    /// <summary>
+    /// Sinh viên tự rời lớp (xóa ClassEnrollment của chính mình).
+    /// </summary>
+    Task LeaveEnrolledClassAsync(Guid studentId, Guid classId);
 }
 

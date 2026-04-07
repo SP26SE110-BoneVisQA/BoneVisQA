@@ -199,6 +199,8 @@ public class StudentRepository : IStudentRepository
         return await _unitOfWork.QuizRepository
             .FindByCondition(q => q.Id == quizId)
             .Include(q => q.QuizQuestions)
+                .ThenInclude(qq => qq.Case)
+                    .ThenInclude(c => c!.MedicalImages)
             .FirstOrDefaultAsync();
     }
 

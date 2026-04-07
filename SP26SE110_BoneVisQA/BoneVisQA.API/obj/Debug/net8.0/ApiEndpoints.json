@@ -2453,6 +2453,22 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteQuiz",
+    "RelativePath": "api/lecturer/quizzes/{quizId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetQuizQuestions",
     "RelativePath": "api/lecturer/quizzes/{quizId}/questions",
     "HttpMethod": "GET",
@@ -3534,6 +3550,22 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "DeleteQuiz",
+    "RelativePath": "api/Lecturers/quizzes/{quizId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetQuizQuestions",
     "RelativePath": "api/Lecturers/quizzes/{quizId}/questions",
     "HttpMethod": "GET",
@@ -4539,6 +4571,22 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentsController",
+    "Method": "LeaveEnrolledClass",
+    "RelativePath": "api/Students/classes/{classId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentsController",

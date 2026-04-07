@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.API.Controllers.Lecturer;
@@ -24,6 +26,13 @@ public class LecturersController : ControllerBase
     {
         _lecturerService = lecturerService;
         _aiQuizService = aiQuizService;
+    }
+
+    private static Guid? TryGetJwtUserId(ClaimsPrincipal user)
+    {
+        var s = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        return Guid.TryParse(s, out var id) && id != Guid.Empty ? id : null;
     }
 
     #region Class Management
@@ -218,7 +227,8 @@ public class LecturersController : ControllerBase
 
         try
         {
-            var result = await _lecturerService.CreateQuizAsync(request);
+            var creatorId = TryGetJwtUserId(User);
+            var result = await _lecturerService.CreateQuizAsync(request, creatorId);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -332,6 +342,15 @@ public class LecturersController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("quizzes/{quizId:guid}")]
+    public async Task<IActionResult> DeleteQuiz(Guid quizId)
+    {
+        var deleted = await _lecturerService.DeleteQuizAsync(quizId);
+        if (!deleted)
+            return NotFound(new { message = "Quiz không tồn tại." });
+        return NoContent();
+    }
+
     [HttpPost("classes/{classId:guid}/quizzes/{quizId:guid}")]
     public async Task<ActionResult<ClassQuizDto>> AssignQuizToClass(Guid classId, Guid quizId)
     {
@@ -416,7 +435,8 @@ public class LecturersController : ControllerBase
                 PassingScore = request.PassingScore
             };
 
-            var quiz = await _lecturerService.CreateQuizAsync(createRequest);
+            var creatorId = TryGetJwtUserId(User);
+            var quiz = await _lecturerService.CreateQuizAsync(createRequest, creatorId);
 
             // 2. Tạo questions từ AI
             var questionsResult = await _aiQuizService.GenerateQuizQuestionsAsync(

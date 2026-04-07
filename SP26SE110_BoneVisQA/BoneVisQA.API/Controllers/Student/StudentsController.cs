@@ -173,4 +173,24 @@ public class StudentsController : ControllerBase
             return NotFound(new { message = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Sinh viên tự hủy đăng ký (rời lớp).
+    /// </summary>
+    [HttpDelete("classes/{classId:guid}")]
+    public async Task<IActionResult> LeaveEnrolledClass(Guid classId)
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        try
+        {
+            await _studentService.LeaveEnrolledClassAsync(studentId, classId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 }

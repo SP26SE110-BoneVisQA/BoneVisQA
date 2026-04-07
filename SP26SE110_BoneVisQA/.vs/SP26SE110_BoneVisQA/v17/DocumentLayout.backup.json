@@ -116,7 +116,7 @@
               "RelativeDocumentMoniker": "BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
               "ToolTip": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
               "RelativeToolTip": "BoneVisQA.Services\\Services\\Student\\StudentLearningService.cs",
-              "ViewState": "AgIAAKACAAAAAAAAAAAiwLMCAAAmAAAAAAAAAA==",
+              "ViewState": "AgIAAKYCAAAAAAAAAAAiwLMCAAAmAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-07T10:57:51.332Z",
               "EditorCaption": ""
@@ -131,8 +131,7 @@
               "RelativeToolTip": "BoneVisQA.Repositories\\Models\\Quiz.cs",
               "ViewState": "AgIAADIAAAAAAAAAAAAmwAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-07T08:07:52.634Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-07T08:07:52.634Z"
             },
             {
               "$type": "Document",
@@ -144,8 +143,7 @@
               "RelativeToolTip": "BoneVisQA.Services\\Services\\Student\\StudentService.cs",
               "ViewState": "AgIAAF4DAAAAAAAAAAASwGsDAAAzAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-07T08:07:24.079Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-07T08:07:24.079Z"
             }
           ]
         },

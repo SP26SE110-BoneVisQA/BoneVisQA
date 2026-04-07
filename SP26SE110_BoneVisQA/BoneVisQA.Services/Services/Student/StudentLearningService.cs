@@ -545,6 +545,11 @@ public class StudentLearningService : IStudentLearningService
         if (expiredSessions.Count == 0)
             return;
 
+        var expiredQuizIds = expiredSessions
+            .Select(s => s.QuizId)
+            .Distinct()
+            .ToList();
+
         var expiredQuizClassPairs = expiredSessions
             .Select(s => new { s.QuizId, s.ClassId })
             .ToList();
@@ -555,7 +560,7 @@ public class StudentLearningService : IStudentLearningService
             .Include(a => a.Quiz)
                 .ThenInclude(q => q.QuizQuestions)
             .Where(a => a.CompletedAt == null)
-            .Where(a => expiredQuizClassPairs.Any(p => p.QuizId == a.QuizId))
+            .Where(a => expiredQuizIds.Contains(a.QuizId))
             .ToListAsync();
 
         foreach (var attempt in expiredAttempts)
@@ -563,10 +568,16 @@ public class StudentLearningService : IStudentLearningService
             var quiz = attempt.Quiz;
             if (quiz == null) continue;
 
+            // Các classId mà quiz này đã đóng cho sinh viên này
+            var closedClassIds = expiredQuizClassPairs
+                .Where(p => p.QuizId == attempt.QuizId)
+                .Select(p => p.ClassId)
+                .ToHashSet();
+
             // Kiểm tra student có trong lớp của quiz đã đóng không
             var isStudentInClass = await _unitOfWork.Context.ClassEnrollments
                 .AnyAsync(e => e.StudentId == attempt.StudentId &&
-                              expiredQuizClassPairs.Any(p => p.QuizId == attempt.QuizId && p.ClassId == e.ClassId));
+                              closedClassIds.Contains(e.ClassId));
 
             if (!isStudentInClass) continue;
 

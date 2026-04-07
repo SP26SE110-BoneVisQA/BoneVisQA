@@ -599,13 +599,25 @@ public class StudentService : IStudentService
         }
 
         var questions = quiz.QuizQuestions
-            .Select(q => new StudentQuizQuestionDto
+            .Select(q =>
             {
-                QuestionId = q.Id,
-                QuestionText = q.QuestionText,
-                Type = q.Type,
-                CaseId = q.CaseId ?? Guid.Empty,
-                ImageUrl = q.ImageUrl
+                var caseImageUrl = q.Case?.MedicalImages
+                    .OrderBy(mi => mi.CreatedAt ?? DateTime.MaxValue)
+                    .Select(mi => mi.ImageUrl)
+                    .FirstOrDefault();
+                return new StudentQuizQuestionDto
+                {
+                    QuestionId = q.Id,
+                    QuestionText = q.QuestionText,
+                    Type = q.Type,
+                    CaseId = q.CaseId,
+                    CaseTitle = q.Case?.Title,
+                    OptionA = q.OptionA,
+                    OptionB = q.OptionB,
+                    OptionC = q.OptionC,
+                    OptionD = q.OptionD,
+                    ImageUrl = !string.IsNullOrWhiteSpace(q.ImageUrl) ? q.ImageUrl : caseImageUrl,
+                };
             })
             .ToList();
 
@@ -614,6 +626,7 @@ public class StudentService : IStudentService
             AttemptId = attempt.Id,
             QuizId = quiz.Id,
             Title = quiz.Title,
+            Topic = quiz.Topic,
             Questions = questions
         };
     }
@@ -898,23 +911,25 @@ public class StudentService : IStudentService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Student's attempts for quizzes in this class
+        // Student attempts — chỉ dùng để gắn trạng thái hoàn thành / điểm; danh sách quiz phải lấy theo lớp (ClassQuizSessions),
+        // không chỉ những quiz đã có attempt (sinh viên chưa làm vẫn phải thấy bài được gán).
         var quizAttempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.StudentId == studentId && classQuizIds.Contains(a.QuizId))
             .Select(a => new { a.QuizId, a.CompletedAt, a.Score })
             .ToListAsync();
 
-        var quizIds = quizAttempts.Select(a => a.QuizId).Distinct().ToList();
         var quizzesRaw = await _unitOfWork.Context.Quizzes
             .AsNoTracking()
-            .Where(q => quizIds.Contains(q.Id))
+            .Where(q => classQuizIds.Contains(q.Id))
             .Select(q => new { q.Id, q.Title, q.Topic, q.OpenTime, q.CloseTime, q.TimeLimit, q.PassingScore })
+            .OrderByDescending(q => q.OpenTime ?? DateTime.MinValue)
+            .ThenBy(q => q.Title)
             .ToListAsync();
 
         var questionCounts = await _unitOfWork.Context.QuizQuestions
-            .Where(q => quizIds.Contains(q.QuizId))
-            .GroupBy(q => q.QuizId)
+            .Where(qq => classQuizIds.Contains(qq.QuizId))
+            .GroupBy(qq => qq.QuizId)
             .Select(g => new { QuizId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.QuizId, x => x.Count);
 
@@ -927,7 +942,7 @@ public class StudentService : IStudentService
                     .FirstOrDefault();
                 return new ClassQuizSummaryDto
                 {
-                    QuizId = latest?.QuizId ?? q.Id,
+                    QuizId = q.Id,
                     Title = q.Title,
                     Topic = q.Topic,
                     OpenTime = q.OpenTime,
@@ -979,5 +994,21 @@ public class StudentService : IStudentService
             Students = students,
             Announcements = announcements,
         };
+    }
+
+    public async Task LeaveEnrolledClassAsync(Guid studentId, Guid classId)
+    {
+        var enrollment = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.StudentId == studentId && e.ClassId == classId)
+            .FirstOrDefaultAsync();
+
+        if (enrollment == null)
+        {
+            throw new KeyNotFoundException("You are not enrolled in this class.");
+        }
+
+        await _unitOfWork.ClassEnrollmentRepository.DeleteAsync(enrollment.Id);
+        await _unitOfWork.SaveAsync();
+        _logger.LogInformation("[LeaveEnrolledClassAsync] Student {StudentId} left class {ClassId}.", studentId, classId);
     }
 }

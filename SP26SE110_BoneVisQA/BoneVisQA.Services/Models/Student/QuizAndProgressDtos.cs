@@ -38,6 +38,8 @@ public class StudentQuizQuestionDto
     public string QuestionText { get; set; } = string.Empty;
     public string? Type { get; set; }
     public Guid? CaseId { get; set; }
+    /// <summary>Tên case (nếu câu hỏi gắn case) — hiển thị trên UI student.</summary>
+    public string? CaseTitle { get; set; }
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }

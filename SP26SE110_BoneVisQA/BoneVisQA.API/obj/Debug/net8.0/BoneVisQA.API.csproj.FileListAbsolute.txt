@@ -290,3 +290,4 @@ D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.AP
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\ref\BoneVisQA.API.dll
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\bin\Debug\net8.0\BoneVisQA.API.staticwebassets.runtime.json
 d:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.MvcApplicationPartsAssemblyInfo.cs
+D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

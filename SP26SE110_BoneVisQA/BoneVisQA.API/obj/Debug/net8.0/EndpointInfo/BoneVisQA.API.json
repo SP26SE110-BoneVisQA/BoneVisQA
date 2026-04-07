@@ -4832,6 +4832,27 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/Lecturers/quizzes/{quizId}": {
@@ -4927,6 +4948,27 @@
                 }
               }
             }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -8140,6 +8182,27 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Students"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/upload/image": {
@@ -9340,6 +9403,14 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "totalAssignments": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completedAssignments": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

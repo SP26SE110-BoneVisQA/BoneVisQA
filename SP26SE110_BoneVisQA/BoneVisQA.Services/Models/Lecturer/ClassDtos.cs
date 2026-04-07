@@ -34,4 +34,6 @@ public class ClassStatsDto
     public int TotalCasesViewed { get; set; }
     public int TotalQuestionsAsked { get; set; }
     public double? AvgQuizScore { get; set; }
+    public int TotalAssignments { get; set; }
+    public int CompletedAssignments { get; set; }
 }
