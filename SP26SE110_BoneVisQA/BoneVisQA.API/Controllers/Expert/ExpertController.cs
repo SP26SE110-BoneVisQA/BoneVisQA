@@ -58,7 +58,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes")]
-        public async Task<IActionResult> CreateQuiz([FromBody] QuizDto request)
+        public async Task<IActionResult> CreateQuiz([FromBody] QuizRequestDTO request)
         {
             if (request == null)
             {
@@ -75,7 +75,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDto request)
+        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDTO request)
         {
             if (request == null)
             {

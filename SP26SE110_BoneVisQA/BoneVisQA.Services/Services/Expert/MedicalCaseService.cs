@@ -59,7 +59,8 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = dto.CategoryId,
                 SuggestedDiagnosis = dto.SuggestedDiagnosis,
                 KeyFindings = dto.KeyFindings,
-                IsApproved = false,
+                ReflectiveQuestions = dto.ReflectiveQuestions,
+                IsApproved = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
@@ -79,6 +80,7 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = medicalCase.IsApproved,
                 IsActive = medicalCase.IsActive,
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
+                ReflectiveQuestions = medicalCase.ReflectiveQuestions,  
                 KeyFindings = medicalCase.KeyFindings,
                 CreatedAt = medicalCase.CreatedAt,
             };

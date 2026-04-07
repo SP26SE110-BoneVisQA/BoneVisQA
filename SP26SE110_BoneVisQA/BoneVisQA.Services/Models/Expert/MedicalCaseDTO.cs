@@ -27,7 +27,6 @@ namespace BoneVisQA.Services.Models.Expert
     public class MedicalCaseDTO
     {
         public Guid Id { get; set; }
-        public Guid? CreatedByExpertId { get; set; }
         public string? ExpertName { get; set; }
         public string Title { get; set; } = null!;
         public string Description { get; set; } = null!;

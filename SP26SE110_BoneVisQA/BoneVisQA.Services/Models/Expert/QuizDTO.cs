@@ -9,11 +9,41 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Expert
 {
-    public class QuizDTO
+    public class QuizRequestDTO
     {
         public Guid Id { get; set; }
 
         public string Title { get; set; } = null!;
+       
+        public Guid? CreatedByExpertId { get; set; }
+       
+        public string? Topic { get; set; }
+
+        public DateTime? OpenTime { get; set; }
+
+        public DateTime? CloseTime { get; set; }
+
+        public int? TimeLimit { get; set; }
+
+        public int? PassingScore { get; set; }    
+
+        public bool IsAiGenerated { get; set; }
+
+        public string? Difficulty { get; set; }
+
+        public string? Classification { get; set; }
+
+        public DateTime? CreatedAt { get; set; }
+    }
+    public class QuizResponseDTO
+    {
+        public Guid Id { get; set; }
+
+        public string Title { get; set; } = null!;
+
+        public string? ExpertName { get; set; }
+
+        public string? Topic { get; set; }
 
         public DateTime? OpenTime { get; set; }
 
@@ -22,14 +52,23 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TimeLimit { get; set; }
 
         public int? PassingScore { get; set; }
-      
+
+        public bool IsAiGenerated { get; set; }
+
+        public string? Difficulty { get; set; }
+
+        public string? Classification { get; set; }
+
         public DateTime? CreatedAt { get; set; }
     }
+
     public class AssignQuizRequestDTO
     {
         public Guid ClassId { get; set; }
 
         public Guid QuizId { get; set; }
+
+        public Guid? AssignedExpertId { get; set; }
 
         public DateTime? OpenTime { get; set; }
 
@@ -48,6 +87,8 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid QuizId { get; set; }
 
         public string? QuizName { get; set; }
+
+        public string? ExpertName { get; set; }
 
         public DateTime? AssignedAt { get; set; }
 

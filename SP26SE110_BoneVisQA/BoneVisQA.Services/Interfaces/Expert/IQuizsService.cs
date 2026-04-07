@@ -10,9 +10,9 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface IQuizsService
     {
-        Task<QuizDto> CreateQuizAsync(QuizDto request);
+        Task<QuizResponseDTO> CreateQuizAsync(QuizRequestDTO request);
 
-        Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
+        Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDTO request);
 
         Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto);
 

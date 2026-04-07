@@ -21,35 +21,67 @@ namespace BoneVisQA.Services.Services.Expert
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<QuizDto> CreateQuizAsync(QuizDto request)
+        public async Task<QuizResponseDTO> CreateQuizAsync(QuizRequestDTO request)
         {
             var quiz = new Quiz
             {
                 Id = Guid.NewGuid(),
                 Title = request.Title,
-                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+
+                CreatedByExpertId = request.CreatedByExpertId,
+
+                Topic = request.Topic,
+
+                OpenTime = request.OpenTime.HasValue? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc): null,
+
+                CloseTime = request.CloseTime.HasValue? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc): null,
+
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
+
+                IsAiGenerated = request.IsAiGenerated,
+
+                Difficulty = request.Difficulty,
+                Classification = request.Classification,
+
                 CreatedAt = DateTime.UtcNow
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
             await _unitOfWork.SaveAsync();
 
-            return new QuizDto
+            string? expertName = null;
+
+            if (request.CreatedByExpertId.HasValue)
+            {
+                var expert = await _unitOfWork.UserRepository.GetByIdAsync(request.CreatedByExpertId.Value);
+
+                expertName = expert?.FullName;
+            }
+
+            return new QuizResponseDTO
             {
                 Id = quiz.Id,
                 Title = quiz.Title,
+
+                ExpertName = expertName,
+
+                Topic = quiz.Topic,
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
+
                 TimeLimit = quiz.TimeLimit,
                 PassingScore = quiz.PassingScore,
+
+                IsAiGenerated = quiz.IsAiGenerated,
+                Difficulty = quiz.Difficulty,
+                Classification = quiz.Classification,
+
                 CreatedAt = quiz.CreatedAt
             };
         }
 
-        public async Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
+        public async Task<QuizQuestionDTO> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDTO request)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
@@ -78,7 +110,7 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
             await _unitOfWork.SaveAsync();
 
-            return new QuizQuestionDto
+            return new QuizQuestionDTO
             {
                 Id = question.Id,
                 QuizId = question.QuizId,
@@ -132,6 +164,16 @@ namespace BoneVisQA.Services.Services.Expert
 
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
+           
+            string? expertName = null;
+
+            if (dto.AssignedExpertId.HasValue)
+            {
+                var expert = await _unitOfWork.UserRepository
+                    .GetByIdAsync(dto.AssignedExpertId.Value);
+
+                expertName = expert?.FullName;
+            }
 
             return new ClassQuizSessionResponseDTO
             {
@@ -141,6 +183,7 @@ namespace BoneVisQA.Services.Services.Expert
                 QuizId = classQuiz.QuizId,
                 QuizName = quiz.Title,
 
+                ExpertName = expertName, 
                 AssignedAt = classQuiz.CreatedAt,
 
                 OpenTime = classQuiz.OpenTime,
