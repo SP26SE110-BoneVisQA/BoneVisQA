@@ -13,6 +13,8 @@ public class QuizListItemDto
     public DateTime? CloseTime { get; set; }
     public int? TimeLimit { get; set; }
     public int? PassingScore { get; set; }
+    /// <summary>Số câu trong quiz (quiz_questions) — dùng cho màn hình student trước khi bắt đầu.</summary>
+    public int TotalQuestions { get; set; }
     public bool IsCompleted { get; set; }
     public double? Score { get; set; }
 }

@@ -891,6 +891,27 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "GetAllMedicalCases",
+    "RelativePath": "api/expert/cases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "pageIndex",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "pageSize",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
     "Method": "CreateCase",
     "RelativePath": "api/expert/cases",
     "HttpMethod": "POST",
@@ -899,7 +920,44 @@
     "Parameters": [
       {
         "Name": "dto",
-        "Type": "BoneVisQA.Services.Models.Expert.MedicalCaseDTORequest",
+        "Type": "BoneVisQA.Services.Models.Expert.CreateMedicalCaseRequestDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "UpdateMedicalCase",
+    "RelativePath": "api/expert/cases/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Expert.UpdateMedicalCaseDTORequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "DeleteMedicalCase",
+    "RelativePath": "api/expert/cases/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
         "IsRequired": true
       }
     ],
@@ -1059,6 +1117,59 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "UpdateQuestion",
+    "RelativePath": "api/expert/questions",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Expert.UpdateQuizQuestionRequestDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "DeleteQuestion",
+    "RelativePath": "api/expert/questions/{questionId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "questionId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "GetQuizzes",
+    "RelativePath": "api/expert/quizzes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "pageIndex",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "pageSize",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
     "Method": "CreateQuiz",
     "RelativePath": "api/expert/quizzes",
     "HttpMethod": "POST",
@@ -1067,7 +1178,55 @@
     "Parameters": [
       {
         "Name": "request",
-        "Type": "BoneVisQA.Services.Models.Expert.QuizRequestDTO",
+        "Type": "BoneVisQA.Services.Models.Expert.CreateQuizRequestDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "UpdateQuiz",
+    "RelativePath": "api/expert/quizzes",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Expert.UpdateQuizRequestDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "DeleteQuiz",
+    "RelativePath": "api/expert/quizzes/{quizId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Expert.ExpertController",
+    "Method": "GetQuestionsByQuiz",
+    "RelativePath": "api/expert/quizzes/{quizId}/questions",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
         "IsRequired": true
       }
     ],
@@ -1088,7 +1247,7 @@
       },
       {
         "Name": "request",
-        "Type": "BoneVisQA.Services.Models.Expert.CreateQuizQuestionDTO",
+        "Type": "BoneVisQA.Services.Models.Expert.CreateQuizQuestionRequestDTO",
         "IsRequired": true
       }
     ],

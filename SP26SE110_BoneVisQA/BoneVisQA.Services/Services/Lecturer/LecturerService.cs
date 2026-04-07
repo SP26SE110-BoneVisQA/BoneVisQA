@@ -1272,24 +1272,25 @@ public class LecturerService : ILecturerService
         var classIds = classList.Select(c => c.Id).ToList();
         var classNameMap = classList.ToDictionary(c => c.Id, c => c.ClassName ?? "");
 
-        // Eager-load all navigation properties in parallel
-        var enrollTask = _unitOfWork.Context.ClassEnrollments
+        // Tuần tự: không start ToDictionaryAsync rồi await query khác — EF DbContext không cho nhiều operation đồng thời.
+        var enrollmentCounts = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
             .Where(e => classIds.Contains(e.ClassId))
             .GroupBy(e => e.ClassId)
             .Select(g => new { ClassId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ClassId, x => x.Count);
 
         var allCaseAssignments = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
             .Where(cc => classIds.Contains(cc.ClassId))
             .Include(cc => cc.Case)
             .ToListAsync();
 
         var allQuizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
             .Where(cqs => classIds.Contains(cqs.ClassId))
             .Include(cqs => cqs.Quiz)
             .ToListAsync();
-
-        var enrollmentCounts = await enrollTask;
 
         // Extract quiz IDs after sessions are loaded
         var quizQuizIds = allQuizSessions.Select(q => q.QuizId).ToList();

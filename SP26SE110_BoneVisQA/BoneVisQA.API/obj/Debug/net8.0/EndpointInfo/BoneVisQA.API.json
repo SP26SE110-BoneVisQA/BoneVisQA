@@ -1350,6 +1350,36 @@
       }
     },
     "/api/expert/cases": {
+      "get": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "post": {
         "tags": [
           "Expert"
@@ -1358,21 +1388,84 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTORequest"
+                "$ref": "#/components/schemas/CreateMedicalCaseRequestDTO"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTORequest"
+                "$ref": "#/components/schemas/CreateMedicalCaseRequestDTO"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MedicalCaseDTORequest"
+                "$ref": "#/components/schemas/CreateMedicalCaseRequestDTO"
               }
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/expert/cases/{id}": {
+      "put": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMedicalCaseDTORequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMedicalCaseDTORequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMedicalCaseDTORequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1457,6 +1550,36 @@
       }
     },
     "/api/expert/quizzes": {
+      "get": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "post": {
         "tags": [
           "Expert"
@@ -1465,17 +1588,46 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuizRequestDTO"
+                "$ref": "#/components/schemas/CreateQuizRequestDTO"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuizRequestDTO"
+                "$ref": "#/components/schemas/CreateQuizRequestDTO"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/QuizRequestDTO"
+                "$ref": "#/components/schemas/CreateQuizRequestDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Expert"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizRequestDTO"
               }
             }
           }
@@ -1487,7 +1639,51 @@
         }
       }
     },
+    "/api/expert/quizzes/{quizId}": {
+      "delete": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/expert/quizzes/{quizId}/questions": {
+      "get": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "quizId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "post": {
         "tags": [
           "Expert"
@@ -1507,21 +1703,75 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateQuizQuestionDTO"
+                "$ref": "#/components/schemas/CreateQuizQuestionRequestDTO"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateQuizQuestionDTO"
+                "$ref": "#/components/schemas/CreateQuizQuestionRequestDTO"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateQuizQuestionDTO"
+                "$ref": "#/components/schemas/CreateQuizQuestionRequestDTO"
               }
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/expert/questions": {
+      "put": {
+        "tags": [
+          "Expert"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizQuestionRequestDTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizQuestionRequestDTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuizQuestionRequestDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/expert/questions/{questionId}": {
+      "delete": {
+        "tags": [
+          "Expert"
+        ],
+        "parameters": [
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -9539,44 +9789,54 @@
         },
         "additionalProperties": false
       },
-      "CreateQuizQuestionDTO": {
+      "CreateMedicalCaseRequestDTO": {
         "type": "object",
         "properties": {
-          "quizId": {
+          "title": {
             "type": "string",
-            "format": "uuid"
+            "nullable": true
           },
-          "caseId": {
+          "createdByExpertId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
           },
-          "questionText": {
+          "description": {
             "type": "string",
             "nullable": true
           },
-          "type": {
+          "difficulty": {
             "type": "string",
             "nullable": true
           },
-          "optionA": {
+          "isApproved": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "suggestedDiagnosis": {
             "type": "string",
             "nullable": true
           },
-          "optionB": {
+          "reflectiveQuestions": {
             "type": "string",
             "nullable": true
           },
-          "optionC": {
+          "keyFindings": {
             "type": "string",
             "nullable": true
           },
-          "optionD": {
+          "createdAt": {
             "type": "string",
-            "nullable": true
-          },
-          "correctAnswer": {
-            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -9624,6 +9884,108 @@
           },
           "imageUrl": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateQuizQuestionRequestDTO": {
+        "type": "object",
+        "properties": {
+          "quizId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionA": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionB": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionC": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionD": {
+            "type": "string",
+            "nullable": true
+          },
+          "correctAnswer": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateQuizRequestDTO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdByExpertId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timeLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isAiGenerated": {
+            "type": "boolean"
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -10809,59 +11171,6 @@
         },
         "additionalProperties": false
       },
-      "MedicalCaseDTORequest": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdByExpertId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "difficulty": {
-            "type": "string",
-            "nullable": true
-          },
-          "isApproved": {
-            "type": "boolean",
-            "nullable": true
-          },
-          "isActive": {
-            "type": "boolean",
-            "nullable": true
-          },
-          "categoryId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "suggestedDiagnosis": {
-            "type": "string",
-            "nullable": true
-          },
-          "reflectiveQuestions": {
-            "type": "string",
-            "nullable": true
-          },
-          "keyFindings": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "MedicalImageDto": {
         "type": "object",
         "properties": {
@@ -11207,6 +11516,10 @@
             "format": "int32",
             "nullable": true
           },
+          "totalQuestions": {
+            "type": "integer",
+            "format": "int32"
+          },
           "isCompleted": {
             "type": "boolean"
           },
@@ -11272,65 +11585,6 @@
           },
           "imageUrl": {
             "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "QuizRequestDTO": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdByExpertId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          },
-          "topic": {
-            "type": "string",
-            "nullable": true
-          },
-          "openTime": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "closeTime": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "timeLimit": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "passingScore": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "isAiGenerated": {
-            "type": "boolean"
-          },
-          "difficulty": {
-            "type": "string",
-            "nullable": true
-          },
-          "classification": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
             "nullable": true
           }
         },
@@ -12062,6 +12316,10 @@
             "format": "uuid",
             "nullable": true
           },
+          "caseTitle": {
+            "type": "string",
+            "nullable": true
+          },
           "optionA": {
             "type": "string",
             "nullable": true
@@ -12531,6 +12789,59 @@
         },
         "additionalProperties": false
       },
+      "UpdateMedicalCaseDTORequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdByExpertId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "isApproved": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "suggestedDiagnosis": {
+            "type": "string",
+            "nullable": true
+          },
+          "reflectiveQuestions": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyFindings": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateQuizAttemptRequestDto": {
         "type": "object",
         "properties": {
@@ -12544,6 +12855,98 @@
             "items": {
               "$ref": "#/components/schemas/UpdateAnswerDto"
             },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateQuizQuestionRequestDTO": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "correctAnswer": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionA": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionB": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionC": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionD": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateQuizRequestDTO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "openTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "timeLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "type": "string",
             "nullable": true
           }
         },

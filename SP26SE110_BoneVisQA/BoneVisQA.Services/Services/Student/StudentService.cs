@@ -540,6 +540,13 @@ public class StudentService : IStudentService
             .FindByCondition(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
             .ToListAsync();
 
+        var questionCounts = await _unitOfWork.Context.QuizQuestions
+            .Where(q => quizIds.Contains(q.QuizId))
+            .GroupBy(q => q.QuizId)
+            .Select(g => new { QuizId = g.Key, Count = g.Count() })
+            .ToListAsync();
+        var countByQuiz = questionCounts.ToDictionary(x => x.QuizId, x => x.Count);
+
         return sessions.Select(s =>
         {
             var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
@@ -552,7 +559,8 @@ public class StudentService : IStudentService
                 OpenTime = s.OpenTime,
                 CloseTime = s.CloseTime,
                 TimeLimit = s.TimeLimitMinutes,
-                PassingScore = (int?)s.PassingScore,
+                PassingScore = s.PassingScore,
+                TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
                 Score = attempt?.Score
             };
