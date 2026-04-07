@@ -71,7 +71,13 @@ public class StudentCasesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Returns a single case detail in catalog detail shape (images, expert summary, key findings).
+    /// </summary>
     [HttpGet("{caseId:guid}")]
+    [ProducesResponseType(typeof(CaseDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CaseDetailDto>> GetCaseDetail(Guid caseId)
     {
         var studentId = GetUserId();
@@ -79,7 +85,9 @@ public class StudentCasesController : ControllerBase
             return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
         var result = await _studentService.GetCaseDetailAsync(caseId, studentId.Value);
-        return result == null ? NotFound() : Ok(result);
+        return result == null
+            ? NotFound(new { message = "Không tìm thấy ca bệnh." })
+            : Ok(result);
     }
 
     [HttpPost("annotations")]

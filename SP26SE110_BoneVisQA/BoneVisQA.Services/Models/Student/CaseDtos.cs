@@ -29,6 +29,10 @@ public class CaseDetailDto
     public string Description { get; set; } = string.Empty;
     public string? Difficulty { get; set; }
     public string? CategoryName { get; set; }
+    public string? ExpertSummary { get; set; }
+    public string? KeyFindings { get; set; }
+    public string? ReflectiveQuestions { get; set; }
+    public string? PrimaryImageUrl { get; set; }
     public bool IsApproved { get; set; }
     public IReadOnlyList<MedicalImageDto> Images { get; set; } = Array.Empty<MedicalImageDto>();
 }

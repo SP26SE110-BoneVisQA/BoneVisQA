@@ -152,6 +152,13 @@ public class StudentService : IStudentService
             Description = entity.Description,
             Difficulty = entity.Difficulty,
             CategoryName = entity.Category?.Name,
+            ExpertSummary = entity.SuggestedDiagnosis,
+            KeyFindings = entity.KeyFindings,
+            ReflectiveQuestions = entity.ReflectiveQuestions,
+            PrimaryImageUrl = entity.MedicalImages
+                .OrderBy(i => i.CreatedAt)
+                .Select(i => i.ImageUrl)
+                .FirstOrDefault(),
             IsApproved = entity.IsApproved ?? false,
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
