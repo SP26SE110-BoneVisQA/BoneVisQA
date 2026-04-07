@@ -140,4 +140,17 @@ public class StudentsController : ControllerBase
         var result = await _studentService.GetProgressAsync(studentId);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Trả về danh sách lớp học mà sinh viên đã đăng ký (qua ClassEnrollments).
+    /// </summary>
+    [HttpGet("classes")]
+    public async Task<ActionResult<IReadOnlyList<StudentClassDto>>> GetEnrolledClasses()
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        var enrollments = await _studentService.GetEnrolledClassesAsync(studentId);
+        return Ok(enrollments);
+    }
 }

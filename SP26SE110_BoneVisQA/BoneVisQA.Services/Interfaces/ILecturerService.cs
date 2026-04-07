@@ -39,6 +39,8 @@ public interface ILecturerService
     Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId);
     Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId);
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
+    Task<List<ClassAssignmentDto>> GetClassAssignmentsAsync(Guid classId);
+    Task<List<ClassAssignmentDto>> GetAllAssignmentsForLecturerAsync(Guid lecturerId);
     Task<ClassStatsDto> GetClassStatsAsync(Guid classId);
 
     Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request);

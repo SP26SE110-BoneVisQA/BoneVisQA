@@ -1,3 +1,5 @@
+using System;
+
 namespace BoneVisQA.Services.Models.Lecturer;
 
 public class LecturerDashboardStatsDto

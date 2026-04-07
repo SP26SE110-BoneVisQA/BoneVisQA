@@ -68,9 +68,48 @@ public class StudentQuizzesController : ControllerBase
     }
 
     /// <summary>
-    /// AI Generate Practice Quiz: Student tự tạo quiz ôn luyện bằng AI
+    /// AI Generate + Lưu vào DB → Trả về session quiz để student bắt đầu làm ngay.
+    /// Kết hợp: Generate (AI) + Save (Quiz + QuizAttempt) trong 1 lần gọi.
     /// </summary>
     [HttpPost("practice/generate")]
+    public async Task<ActionResult<StudentGeneratedQuizAttemptDto>> GenerateAndSavePracticeQuiz(
+        [FromBody] GeneratePracticeQuizRequestDto request)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        if (string.IsNullOrWhiteSpace(request.Topic))
+            return BadRequest(new { message = "Topic là bắt buộc." });
+
+        // 1. Gọi AI tạo câu hỏi
+        var generated = await _aiQuizService.GenerateQuizQuestionsAsync(
+            request.Topic,
+            request.QuestionCount ?? 5,
+            request.Difficulty);
+
+        if (!generated.Success || generated.Questions.Count == 0)
+            return Ok(new StudentGeneratedQuizAttemptDto
+            {
+                AttemptId = Guid.Empty,
+                QuizId = Guid.Empty,
+                Title = string.Empty,
+                Topic = request.Topic,
+                Questions = Array.Empty<StudentQuizQuestionDto>(),
+                SavedToHistory = false,
+            });
+
+        // 2. Lưu vào DB (tạo Quiz + QuizAttempt)
+        var session = await _studentLearningService.SaveAndStartGeneratedQuizAsync(
+            studentId.Value,
+            generated,
+            request.Topic,
+            request.Difficulty);
+
+        return Ok(session);
+    }
+
+    [HttpPost("practice/save")]
     public async Task<ActionResult<AIQuizGenerationResultDto>> GeneratePracticeQuiz([FromBody] GeneratePracticeQuizRequestDto request)
     {
         var studentId = GetUserId();
@@ -93,6 +132,17 @@ public class StudentQuizzesController : ControllerBase
         public string Topic { get; set; } = string.Empty;
         public int? QuestionCount { get; set; }
         public string? Difficulty { get; set; }
+    }
+
+    [HttpGet("history")]
+    public async Task<ActionResult<IReadOnlyList<StudentQuizAttemptSummaryDto>>> GetQuizHistory()
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _studentLearningService.GetQuizAttemptHistoryAsync(studentId.Value);
+        return Ok(result);
     }
 
     [HttpPost("submit")]
@@ -127,6 +177,31 @@ public class StudentQuizzesController : ControllerBase
         submit.StudentId = studentId.Value;
         var result = await _studentService.SubmitQuizAsync(studentId.Value, submit);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Lấy chi tiết đáp án của một quiz attempt đã nộp (để review sau khi nộp).
+    /// </summary>
+    [HttpGet("{attemptId}/review")]
+    public async Task<ActionResult<QuizAttemptReviewDto>> GetQuizAttemptReview(Guid attemptId)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Unauthorized." });
+
+        try
+        {
+            var result = await _studentLearningService.GetQuizAttemptReviewAsync(studentId.Value, attemptId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     private Guid? GetUserId()

@@ -39,5 +39,10 @@ public interface IStudentService
     Task<StudentProgressDto> GetProgressAsync(Guid studentId);
 
     Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDto submit);
+
+    /// <summary>
+    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// </summary>
+    Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId);
 }
 

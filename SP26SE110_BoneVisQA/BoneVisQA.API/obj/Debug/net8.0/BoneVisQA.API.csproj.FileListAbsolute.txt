@@ -272,7 +272,6 @@ D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.AP
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.AssemblyInfoInputs.cache
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.AssemblyInfo.cs
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.csproj.CoreCompileInputs.cache
-D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.MvcApplicationPartsAssemblyInfo.cs
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.MvcApplicationPartsAssemblyInfo.cache
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.sourcelink.json
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\rjimswa.dswa.cache.json
@@ -291,3 +290,4 @@ D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.AP
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\ref\BoneVisQA.API.dll
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\bin\Debug\net8.0\BoneVisQA.API.staticwebassets.runtime.json
 D:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
+d:\SP26_SEP490_SP26SE110_BoneVisQA\BE\BoneVisQA\SP26SE110_BoneVisQA\BoneVisQA.API\obj\Debug\net8.0\BoneVisQA.API.MvcApplicationPartsAssemblyInfo.cs

@@ -150,6 +150,30 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("classes/{classId:guid}/assignments")]
+    public async Task<ActionResult<List<ClassAssignmentDto>>> GetClassAssignments(Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetClassAssignmentsAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Lấy tất cả assignments (case + quiz) của tất cả lớp thuộc giảng viên hiện tại.</summary>
+    [HttpGet("assignments")]
+    public async Task<ActionResult<List<ClassAssignmentDto>>> GetAllAssignmentsForLecturer([FromQuery] Guid lecturerId)
+    {
+        if (lecturerId == Guid.Empty)
+            return BadRequest(new { message = "lecturerId là bắt buộc." });
+        var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId);
+        return Ok(result);
+    }
+
     /// <summary>Không dùng :guid trên route — nếu id sai sẽ trả 400 thay vì 404 do router.</summary>
     [HttpPut("classes/{classId}/announcements/{announcementId}")]
     public async Task<ActionResult<AnnouncementDto>> UpdateAnnouncement(

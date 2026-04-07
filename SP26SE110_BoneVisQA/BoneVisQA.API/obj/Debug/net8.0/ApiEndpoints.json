@@ -1330,6 +1330,32 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetAllAssignmentsForLecturer",
+    "RelativePath": "api/lecturer/assignments",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "lecturerId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[BoneVisQA.Services.Models.Lecturer.ClassAssignmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetAllCases",
     "RelativePath": "api/lecturer/cases",
     "HttpMethod": "GET",
@@ -1607,6 +1633,32 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassAssignments",
+    "RelativePath": "api/lecturer/classes/{classId}/assignments",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[BoneVisQA.Services.Models.Lecturer.ClassAssignmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerAssignmentsController",
@@ -2531,6 +2583,32 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetAllAssignmentsForLecturer",
+    "RelativePath": "api/Lecturers/assignments",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "lecturerId",
+        "Type": "System.Guid",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[BoneVisQA.Services.Models.Lecturer.ClassAssignmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "GetAllCases",
     "RelativePath": "api/Lecturers/cases",
     "HttpMethod": "GET",
@@ -2808,6 +2886,32 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
+    "Method": "GetClassAssignments",
+    "RelativePath": "api/Lecturers/classes/{classId}/assignments",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[BoneVisQA.Services.Models.Lecturer.ClassAssignmentDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
@@ -3842,6 +3946,32 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
+    "Method": "GetQuizAttemptReview",
+    "RelativePath": "api/student/quizzes/{attemptId}/review",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "attemptId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Student.QuizAttemptReviewDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
     "Method": "StartQuiz",
     "RelativePath": "api/student/quizzes/{quizId}/start",
     "HttpMethod": "POST",
@@ -3894,6 +4024,26 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
+    "Method": "GetQuizHistory",
+    "RelativePath": "api/student/quizzes/history",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Student.StudentQuizAttemptSummaryDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
     "Method": "GetPracticeQuiz",
     "RelativePath": "api/student/quizzes/practice",
     "HttpMethod": "GET",
@@ -3920,8 +4070,34 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
-    "Method": "GeneratePracticeQuiz",
+    "Method": "GenerateAndSavePracticeQuiz",
     "RelativePath": "api/student/quizzes/practice/generate",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.API.Controllers.Student.StudentQuizzesController\u002BGeneratePracticeQuizRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Student.StudentGeneratedQuizAttemptDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
+    "Method": "GeneratePracticeQuiz",
+    "RelativePath": "api/student/quizzes/practice/save",
     "HttpMethod": "POST",
     "IsController": true,
     "Order": 0,
@@ -4156,6 +4332,26 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Student.CaseListItemDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentsController",
+    "Method": "GetEnrolledClasses",
+    "RelativePath": "api/Students/classes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Student.StudentClassDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
         "MediaTypes": [
           "text/plain",
           "application/json",

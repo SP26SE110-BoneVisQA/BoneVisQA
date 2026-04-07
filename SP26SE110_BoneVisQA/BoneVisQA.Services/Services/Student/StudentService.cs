@@ -823,4 +823,62 @@ public class StudentService : IStudentService
             AvgQuizScore = avgQuizScore
         };
     }
+
+    /// <summary>
+    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// </summary>
+    public async Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId)
+    {
+        var enrollments = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+                .ThenInclude(c => c!.Lecturer)
+            .Where(e => e.StudentId == studentId)
+            .ToListAsync();
+
+        var classIds = enrollments
+            .Where(e => e.Class != null)
+            .Select(e => e.Class!.Id)
+            .ToList();
+
+        // Lấy số lượng announcements, quizzes, cases cho mỗi lớp
+        var announcementCounts = await _unitOfWork.Context.Announcements
+            .Where(a => classIds.Contains(a.ClassId))
+            .GroupBy(a => a.ClassId)
+            .Select(g => new { ClassId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ClassId, x => x.Count);
+
+        var quizCounts = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .GroupBy(cqs => cqs.ClassId)
+            .Select(g => new { ClassId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ClassId, x => x.Count);
+
+        var caseCounts = await _unitOfWork.Context.ClassCases
+            .Where(cc => classIds.Contains(cc.ClassId))
+            .GroupBy(cc => cc.ClassId)
+            .Select(g => new { ClassId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ClassId, x => x.Count);
+
+        var result = new List<StudentClassDto>();
+        foreach (var enrollment in enrollments)
+        {
+            if (enrollment.Class == null) continue;
+            var c = enrollment.Class;
+            result.Add(new StudentClassDto
+            {
+                ClassId = c.Id,
+                ClassName = c.ClassName,
+                Semester = c.Semester,
+                LecturerId = c.LecturerId,
+                LecturerName = c.Lecturer?.FullName,
+                TotalAnnouncements = announcementCounts.GetValueOrDefault(c.Id, 0),
+                TotalQuizzes = quizCounts.GetValueOrDefault(c.Id, 0),
+                TotalCases = caseCounts.GetValueOrDefault(c.Id, 0),
+                EnrolledAt = enrollment.EnrolledAt,
+            });
+        }
+
+        return result;
+    }
 }

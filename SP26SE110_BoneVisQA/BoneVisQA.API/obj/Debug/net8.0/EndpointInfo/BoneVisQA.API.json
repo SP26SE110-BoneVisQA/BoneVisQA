@@ -3757,6 +3757,200 @@
         }
       }
     },
+    "/api/lecturer/classes/{classId}/assignments": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/classes/{classId}/assignments": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "classId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lecturer/assignments": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "lecturerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Lecturers/assignments": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "parameters": [
+          {
+            "name": "lecturerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassAssignmentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lecturer/classes/{classId}/announcements/{announcementId}": {
       "put": {
         "tags": [
@@ -6912,6 +7106,54 @@
             "content": {
               "text/plain": {
                 "schema": {
+                  "$ref": "#/components/schemas/StudentGeneratedQuizAttemptDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentGeneratedQuizAttemptDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentGeneratedQuizAttemptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/student/quizzes/practice/save": {
+      "post": {
+        "tags": [
+          "StudentQuizzes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePracticeQuizRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
                   "$ref": "#/components/schemas/AIQuizGenerationResultDto"
                 }
               },
@@ -6923,6 +7165,44 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AIQuizGenerationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/student/quizzes/history": {
+      "get": {
+        "tags": [
+          "StudentQuizzes"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentQuizAttemptSummaryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentQuizAttemptSummaryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentQuizAttemptSummaryDto"
+                  }
                 }
               }
             }
@@ -7019,6 +7299,46 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StudentSubmitQuestionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/student/quizzes/{attemptId}/review": {
+      "get": {
+        "tags": [
+          "StudentQuizzes"
+        ],
+        "parameters": [
+          {
+            "name": "attemptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizAttemptReviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizAttemptReviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizAttemptReviewDto"
                 }
               }
             }
@@ -7474,6 +7794,44 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StudentProgressDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Students/classes": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentClassDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentClassDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudentClassDto"
+                  }
                 }
               }
             }
@@ -8293,6 +8651,57 @@
           "sourceText": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClassAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "classId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "className": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isMandatory": {
+            "type": "boolean"
+          },
+          "assignedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "totalStudents": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "submittedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gradedCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -9918,6 +10327,92 @@
         },
         "additionalProperties": { }
       },
+      "QuestionReviewItemDto": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionText": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionA": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionB": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionC": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionD": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentAnswer": {
+            "type": "string",
+            "nullable": true
+          },
+          "correctAnswer": {
+            "type": "string",
+            "nullable": true
+          },
+          "isCorrect": {
+            "type": "boolean"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "caseId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuizAttemptReviewDto": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "score": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "totalQuestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "correctAnswers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionReviewItemDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "QuizDto": {
         "type": "object",
         "properties": {
@@ -10313,6 +10808,50 @@
         },
         "additionalProperties": false
       },
+      "StudentClassDto": {
+        "type": "object",
+        "properties": {
+          "classId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "className": {
+            "type": "string",
+            "nullable": true
+          },
+          "semester": {
+            "type": "string",
+            "nullable": true
+          },
+          "lecturerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "lecturerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalAnnouncements": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalQuizzes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCases": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "enrolledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "StudentEnrollmentDto": {
         "type": "object",
         "properties": {
@@ -10344,6 +10883,38 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StudentGeneratedQuizAttemptDto": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudentQuizQuestionDto"
+            },
+            "nullable": true
+          },
+          "savedToHistory": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -10546,6 +11117,70 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "StudentQuizAttemptSummaryDto": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quizTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "topic": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficulty": {
+            "type": "string",
+            "nullable": true
+          },
+          "className": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "score": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "passingScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "totalQuestions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "correctAnswers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isAiGenerated": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

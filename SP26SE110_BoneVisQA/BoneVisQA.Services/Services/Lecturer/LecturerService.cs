@@ -1121,6 +1121,183 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
+    public async Task<List<ClassAssignmentDto>> GetClassAssignmentsAsync(Guid classId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+
+        var className = academicClass.ClassName;
+
+        // Total enrolled students
+        var totalStudents = await _unitOfWork.Context.ClassEnrollments
+            .CountAsync(e => e.ClassId == classId);
+
+        // Case assignments
+        var caseAssignments = await _unitOfWork.Context.ClassCases
+            .Where(cc => cc.ClassId == classId)
+            .Include(cc => cc.Case)
+            .OrderByDescending(cc => cc.AssignedAt)
+            .ToListAsync();
+
+        var caseViewCounts = await _unitOfWork.Context.CaseViewLogs
+            .Where(v => v.CaseId != Guid.Empty)
+            .GroupBy(_ => 1)
+            .Select(g => new { Count = g.Count() })
+            .FirstOrDefaultAsync();
+
+        // Quiz assignments
+        var quizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Include(cqs => cqs.Quiz)
+            .OrderByDescending(cqs => cqs.CreatedAt)
+            .ToListAsync();
+
+        var quizIds = quizSessions.Select(q => q.Id).ToList();
+        var quizSubmittedCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizAttempts
+                .Where(a => quizIds.Contains(a.QuizId))
+                .GroupBy(_ => 1)
+                .Select(g => new { Count = g.Count() })
+                .FirstOrDefaultAsync()
+            : null;
+        var quizGradedCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizAttempts
+                .Where(a => quizIds.Contains(a.QuizId) && a.Score != null)
+                .GroupBy(_ => 1)
+                .Select(g => new { Count = g.Count() })
+                .FirstOrDefaultAsync()
+            : null;
+
+        var results = new List<ClassAssignmentDto>();
+
+        foreach (var cc in caseAssignments)
+        {
+            results.Add(new ClassAssignmentDto
+            {
+                Id = cc.CaseId,
+                ClassId = classId,
+                ClassName = className,
+                Type = "case",
+                Title = cc.Case?.Title ?? "Unknown Case",
+                DueDate = cc.DueDate,
+                IsMandatory = cc.IsMandatory,
+                AssignedAt = cc.AssignedAt,
+                TotalStudents = totalStudents,
+                SubmittedCount = 0,   // case view tracking cần case_id riêng trong case_view_logs
+                GradedCount = 0,
+            });
+        }
+
+        foreach (var qs in quizSessions)
+        {
+            results.Add(new ClassAssignmentDto
+            {
+                Id = qs.Id,
+                ClassId = classId,
+                ClassName = className,
+                Type = "quiz",
+                Title = qs.Quiz?.Title ?? "Unknown Quiz",
+                DueDate = qs.CloseTime,
+                IsMandatory = false,
+                AssignedAt = qs.CreatedAt,
+                TotalStudents = totalStudents,
+                SubmittedCount = quizSubmittedCounts?.Count ?? 0,
+                GradedCount = quizGradedCounts?.Count ?? 0,
+            });
+        }
+
+        return results
+            .OrderByDescending(a => a.AssignedAt)
+            .ToList();
+    }
+
+    public async Task<List<ClassAssignmentDto>> GetAllAssignmentsForLecturerAsync(Guid lecturerId)
+    {
+        // Lấy tất cả lớp của giảng viên
+        var classList = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .ToListAsync();
+
+        if (classList.Count == 0)
+            return new List<ClassAssignmentDto>();
+
+        var results = new List<ClassAssignmentDto>();
+
+        foreach (var academicClass in classList)
+        {
+            var totalStudents = await _unitOfWork.Context.ClassEnrollments
+                .CountAsync(e => e.ClassId == academicClass.Id);
+
+            // Case assignments
+            var caseAssignments = await _unitOfWork.Context.ClassCases
+                .Where(cc => cc.ClassId == academicClass.Id)
+                .Include(cc => cc.Case)
+                .ToListAsync();
+
+            foreach (var cc in caseAssignments)
+            {
+                results.Add(new ClassAssignmentDto
+                {
+                    Id = cc.CaseId,
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    Type = "case",
+                    Title = cc.Case?.Title ?? "Unknown Case",
+                    DueDate = cc.DueDate,
+                    IsMandatory = cc.IsMandatory,
+                    AssignedAt = cc.AssignedAt,
+                    TotalStudents = totalStudents,
+                    SubmittedCount = 0,
+                    GradedCount = 0,
+                });
+            }
+
+            // Quiz assignments
+            var quizSessions = await _unitOfWork.Context.ClassQuizSessions
+                .Where(cqs => cqs.ClassId == academicClass.Id)
+                .Include(cqs => cqs.Quiz)
+                .ToListAsync();
+
+            var quizIds = quizSessions.Select(q => q.Id).ToList();
+            var quizSubmittedCounts = quizIds.Count > 0
+                ? await _unitOfWork.Context.QuizAttempts
+                    .Where(a => quizIds.Contains(a.QuizId))
+                    .GroupBy(_ => 1)
+                    .Select(g => new { Count = g.Count() })
+                    .FirstOrDefaultAsync()
+                : null;
+            var quizGradedCounts = quizIds.Count > 0
+                ? await _unitOfWork.Context.QuizAttempts
+                    .Where(a => quizIds.Contains(a.QuizId) && a.Score != null)
+                    .GroupBy(_ => 1)
+                    .Select(g => new { Count = g.Count() })
+                    .FirstOrDefaultAsync()
+                : null;
+
+            foreach (var qs in quizSessions)
+            {
+                results.Add(new ClassAssignmentDto
+                {
+                    Id = qs.Id,
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    Type = "quiz",
+                    Title = qs.Quiz?.Title ?? "Unknown Quiz",
+                    DueDate = qs.CloseTime,
+                    IsMandatory = false,
+                    AssignedAt = qs.CreatedAt,
+                    TotalStudents = totalStudents,
+                    SubmittedCount = quizSubmittedCounts?.Count ?? 0,
+                    GradedCount = quizGradedCounts?.Count ?? 0,
+                });
+            }
+        }
+
+        return results.OrderByDescending(a => a.AssignedAt).ToList();
+    }
+
     public async Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId)
     {
         var announcements = await _unitOfWork.AnnouncementRepository
