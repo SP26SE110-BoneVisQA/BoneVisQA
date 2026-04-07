@@ -38,13 +38,14 @@ public class VisualQaAiService : IVisualQaAiService
 
     public async Task<VisualQAResponseDto> RunPipelineAsync(VisualQARequestDto request, CancellationToken cancellationToken = default)
     {
-        // Bounding box overlay when coordinates exist (single image fetch for the generation call).
+        // Polygon (preferred) or legacy box overlay when ROI exists (single image fetch for the generation call).
         string? imageB64 = null;
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
         {
-            imageB64 = await _imageProcessingService.DrawBoundingBoxAsBase64JpegAsync(
+            imageB64 = await _imageProcessingService.DrawAnnotationOverlayAsBase64JpegAsync(
                 request.ImageUrl,
                 request.Coordinates,
+                request.CustomPolygon,
                 cancellationToken);
         }
 
@@ -190,9 +191,9 @@ public class VisualQaAiService : IVisualQaAiService
     private static string BuildRagEmbeddingQuery(VisualQARequestDto request)
     {
         var q = request.QuestionText?.Trim() ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(request.Coordinates))
+        if (HasRoiAnnotation(request))
         {
-            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: có vùng ROI/annotation trên ảnh; ưu tiên tài liệu liên quan chẩn đoán hình ảnh cơ xương khớp tại vùng được đánh dấu.]";
+            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: có vùng ROI/annotation (polygon hoặc hộp) trên ảnh; ưu tiên tài liệu liên quan chẩn đoán hình ảnh cơ xương khớp tại vùng được đánh dấu.]";
         }
 
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
@@ -201,6 +202,13 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         return q;
+    }
+
+    private static bool HasRoiAnnotation(VisualQARequestDto request)
+    {
+        if (request.CustomPolygon is { Count: >= 3 })
+            return true;
+        return !string.IsNullOrWhiteSpace(request.Coordinates);
     }
 
     private static bool IsNonMedicalRefusalAnswer(string? answerText)
@@ -224,9 +232,13 @@ public class VisualQaAiService : IVisualQaAiService
         var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
         if (hasImage)
         {
-            if (!string.IsNullOrWhiteSpace(request.Coordinates))
+            if (request.CustomPolygon is { Count: >= 3 })
             {
-                sb.AppendLine("An image is provided. A RED bounding box has been drawn on the image based on the provided ROI. You MUST focus your visual analysis specifically inside this RED rectangle. Ignore irrelevant areas outside the box.");
+                sb.AppendLine("An image is provided. A bright green polygon outline has been drawn on the lesion region. You MUST focus your visual analysis on the marked polygon and its immediate context.");
+            }
+            else if (!string.IsNullOrWhiteSpace(request.Coordinates))
+            {
+                sb.AppendLine("An image is provided. A green outline (polygon or legacy rectangle) marks the ROI. You MUST focus your visual analysis on that marked region.");
             }
             else
             {
@@ -257,7 +269,12 @@ public class VisualQaAiService : IVisualQaAiService
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Coordinates))
+        if (request.CustomPolygon is { Count: >= 3 })
+        {
+            sb.AppendLine($"User polygon ROI provided ({request.CustomPolygon.Count} vertices). Pay special attention to the outlined lesion region.");
+            sb.AppendLine();
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Coordinates))
         {
             sb.AppendLine($"User coordinates/ROI provided: {request.Coordinates}. Pay special attention to this region.");
             sb.AppendLine();

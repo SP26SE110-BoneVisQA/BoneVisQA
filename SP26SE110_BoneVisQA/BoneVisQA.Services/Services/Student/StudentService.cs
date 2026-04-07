@@ -1,4 +1,5 @@
 using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
@@ -226,7 +227,9 @@ public class StudentService : IStudentService
 
     public async Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request)
     {
-        var coordinatesJson = TryParseCoordinatesJson(request.Coordinates);
+        var coordinatesJson = request.CustomPolygon is { Count: >= 3 }
+            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+            : TryParseCoordinatesJson(request.Coordinates);
 
         var entity = new CaseAnnotation
         {
@@ -285,7 +288,17 @@ public class StudentService : IStudentService
         var caseIdToSave = isPersonalUpload ? null : request.CaseId;
         var annotationIdToSave = isPersonalUpload ? null : request.AnnotationId;
 
-        string? coordsToSave = request.Coordinates;
+        // Promote polygon sent as raw JSON string in Coordinates (multipart / legacy clients).
+        if (request.CustomPolygon == null && !string.IsNullOrWhiteSpace(request.Coordinates))
+        {
+            var parsed = PolygonAnnotationParser.TryParsePolygonFromJson(request.Coordinates);
+            if (parsed is { Count: >= 3 })
+                request.CustomPolygon = parsed;
+        }
+
+        string? coordsToSave = request.CustomPolygon is { Count: >= 3 }
+            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+            : TryParseCoordinatesJson(request.Coordinates);
         string? imageUrlToSave = request.ImageUrl;
 
         if (request.AnnotationId.HasValue && !isPersonalUpload)
@@ -304,7 +317,17 @@ public class StudentService : IStudentService
             }
 
             coordsToSave = annotation.Coordinates;
-            request.Coordinates = coordsToSave; // keep pipeline in sync with the saved/authoritative coordinates
+            var fromDb = PolygonAnnotationParser.TryParsePolygonFromJson(coordsToSave);
+            if (fromDb is { Count: >= 3 })
+            {
+                request.CustomPolygon = fromDb;
+                request.Coordinates = null;
+            }
+            else
+            {
+                request.CustomPolygon = null;
+                request.Coordinates = coordsToSave;
+            }
 
             if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
             {
