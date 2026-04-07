@@ -5,6 +5,7 @@ using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -44,11 +45,54 @@ namespace BoneVisQA.Services.Services.Expert
 
             return $"/uploads/images/{fileName}";
         }
-
-        public async Task<MedicalCaseDTO> CreateMedicalCaseAsync(MedicalCaseDTORequest dto)
+        public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex,int pageSize)
         {
-            var expert = await _unitOfWork.UserRepository.GetByIdAsync(dto.CreatedByExpertId.Value);
-           
+            var query = _unitOfWork.MedicalCaseRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var medicalCases = await query
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetMedicalCaseDTO
+                {
+                    Id = x.Id,
+                    Title = x.Title,
+                    CreatedByExpertId = x.CreatedByExpertId,
+                    ExpertName = x.CreatedByExpert!.FullName,
+                    Description = x.Description,
+                    Difficulty = x.Difficulty,
+                    CategoryId = x.CategoryId,
+                    CategoryName = x.Category!.Name, 
+                    IsApproved = x.IsApproved,
+                    IsActive = x.IsActive,
+                    SuggestedDiagnosis = x.SuggestedDiagnosis,
+                    ReflectiveQuestions = x.ReflectiveQuestions,
+                    KeyFindings = x.KeyFindings,
+                    CreatedAt = x.CreatedAt
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetMedicalCaseDTO>
+            {
+                Items = medicalCases,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+        public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto)
+        {
+            var categoryname = await _unitOfWork.CategoryRepository.GetByIdAsync(dto.CategoryId ?? Guid.Empty);
+          
+            User ? expert = null;
+
+            if (dto.CreatedByExpertId.HasValue)
+            {
+                expert = await _unitOfWork.UserRepository.GetByIdAsync(dto.CreatedByExpertId.Value);
+            }
+
             var medicalCase = new MedicalCase
             {
                 Id = Guid.NewGuid(),
@@ -63,20 +107,19 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
             await _unitOfWork.SaveAsync();
 
-            return new MedicalCaseDTO
+            return new CreateMedicalCaseResponseDTO
             {
                 Id = medicalCase.Id,
                 ExpertName = expert?.FullName,  
                 Title = medicalCase.Title,
                 Description = medicalCase.Description,
                 Difficulty = medicalCase.Difficulty,
-                CategoryId = medicalCase.CategoryId,
+                CategoryName = categoryname?.Name,
                 IsApproved = medicalCase.IsApproved,
                 IsActive = medicalCase.IsActive,
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
@@ -85,6 +128,68 @@ namespace BoneVisQA.Services.Services.Expert
                 CreatedAt = medicalCase.CreatedAt,
             };
         }
+
+        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
+        {
+            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
+
+            if (medicalCase == null)
+                return null;
+
+            // Update fields
+            medicalCase.Title = request.Title;
+            medicalCase.Description = request.Description;
+            medicalCase.Difficulty = request.Difficulty;
+            medicalCase.CategoryId = request.CategoryId;
+            medicalCase.IsApproved = request.IsApproved;
+            medicalCase.IsActive = request.IsActive;
+            medicalCase.SuggestedDiagnosis = request.SuggestedDiagnosis;
+            medicalCase.ReflectiveQuestions = request.ReflectiveQuestions;
+            medicalCase.KeyFindings = request.KeyFindings;
+            medicalCase.CreatedByExpertId = request.CreatedByExpertId;
+            medicalCase.UpdatedAt = DateTime.UtcNow;
+
+            _unitOfWork.MedicalCaseRepository.Update(medicalCase);
+            await _unitOfWork.SaveAsync();
+
+            // lấy thêm dữ liệu liên quan
+            var expert = await _unitOfWork.UserRepository
+                .GetByIdAsync(medicalCase.CreatedByExpertId ?? Guid.Empty);
+
+            var category = await _unitOfWork.CategoryRepository
+                .GetByIdAsync(medicalCase.CategoryId ?? Guid.Empty);
+
+            return new UpdateMedicalCaseResponseDTO
+            {
+                Id = medicalCase.Id,
+                ExpertName = expert?.FullName,
+                Title = medicalCase.Title,
+                Description = medicalCase.Description,
+                Difficulty = medicalCase.Difficulty,
+                CategoryName = category?.Name,
+                IsApproved = medicalCase.IsApproved,
+                IsActive = medicalCase.IsActive,
+                SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
+                ReflectiveQuestions = medicalCase.ReflectiveQuestions,
+                KeyFindings = medicalCase.KeyFindings,
+                UpdatedAt = medicalCase.UpdatedAt
+            };
+        }
+        public async Task<bool> DeleteMedicalCaseAsync(Guid id)
+        {
+            var medicalCase = await _unitOfWork.MedicalCaseRepository
+                .GetByIdAsync(id);
+
+            if (medicalCase == null)
+                return false;
+
+            _ = _unitOfWork.MedicalCaseRepository.RemoveAsync(medicalCase);
+
+            await _unitOfWork.SaveAsync();
+
+            return true;
+        }
+
         // Thêm image cho case
         public async Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto)
         {

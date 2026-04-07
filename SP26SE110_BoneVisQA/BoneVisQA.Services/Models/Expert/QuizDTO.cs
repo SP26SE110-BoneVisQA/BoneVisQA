@@ -9,7 +9,23 @@ using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Expert
 {
-    public class QuizRequestDTO
+
+    //Quiz
+    public class GetQuizDTO
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = null!;
+        public string? Topic { get; set; }
+        public DateTime? OpenTime { get; set; }
+        public DateTime? CloseTime { get; set; }
+        public int? TimeLimit { get; set; }
+        public int? PassingScore { get; set; }
+        public bool IsAiGenerated { get; set; }
+        public string? Difficulty { get; set; }
+        public string? Classification { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }   
+    public class CreateQuizRequestDTO
     {
         public Guid Id { get; set; }
 
@@ -35,7 +51,7 @@ namespace BoneVisQA.Services.Models.Expert
 
         public DateTime? CreatedAt { get; set; }
     }
-    public class QuizResponseDTO
+    public class CreateQuizResponseDTO
     {
         public Guid Id { get; set; }
 
@@ -61,7 +77,102 @@ namespace BoneVisQA.Services.Models.Expert
 
         public DateTime? CreatedAt { get; set; }
     }
+    public class UpdateQuizRequestDTO
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = null!;
+        public string? Topic { get; set; }
+        public DateTime? OpenTime { get; set; }
+        public DateTime? CloseTime { get; set; }
+        public int? TimeLimit { get; set; }
+        public int? PassingScore { get; set; }
+        public string? Difficulty { get; set; }
+        public string? Classification { get; set; }
+    }
 
+    public class UpdateQuizResponseDTO
+    {
+        public string Title { get; set; } = null!;
+        public string? Topic { get; set; }
+        public DateTime? OpenTime { get; set; }
+        public DateTime? CloseTime { get; set; }
+        public int? TimeLimit { get; set; }
+        public int? PassingScore { get; set; }
+        public string? Difficulty { get; set; }
+        public string? Classification { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
+
+
+    //Question
+    public class GetQuizQuestionDTO
+    {
+        public Guid QuestionId { get; set; }
+        public string? QuizTitle { get; set; }
+        public string? CaseTitle { get; set; }
+        public string QuestionText { get; set; } = null!;
+        public string? Type { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+        public string? CorrectAnswer { get; set; }
+    }   
+    public class CreateQuizQuestionRequestDTO
+    {
+        public Guid QuizId { get; set; }
+        public Guid? CaseId { get; set; }
+        public string QuestionText { get; set; } = null!;
+        public string? Type { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+        public string? CorrectAnswer { get; set; }
+    }
+    public class CreateQuizQuestionResponseDTO
+    {
+        public Guid Id { get; set; }
+        public Guid QuizId { get; set; }
+        public string? QuizTitle { get; set; }
+        public Guid? CaseId { get; set; }
+        public string? CaseTitle { get; set; }
+        public string QuestionText { get; set; } = null!;
+        public string? Type { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+        public string? CorrectAnswer { get; set; }
+    }
+    public class UpdateQuizQuestionRequestDTO
+    {
+        public Guid QuestionId { get; set; }
+        public Guid QuizId { get; set; }
+        public Guid CaseId { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public string? Type { get; set; }
+        public string? CorrectAnswer { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+    }
+
+    public class UpdateQuizQuestionResponseDTO
+    {
+        public string QuestionText { get; set; } = string.Empty;
+        public string? QuizTitle { get; set; }
+        public string? CaseTitle { get; set; }
+        public string? Type { get; set; }
+        public string? CorrectAnswer { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
+    }
+
+    // Assign Quiz to Class
     public class AssignQuizRequestDTO
     {
         public Guid ClassId { get; set; }
@@ -100,96 +211,14 @@ namespace BoneVisQA.Services.Models.Expert
 
         public int? TimeLimitMinutes { get; set; }
     }
-    public class QuizQuestionDTO
+    public class PagedResult<T>
     {
-        public Guid Id { get; set; }
-        public Guid QuizId { get; set; }
-        public string? QuizTitle { get; set; }
-        public Guid? CaseId { get; set; }
-        public string? CaseTitle { get; set; }
-        public string QuestionText { get; set; } = null!;
-        public string? Type { get; set; }
-        public string? OptionA { get; set; }
-        public string? OptionB { get; set; }
-        public string? OptionC { get; set; }
-        public string? OptionD { get; set; }
-        public string? CorrectAnswer { get; set; }
+        public List<T> Items { get; set; } = new();
+
+        public int TotalCount { get; set; }
+
+        public int PageIndex { get; set; }
+
+        public int PageSize { get; set; }
     }
-
-    public class CreateQuizQuestionDTO
-    {
-        public Guid QuizId { get; set; }
-        public Guid? CaseId { get; set; }
-        public string QuestionText { get; set; } = null!;
-        public string? Type { get; set; }
-        public string? OptionA { get; set; }
-        public string? OptionB { get; set; }
-        public string? OptionC { get; set; }
-        public string? OptionD { get; set; }
-        public string? CorrectAnswer { get; set; }
-    }
-
-    public class QuizScoreResultDTO
-    {
-        public Guid AttemptId { get; set; }
-        public Guid StudentId { get; set; }
-        public Guid QuizId { get; set; }
-        public string QuizTitle { get; set; } = null!;
-        public int TotalQuestions { get; set; }
-        public int CorrectAnswers { get; set; }
-        public float Score { get; set; }
-        public int? PassingScore { get; set; }
-        public bool IsPassed { get; set; }
-        public DateTime? CompletedAt { get; set; }
-    }
-    public class UpdateQuizsQuestionRequestDto
-    {
-        public string QuestionText { get; set; } = string.Empty;
-        public string? Type { get; set; }
-        public string? CorrectAnswer { get; set; }
-        public string? OptionA { get; set; }
-        public string? OptionB { get; set; }
-        public string? OptionC { get; set; }
-        public string? OptionD { get; set; }
-    }
-
-    public class UpdateQuizsQuestionResponseDto
-    {
-        public string? QuizTitle { get; set; }
-        public string QuestionText { get; set; } = string.Empty;
-        public string? Type { get; set; }
-        public string? CorrectAnswer { get; set; }
-        public string? OptionA { get; set; }
-        public string? OptionB { get; set; }
-        public string? OptionC { get; set; }
-        public string? OptionD { get; set; }
-    }
-
-    public class StudentSubmitQuestionDTO
-    {
-        public Guid StudentId { get; set; }
-
-        public Guid AttemptId { get; set; }
-
-        public Guid QuestionId { get; set; }
-
-        public string? StudentAnswer { get; set; }
-
-    }
-
-    public class StudentSubmitQuestionResponseDTO
-    {
-        public string? QuizTitle { get; set; }
-        public string? QuestionText { get; set; }
-        public string? OptionA { get; set; }
-        public string? OptionB { get; set; }
-        public string? OptionC { get; set; }
-        public string? OptionD { get; set; }
-        public string? StudentAnswer { get; set; }
-        public string? StudentAnswerText { get; set; }
-        public string? CorrectAnswer { get; set; }
-        public string? CorrectAnswerText { get; set; }
-        public bool? IsCorrect { get; set; }
-    }
-
 }
