@@ -17,3 +17,49 @@ public class StudentClassDto
     public int TotalCases { get; set; }
     public DateTime? EnrolledAt { get; set; }
 }
+
+/// <summary>
+/// Chi tiết đầy đủ của một lớp học — dùng khi student mở rộng một lớp.
+/// </summary>
+public class StudentClassDetailDto
+{
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public string Semester { get; set; } = string.Empty;
+    public Guid? LecturerId { get; set; }
+    public string? LecturerName { get; set; }
+    public DateTime? EnrolledAt { get; set; }
+
+    public List<ClassQuizSummaryDto> Quizzes { get; set; } = new();
+    public List<ClassStudentSummaryDto> Students { get; set; } = new();
+    public List<ClassAnnouncementDto> Announcements { get; set; } = new();
+}
+
+public class ClassQuizSummaryDto
+{
+    public Guid QuizId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Topic { get; set; }
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int TotalQuestions { get; set; }
+    public int? TimeLimit { get; set; }
+    public int? PassingScore { get; set; }
+    public bool IsCompleted { get; set; }
+    public double? Score { get; set; }
+}
+
+public class ClassStudentSummaryDto
+{
+    public Guid StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+    public string? StudentCode { get; set; }
+}
+
+public class ClassAnnouncementDto
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public DateTime? CreatedAt { get; set; }
+}

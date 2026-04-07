@@ -117,4 +117,161 @@ public class LecturerDashboardService : ILecturerDashboardService
             .ThenBy(x => x.StudentName)
             .ToList();
     }
+
+    public async Task<LecturerAnalyticsDto> GetAnalyticsAsync(Guid lecturerId)
+    {
+        var classes = await _unitOfWork.Context.AcademicClasses
+            .Where(c => c.LecturerId == lecturerId)
+            .ToListAsync();
+
+        var classIds = classes.Select(c => c.Id).ToList();
+
+        // ── Class Performance ─────────────────────────────────────────────────
+        var classPerformance = new List<ClassPerformanceDto>();
+        foreach (var cls in classes)
+        {
+            var studentIds = await _unitOfWork.Context.ClassEnrollments
+                .Where(e => e.ClassId == cls.Id)
+                .Select(e => e.StudentId)
+                .ToListAsync();
+
+            var casesViewed = await _unitOfWork.Context.CaseViewLogs
+                .Where(v => studentIds.Contains(v.StudentId))
+                .CountAsync();
+
+            var questions = await _unitOfWork.Context.StudentQuestions
+                .Where(q => studentIds.Contains(q.StudentId))
+                .CountAsync();
+
+            var escalated = await _unitOfWork.Context.CaseAnswers
+                .Include(a => a.Question)
+                .CountAsync(a =>
+                    a.Question != null && studentIds.Contains(a.Question.StudentId) &&
+                    a.Status == "Escalated");
+
+            var quizScores = await _unitOfWork.Context.QuizAttempts
+                .Where(a => studentIds.Contains(a.StudentId) && a.Score.HasValue)
+                .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                    cqs.ClassId == cls.Id && cqs.QuizId == a.QuizId))
+                .Select(a => a.Score!.Value)
+                .ToListAsync();
+
+            var avgScore = quizScores.Count > 0 ? quizScores.Average() : (double?)null;
+            var completionRate = studentIds.Count > 0
+                ? (int)Math.Round(casesViewed / (double)Math.Max(1, studentIds.Count * 5) * 100)
+                : 0;
+
+            classPerformance.Add(new ClassPerformanceDto
+            {
+                ClassId = cls.Id,
+                ClassName = cls.ClassName,
+                Semester = cls.Semester ?? string.Empty,
+                StudentCount = studentIds.Count,
+                TotalCasesViewed = casesViewed,
+                AvgQuizScore = avgScore,
+                CompletionRate = Math.Min(100, completionRate),
+                TrendPercent = 0,
+                TotalQuestions = questions,
+                EscalatedCount = escalated
+            });
+        }
+
+        // ── Topic Scores ──────────────────────────────────────────────────────
+        var topicScores = new List<TopicScoreDto>();
+
+        var quizzesWithTopic = await _unitOfWork.Context.Quizzes
+            .Where(q => q.Topic != null && q.Topic != "")
+            .Select(q => new { q.Id, q.Topic })
+            .ToListAsync();
+
+        var quizIdsByTopic = quizzesWithTopic
+            .GroupBy(q => q.Topic!)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+        foreach (var (topic, quizIds) in quizIdsByTopic)
+        {
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .Where(a => quizIds.Contains(a.QuizId) && a.Score.HasValue)
+                .ToListAsync();
+
+            if (attempts.Count == 0) continue;
+
+            var avgScore = attempts.Average(a => a.Score!.Value);
+            var commonErrors = new List<string>();
+
+            var belowAvg = attempts.Where(a => a.Score!.Value < avgScore).ToList();
+            if (belowAvg.Count > 0)
+                commonErrors.Add("Score below class average — review key concepts");
+
+            if (avgScore < 60)
+                commonErrors.Add("Low topic mastery — recommend additional study materials");
+
+            topicScores.Add(new TopicScoreDto
+            {
+                Topic = topic,
+                AvgScore = Math.Round(avgScore, 1),
+                Attempts = attempts.Count,
+                CommonErrors = commonErrors.Take(2).ToArray()
+            });
+        }
+
+        // ── Top & Bottom Students (across all lecturer classes) ──────────────
+        var allStudentIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => classIds.Contains(e.ClassId))
+            .Select(e => e.StudentId)
+            .Distinct()
+            .ToListAsync();
+
+        var studentScores = new Dictionary<Guid, (string name, double? avg, int cases, int questions)>();
+
+        foreach (var sid in allStudentIds)
+        {
+            var name = await _unitOfWork.Context.Users
+                .Where(u => u.Id == sid)
+                .Select(u => u.FullName)
+                .FirstOrDefaultAsync();
+
+            var cases = await _unitOfWork.Context.CaseViewLogs
+                .CountAsync(v => v.StudentId == sid);
+
+            var questions = await _unitOfWork.Context.StudentQuestions
+                .CountAsync(q => q.StudentId == sid);
+
+            var scores = await _unitOfWork.Context.QuizAttempts
+                .Where(a => a.StudentId == sid && a.Score.HasValue)
+                .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                    classIds.Contains(cqs.ClassId) && cqs.QuizId == a.QuizId))
+                .Select(a => a.Score!.Value)
+                .ToListAsync();
+
+            studentScores[sid] = (name ?? "Unknown", scores.Count > 0 ? scores.Average() : null, cases, questions);
+        }
+
+        var rankedStudents = studentScores
+            .Select(kv => new ClassLeaderboardItemDto
+            {
+                StudentId = kv.Key,
+                StudentName = kv.Value.name,
+                AverageQuizScore = kv.Value.avg,
+                TotalCasesViewed = kv.Value.cases,
+                TotalQuestionsAsked = kv.Value.questions
+            })
+            .OrderByDescending(s => s.AverageQuizScore ?? double.MinValue)
+            .ThenByDescending(s => s.TotalCasesViewed)
+            .ToList();
+
+        var topStudents = rankedStudents.Take(5).ToList();
+        var bottomStudents = rankedStudents
+            .Where(s => s.AverageQuizScore < 60)
+            .Take(5)
+            .ToList();
+
+        return new LecturerAnalyticsDto
+        {
+            ClassPerformance = classPerformance,
+            TopicScores = topicScores.OrderByDescending(t => t.AvgScore).ToList(),
+            TopStudents = topStudents,
+            BottomStudents = bottomStudents
+        };
+    }
 }

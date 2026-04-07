@@ -680,6 +680,18 @@ public class StudentLearningService : IStudentLearningService
         };
     }
 
+    public async Task DeleteQuizAttemptAsync(Guid studentId, Guid attemptId)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.StudentQuizAnswers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
+
+        _unitOfWork.Context.StudentQuizAnswers.RemoveRange(attempt.StudentQuizAnswers);
+        _unitOfWork.Context.QuizAttempts.Remove(attempt);
+        await _unitOfWork.SaveAsync();
+    }
+
     private sealed class StudentTopicStatAccumulator
     {
         public int QuizAttempts { get; set; }

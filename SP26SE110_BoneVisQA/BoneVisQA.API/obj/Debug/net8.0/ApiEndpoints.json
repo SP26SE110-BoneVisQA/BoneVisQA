@@ -1067,7 +1067,7 @@
     "Parameters": [
       {
         "Name": "request",
-        "Type": "BoneVisQA.Services.Models.Lecturer.QuizDto",
+        "Type": "BoneVisQA.Services.Models.Expert.QuizRequestDTO",
         "IsRequired": true
       }
     ],
@@ -1088,7 +1088,7 @@
       },
       {
         "Name": "request",
-        "Type": "BoneVisQA.Services.Models.Lecturer.CreateQuizQuestionDto",
+        "Type": "BoneVisQA.Services.Models.Expert.CreateQuizQuestionDTO",
         "IsRequired": true
       }
     ],
@@ -1723,6 +1723,114 @@
     ]
   },
   {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerAssignmentsController",
+    "Method": "GetQuizAttempts",
+    "RelativePath": "api/lecturer/classes/{classId}/assignments/quizzes/{quizId}/attempts",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Lecturer.StudentQuizAttemptDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerAssignmentsController",
+    "Method": "GetQuizAttemptDetail",
+    "RelativePath": "api/lecturer/classes/{classId}/assignments/quizzes/{quizId}/attempts/{attemptId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "attemptId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizAttemptDetailDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerAssignmentsController",
+    "Method": "UpdateQuizAttempt",
+    "RelativePath": "api/lecturer/classes/{classId}/assignments/quizzes/{quizId}/attempts/{attemptId}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "quizId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "attemptId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "BoneVisQA.Services.Models.Lecturer.UpdateQuizAttemptRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.QuizAttemptDetailDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturersController",
     "Method": "AssignCasesToClass",
     "RelativePath": "api/lecturer/classes/{classId}/cases",
@@ -2118,6 +2226,35 @@
           "text/json"
         ],
         "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Lecturer.LecturerDashboardController",
+    "Method": "GetAnalytics",
+    "RelativePath": "api/lecturer/dashboard/analytics",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Lecturer.LecturerAnalyticsDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "Microsoft.AspNetCore.Mvc.ProblemDetails",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 401
       }
     ]
   },
@@ -3946,6 +4083,22 @@
   },
   {
     "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
+    "Method": "DeleteQuizAttempt",
+    "RelativePath": "api/student/quizzes/{attemptId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "attemptId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentQuizzesController",
     "Method": "GetQuizAttemptReview",
     "RelativePath": "api/student/quizzes/{attemptId}/review",
     "HttpMethod": "GET",
@@ -4352,6 +4505,32 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IReadOnlyList\u00601[[BoneVisQA.Services.Models.Student.StudentClassDto, BoneVisQA.Services, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "BoneVisQA.API.Controllers.Student.StudentsController",
+    "Method": "GetClassDetail",
+    "RelativePath": "api/Students/classes/{classId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "classId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "BoneVisQA.Services.Models.Student.StudentClassDetailDto",
         "MediaTypes": [
           "text/plain",
           "application/json",

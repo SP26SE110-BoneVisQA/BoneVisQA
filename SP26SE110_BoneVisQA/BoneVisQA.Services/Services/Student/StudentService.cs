@@ -824,9 +824,7 @@ public class StudentService : IStudentService
         };
     }
 
-    /// <summary>
     /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
-    /// </summary>
     public async Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId)
     {
         var enrollments = await _unitOfWork.Context.ClassEnrollments
@@ -880,5 +878,106 @@ public class StudentService : IStudentService
         }
 
         return result;
+    }
+
+    public async Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId)
+    {
+        // Verify enrollment
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+                .ThenInclude(c => c!.Lecturer)
+            .FirstOrDefaultAsync(e => e.StudentId == studentId && e.ClassId == classId)
+            ?? throw new KeyNotFoundException("You are not enrolled in this class.");
+
+        var cls = enrollment.Class!;
+
+        // Quiz IDs assigned to this class (via ClassQuizSession)
+        var classQuizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .ToListAsync();
+
+        // Student's attempts for quizzes in this class
+        var quizAttempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => a.StudentId == studentId && classQuizIds.Contains(a.QuizId))
+            .Select(a => new { a.QuizId, a.CompletedAt, a.Score })
+            .ToListAsync();
+
+        var quizIds = quizAttempts.Select(a => a.QuizId).Distinct().ToList();
+        var quizzesRaw = await _unitOfWork.Context.Quizzes
+            .AsNoTracking()
+            .Where(q => quizIds.Contains(q.Id))
+            .Select(q => new { q.Id, q.Title, q.Topic, q.OpenTime, q.CloseTime, q.TimeLimit, q.PassingScore })
+            .ToListAsync();
+
+        var questionCounts = await _unitOfWork.Context.QuizQuestions
+            .Where(q => quizIds.Contains(q.QuizId))
+            .GroupBy(q => q.QuizId)
+            .Select(g => new { QuizId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.QuizId, x => x.Count);
+
+        var quizzes = quizzesRaw
+            .Select(q =>
+            {
+                var latest = quizAttempts
+                    .Where(a => a.QuizId == q.Id)
+                    .OrderByDescending(a => a.CompletedAt ?? DateTime.MinValue)
+                    .FirstOrDefault();
+                return new ClassQuizSummaryDto
+                {
+                    QuizId = latest?.QuizId ?? q.Id,
+                    Title = q.Title,
+                    Topic = q.Topic,
+                    OpenTime = q.OpenTime,
+                    CloseTime = q.CloseTime,
+                    TotalQuestions = questionCounts.GetValueOrDefault(q.Id, 0),
+                    TimeLimit = q.TimeLimit,
+                    PassingScore = q.PassingScore,
+                    IsCompleted = latest?.CompletedAt.HasValue ?? false,
+                    Score = latest?.Score,
+                };
+            }).ToList();
+
+        // Students in this class
+        var students = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Student)
+            .Where(e => e.ClassId == classId)
+            .Select(e => new ClassStudentSummaryDto
+            {
+                StudentId = e.StudentId,
+                StudentName = e.Student != null ? e.Student.FullName : "Unknown",
+                StudentCode = e.Student != null ? e.Student.SchoolCohort : null,
+            })
+            .ToListAsync();
+
+        // Announcements
+        var announcements = await _unitOfWork.Context.Announcements
+            .AsNoTracking()
+            .Where(a => a.ClassId == classId)
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new ClassAnnouncementDto
+            {
+                Id = a.Id,
+                Title = a.Title,
+                Content = a.Content,
+                CreatedAt = a.CreatedAt,
+            })
+            .ToListAsync();
+
+        return new StudentClassDetailDto
+        {
+            ClassId = cls.Id,
+            ClassName = cls.ClassName,
+            Semester = cls.Semester,
+            LecturerId = cls.LecturerId,
+            LecturerName = cls.Lecturer?.FullName,
+            EnrolledAt = enrollment.EnrolledAt,
+            Quizzes = quizzes,
+            Students = students,
+            Announcements = announcements,
+        };
     }
 }

@@ -26,4 +26,7 @@ public interface IStudentLearningService
 
     /// Lấy chi tiết đáp án của một quiz attempt đã nộp (để review sau khi nộp).
     Task<QuizAttemptReviewDto> GetQuizAttemptReviewAsync(Guid studentId, Guid attemptId);
+
+    /// Xóa một quiz attempt của student (chỉ xóa attempt, không xóa quiz gốc).
+    Task DeleteQuizAttemptAsync(Guid studentId, Guid attemptId);
 }

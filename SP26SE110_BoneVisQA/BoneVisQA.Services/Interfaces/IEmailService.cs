@@ -20,14 +20,24 @@ public interface IEmailService
     Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent);
 
     // Assignment notification emails
-    //Task<bool> SendAssignmentEmailAsync(
-    //    string toEmail,
-    //    string studentName,
-    //    string className,
-    //    string assignmentTitle,
-    //    string assignmentType,
-    //    DateTime? dueDate,
-    //    string? dueDateDisplay);
+    Task<bool> SendAssignmentEmailAsync(
+        string toEmail,
+        string studentName,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate,
+        string? dueDateDisplay);
 
     //Task SendAssignmentEmailsToClassAsync(Guid classId, string className, string assignmentTitle, string assignmentType, DateTime? dueDate);
+
+    Task<bool> SendAssignmentEmailAsync(
+        string toEmail,
+        string studentName,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate,
+        string? dueDateDisplay);
+
 }

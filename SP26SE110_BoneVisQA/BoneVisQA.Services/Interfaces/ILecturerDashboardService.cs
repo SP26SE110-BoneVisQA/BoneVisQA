@@ -6,4 +6,5 @@ public interface ILecturerDashboardService
 {
     Task<LecturerDashboardStatsDto> GetDashboardStatsAsync(Guid lecturerId);
     Task<IReadOnlyList<ClassLeaderboardItemDto>> GetClassLeaderboardAsync(Guid lecturerId, Guid classId);
+    Task<LecturerAnalyticsDto> GetAnalyticsAsync(Guid lecturerId);
 }
