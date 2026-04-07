@@ -205,6 +205,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Where(a => a.QuizId == quizId)
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .OrderBy(a => a.Student.FullName)
             .ThenBy(a => a.StartedAt)
             .ToListAsync();
@@ -227,7 +228,9 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             StartedAt = a.StartedAt,
             CompletedAt = a.CompletedAt,
             TotalQuestions = totalQuestions,
-            CorrectCount = a.StudentQuizAnswers.Count(sa => sa.IsCorrect == true),
+            CorrectCount = a.StudentQuizAnswers.Count(sa =>
+                sa.Question != null
+                && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer)),
             IsGraded = a.Score.HasValue
         }).ToList();
     }
@@ -277,7 +280,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                     OptionD = sa.Question.OptionD,
                     CorrectAnswer = sa.Question.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
-                    IsCorrect = sa.IsCorrect,
+                    IsCorrect = sa.Question != null && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer),
                     AnswerId = sa.Id
                 }).ToList()
         };
@@ -331,5 +334,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         if (session == null)
             throw new KeyNotFoundException("Quiz này chưa được gắn cho lớp học.");
+    }
+
+    private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
+    {
+        return string.Equals(
+            studentAnswer?.Trim(),
+            correctAnswer?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
     }
 }

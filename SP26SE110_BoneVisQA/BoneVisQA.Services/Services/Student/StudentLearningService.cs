@@ -204,10 +204,7 @@ public class StudentLearningService : IStudentLearningService
                 throw new InvalidOperationException("Phát hiện câu trả lời không thuộc quiz này.");
 
             var existing = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == answer.QuestionId);
-            var isCorrect = string.Equals(
-                answer.StudentAnswer?.Trim(),
-                question.CorrectAnswer?.Trim(),
-                StringComparison.OrdinalIgnoreCase);
+            var isCorrect = QuizAnswerMatchesCorrect(question.CorrectAnswer, answer.StudentAnswer);
 
             if (existing == null)
             {
@@ -230,8 +227,20 @@ public class StudentLearningService : IStudentLearningService
             }
         }
 
+        // Đồng bộ cờ is_correct cho mọi dòng đã lưu (tránh NULL / lệch so với đáp án khi lecturer đếm).
+        foreach (var row in attempt.StudentQuizAnswers.ToList())
+        {
+            if (!questionMap.TryGetValue(row.QuestionId, out var q)) continue;
+            row.IsCorrect = QuizAnswerMatchesCorrect(q.CorrectAnswer, row.StudentAnswer);
+        }
+
         var totalQuestions = quiz.QuizQuestions.Count;
-        var correctAnswers = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true);
+        // Chỉ đếm đúng theo từng câu hiện có trong quiz (tránh dòng answer “mồ côi” sau khi đổi đề).
+        var correctAnswers = quiz.QuizQuestions.Count(q =>
+        {
+            var row = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == q.Id);
+            return row != null && row.IsCorrect == true;
+        });
         var score = totalQuestions == 0 ? 0 : (double)correctAnswers * 100 / totalQuestions;
 
         attempt.Score = score;
@@ -249,6 +258,14 @@ public class StudentLearningService : IStudentLearningService
             TotalQuestions = totalQuestions,
             CorrectAnswers = correctAnswers
         };
+    }
+
+    private static bool QuizAnswerMatchesCorrect(string? correctAnswer, string? studentAnswer)
+    {
+        return string.Equals(
+            studentAnswer?.Trim(),
+            correctAnswer?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// Lưu quiz AI vào DB (tạo Quiz + QuizAttempt mới), trả về session để student bắt đầu làm.
@@ -658,6 +675,8 @@ public class StudentLearningService : IStudentLearningService
         var reviewItems = questions.Select(q =>
         {
             answerMap.TryGetValue(q.Id, out var studentAnswer);
+            var isCorrect = studentAnswer != null &&
+                QuizAnswerMatchesCorrect(q.CorrectAnswer, studentAnswer.StudentAnswer);
             return new QuestionReviewItemDto
             {
                 QuestionId = q.Id,
@@ -668,7 +687,7 @@ public class StudentLearningService : IStudentLearningService
                 OptionD = q.OptionD,
                 StudentAnswer = studentAnswer?.StudentAnswer,
                 CorrectAnswer = q.CorrectAnswer,
-                IsCorrect = studentAnswer?.IsCorrect ?? false,
+                IsCorrect = isCorrect,
                 ImageUrl = q.ImageUrl,
                 CaseId = q.CaseId?.ToString(),
             };
@@ -678,6 +697,10 @@ public class StudentLearningService : IStudentLearningService
         var total = reviewItems.Count;
         var score = total == 0 ? 0.0 : (double)correctCount * 100 / total;
 
+        var quizForPass = attempt.Quiz;
+        var passed = quizForPass == null || !quizForPass.PassingScore.HasValue
+            || score >= quizForPass.PassingScore.Value;
+
         return new QuizAttemptReviewDto
         {
             AttemptId = attempt.Id,
@@ -685,8 +708,7 @@ public class StudentLearningService : IStudentLearningService
             Score = score,
             TotalQuestions = total,
             CorrectAnswers = correctCount,
-            Passed = !attempt.Quiz?.PassingScore.HasValue ?? true
-                || score >= attempt.Quiz.PassingScore.Value,
+            Passed = passed,
             Questions = reviewItems,
         };
     }
