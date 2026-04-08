@@ -1,5 +1,6 @@
 using System;
 using System.Security.Claims;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,7 @@ namespace BoneVisQA.API.Controllers.Expert;
 [ApiController]
 [Route("api/expert/reviews")]
 [Authorize(Roles = "Expert")]
+[Tags("Expert - Reviews")]
 public class ExpertReviewsController : ControllerBase
 {
     private readonly IExpertReviewService _expertReviewService;
@@ -39,6 +41,7 @@ public class ExpertReviewsController : ControllerBase
     /// Resolves an escalated answer and stores the expert-reviewed outcome.
     /// </summary>
     [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -58,11 +61,35 @@ public class ExpertReviewsController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }
+
+    /// <summary>Approves / finalizes an escalated answer (same contract as <c>resolve</c>).</summary>
+    [HttpPost("{answerId:guid}/approve")]
+    [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<ExpertEscalatedAnswerDto>> ApprovePost(Guid answerId, [FromBody] ResolveEscalatedAnswerRequestDto request)
+        => Resolve(answerId, request);
+
+    /// <summary>Approves / finalizes an escalated answer (same contract as <c>resolve</c>).</summary>
+    [HttpPut("{answerId:guid}/approve")]
+    [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<ExpertEscalatedAnswerDto>> ApprovePut(Guid answerId, [FromBody] ResolveEscalatedAnswerRequestDto request)
+        => Resolve(answerId, request);
 
     /// <summary>
     /// Flags a retrieved document chunk as low quality for later knowledge base review.

@@ -7,6 +7,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 [Authorize(Roles = "Admin")]
 [ApiController]
 [Route("api/admin/monitoring")]
+[Tags("Admin - Monitoring")]
 public class AdminMonitoringController : ControllerBase
 {
     private readonly ISystemMonitoringService _systemMonitoringService;

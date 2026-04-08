@@ -8,6 +8,7 @@ namespace BoneVisQA.API.Controllers.Health;
 
 [ApiController]
 [Route("api/[controller]")]
+[Tags("Health")]
 [AllowAnonymous]
 public class DbHealthController : ControllerBase
 {

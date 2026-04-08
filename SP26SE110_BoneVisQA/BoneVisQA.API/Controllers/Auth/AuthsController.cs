@@ -16,6 +16,7 @@ namespace BoneVisQA.API.Controllers.Auth;
 
 [ApiController]
 [Route("api/[controller]")]
+[Tags("Auth")]
 [AllowAnonymous]
 public class AuthsController : ControllerBase
 {

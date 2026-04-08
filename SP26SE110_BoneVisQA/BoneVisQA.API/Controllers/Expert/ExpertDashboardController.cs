@@ -8,6 +8,7 @@ namespace BoneVisQA.API.Controllers.Expert;
 
 [ApiController]
 [Route("api/expert/dashboard")]
+[Tags("Expert - Dashboard")]
 [Authorize(Roles = "Expert")]
 public class ExpertDashboardController : ControllerBase
 {

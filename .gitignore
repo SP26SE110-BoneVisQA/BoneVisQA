@@ -1,52 +1,87 @@
-# Visual Studio (cache — không commit, tránh Permission denied khi commit)
-.vs/
-**/.vs/
-*.vsidx
+# =========================
+# Visual Studio / .NET
+# =========================
+
+# Build outputs
+**/[Bb]in/
+**/[Oo]bj/
+**/[Dd]ebug/
+**/[Rr]elease/
+**/x64/
+**/x86/
+**/[Aa][Rr][Mm]/
+**/[Aa][Rr][Mm]64/
+**/TestResults/
+TestResults/
+
+# Compiled / generated files
+*.dll
+*.exe
+*.pdb
+*.cache
+*.ilk
+*.obj
+*.lib
+*.nupkg
+*.snupkg
+
+# User-specific files
 *.suo
 *.user
 *.userosscache
+*.rsuser
+*.sln.docstates
 
-# Build
-[Bb]in/
-[Oo]bj/
-[Dd]ebug/
-[Rr]elease/
-*.dll
-*.pdb
+# Visual Studio
+.vs/
+**/.vs/
+*.vsidx
+*.db
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# VS Code local
+.vscode/
 
 # NuGet
 **/packages/
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/CopilotIndices/17.14.1091.29919/CodeChunks.db
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/CopilotIndices/17.14.1091.29919/CodeChunks.db
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/CopilotIndices/17.14.1091.29919/CodeChunks.db
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/CopilotIndices/17.14.1091.29919/SemanticSymbols.db
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/DesignTimeBuild/.dtbcache.v2
-SP26SE110_BoneVisQA/.vs/SP26SE110_BoneVisQA/v17/.suo
-SP26SE110_BoneVisQA/BoneVisQA.API/bin/Debug/net8.0/BoneVisQA.API.dll
-SP26SE110_BoneVisQA/BoneVisQA.API/bin/Debug/net8.0/BoneVisQA.Repositories.dll
-SP26SE110_BoneVisQA/BoneVisQA.API/bin/Debug/net8.0/BoneVisQA.Repositories.pdb
-SP26SE110_BoneVisQA/BoneVisQA.API/bin/Debug/net8.0/BoneVisQA.Services.dll
-SP26SE110_BoneVisQA/BoneVisQA.API/bin/Debug/net8.0/BoneVisQA.Services.pdb
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.AssemblyInfo.cs
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.AssemblyInfoInputs.cache
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.csproj.AssemblyReference.cache
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.dll
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.pdb
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/BoneVisQA.API.sourcelink.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/EndpointInfo/BoneVisQA.API.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/refint/BoneVisQA.API.dll
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/rjsmcshtml.dswa.cache.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/rjsmrazor.dswa.cache.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/rpswa.dswa.cache.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/staticwebassets.build.endpoints.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/staticwebassets.build.json
-SP26SE110_BoneVisQA/BoneVisQA.API/obj/Debug/net8.0/staticwebassets.build.json.cache
-SP26SE110_BoneVisQA/BoneVisQA.API/wwwroot/uploads/images/8665f405-6f36-4650-8de5-dce115e161dd.jpg
-SP26SE110_BoneVisQA/BoneVisQA.API/wwwroot/uploads/images/9bd9a371-da05-4796-88bc-445ed35e3a12.png
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/bin/Debug/net8.0/BoneVisQA.Repositories.dll
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/bin/Debug/net8.0/BoneVisQA.Repositories.pdb
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/obj/BoneVisQA.Repositories.csproj.nuget.dgspec.json
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/obj/BoneVisQA.Repositories.csproj.nuget.g.props
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/obj/Debug/net8.0/BoneVisQA.Repositories.AssemblyInfo.cs
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/obj/Debug/net8.0/BoneVisQA.Repositories.AssemblyInfoInputs.cache
-SP26SE110_BoneVisQA/BoneVisQA.Repositories/obj/Debug/net8.0/BoneVisQA.Repositories.assets.cache
+
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ASP.NET / local settings
+appsettings.Development.json
+*.Development.json
+launchSettings.json
+
+# Coverage / diagnostics
+*.coverage
+*.coveragexml
+coverage/
+coverage-results/
+
+# Logs
+*.log
+logs/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Copilot / project evaluation caches
+**/CopilotIndices/
+CopilotIndices/
+*.v9.bin
+
+# Temporary files
+*.tmp
+*.temp
+*~

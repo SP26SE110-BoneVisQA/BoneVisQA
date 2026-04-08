@@ -7,6 +7,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/users")]
+[Tags("Admin - Users")]
 [Authorize(Roles = "Admin")]
 public class AdminUsersController : ControllerBase
 {

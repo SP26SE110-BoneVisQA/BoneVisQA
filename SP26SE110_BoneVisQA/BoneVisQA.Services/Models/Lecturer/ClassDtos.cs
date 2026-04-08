@@ -12,14 +12,6 @@ public class ClassDto
     public DateTime? CreatedAt { get; set; }
 }
 
-public class CreateClassRequestDto
-{
-    public string ClassName { get; set; } = string.Empty;
-    public string Semester { get; set; } = string.Empty;
-    public Guid LecturerId { get; set; }
-    public Guid? ExpertId { get; set; }
-}
-
 public class UpdateClassRequestDto
 {
     public string ClassName { get; set; } = string.Empty;

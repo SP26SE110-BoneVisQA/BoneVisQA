@@ -228,7 +228,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.ToTable("case_answers", t =>
                         {
-                            t.HasCheckConstraint("case_answers_status_check", "status = ANY (ARRAY['Pending'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'Revised'::text])");
+                            t.HasCheckConstraint("case_answers_status_check", "status = ANY (ARRAY['Pending'::text, 'RequiresLecturerReview'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'EscalatedToExpert'::text, 'ExpertApproved'::text, 'Revised'::text])");
                         });
                 });
 
