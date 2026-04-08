@@ -8,6 +8,7 @@ namespace BoneVisQA.API.Controllers.Student;
 
 [ApiController]
 [Route("api/student/questions")]
+[Tags("Student - Questions")]
 [Authorize(Roles = "Student")]
 public class StudentQuestionsController : ControllerBase
 {

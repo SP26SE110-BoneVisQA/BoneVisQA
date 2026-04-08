@@ -9,10 +9,17 @@
 # Build
 [Bb]in/
 [Oo]bj/
+[Bb]in/**
+[Oo]bj/**
 [Dd]ebug/
 [Rr]elease/
+**/TestResults/
+TestResults/
 *.dll
 *.pdb
+*.cache
+*.user
+appsettings.Development.json
 
 # NuGet
 **/packages/

@@ -1,4 +1,5 @@
 ﻿using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using System;
@@ -137,7 +138,9 @@ namespace BoneVisQA.Services.Services.Admin
                 TotalReviews = reviews.Count,
                 ApprovedReviews = reviews.Count(r => r.Action == "Approve"),
                 RejectedReviews = reviews.Count(r => r.Action == "Reject"),
-                PendingAnswers = answers.Count(a => a.Status == "Pending")
+                PendingAnswers = answers.Count(a =>
+                    a.Status == CaseAnswerStatuses.Pending
+                    || a.Status == CaseAnswerStatuses.RequiresLecturerReview)
             };
         }
     }

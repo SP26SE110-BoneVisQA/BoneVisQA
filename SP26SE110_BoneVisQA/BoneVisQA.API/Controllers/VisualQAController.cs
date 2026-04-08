@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
@@ -15,12 +16,20 @@ public class VisualQAFileUploadRequest
     public string QuestionText { get; set; } = string.Empty;
     public IFormFile? CustomImage { get; set; }
 
+    /// <summary>
+    /// JSON array of points: <c>[{"x":0.12,"y":0.34},...]</c> (same contract as <see cref="VisualQARequestDto.CustomPolygon"/>).
+    /// </summary>
+    [DefaultValue(null)]
+    public string? CustomPolygonJson { get; set; }
+
+    /// <summary>Legacy bounding box JSON <c>{"x","y","w","h"}</c> when no polygon is sent.</summary>
     [DefaultValue(null)]
     public string? Coordinates { get; set; }
 }
 
 [ApiController]
 [Route("api/student/visual-qa")]
+[Tags("Student - Visual QA")]
 [Authorize]
 public class VisualQAController : ControllerBase
 {
@@ -70,10 +79,27 @@ public class VisualQAController : ControllerBase
             "student_uploads",
             $"images/{studentId}");
 
+        List<PointDto>? polygon = null;
+        if (!string.IsNullOrWhiteSpace(formRequest.CustomPolygonJson))
+        {
+            try
+            {
+                polygon = JsonSerializer.Deserialize<List<PointDto>>(formRequest.CustomPolygonJson);
+            }
+            catch
+            {
+                return BadRequest(new { message = "CustomPolygonJson must be a valid JSON array of {x,y} points." });
+            }
+
+            if (polygon is { Count: > 0 } && polygon.Count < 3)
+                return BadRequest(new { message = "Polygon requires at least 3 points." });
+        }
+
         var request = new VisualQARequestDto
         {
             QuestionText = formRequest.QuestionText,
             ImageUrl = imageUrl,
+            CustomPolygon = polygon,
             Coordinates = formRequest.Coordinates,
             CaseId = null,
             AnnotationId = null

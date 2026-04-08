@@ -8,6 +8,7 @@ namespace BoneVisQA.API.Controllers.Lecturer;
 
 [ApiController]
 [Route("api/lecturer/dashboard")]
+[Tags("Lecturer - Dashboard")]
 [Authorize(Roles = "Lecturer")]
 public class LecturerDashboardController : ControllerBase
 {

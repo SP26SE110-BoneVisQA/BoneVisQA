@@ -1,5 +1,6 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
@@ -425,7 +426,10 @@ public class StudentLearningService : IStudentLearningService
 
         var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
             .Include(a => a.Question)
-            .CountAsync(a => a.Question.StudentId == studentId && a.Status == "Escalated");
+            .CountAsync(a =>
+                a.Question.StudentId == studentId
+                && (a.Status == CaseAnswerStatuses.EscalatedToExpert
+                    || a.Status == CaseAnswerStatuses.Escalated));
 
         return new StudentProgressDto
         {

@@ -26,8 +26,16 @@ public partial class CaseAnswer
     [Column("differential_diagnoses")]
     public string? DifferentialDiagnoses { get; set; }
 
+    /// <summary>Key imaging signs / findings (SEPS structured learning output).</summary>
+    [Column("key_imaging_findings")]
+    public string? KeyImagingFindings { get; set; }
+
+    /// <summary>Reflective questions for self-assessment (SEPS).</summary>
+    [Column("reflective_questions")]
+    public string? ReflectiveQuestions { get; set; }
+
     [Column("status")]
-    public string Status { get; set; } = "Pending";
+    public string Status { get; set; } = "RequiresLecturerReview";
 
     [Column("reviewed_by_id")]
     public Guid? ReviewedById { get; set; }

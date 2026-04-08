@@ -1,5 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +39,14 @@ public class LecturerTriageService : ILecturerTriageService
         if (!classEnrollment.Class.ExpertId.HasValue)
             throw new InvalidOperationException("Lớp hiện chưa được gán chuyên gia để tiếp nhận escalation.");
 
-        answer.Status = "Escalated";
+        if (CaseAnswerStatuses.IsEscalatedToExpert(answer.Status))
+            throw new ConflictException("Câu trả lời này đã được chuyển tuyến trước đó.");
+
+        if (!CaseAnswerStatuses.CanEscalateFromLecturer(answer.Status))
+            throw new InvalidOperationException(
+                "Chỉ có thể chuyển tuyến khi câu trả lời đang chờ giảng viên xem xét (Pending / RequiresLecturerReview / Rejected).");
+
+        answer.Status = CaseAnswerStatuses.EscalatedToExpert;
         answer.EscalatedById = lecturerId;
         answer.EscalatedAt = DateTime.UtcNow;
 

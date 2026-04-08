@@ -1,9 +1,15 @@
+using BoneVisQA.Services.Models.VisualQA;
+
 namespace BoneVisQA.Services.Interfaces;
 
 public interface IImageProcessingService
 {
     /// <summary>
-    /// Downloads image, draws red bounding box from JSON {"x","y","w","h"}, returns Base64 JPEG or null.
+    /// Downloads the image, draws a polygon outline (preferred) or legacy bounding box from JSON, returns Base64 JPEG or null.
     /// </summary>
-    Task<string?> DrawBoundingBoxAsBase64JpegAsync(string? imageUrl, string? coordinatesJson, CancellationToken cancellationToken = default);
+    Task<string?> DrawAnnotationOverlayAsBase64JpegAsync(
+        string? imageUrl,
+        string? coordinatesJson,
+        IReadOnlyList<PointDto>? customPolygon,
+        CancellationToken cancellationToken = default);
 }
