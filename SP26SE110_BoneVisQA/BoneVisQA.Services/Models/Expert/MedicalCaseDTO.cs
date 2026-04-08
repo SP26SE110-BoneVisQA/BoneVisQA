@@ -125,4 +125,22 @@ namespace BoneVisQA.Services.Models.Expert
         public string Label { get; set; } = null!;
         public string? Coordinates { get; set; }
     }
+
+    public class GetTagDTO 
+    { 
+        public Guid Id { get; set; } 
+        public string Name { get; set; } = null!; 
+    }
+    
+    public class GetCategoryDTO 
+    { public Guid Id { get; set; } 
+      public string Name { get; set; } = null!; 
+    }
+   
+    public class GetAllImageDTO
+    {
+        public Guid Id { get; set; }
+        public string ImageUrl { get; set; } = null!;
+        public string FileName { get; set; } = null!;
+    }
 }

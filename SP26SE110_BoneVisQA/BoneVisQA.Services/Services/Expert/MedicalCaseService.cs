@@ -245,5 +245,83 @@ namespace BoneVisQA.Services.Services.Expert
                 Coordinates = annotation.Coordinates
             };
         }
+
+        public async Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.CategoryRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var categories = await query
+                .OrderBy(x => x.Name)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetCategoryDTO
+                {
+                    Id = x.Id,
+                    Name = x.Name
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetCategoryDTO>
+            {
+                Items = categories,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+
+        public async Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.TagRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var tags = await query
+                .OrderBy(x => x.Name)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetTagDTO
+                {
+                    Id = x.Id,
+                    Name = x.Name
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetTagDTO>
+            {
+                Items = tags,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+        public async Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.MedicalImageRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var images = await query
+                .OrderByDescending(x => x.CreatedAt) 
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+              .Select(x => new GetAllImageDTO
+              {
+                  Id = x.Id,
+                  ImageUrl = x.ImageUrl,
+                  FileName = Path.GetFileName(x.ImageUrl)
+              })
+                .ToListAsync();
+
+            return new PagedResult<GetAllImageDTO>
+            {
+                Items = images,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
     }
 }

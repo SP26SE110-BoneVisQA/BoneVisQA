@@ -19,5 +19,14 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
         Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
+
+        Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize);
+        Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize);
+        Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize);
+
+
+
+
+
     }
 }
