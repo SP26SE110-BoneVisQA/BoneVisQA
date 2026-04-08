@@ -7,6 +7,8 @@ public class ResolveEscalatedAnswerRequestDto
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
     public string? DifferentialDiagnoses { get; set; }
+    public string? KeyImagingFindings { get; set; }
+    public string? ReflectiveQuestions { get; set; }
     public string? ReviewNote { get; set; }
 }
 
@@ -36,6 +38,8 @@ public class ExpertEscalatedAnswerDto
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
     public string? DifferentialDiagnoses { get; set; }
+    public string? KeyImagingFindings { get; set; }
+    public string? ReflectiveQuestions { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? EscalatedById { get; set; }
     public DateTime? EscalatedAt { get; set; }

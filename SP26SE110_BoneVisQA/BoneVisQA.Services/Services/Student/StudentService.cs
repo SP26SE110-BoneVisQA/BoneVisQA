@@ -1,7 +1,9 @@
 using BoneVisQA.Repositories.Interfaces;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
@@ -151,6 +153,13 @@ public class StudentService : IStudentService
             Description = entity.Description,
             Difficulty = entity.Difficulty,
             CategoryName = entity.Category?.Name,
+            ExpertSummary = entity.SuggestedDiagnosis,
+            KeyFindings = entity.KeyFindings,
+            ReflectiveQuestions = entity.ReflectiveQuestions,
+            PrimaryImageUrl = entity.MedicalImages
+                .OrderBy(i => i.CreatedAt)
+                .Select(i => i.ImageUrl)
+                .FirstOrDefault(),
             IsApproved = entity.IsApproved ?? false,
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
@@ -226,7 +235,9 @@ public class StudentService : IStudentService
 
     public async Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request)
     {
-        var coordinatesJson = TryParseCoordinatesJson(request.Coordinates);
+        var coordinatesJson = request.CustomPolygon is { Count: >= 3 }
+            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+            : TryParseCoordinatesJson(request.Coordinates);
 
         var entity = new CaseAnnotation
         {
@@ -285,7 +296,17 @@ public class StudentService : IStudentService
         var caseIdToSave = isPersonalUpload ? null : request.CaseId;
         var annotationIdToSave = isPersonalUpload ? null : request.AnnotationId;
 
-        string? coordsToSave = request.Coordinates;
+        // Promote polygon sent as raw JSON string in Coordinates (multipart / legacy clients).
+        if (request.CustomPolygon == null && !string.IsNullOrWhiteSpace(request.Coordinates))
+        {
+            var parsed = PolygonAnnotationParser.TryParsePolygonFromJson(request.Coordinates);
+            if (parsed is { Count: >= 3 })
+                request.CustomPolygon = parsed;
+        }
+
+        string? coordsToSave = request.CustomPolygon is { Count: >= 3 }
+            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+            : TryParseCoordinatesJson(request.Coordinates);
         string? imageUrlToSave = request.ImageUrl;
 
         if (request.AnnotationId.HasValue && !isPersonalUpload)
@@ -304,7 +325,17 @@ public class StudentService : IStudentService
             }
 
             coordsToSave = annotation.Coordinates;
-            request.Coordinates = coordsToSave; // keep pipeline in sync with the saved/authoritative coordinates
+            var fromDb = PolygonAnnotationParser.TryParsePolygonFromJson(coordsToSave);
+            if (fromDb is { Count: >= 3 })
+            {
+                request.CustomPolygon = fromDb;
+                request.Coordinates = null;
+            }
+            else
+            {
+                request.CustomPolygon = null;
+                request.Coordinates = coordsToSave;
+            }
 
             if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
             {
@@ -344,7 +375,7 @@ public class StudentService : IStudentService
 
     public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
     {
-        // PostgreSQL case_answers_status_check: only 'Pending', 'Approved', 'Edited', 'Rejected'.
+        // PostgreSQL case_answers_status_check — see CaseAnswerStatuses / db scripts.
         var status = ClassifyVisualQaAnswerStatus(response);
 
         var answer = new CaseAnswer
@@ -354,6 +385,9 @@ public class StudentService : IStudentService
             AnswerText = response.AnswerText,
             StructuredDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = response.DifferentialDiagnoses,
+            KeyImagingFindings = response.KeyImagingFindings,
+            ReflectiveQuestions = response.ReflectiveQuestions,
+            AiConfidenceScore = response.AiConfidenceScore,
             Status = status,
             GeneratedAt = DateTime.UtcNow
         };
@@ -404,7 +438,14 @@ public class StudentService : IStudentService
     /// </summary>
     private static string ClassifyVisualQaAnswerStatus(VisualQAResponseDto response)
     {
-        return IsVisualQaRejectedResponse(response) ? "Rejected" : "Pending";
+        if (IsVisualQaRejectedResponse(response))
+            return CaseAnswerStatuses.Rejected;
+
+        if (response.AiConfidenceScore.HasValue
+            && response.AiConfidenceScore.Value >= LecturerTriageThresholds.MinConfidenceToBypassTriage)
+            return CaseAnswerStatuses.Approved;
+
+        return CaseAnswerStatuses.RequiresLecturerReview;
     }
 
     /// <summary>
@@ -483,14 +524,10 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)
     {
-        var items = await _unitOfWork.Context.StudentQuestions
+        return await _unitOfWork.Context.StudentQuestions
             .AsNoTracking()
-            .Include(q => q.CaseAnswers)
             .Where(q => q.StudentId == studentId)
             .OrderByDescending(q => q.CreatedAt)
-            .ToListAsync();
-
-        return items
             .Select(q => new StudentQuestionHistoryItemDto
             {
                 Id = q.Id,
@@ -501,6 +538,22 @@ public class StudentService : IStudentService
                     .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
                     .Select(a => a.AnswerText)
                     .FirstOrDefault(),
+                StructuredDiagnosis = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.StructuredDiagnosis)
+                    .FirstOrDefault(),
+                DifferentialDiagnoses = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.DifferentialDiagnoses)
+                    .FirstOrDefault(),
+                KeyImagingFindings = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.KeyImagingFindings)
+                    .FirstOrDefault(),
+                ReflectiveQuestions = q.CaseAnswers
+                    .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
+                    .Select(a => a.ReflectiveQuestions)
+                    .FirstOrDefault(),
                 AnswerStatus = q.CaseAnswers
                     .OrderByDescending(a => a.ReviewedAt ?? a.GeneratedAt)
                     .Select(a => a.Status)
@@ -510,7 +563,7 @@ public class StudentService : IStudentService
                     .Select(a => a.ReviewedAt)
                     .FirstOrDefault()
             })
-            .ToList();
+            .ToListAsync();
     }
 
     public async Task<IReadOnlyList<StudentAnnouncementDto>> GetAnnouncementsAsync(Guid studentId)
@@ -586,11 +639,48 @@ public class StudentService : IStudentService
                 "Bạn chưa được gán quiz này qua lớp đã đăng ký, hoặc quiz không nằm trong thời gian mở.");
         }
 
+        // Lấy session để kiểm tra allow_retake TRƯỚC khi xử lý retake
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        var classSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cqs =>
+                cqs.QuizId == quizId &&
+                classIds.Contains(cqs.ClassId) &&
+                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
         QuizAttempt attempt;
 
         if (existingAttempt != null)
         {
+            if (existingAttempt.CompletedAt.HasValue)
+            {
+                // Kiểm tra có được retake không: global flag HOẶC lecturer đã reset riêng
+                var globalRetake = classSession?.AllowRetake ?? false;
+                var lecturerRetake = classSession?.RetakeResetAt > existingAttempt.CompletedAt;
+                if (!globalRetake && !lecturerRetake)
+                {
+                    throw new InvalidOperationException(
+                        "Bạn đã nộp bài quiz này. Giảng viên sẽ cho phép làm lại khi cần.");
+                }
+
+                // Được retake: xóa đáp án cũ và reset
+                var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
+                    .Where(a => a.AttemptId == existingAttempt.Id)
+                    .ToListAsync();
+                _unitOfWork.Context.StudentQuizAnswers.RemoveRange(oldAnswers);
+                existingAttempt.CompletedAt = null;
+                existingAttempt.Score = null;
+                existingAttempt.StartedAt = DateTime.UtcNow;
+                await _unitOfWork.QuizAttemptRepository.UpdateAsync(existingAttempt);
+                await _unitOfWork.SaveAsync();
+            }
+
             attempt = existingAttempt;
         }
         else
@@ -606,7 +696,14 @@ public class StudentService : IStudentService
             attempt = await _studentRepository.CreateQuizAttemptAsync(attempt);
         }
 
-        var questions = quiz.QuizQuestions
+        var shuffleQuestions = classSession?.ShuffleQuestions ?? false;
+
+        var questionList = quiz.QuizQuestions.AsEnumerable();
+
+        if (shuffleQuestions)
+            questionList = questionList.OrderBy(_ => Random.Shared.Next());
+
+        var questionDtos = questionList
             .Select(q =>
             {
                 var caseImageUrl = q.Case?.MedicalImages
@@ -635,7 +732,8 @@ public class StudentService : IStudentService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
-            Questions = questions
+            TimeLimit = quiz.TimeLimit,
+            Questions = questionDtos
         };
     }
     //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz

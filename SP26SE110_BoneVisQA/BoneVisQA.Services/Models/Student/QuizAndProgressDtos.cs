@@ -55,6 +55,8 @@ public class QuizSessionDto
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Topic { get; set; }
+    /// <summary>Thời giới hạn làm bài (phút), từ quizzes.time_limit — FE dùng cho đồng hồ đếm ngược.</summary>
+    public int? TimeLimit { get; set; }
     public IReadOnlyList<StudentQuizQuestionDto> Questions { get; set; } = Array.Empty<StudentQuizQuestionDto>();
 }
 

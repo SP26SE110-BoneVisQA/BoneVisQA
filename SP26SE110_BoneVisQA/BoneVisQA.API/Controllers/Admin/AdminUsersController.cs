@@ -7,6 +7,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/users")]
+[Tags("Admin - Users")]
 [Authorize(Roles = "Admin")]
 public class AdminUsersController : ControllerBase
 {
@@ -60,7 +61,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.ActivateUserAccountAsync(id);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            ? NotFound(new { message = "User not found." })
             : Ok(new
             {
                 Message = "Account activated successfully.",
@@ -73,7 +74,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.DeactivateUserAccountAsync(id);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            ? NotFound(new { message = "User not found." })
             : Ok(new
             {
                 Message = "Deactive user successfully.",
@@ -119,7 +120,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.GetUserByIdAsync(id);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            ? NotFound(new { message = "User not found." })
             : Ok(new { Message = "Get user successfully.", Result = result });
     }
     /// POST /api/admin/users  –  Create a new user
@@ -159,7 +160,7 @@ public class AdminUsersController : ControllerBase
 
         var result = await _userManagementService.UpdateUserAsync(id, request);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
+            ? NotFound(new { message = "User not found." })
             : Ok(new { Message = "User updated successfully.", Result = result });
     }
 
@@ -181,7 +182,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> GetUserClasses(Guid userId)
     {
         var classes = await _userManagementService.GetUserClassesAsync(userId);
-        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+        return Ok(new { Message = "Class list retrieved successfully.", Result = classes });
     }
 
     /// GET /api/admin/users/classes  –  Lấy tất cả lớp có sẵn
@@ -189,7 +190,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> GetAvailableClasses()
     {
         var classes = await _userManagementService.GetAvailableClassesAsync();
-        return Ok(new { Message = "Lấy danh sách lớp thành công.", Result = classes });
+        return Ok(new { Message = "Class list retrieved successfully.", Result = classes });
     }
 
     /// POST /api/admin/users/{userId}/classes  –  Gán user vào một lớp
@@ -201,8 +202,8 @@ public class AdminUsersController : ControllerBase
 
         var result = await _userManagementService.AssignUserToClassAsync(userId, request.ClassId);
         return result == null
-            ? BadRequest(new { message = "Không thể gán user vào lớp. Kiểm tra lại vai trò hoặc lớp học." })
-            : Ok(new { Message = "User đã được gán vào lớp.", Result = result });
+            ? BadRequest(new { message = "Cannot assign user to class. Check the role or class." })
+            : Ok(new { Message = "User assigned to class.", Result = result });
     }
 
     /// DELETE /api/admin/users/{userId}/classes/{classId}  –  Xóa user khỏi một lớp
@@ -211,8 +212,8 @@ public class AdminUsersController : ControllerBase
     {
         var removed = await _userManagementService.RemoveUserFromClassAsync(userId, classId);
         return !removed
-            ? NotFound(new { message = "Không tìm thấy liên kết user-lớp." })
-            : Ok(new { Message = "User đã được xóa khỏi lớp." });
+            ? NotFound(new { message = "User-class link not found." })
+            : Ok(new { Message = "User removed from class." });
     }
 
     // ── Medical Student Verification ─────────────────────────────────────────────
@@ -222,7 +223,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> GetPendingVerifications()
     {
         var pending = await _userManagementService.GetPendingVerificationsAsync();
-        return Ok(new { Message = "Lấy danh sách xác minh thành công.", Result = pending });
+        return Ok(new { Message = "Verification list retrieved successfully.", Result = pending });
     }
 
     /// PUT /api/admin/users/{id}/verifications/approve  –  Duyệt xác minh sinh viên y khoa
@@ -236,8 +237,8 @@ public class AdminUsersController : ControllerBase
 
         var result = await _userManagementService.ApproveMedicalVerificationAsync(id, request.IsApproved, request.Notes, adminId);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng." })
-            : Ok(new { Message = request.IsApproved ? "Xác minh được phê duyệt." : "Xác minh bị từ chối.", Result = result });
+            ? NotFound(new { message = "User not found." })
+            : Ok(new { Message = request.IsApproved ? "Verification approved." : "Verification rejected.", Result = result });
     }
 }
 

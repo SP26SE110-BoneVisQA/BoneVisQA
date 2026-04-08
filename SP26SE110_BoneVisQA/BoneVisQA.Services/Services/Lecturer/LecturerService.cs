@@ -1,6 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,16 @@ public class LecturerService : ILecturerService
         _emailService = emailService;
     }
 
-    public async Task<ClassDto> CreateClassAsync(CreateClassRequestDto request)
+    private async Task EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
+    {
+        var ownsClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .AnyAsync();
+        if (!ownsClass)
+            throw new UnauthorizedAccessException("Giảng viên không có quyền truy cập lớp học này.");
+    }
+
+    public async Task<ClassDto> CreateClassAsync(Guid lecturerId, CreateClassRequestDto request)
     {
         var now = DateTime.UtcNow;
         var entity = new AcademicClass
@@ -30,7 +40,7 @@ public class LecturerService : ILecturerService
             Id = Guid.NewGuid(),
             ClassName = request.ClassName,
             Semester = request.Semester,
-            LecturerId = request.LecturerId,
+            LecturerId = lecturerId,
             ExpertId = request.ExpertId,
             CreatedAt = now,
             UpdatedAt = now
@@ -69,8 +79,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<bool> EnrollStudentAsync(Guid classId, Guid studentId)
+    public async Task<bool> EnrollStudentAsync(Guid lecturerId, Guid classId, Guid studentId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var existing = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId && e.StudentId == studentId)
             .FirstOrDefaultAsync();
@@ -99,8 +110,9 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid classId, EnrollStudentsRequestDto request)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> EnrollStudentsAsync(Guid lecturerId, Guid classId, EnrollStudentsRequestDto request)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         // Get class info to store class name
         var classEntity = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId)
@@ -132,11 +144,12 @@ public class LecturerService : ILecturerService
         }
 
         await _unitOfWork.SaveAsync();
-        return await GetStudentsInClassAsync(classId);
+        return await GetStudentsInClassAsync(lecturerId, classId);
     }
 
-    public async Task<bool> RemoveStudentAsync(Guid classId, Guid studentId)
+    public async Task<bool> RemoveStudentAsync(Guid lecturerId, Guid classId, Guid studentId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId && e.StudentId == studentId)
             .FirstOrDefaultAsync();
@@ -151,8 +164,9 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid classId)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid lecturerId, Guid classId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrollments = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Include(e => e.Student)
@@ -172,8 +186,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid classId)
+    public async Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid lecturerId, Guid classId)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var enrolledStudentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Select(e => e.StudentId)
@@ -210,8 +225,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<AnnouncementDto> CreateAnnouncementAsync(Guid classId, CreateAnnouncementRequestDto request)
+    public async Task<AnnouncementDto> CreateAnnouncementAsync(Guid lecturerId, Guid classId, CreateAnnouncementRequestDto request)
     {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var now = DateTime.UtcNow;
 
         // Lấy thông tin lớp và giảng viên
@@ -852,9 +868,11 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    public async Task<ClassDto?> GetClassByIdAsync(Guid classId)
+    public async Task<ClassDto?> GetClassByIdAsync(Guid lecturerId, Guid classId)
     {
-        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        var c = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync();
         if (c == null) return null;
         return new ClassDto
         {
@@ -863,9 +881,11 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<ClassDto> UpdateClassAsync(Guid classId, UpdateClassRequestDto request)
+    public async Task<ClassDto> UpdateClassAsync(Guid lecturerId, Guid classId, UpdateClassRequestDto request)
     {
-        var c = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
+        var c = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
         c.ClassName = request.ClassName;
         c.Semester = request.Semester;
@@ -880,9 +900,11 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<bool> DeleteClassAsync(Guid classId)
+    public async Task<bool> DeleteClassAsync(Guid lecturerId, Guid classId)
     {
-        var existing = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        var existing = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .FirstOrDefaultAsync();
         if (existing == null) return false;
         await _unitOfWork.AcademicClassRepository.DeleteAsync(classId);
         await _unitOfWork.SaveAsync();
@@ -909,6 +931,16 @@ public class LecturerService : ILecturerService
                 .ThenInclude(q => q.Case)
                     .ThenInclude(c => c != null ? c.MedicalImages : null)
             .Where(a => studentIds.Contains(a.Question.StudentId))
+            .Where(a =>
+                a.Status == CaseAnswerStatuses.EscalatedToExpert
+                || a.Status == CaseAnswerStatuses.Escalated
+                || (
+                    a.Status != CaseAnswerStatuses.Approved
+                    && a.Status != CaseAnswerStatuses.Revised
+                    && a.Status != CaseAnswerStatuses.Edited
+                    && a.Status != CaseAnswerStatuses.ExpertApproved
+                    && (a.AiConfidenceScore == null
+                        || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage)))
             .OrderByDescending(a => a.Question.CreatedAt)
             .ToListAsync();
 
@@ -938,10 +970,11 @@ public class LecturerService : ILecturerService
                 ThumbnailUrl = a.Question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
                 QuestionText = a.Question.QuestionText,
                 AnswerText = a.AnswerText,
-                Status = a.Status ?? "Pending",
+                Status = a.Status ?? CaseAnswerStatuses.RequiresLecturerReview,
                 AiConfidenceScore = a.AiConfidenceScore,
                 AskedAt = a.Question.CreatedAt,
-                IsEscalated = a.Status == "Escalated",
+                IsEscalated = a.Status == CaseAnswerStatuses.EscalatedToExpert
+                              || a.Status == CaseAnswerStatuses.Escalated,
                 EscalatedByName = a.EscalatedById.HasValue
                     ? expertNames.GetValueOrDefault(a.EscalatedById.Value)
                     : null,
@@ -994,7 +1027,8 @@ public class LecturerService : ILecturerService
             ReviewedById = answer?.ReviewedById,
             ReviewedByName = answer?.ReviewedBy?.FullName,
             ReviewedAt = answer?.ReviewedAt,
-            IsEscalated = answer?.Status == "Escalated",
+            IsEscalated = answer?.Status == CaseAnswerStatuses.EscalatedToExpert
+                          || answer?.Status == CaseAnswerStatuses.Escalated,
             EscalatedByName = null,
             EscalatedAt = answer?.EscalatedAt
         };
@@ -1025,7 +1059,7 @@ public class LecturerService : ILecturerService
                 AnswerText = request.AnswerText,
                 StructuredDiagnosis = request.StructuredDiagnosis,
                 DifferentialDiagnoses = request.DifferentialDiagnoses,
-                Status = request.Approve ? "Approved" : "Edited",
+                Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited,
                 GeneratedAt = DateTime.UtcNow
             };
             await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
@@ -1035,7 +1069,7 @@ public class LecturerService : ILecturerService
             answer.AnswerText = request.AnswerText;
             answer.StructuredDiagnosis = request.StructuredDiagnosis;
             answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
-            answer.Status = request.Approve ? "Approved" : "Edited";
+            answer.Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited;
             await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
         }
 
@@ -1063,55 +1097,72 @@ public class LecturerService : ILecturerService
             .ToListAsync();
 
         var studentIds = enrollments.Select(e => e.StudentId).ToList();
-        var result = new List<ClassStudentProgressDto>();
+        if (studentIds.Count == 0)
+            return new List<ClassStudentProgressDto>();
 
-        foreach (var enrollment in enrollments)
-        {
-            var studentId = enrollment.StudentId;
-            var stats = await _unitOfWork.LearningStatisticRepository
-                .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ClassId == classId);
-
-            var casesViewed = await _unitOfWork.CaseViewLogRepository
-                .FindByCondition(v => v.StudentId == studentId)
-                .CountAsync();
-
-            var questionsAsked = await _unitOfWork.StudentQuestionRepository
-                .FindByCondition(q => q.StudentId == studentId)
-                .CountAsync();
-
-            var quizAttempts = await _unitOfWork.QuizAttemptRepository
-                .FindByCondition(a => a.StudentId == studentId)
-                .ToListAsync();
-
-            var escalatedCount = await _unitOfWork.Context.CaseAnswers
-                .CountAsync(a => a.Question != null &&
-                    a.Question.StudentId == studentId &&
-                    a.Status == "Escalated");
-
-            var lastActivity = await _unitOfWork.Context.CaseViewLogs
-                .Where(v => v.StudentId == studentId)
-                .OrderByDescending(v => v.ViewedAt)
-                .Select(v => (DateTime?)v.ViewedAt)
-                .FirstOrDefaultAsync();
-
-            result.Add(new ClassStudentProgressDto
+        var casesViewedMap = await _unitOfWork.Context.CaseViewLogs
+            .AsNoTracking()
+            .Where(v => studentIds.Contains(v.StudentId))
+            .GroupBy(v => v.StudentId)
+            .Select(g => new
             {
-                StudentId = studentId,
-                StudentName = enrollment.Student?.FullName ?? string.Empty,
-                StudentEmail = enrollment.Student?.Email,
-                StudentCode = enrollment.Student?.SchoolCohort,
-                TotalCasesViewed = casesViewed,
-                TotalQuestionsAsked = questionsAsked,
-                AvgQuizScore = quizAttempts.Count > 0 && quizAttempts.Any(a => a.Score.HasValue)
-                    ? quizAttempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
-                    : null,
-                QuizAttempts = quizAttempts.Count,
-                EscalatedAnswers = escalatedCount,
-                LastActivityAt = lastActivity
-            });
-        }
+                StudentId = g.Key,
+                Count = g.Count(),
+                LastViewedAt = g.Max(x => x.ViewedAt)
+            })
+            .ToDictionaryAsync(x => x.StudentId, x => new { x.Count, x.LastViewedAt });
 
-        return result;
+        var questionsAskedMap = await _unitOfWork.Context.StudentQuestions
+            .AsNoTracking()
+            .Where(q => studentIds.Contains(q.StudentId))
+            .GroupBy(q => q.StudentId)
+            .Select(g => new { StudentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StudentId, x => x.Count);
+
+        var quizAggMap = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => studentIds.Contains(a.StudentId))
+            .GroupBy(a => a.StudentId)
+            .Select(g => new
+            {
+                StudentId = g.Key,
+                Attempts = g.Count(),
+                AvgScore = g.Where(x => x.Score.HasValue).Average(x => (double?)x.Score)
+            })
+            .ToDictionaryAsync(x => x.StudentId, x => new { x.Attempts, x.AvgScore });
+
+        var escalatedMap = await _unitOfWork.Context.CaseAnswers
+            .AsNoTracking()
+            .Where(a =>
+                (a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
+                && a.Question != null
+                && studentIds.Contains(a.Question.StudentId))
+            .GroupBy(a => a.Question.StudentId)
+            .Select(g => new { StudentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StudentId, x => x.Count);
+
+        return enrollments
+            .Select(enrollment =>
+            {
+                var studentId = enrollment.StudentId;
+                var casesAgg = casesViewedMap.GetValueOrDefault(studentId);
+                var quizAgg = quizAggMap.GetValueOrDefault(studentId);
+
+                return new ClassStudentProgressDto
+                {
+                    StudentId = studentId,
+                    StudentName = enrollment.Student?.FullName ?? string.Empty,
+                    StudentEmail = enrollment.Student?.Email,
+                    StudentCode = enrollment.Student?.SchoolCohort,
+                    TotalCasesViewed = casesAgg?.Count ?? 0,
+                    TotalQuestionsAsked = questionsAskedMap.GetValueOrDefault(studentId),
+                    AvgQuizScore = quizAgg?.AvgScore,
+                    QuizAttempts = quizAgg?.Attempts ?? 0,
+                    EscalatedAnswers = escalatedMap.GetValueOrDefault(studentId),
+                    LastActivityAt = casesAgg?.LastViewedAt
+                };
+            })
+            .ToList();
     }
 
     public async Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId)

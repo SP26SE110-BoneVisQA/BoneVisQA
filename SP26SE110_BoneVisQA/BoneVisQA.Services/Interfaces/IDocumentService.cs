@@ -1,6 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace BoneVisQA.Services.Interfaces;
 
@@ -23,6 +24,31 @@ public class DocumentDto
     public DateTime? CreatedAt { get; set; }
 }
 
+public class DocumentIngestionStatusDto
+{
+    public string Status { get; set; } = "Processing";
+    public int ProgressPercentage { get; set; }
+    public string CurrentOperation { get; set; } = string.Empty;
+}
+
+/// <summary>One row from a batch admin document upload.</summary>
+public class DocumentUploadResultItemDto
+{
+    public string FileName { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public DocumentDto? Document { get; set; }
+}
+
+/// <summary>Batch PDF upload orchestration (delegates to <see cref="IDocumentService"/> per file).</summary>
+public interface IDocumentProcessingService
+{
+    Task<IReadOnlyList<DocumentUploadResultItemDto>> UploadDocumentsAsync(
+        IReadOnlyList<IFormFile> files,
+        DocumentUploadDto baseMetadata,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IDocumentService
 {
     /// <summary>
@@ -36,5 +62,6 @@ public interface IDocumentService
     Task<bool> DeleteDocumentAsync(Guid id);
     Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
+    Task<DocumentIngestionStatusDto?> GetIngestionStatusAsync(Guid id);
     string MapStatusForApi(string? rawStatus);
 }

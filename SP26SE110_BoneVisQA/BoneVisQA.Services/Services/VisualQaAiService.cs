@@ -14,6 +14,12 @@ public class VisualQaAiService : IVisualQaAiService
     private const string InvalidMedicalImageAnswer = "Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.";
     private const string MissingMedicalKnowledgeAnswer =
         "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
+    private const string TemporaryVectorSearchUnavailableAnswer =
+        "Vector search is temporarily unavailable due to high network demand. Please try again later.";
+    private const string TemporaryAiGenerationUnavailableAnswer =
+        "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
+    private const string AiOverloadVietnameseMessage =
+        "Hệ thống AI đang quá tải. Vui lòng thử lại sau.";
 
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
@@ -34,18 +40,38 @@ public class VisualQaAiService : IVisualQaAiService
 
     public async Task<VisualQAResponseDto> RunPipelineAsync(VisualQARequestDto request, CancellationToken cancellationToken = default)
     {
-        // Bounding box overlay when coordinates exist (single image fetch for the generation call).
+        // Polygon (preferred) or legacy box overlay when ROI exists (single image fetch for the generation call).
         string? imageB64 = null;
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
         {
-            imageB64 = await _imageProcessingService.DrawBoundingBoxAsBase64JpegAsync(
+            imageB64 = await _imageProcessingService.DrawAnnotationOverlayAsBase64JpegAsync(
                 request.ImageUrl,
                 request.Coordinates,
+                request.CustomPolygon,
                 cancellationToken);
         }
 
-        var ragQueryText = request.QuestionText;
-        var embedding = await _embeddingService.EmbedTextAsync(ragQueryText, cancellationToken);
+        // SEPS: combine question with ROI/image context for retrieval (text embedding; vision model handles image in Gemini).
+        var ragQueryText = BuildRagEmbeddingQuery(request);
+        float[] embedding;
+        try
+        {
+            embedding = await _embeddingService.EmbedTextAsync(ragQueryText, cancellationToken);
+        }
+        catch
+        {
+            return new VisualQAResponseDto
+            {
+                AnswerText = AiOverloadVietnameseMessage,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = AiOverloadVietnameseMessage,
+                Citations = new List<CitationItemDto>()
+            };
+        }
         var queryEmbedding = embedding;
         var queryVector = new Vector(queryEmbedding);
 
@@ -97,6 +123,9 @@ public class VisualQaAiService : IVisualQaAiService
                 AnswerText = MissingMedicalKnowledgeAnswer,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = maxSimilarity,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -104,10 +133,29 @@ public class VisualQaAiService : IVisualQaAiService
         var prompt = BuildGeminiPrompt(request, topChunks);
 
         // GeminiService expects "imageUrl" input, but we pass Base64 for our inlineData workflow.
-        var response = await _geminiService.GenerateMedicalAnswerAsync(
-            prompt,
-            imageB64 ?? string.Empty,
-            cancellationToken);
+        VisualQAResponseDto response;
+        try
+        {
+            response = await _geminiService.GenerateMedicalAnswerAsync(
+                prompt,
+                imageB64 ?? string.Empty,
+                cancellationToken);
+        }
+        catch
+        {
+            // Do not attach RAG similarity here: generation failed and the answer must stay on the triage queue.
+            return new VisualQAResponseDto
+            {
+                AnswerText = AiOverloadVietnameseMessage,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = AiOverloadVietnameseMessage,
+                Citations = new List<CitationItemDto>()
+            };
+        }
 
         var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
 
@@ -117,6 +165,8 @@ public class VisualQaAiService : IVisualQaAiService
             response.Citations = new List<CitationItemDto>();
             response.SuggestedDiagnosis = null;
             response.DifferentialDiagnoses = null;
+            response.KeyImagingFindings = null;
+            response.ReflectiveQuestions = null;
         }
         else
         {
@@ -140,7 +190,35 @@ public class VisualQaAiService : IVisualQaAiService
             }
         }
 
+        response.AiConfidenceScore = maxSimilarity;
+
         return response;
+    }
+
+    /// <summary>
+    /// Enriches the text used for vector retrieval so ROI and image-backed questions bias toward relevant chunks (SEPS Image + RAG).
+    /// </summary>
+    private static string BuildRagEmbeddingQuery(VisualQARequestDto request)
+    {
+        var q = request.QuestionText?.Trim() ?? string.Empty;
+        if (HasRoiAnnotation(request))
+        {
+            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: có vùng ROI/annotation (polygon hoặc hộp) trên ảnh; ưu tiên tài liệu liên quan chẩn đoán hình ảnh cơ xương khớp tại vùng được đánh dấu.]";
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl))
+        {
+            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: câu hỏi kèm hình ảnh y khoa.]";
+        }
+
+        return q;
+    }
+
+    private static bool HasRoiAnnotation(VisualQARequestDto request)
+    {
+        if (request.CustomPolygon is { Count: >= 3 })
+            return true;
+        return !string.IsNullOrWhiteSpace(request.Coordinates);
     }
 
     private static bool IsNonMedicalRefusalAnswer(string? answerText)
@@ -164,9 +242,13 @@ public class VisualQaAiService : IVisualQaAiService
         var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
         if (hasImage)
         {
-            if (!string.IsNullOrWhiteSpace(request.Coordinates))
+            if (request.CustomPolygon is { Count: >= 3 })
             {
-                sb.AppendLine("An image is provided. A RED bounding box has been drawn on the image based on the provided ROI. You MUST focus your visual analysis specifically inside this RED rectangle. Ignore irrelevant areas outside the box.");
+                sb.AppendLine("An image is provided. A bright green polygon outline has been drawn on the lesion region. You MUST focus your visual analysis on the marked polygon and its immediate context.");
+            }
+            else if (!string.IsNullOrWhiteSpace(request.Coordinates))
+            {
+                sb.AppendLine("An image is provided. A green outline (polygon or legacy rectangle) marks the ROI. You MUST focus your visual analysis on that marked region.");
             }
             else
             {
@@ -197,7 +279,12 @@ public class VisualQaAiService : IVisualQaAiService
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(request.Coordinates))
+        if (request.CustomPolygon is { Count: >= 3 })
+        {
+            sb.AppendLine($"User polygon ROI provided ({request.CustomPolygon.Count} vertices). Pay special attention to the outlined lesion region.");
+            sb.AppendLine();
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Coordinates))
         {
             sb.AppendLine($"User coordinates/ROI provided: {request.Coordinates}. Pay special attention to this region.");
             sb.AppendLine();
@@ -211,12 +298,14 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("Bạn bắt buộc phải suy luận, giải thích và trả lời hoàn toàn bằng Tiếng Việt (Vietnamese) theo đúng chuẩn Y khoa.");
 
         sb.AppendLine();
-        sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for suggestedDiagnosis and differentialDiagnoses when refusing or when not applicable):");
+        sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for optional fields when refusing or when not applicable):");
         sb.AppendLine(@"
 {
   ""answerText"": ""Your full educational answer here."",
   ""suggestedDiagnosis"": ""Primary suggested diagnosis or null."",
-  ""differentialDiagnoses"": ""Other differential diagnoses or null.""
+  ""differentialDiagnoses"": ""Other differential diagnoses or null."",
+  ""keyImagingFindings"": ""Key imaging signs to focus on, or null."",
+  ""reflectiveQuestions"": ""1-3 reflective questions for the student, or null.""
 }
 ");
 

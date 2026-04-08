@@ -3,19 +3,19 @@ using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
-using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.API.Controllers.Lecturer;
 
 [ApiController]
 [Route("api/lecturer")]
-[Route("api/Lecturers")] // alias: FE cũ / cache bundle có thể vẫn gọi /api/Lecturers/...
+[Tags("Lecturer - Classes")]
 [Authorize(Roles = "Lecturer")]
 public class LecturersController : ControllerBase
 {
@@ -37,29 +37,51 @@ public class LecturersController : ControllerBase
 
     #region Class Management
 
+    private Guid? GetLecturerId()
+    {
+        var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+    }
+
     [HttpPost("classes")]
     public async Task<ActionResult<ClassDto>> CreateClass([FromBody] CreateClassRequestDto request)
     {
-        var result = await _lecturerService.CreateClassAsync(request);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.CreateClassAsync(lecturerId.Value, request);
         return Ok(result);
     }
 
     [HttpGet("classes/{classId:guid}")]
     public async Task<ActionResult<ClassDto>> GetClassById(Guid classId)
     {
-        var result = await _lecturerService.GetClassByIdAsync(classId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetClassByIdAsync(lecturerId.Value, classId);
         if (result == null)
-            return NotFound(new { message = "Lớp không tồn tại." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền truy cập lớp học này." });
         return Ok(result);
     }
 
     [HttpPut("classes/{classId:guid}")]
     public async Task<ActionResult<ClassDto>> UpdateClass(Guid classId, [FromBody] UpdateClassRequestDto request)
     {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
         try
         {
-            var result = await _lecturerService.UpdateClassAsync(classId, request);
+            var result = await _lecturerService.UpdateClassAsync(lecturerId.Value, classId, request);
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {
@@ -70,23 +92,43 @@ public class LecturersController : ControllerBase
     [HttpDelete("classes/{classId:guid}")]
     public async Task<IActionResult> DeleteClass(Guid classId)
     {
-        var deleted = await _lecturerService.DeleteClassAsync(classId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var deleted = await _lecturerService.DeleteClassAsync(lecturerId.Value, classId);
         if (!deleted)
-            return NotFound(new { message = "Lớp không tồn tại." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền truy cập lớp học này." });
         return NoContent();
     }
 
     [HttpGet("classes")]
-    public async Task<ActionResult<IReadOnlyList<ClassDto>>> GetClasses([FromQuery] Guid lecturerId)
+    public async Task<ActionResult<IReadOnlyList<ClassDto>>> GetClasses()
     {
-        var result = await _lecturerService.GetClassesForLecturerAsync(lecturerId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetClassesForLecturerAsync(lecturerId.Value);
         return Ok(result);
     }
 
     [HttpPost("classes/{classId:guid}/enroll")]
     public async Task<IActionResult> EnrollStudent(Guid classId, [FromBody] EnrollStudentRequestDto request)
     {
-        var created = await _lecturerService.EnrollStudentAsync(classId, request.StudentId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        bool created;
+        try
+        {
+            created = await _lecturerService.EnrollStudentAsync(lecturerId.Value, classId, request.StudentId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         if (!created)
             return Conflict(new { message = "Student đã có trong lớp này." });
         return NoContent();
@@ -95,14 +137,38 @@ public class LecturersController : ControllerBase
     [HttpPost("classes/{classId:guid}/enrollmany")]
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> EnrollManyStudents(Guid classId, [FromBody] EnrollStudentsRequestDto request)
     {
-        var result = await _lecturerService.EnrollStudentsAsync(classId, request);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        IReadOnlyList<StudentEnrollmentDto> result;
+        try
+        {
+            result = await _lecturerService.EnrollStudentsAsync(lecturerId.Value, classId, request);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         return Ok(result);
     }
 
     [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
     public async Task<IActionResult> RemoveStudent(Guid classId, Guid studentId)
     {
-        var removed = await _lecturerService.RemoveStudentAsync(classId, studentId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        bool removed;
+        try
+        {
+            removed = await _lecturerService.RemoveStudentAsync(lecturerId.Value, classId, studentId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         if (!removed)
             return NotFound(new { message = "Student không tồn tại trong lớp này." });
         return NoContent();
@@ -111,14 +177,38 @@ public class LecturersController : ControllerBase
     [HttpGet("classes/{classId:guid}/students")]
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetStudentsInClass(Guid classId)
     {
-        var result = await _lecturerService.GetStudentsInClassAsync(classId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        IReadOnlyList<StudentEnrollmentDto> result;
+        try
+        {
+            result = await _lecturerService.GetStudentsInClassAsync(lecturerId.Value, classId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         return Ok(result);
     }
 
     [HttpGet("classes/{classId:guid}/students/available")]
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetAvailableStudents(Guid classId)
     {
-        var result = await _lecturerService.GetAvailableStudentsAsync(classId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        IReadOnlyList<StudentEnrollmentDto> result;
+        try
+        {
+            result = await _lecturerService.GetAvailableStudentsAsync(lecturerId.Value, classId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         return Ok(result);
     }
 
@@ -141,7 +231,11 @@ public class LecturersController : ControllerBase
     [HttpPost("classes/{classId:guid}/announcements")]
     public async Task<ActionResult<AnnouncementDto>> CreateAnnouncement(Guid classId, [FromBody] CreateAnnouncementRequestDto request)
     {
-        var result = await _lecturerService.CreateAnnouncementAsync(classId, request);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.CreateAnnouncementAsync(lecturerId.Value, classId, request);
         return Ok(result);
     }
 
@@ -175,11 +269,13 @@ public class LecturersController : ControllerBase
 
     /// <summary>Lấy tất cả assignments (case + quiz) của tất cả lớp thuộc giảng viên hiện tại.</summary>
     [HttpGet("assignments")]
-    public async Task<ActionResult<List<ClassAssignmentDto>>> GetAllAssignmentsForLecturer([FromQuery] Guid lecturerId)
+    public async Task<ActionResult<List<ClassAssignmentDto>>> GetAllAssignmentsForLecturer()
     {
-        if (lecturerId == Guid.Empty)
-            return BadRequest(new { message = "lecturerId là bắt buộc." });
-        var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId.Value);
         return Ok(result);
     }
 
@@ -191,7 +287,7 @@ public class LecturersController : ControllerBase
         [FromBody] UpdateAnnouncementRequestDto request)
     {
         if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
-            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+            return BadRequest(new { message = "Invalid class ID or announcement ID." });
         try
         {
             var result = await _lecturerService.UpdateAnnouncementAsync(cId, aId, request);
@@ -207,10 +303,10 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> DeleteAnnouncement(string classId, string announcementId)
     {
         if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
-            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+            return BadRequest(new { message = "Invalid class ID or announcement ID." });
         var deleted = await _lecturerService.DeleteAnnouncementAsync(cId, aId);
         if (!deleted)
-            return NotFound(new { message = "Thông báo không tồn tại." });
+            return NotFound(new { message = "Announcement does not exist." });
         return NoContent();
     }
 
@@ -239,11 +335,13 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách quiz gắn với mọi lớp của giảng viên.</summary>
     [HttpGet("quizzes")]
-    public async Task<ActionResult<IReadOnlyList<ClassQuizDto>>> GetQuizzesForLecturer([FromQuery] Guid lecturerId)
+    public async Task<ActionResult<IReadOnlyList<ClassQuizDto>>> GetQuizzesForLecturer()
     {
-        if (lecturerId == Guid.Empty)
-            return BadRequest(new { message = "lecturerId là bắt buộc." });
-        var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId.Value);
         return Ok(result);
     }
 
@@ -299,7 +397,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizQuestionsAsync(quizId);
         if (result == null || !result.Any())
-            return NotFound(new { message = "Không tìm thấy câu hỏi nào." });
+            return NotFound(new { message = "No questions found." });
         return Ok(result);
     }
 
@@ -330,7 +428,7 @@ public class LecturersController : ControllerBase
             return BadRequest("Invalid request data.");
 
         var updated = await _lecturerService.UpdateQuizQuestionAsync(questionId, request);
-        return Ok(new { message = "Cập nhật câu hỏi thành công." });
+            return Ok(new { message = "Question updated successfully." });
     }
 
     [HttpDelete("quizzes/questions/{questionId:guid}")]
@@ -345,6 +443,10 @@ public class LecturersController : ControllerBase
     [HttpDelete("quizzes/{quizId:guid}")]
     public async Task<IActionResult> DeleteQuiz(Guid quizId)
     {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
         var deleted = await _lecturerService.DeleteQuizAsync(quizId);
         if (!deleted)
             return NotFound(new { message = "Quiz không tồn tại." });
@@ -354,6 +456,10 @@ public class LecturersController : ControllerBase
     [HttpPost("classes/{classId:guid}/quizzes/{quizId:guid}")]
     public async Task<ActionResult<ClassQuizDto>> AssignQuizToClass(Guid classId, Guid quizId)
     {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
         try
         {
             var result = await _lecturerService.AssignQuizToClassAsync(classId, quizId);
@@ -368,7 +474,6 @@ public class LecturersController : ControllerBase
             return Conflict(new { message = ex.Message });
         }
     }
-
     #endregion
 
     #region AI Quiz Management
@@ -397,7 +502,7 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<AIQuizGenerationResultDto>> SuggestQuestions([FromBody] AISuggestQuestionsRequestDto request)
     {
         if (request.Cases == null || request.Cases.Count == 0)
-            return BadRequest(new { message = "Cần chọn ít nhất 1 case." });
+            return BadRequest(new { message = "At least 1 case is required." });
 
         var result = await _aiQuizService.SuggestQuestionsFromCasesAsync(
             request.Cases,
@@ -470,7 +575,7 @@ public class LecturersController : ControllerBase
                 quizId = quiz.Id,
                 title = quiz.Title,
                 questionsCreated = questionsResult.Questions.Count,
-                message = $"Đã tạo quiz với {questionsResult.Questions.Count} câu hỏi"
+                message = $"Quiz created with {questionsResult.Questions.Count} questions"
             });
         }
         catch (Exception ex)
@@ -487,13 +592,6 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CaseDto>>> GetAllCases()
     {
         var result = await _lecturerService.GetAllCasesAsync();
-        return Ok(result);
-    }
-
-    [HttpPost("classes/{classId:guid}/cases")]
-    public async Task<ActionResult<IReadOnlyList<CaseDto>>> AssignCasesToClass(Guid classId, [FromBody] AssignCasesToClassRequestDto request)
-    {
-        var result = await _lecturerService.AssignCasesToClassAsync(classId, request);
         return Ok(result);
     }
 

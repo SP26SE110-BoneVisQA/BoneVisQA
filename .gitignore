@@ -1,18 +1,87 @@
-# Visual Studio (cache — không commit, tránh Permission denied khi commit)
-.vs/
-**/.vs/
-*.vsidx
+# =========================
+# Visual Studio / .NET
+# =========================
+
+# Build outputs
+**/[Bb]in/
+**/[Oo]bj/
+**/[Dd]ebug/
+**/[Rr]elease/
+**/x64/
+**/x86/
+**/[Aa][Rr][Mm]/
+**/[Aa][Rr][Mm]64/
+**/TestResults/
+TestResults/
+
+# Compiled / generated files
+*.dll
+*.exe
+*.pdb
+*.cache
+*.ilk
+*.obj
+*.lib
+*.nupkg
+*.snupkg
+
+# User-specific files
 *.suo
 *.user
 *.userosscache
+*.rsuser
+*.sln.docstates
 
-# Build
-[Bb]in/
-[Oo]bj/
-[Dd]ebug/
-[Rr]elease/
-*.dll
-*.pdb
+# Visual Studio
+.vs/
+**/.vs/
+*.vsidx
+*.db
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# VS Code local
+.vscode/
 
 # NuGet
 **/packages/
+
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ASP.NET / local settings
+appsettings.Development.json
+*.Development.json
+launchSettings.json
+
+# Coverage / diagnostics
+*.coverage
+*.coveragexml
+coverage/
+coverage-results/
+
+# Logs
+*.log
+logs/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Copilot / project evaluation caches
+**/CopilotIndices/
+CopilotIndices/
+*.v9.bin
+
+# Temporary files
+*.tmp
+*.temp
+*~

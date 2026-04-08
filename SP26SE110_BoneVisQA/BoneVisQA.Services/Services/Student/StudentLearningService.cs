@@ -1,5 +1,7 @@
+using System;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
@@ -71,7 +73,9 @@ public class StudentLearningService : IStudentLearningService
         if (candidateQuizzes.Count > 0)
         {
             var quiz = candidateQuizzes[Random.Shared.Next(candidateQuizzes.Count)];
-            return await CreateSessionFromQuizAsync(quiz, studentId);
+            var shuffleSetting = quiz.ClassQuizSessions
+                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId))?.ShuffleQuestions ?? false;
+            return await CreateSessionFromQuizAsync(quiz, studentId, shuffleSetting);
         }
 
         // 3. Fallback cuối: Tìm bất kỳ quiz nào (AI hoặc lecturer)
@@ -89,14 +93,37 @@ public class StudentLearningService : IStudentLearningService
             .FirstOrDefaultAsync();
 
         if (anyQuiz != null)
-            return await CreateSessionFromQuizAsync(anyQuiz, studentId);
+        {
+            var shuffleSetting = anyQuiz.ClassQuizSessions
+                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId))?.ShuffleQuestions ?? false;
+            return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting);
+        }
 
         throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
     }
 
+    /// <summary>
+    /// Xóa đáp án cũ và mở lại attempt (retake). Dùng khi DB chỉ cho phép một quiz_attempts / (student, quiz).
+    /// </summary>
+    private static async Task ResetQuizAttemptForRetakeAsync(
+        IUnitOfWork unitOfWork,
+        BoneVisQA.Repositories.Models.QuizAttempt attempt)
+    {
+        var rows = await unitOfWork.Context.StudentQuizAnswers
+            .Where(a => a.AttemptId == attempt.Id)
+            .ToListAsync();
+        unitOfWork.Context.StudentQuizAnswers.RemoveRange(rows);
+        attempt.CompletedAt = null;
+        attempt.Score = null;
+        attempt.StartedAt = DateTime.UtcNow;
+        await unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
+        await unitOfWork.SaveAsync();
+    }
+
     private async Task<QuizSessionDto> CreateSessionFromQuizAsync(
-        BoneVisQA.Repositories.Models.Quiz quiz, 
-        Guid studentId)
+        BoneVisQA.Repositories.Models.Quiz quiz,
+        Guid studentId,
+        bool shuffleQuestions = false)
     {
         var attempt = await _unitOfWork.Context.QuizAttempts
             .Include(a => a.StudentQuizAnswers)
@@ -117,17 +144,14 @@ public class StudentLearningService : IStudentLearningService
         }
         else if (attempt.CompletedAt.HasValue)
         {
-            attempt = new BoneVisQA.Repositories.Models.QuizAttempt
-            {
-                Id = Guid.NewGuid(),
-                StudentId = studentId,
-                QuizId = quiz.Id,
-                StartedAt = DateTime.UtcNow
-            };
-
-            await _unitOfWork.QuizAttemptRepository.AddAsync(attempt);
-            await _unitOfWork.SaveAsync();
+            // DB unique (student_id, quiz_id): không thể thêm attempt thứ 2 — reset hàng hiện có để retake.
+            await ResetQuizAttemptForRetakeAsync(_unitOfWork, attempt);
         }
+
+        var questions = quiz.QuizQuestions.AsEnumerable();
+
+        if (shuffleQuestions)
+            questions = questions.OrderBy(_ => Random.Shared.Next());
 
         return new QuizSessionDto
         {
@@ -135,8 +159,8 @@ public class StudentLearningService : IStudentLearningService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
-            Questions = quiz.QuizQuestions
-                .OrderBy(q => q.QuestionText)
+            TimeLimit = quiz.TimeLimit,
+            Questions = questions
                 .Select(q => new StudentQuizQuestionDto
                 {
                     QuestionId = q.Id,
@@ -425,7 +449,10 @@ public class StudentLearningService : IStudentLearningService
 
         var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
             .Include(a => a.Question)
-            .CountAsync(a => a.Question.StudentId == studentId && a.Status == "Escalated");
+            .CountAsync(a =>
+                a.Question.StudentId == studentId
+                && (a.Status == CaseAnswerStatuses.EscalatedToExpert
+                    || a.Status == CaseAnswerStatuses.Escalated));
 
         return new StudentProgressDto
         {

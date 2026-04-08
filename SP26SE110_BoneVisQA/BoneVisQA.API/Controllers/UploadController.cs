@@ -4,6 +4,7 @@ namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/upload")]
+[Tags("Upload")]
 public class UploadController : ControllerBase
 {
     [HttpPost("image")]
