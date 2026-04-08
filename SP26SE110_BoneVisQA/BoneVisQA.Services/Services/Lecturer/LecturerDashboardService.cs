@@ -1,4 +1,5 @@
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +43,13 @@ public class LecturerDashboardService : ILecturerDashboardService
             .CountAsync(a =>
                 a.Question != null &&
                 studentIds.Contains(a.Question.StudentId) &&
-                (a.Status == "Pending" || a.Status == "Escalated"));
+                (a.Status == "Escalated"
+                 || (
+                     a.Status != "Approved"
+                     && a.Status != "Revised"
+                     && a.Status != "Edited"
+                     && (a.AiConfidenceScore == null
+                         || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage))));
 
         var avgQuizScore = await _unitOfWork.Context.QuizAttempts
             .Where(a => studentIds.Contains(a.StudentId) && a.Score.HasValue)

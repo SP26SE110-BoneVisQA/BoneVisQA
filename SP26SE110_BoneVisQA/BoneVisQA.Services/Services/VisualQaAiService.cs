@@ -65,6 +65,7 @@ public class VisualQaAiService : IVisualQaAiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -121,6 +122,7 @@ public class VisualQaAiService : IVisualQaAiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = maxSimilarity,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -138,6 +140,7 @@ public class VisualQaAiService : IVisualQaAiService
         }
         catch
         {
+            // Do not attach RAG similarity here: generation failed and the answer must stay on the triage queue.
             return new VisualQAResponseDto
             {
                 AnswerText = TemporaryAiGenerationUnavailableAnswer,
@@ -145,6 +148,7 @@ public class VisualQaAiService : IVisualQaAiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = null,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -181,6 +185,8 @@ public class VisualQaAiService : IVisualQaAiService
                 }
             }
         }
+
+        response.AiConfidenceScore = maxSimilarity;
 
         return response;
     }

@@ -69,5 +69,11 @@ public class VisualQAResponseDto
     public string? KeyImagingFindings { get; set; }
     /// <summary>Reflective questions for student self-assessment (SEPS).</summary>
     public string? ReflectiveQuestions { get; set; }
+    /// <summary>
+    /// Best cosine similarity (0–1) between the query embedding and retrieved chunks before generation.
+    /// Null when unavailable (e.g. embedding failure or generation failure — should be reviewed when possible).
+    /// Persisted on <c>case_answers.ai_confidence_score</c>.
+    /// </summary>
+    public double? AiConfidenceScore { get; set; }
     public List<CitationItemDto> Citations { get; set; } = new();
 }

@@ -3,6 +3,7 @@ using BoneVisQA.Services.Helpers;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Student;
@@ -386,6 +387,7 @@ public class StudentService : IStudentService
             DifferentialDiagnoses = response.DifferentialDiagnoses,
             KeyImagingFindings = response.KeyImagingFindings,
             ReflectiveQuestions = response.ReflectiveQuestions,
+            AiConfidenceScore = response.AiConfidenceScore,
             Status = status,
             GeneratedAt = DateTime.UtcNow
         };
@@ -436,7 +438,14 @@ public class StudentService : IStudentService
     /// </summary>
     private static string ClassifyVisualQaAnswerStatus(VisualQAResponseDto response)
     {
-        return IsVisualQaRejectedResponse(response) ? "Rejected" : "Pending";
+        if (IsVisualQaRejectedResponse(response))
+            return "Rejected";
+
+        if (response.AiConfidenceScore.HasValue
+            && response.AiConfidenceScore.Value >= LecturerTriageThresholds.MinConfidenceToBypassTriage)
+            return "Approved";
+
+        return "Pending";
     }
 
     /// <summary>

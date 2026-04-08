@@ -1,6 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
@@ -799,6 +800,14 @@ public class LecturerService : ILecturerService
                 .ThenInclude(q => q.Case)
                     .ThenInclude(c => c != null ? c.MedicalImages : null)
             .Where(a => studentIds.Contains(a.Question.StudentId))
+            .Where(a =>
+                a.Status == "Escalated"
+                || (
+                    a.Status != "Approved"
+                    && a.Status != "Revised"
+                    && a.Status != "Edited"
+                    && (a.AiConfidenceScore == null
+                        || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage)))
             .OrderByDescending(a => a.Question.CreatedAt)
             .ToListAsync();
 
