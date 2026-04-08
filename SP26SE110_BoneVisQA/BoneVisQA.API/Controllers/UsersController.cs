@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,64 @@ public class UsersController : ControllerBase
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
+    private readonly IStudentProfileService _profileService;
 
-    public UsersController(IUnitOfWork unitOfWork, ISupabaseStorageService storageService)
+    public UsersController(
+        IUnitOfWork unitOfWork,
+        ISupabaseStorageService storageService,
+        IStudentProfileService profileService)
     {
         _unitOfWork = unitOfWork;
         _storageService = storageService;
+        _profileService = profileService;
+    }
+
+    /// <summary>Current user profile (all authenticated roles).</summary>
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(StudentProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StudentProfileDto>> GetMe()
+    {
+        var userId = GetUserId();
+        if (userId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _profileService.GetProfileAsync(userId.Value);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Update current user profile (all authenticated roles).</summary>
+    [HttpPut("me")]
+    [ProducesResponseType(typeof(StudentProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<StudentProfileDto>> UpdateMe([FromBody] UpdateStudentProfileRequestDto request)
+    {
+        var userId = GetUserId();
+        if (userId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        if (string.IsNullOrWhiteSpace(request.FullName))
+            return BadRequest(new { message = "FullName là bắt buộc." });
+
+        try
+        {
+            var result = await _profileService.UpdateProfileAsync(userId.Value, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -36,7 +90,7 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<object>> UploadMyAvatar([FromForm] IFormFile? file)
+    public async Task<ActionResult<object>> UploadMyAvatar(IFormFile? file)
     {
         var userId = GetUserId();
         if (userId == null)

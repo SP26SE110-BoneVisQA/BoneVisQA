@@ -839,7 +839,7 @@ public class LecturerService : ILecturerService
                 ThumbnailUrl = a.Question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
                 QuestionText = a.Question.QuestionText,
                 AnswerText = a.AnswerText,
-                Status = a.Status ?? "Pending",
+                Status = a.Status ?? CaseAnswerStatuses.RequiresLecturerReview,
                 AiConfidenceScore = a.AiConfidenceScore,
                 AskedAt = a.Question.CreatedAt,
                 IsEscalated = a.Status == CaseAnswerStatuses.EscalatedToExpert

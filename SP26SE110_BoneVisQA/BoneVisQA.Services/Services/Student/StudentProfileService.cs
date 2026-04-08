@@ -20,7 +20,7 @@ public class StudentProfileService : IStudentProfileService
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ sinh viên.");
+            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
         return Map(user);
     }
@@ -31,7 +31,7 @@ public class StudentProfileService : IStudentProfileService
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ sinh viên.");
+            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
         user.FullName = request.FullName.Trim();
         user.SchoolCohort = string.IsNullOrWhiteSpace(request.SchoolCohort) ? null : request.SchoolCohort.Trim();
@@ -46,18 +46,20 @@ public class StudentProfileService : IStudentProfileService
 
     private static StudentProfileDto Map(BoneVisQA.Repositories.Models.User user)
     {
+        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
         return new StudentProfileDto
         {
             Id = user.Id,
             FullName = user.FullName,
             Email = user.Email,
+            Role = roles.FirstOrDefault(),
             SchoolCohort = user.SchoolCohort,
             AvatarUrl = user.AvatarUrl,
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt,
             LastLogin = user.LastLogin,
-            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList()
+            Roles = roles
         };
     }
 }

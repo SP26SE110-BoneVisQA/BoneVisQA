@@ -35,7 +35,7 @@ public partial class CaseAnswer
     public string? ReflectiveQuestions { get; set; }
 
     [Column("status")]
-    public string Status { get; set; } = "Pending";
+    public string Status { get; set; } = "RequiresLecturerReview";
 
     [Column("reviewed_by_id")]
     public Guid? ReviewedById { get; set; }

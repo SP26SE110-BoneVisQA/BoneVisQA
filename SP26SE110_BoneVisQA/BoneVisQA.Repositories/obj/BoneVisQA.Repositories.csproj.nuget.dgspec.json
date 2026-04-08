@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj": {}
+    "D:\\DATN\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj": {}
   },
   "projects": {
-    "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj": {
+    "D:\\DATN\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj",
+        "projectUniqueName": "D:\\DATN\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj",
         "projectName": "BoneVisQA.Repositories",
-        "projectPath": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj",
-        "packagesPath": "C:\\Users\\ADMIN\\.nuget\\packages\\",
-        "outputPath": "D:\\SP26_SEP490_SP26SE110_BoneVisQA\\BE\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\obj\\",
+        "projectPath": "D:\\DATN\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\BoneVisQA.Repositories.csproj",
+        "packagesPath": "C:\\Users\\PC\\.nuget\\packages\\",
+        "outputPath": "D:\\DATN\\BoneVisQA\\SP26SE110_BoneVisQA\\BoneVisQA.Repositories\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\ADMIN\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\PC\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -98,7 +98,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.304/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.312/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

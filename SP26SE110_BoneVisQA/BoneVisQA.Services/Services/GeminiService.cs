@@ -72,6 +72,8 @@ public class GeminiService : IGeminiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = FallbackNoReliableInfoAnswer,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -97,6 +99,8 @@ public class GeminiService : IGeminiService
                     DifferentialDiagnoses = null,
                     KeyImagingFindings = null,
                     ReflectiveQuestions = null,
+                    AiConfidenceScore = null,
+                    ErrorMessage = "Không thể truy cập hình ảnh y khoa từ bộ lưu trữ.",
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -143,6 +147,8 @@ public class GeminiService : IGeminiService
                         DifferentialDiagnoses = null,
                         KeyImagingFindings = null,
                         ReflectiveQuestions = null,
+                        AiConfidenceScore = null,
+                        ErrorMessage = FallbackNoReliableInfoAnswer,
                         Citations = new List<CitationItemDto>()
                     };
                 }
@@ -161,6 +167,8 @@ public class GeminiService : IGeminiService
                         DifferentialDiagnoses = null,
                         KeyImagingFindings = null,
                         ReflectiveQuestions = null,
+                        AiConfidenceScore = null,
+                        ErrorMessage = FallbackNoReliableInfoAnswer,
                         Citations = new List<CitationItemDto>()
                     };
                 }
@@ -185,6 +193,8 @@ public class GeminiService : IGeminiService
                     DifferentialDiagnoses = null,
                     KeyImagingFindings = null,
                     ReflectiveQuestions = null,
+                    AiConfidenceScore = null,
+                    ErrorMessage = FallbackNoReliableInfoAnswer,
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -198,6 +208,8 @@ public class GeminiService : IGeminiService
             DifferentialDiagnoses = null,
             KeyImagingFindings = null,
             ReflectiveQuestions = null,
+            AiConfidenceScore = null,
+            ErrorMessage = FallbackNoReliableInfoAnswer,
             Citations = new List<CitationItemDto>()
         };
     }
@@ -309,6 +321,8 @@ public class GeminiService : IGeminiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = FallbackNoReliableInfoAnswer,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -330,6 +344,8 @@ public class GeminiService : IGeminiService
                     DifferentialDiagnoses = null,
                     KeyImagingFindings = null,
                     ReflectiveQuestions = null,
+                    AiConfidenceScore = null,
+                    ErrorMessage = FallbackNoReliableInfoAnswer,
                     Citations = new List<CitationItemDto>()
                 };
             }
@@ -346,6 +362,8 @@ public class GeminiService : IGeminiService
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = FallbackNoReliableInfoAnswer,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -398,6 +416,8 @@ public class GeminiService : IGeminiService
             DifferentialDiagnoses = differentialDiagnoses,
             KeyImagingFindings = keyImagingFindings,
             ReflectiveQuestions = reflectiveQuestions,
+            AiConfidenceScore = null,
+            ErrorMessage = null,
             Citations = citations
         };
     }
