@@ -87,6 +87,21 @@ public class AssignQuizSessionRequestDto
     public DateTime? CloseTime { get; set; }
     public int? TimeLimitMinutes { get; set; }
     public int? PassingScore { get; set; }
+    public bool ShuffleQuestions { get; set; }
+    public bool AllowRetake { get; set; }
+}
+
+/// <summary>Yêu cầu bật retake cho một attempt cụ thể của sinh viên.</summary>
+public class AllowRetakeRequestDto
+{
+    public Guid AttemptId { get; set; }
+}
+
+/// <summary>Yêu cầu bật retake cho toàn bộ sinh viên trong một lớp / quiz.</summary>
+public class AllowRetakeAllRequestDto
+{
+    public Guid ClassId { get; set; }
+    public Guid QuizId { get; set; }
 }
 
 public class ClassCaseAssignmentDto
@@ -110,6 +125,9 @@ public class ClassQuizSessionDto
     public int? TimeLimitMinutes { get; set; }
     public int? PassingScore { get; set; }
     public DateTime? CreatedAt { get; set; }
+    public bool ShuffleQuestions { get; set; }
+    public bool AllowRetake { get; set; }
+    public DateTime? RetakeResetAt { get; set; }
 }
 
 /// <summary>1 assignment entry gộp case + quiz assignment để FE dùng chung card.</summary>

@@ -193,7 +193,7 @@ app.MapGet("/reset-password", (HttpContext ctx) =>
     var token = ctx.Request.Query["token"].ToString();
     if (string.IsNullOrEmpty(token))
     {
-        return Results.Content(@"<!DOCTYPE html><html><body><h1>Lỗi</h1><p class=""error"">Thiếu token. Vui lòng dùng link từ email.</p><p><a href=""/swagger"">Về trang chủ</a></p></body></html>", "text/html; charset=utf-8");
+        return Results.Content(@"<!DOCTYPE html><html><body><h1>Error</h1><p class=""error"">Token missing. Please use the link from your email.</p><p><a href=""/swagger"">Go to homepage</a></p></body></html>", "text/html; charset=utf-8");
     }
     var tokenEscaped = token.Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
     var html = @"<!DOCTYPE html>

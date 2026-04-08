@@ -45,8 +45,19 @@ public class StudentQuizzesController : ControllerBase
         if (studentId == null)
             return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
-        var result = await _studentService.StartQuizAsync(studentId.Value, quizId);
-        return Ok(result);
+        try
+        {
+            var result = await _studentService.StartQuizAsync(studentId.Value, quizId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpGet("practice")]

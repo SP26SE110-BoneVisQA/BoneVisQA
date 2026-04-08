@@ -123,6 +123,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             : null;
         session.TimeLimitMinutes = request.TimeLimitMinutes;
         session.PassingScore = request.PassingScore;
+        session.ShuffleQuestions = request.ShuffleQuestions;
+        session.AllowRetake = request.AllowRetake;
 
         await _unitOfWork.SaveAsync();
 
@@ -139,8 +141,81 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             CloseTime = session.CloseTime,
             TimeLimitMinutes = session.TimeLimitMinutes,
             PassingScore = session.PassingScore,
-            CreatedAt = session.CreatedAt
+            CreatedAt = session.CreatedAt,
+            ShuffleQuestions = session.ShuffleQuestions,
+            AllowRetake = session.AllowRetake,
+            RetakeResetAt = session.RetakeResetAt
         };
+    }
+
+    /// <summary>
+    /// Bật retake cho một attempt cụ thể — reset trạng thái để sinh viên làm lại.
+    /// </summary>
+    public async Task AllowRetakeForAttemptAsync(Guid lecturerId, Guid attemptId)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q!.ClassQuizSessions)
+                    .ThenInclude(cqs => cqs.Class)
+            .FirstOrDefaultAsync(a => a.Id == attemptId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+
+        var classSession = attempt.Quiz?.ClassQuizSessions?.FirstOrDefault();
+        if (classSession == null)
+            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+
+        // Kiểm tra lecturer sở hữu lớp
+        var academicClass = classSession.Class;
+        if (academicClass == null || academicClass.LecturerId != lecturerId)
+            throw new UnauthorizedAccessException("Bạn không có quyền thực hiện thao tác này.");
+
+        if (!attempt.CompletedAt.HasValue)
+            throw new InvalidOperationException("Sinh viên chưa nộp bài. Không cần bật retake.");
+
+        // Xóa đáp án cũ
+        var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
+            .Where(a => a.AttemptId == attempt.Id)
+            .ToListAsync();
+        _unitOfWork.Context.StudentQuizAnswers.RemoveRange(oldAnswers);
+
+        // Reset attempt
+        attempt.CompletedAt = null;
+        attempt.Score = null;
+        attempt.StartedAt = DateTime.UtcNow;
+
+        // Đánh dấu retake đã được bật
+        classSession.RetakeResetAt = DateTime.UtcNow;
+
+        await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
+        await _unitOfWork.SaveAsync();
+    }
+
+    /// <summary>
+    /// Bật retake cho toàn bộ sinh viên trong một lớp đã nộp quiz này.
+    /// </summary>
+    public async Task AllowRetakeAllAsync(Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phân công quiz cho lớp này.");
+
+        var completedAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.QuizId == quizId && a.CompletedAt.HasValue)
+            .Include(a => a.StudentQuizAnswers)
+            .ToListAsync();
+
+        foreach (var attempt in completedAttempts)
+        {
+            _unitOfWork.Context.StudentQuizAnswers.RemoveRange(attempt.StudentQuizAnswers);
+            attempt.CompletedAt = null;
+            attempt.Score = null;
+            attempt.StartedAt = DateTime.UtcNow;
+        }
+
+        session.RetakeResetAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
     }
 
     private async Task NotifyStudentsAsync(AcademicClass academicClass, string assignmentTitle, string assignmentType, DateTime? dueDate)
