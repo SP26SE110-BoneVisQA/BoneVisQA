@@ -19,6 +19,8 @@ public interface ILecturerService
     Task<IReadOnlyList<StudentEnrollmentDto>> GetStudentsInClassAsync(Guid lecturerId, Guid classId);
     Task<IReadOnlyList<StudentEnrollmentDto>> GetAvailableStudentsAsync(Guid lecturerId, Guid classId);
     Task<AnnouncementDto> CreateAnnouncementAsync(Guid lecturerId, Guid classId, CreateAnnouncementRequestDto request);
+    Task<AnnouncementDto> UpdateAnnouncementAsync(Guid classId, Guid announcementId, UpdateAnnouncementRequestDto request);
+    Task<bool> DeleteAnnouncementAsync(Guid classId, Guid announcementId);
 
 
     //Task<QuizDto> CreateQuizAsync(Guid classId, CreateQuizRequestDto request);
@@ -28,6 +30,7 @@ public interface ILecturerService
 
 
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
+    Task<bool> DeleteQuizAsync(Guid quizId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
@@ -37,9 +40,12 @@ public interface ILecturerService
     Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId);
     Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId);
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
+    Task<List<ClassAssignmentDto>> GetClassAssignmentsAsync(Guid classId);
+    Task<List<ClassAssignmentDto>> GetAllAssignmentsForLecturerAsync(Guid lecturerId);
     Task<ClassStatsDto> GetClassStatsAsync(Guid classId);
 
-    Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request);
+    /// <param name="creatingUserId">User id từ JWT (giảng viên) — ghi vào Quiz.CreatedByExpertId để tách quiz SV vs GV.</param>
+    Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request, Guid? creatingUserId = null);
     Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);

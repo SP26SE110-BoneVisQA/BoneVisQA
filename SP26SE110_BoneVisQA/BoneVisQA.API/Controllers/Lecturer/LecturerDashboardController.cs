@@ -30,6 +30,22 @@ public class LecturerDashboardController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Aggregated analytics for the lecturer: class performance, topic scores, top/bottom students.
+    /// </summary>
+    [HttpGet("analytics")]
+    [ProducesResponseType(typeof(LecturerAnalyticsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<LecturerAnalyticsDto>> GetAnalytics()
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerDashboardService.GetAnalyticsAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
     private Guid? GetUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);

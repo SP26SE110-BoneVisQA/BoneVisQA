@@ -879,4 +879,199 @@ public class EmailService : IEmailService
             return false;
         }
     }
+
+    // ── Announcement Emails ──────────────────────────────────────────────────────
+
+    public async Task<bool> SendAnnouncementEmailAsync(
+        string toEmail,
+        string studentName,
+        string lecturerName,
+        string className,
+        string announcementTitle,
+        string announcementContent)
+    {
+        _logger.LogInformation("[SendAnnouncementEmailAsync] Sending announcement email to {ToEmail} from {LecturerName}", toEmail, lecturerName);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendAnnouncementEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        try
+        {
+            var subject = $"[BoneVisQA] Thông báo mới từ lớp {className}: {announcementTitle}";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #2c3e50; color: white; padding: 25px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 22px; }}
+        .announcement-badge {{ background-color: #e74c3c; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; display: inline-block; margin-bottom: 10px; }}
+        .content {{ padding: 30px; background-color: #ffffff; }}
+        .announcement-card {{ background-color: #fef9e7; border-left: 5px solid #f39c12; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
+        .announcement-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }}
+        .announcement-body {{ font-size: 15px; color: #555; white-space: pre-wrap; line-height: 1.8; }}
+        .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; background-color: #f5f5f5; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <div class='announcement-badge'>Thông báo mới</div>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <p>Xin chào <strong>{studentName}</strong>,</p>
+            <p>Bạn có một thông báo mới từ giảng viên <strong>{lecturerName}</strong> trong lớp <strong>{className}</strong>:</p>
+            <div class='announcement-card'>
+                <div class='announcement-title'>{announcementTitle}</div>
+                <div class='announcement-body'>{announcementContent}</div>
+                <div class='meta'>
+                    <strong>Giảng viên:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Lớp:</strong> {className}
+                </div>
+            </div>
+            <p>Đăng nhập vào <a href='#'>BoneVisQA</a> để xem chi tiết và cập nhật.</p>
+            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+        </div>
+        <div class='footer'>
+            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
+            <p>Vui lòng không trả lời trực tiếp email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            _logger.LogInformation("[SendAnnouncementEmailAsync] SMTP config OK - connecting to {Host}:{Port}", _smtpHost, _smtpPort);
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendAnnouncementEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendAnnouncementEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    // ── Assignment notification emails ───────────────────────────────────────────
+
+    public async Task<bool> SendAssignmentEmailAsync(
+        string toEmail,
+        string studentName,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate,
+        string? dueDateDisplay)
+    {
+        _logger.LogInformation("[SendAssignmentEmailAsync] Sending assignment email to {ToEmail} - {Title}", toEmail, assignmentTitle);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendAssignmentEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        var dueDateText = dueDate.HasValue
+            ? $"Hạn nộp: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : "Không có hạn nộp cụ thể";
+
+        var subject = $"[BoneVisQA] Bài tập mới: {assignmentTitle} ({assignmentType})";
+        var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #1a5f7a, #2c3e50); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .header h1 {{ margin: 0; font-size: 22px; }}
+        .type-badge {{ display: inline-block; background-color: #f39c12; color: white; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }}
+        .content {{ padding: 30px; background-color: #ffffff; }}
+        .assignment-card {{ background: linear-gradient(135deg, #f8f9fa, #e8f4f8); border-left: 5px solid #1a5f7a; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
+        .assignment-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }}
+        .assignment-type {{ font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }}
+        .due-date {{ background-color: #fff3cd; border: 1px solid #ffc107; padding: 10px 15px; border-radius: 6px; margin: 15px 0; font-size: 14px; color: #856404; }}
+        .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1a5f7a, #2980b9); color: white !important; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: bold; margin: 15px 0; }}
+        .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
+        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; background-color: #f5f5f5; border-radius: 0 0 8px 8px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <div class='type-badge'>{assignmentType}</div>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <p>Xin chào <strong>{studentName}</strong>,</p>
+            <p>Giảng viên vừa giao một bài tập mới cho lớp <strong>{className}</strong>:</p>
+            <div class='assignment-card'>
+                <div class='assignment-type'>{assignmentType}</div>
+                <div class='assignment-title'>{assignmentTitle}</div>
+                <div class='due-date'>⏰ {dueDateText}</div>
+            </div>
+            <p>Đăng nhập vào <strong>BoneVisQA</strong> để xem chi tiết và làm bài.</p>
+            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+        </div>
+        <div class='footer'>
+            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
+            <p>Vui lòng không trả lời trực tiếp email này.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        try
+        {
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendAssignmentEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendAssignmentEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
 }

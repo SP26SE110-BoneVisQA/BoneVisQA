@@ -48,6 +48,44 @@ public partial class User
     [MaxLength(1024)]
     public string? AvatarUrl { get; set; }
 
+    [Column("department")]
+    [MaxLength(256)]
+    public string? Department { get; set; }
+
+    [Column("specialty")]
+    [MaxLength(256)]
+    public string? Specialty { get; set; }
+
+    [Column("date_of_birth")]
+    public DateOnly? DateOfBirth { get; set; }
+
+    [Column("phone_number")]
+    [MaxLength(256)]
+    public string? PhoneNumber { get; set; }
+
+    [Column("gender")]
+    [MaxLength(32)]
+    public string? Gender { get; set; }
+
+    /// <summary>Mã sinh viên theo trường (cột student_id).</summary>
+    [Column("student_id")]
+    [MaxLength(256)]
+    public string? StudentSchoolId { get; set; }
+
+    [Column("class_code")]
+    [MaxLength(256)]
+    public string? ClassCode { get; set; }
+
+    [Column("address")]
+    public string? Address { get; set; }
+
+    [Column("bio")]
+    public string? Bio { get; set; }
+
+    [Column("emergency_contact")]
+    [MaxLength(256)]
+    public string? EmergencyContact { get; set; }
+
     // Medical Student Verification Fields
     [Column("is_medical_student")]
     public bool IsMedicalStudent { get; set; } = false;

@@ -9,5 +9,6 @@ public class QuizSessionInfoDto
     public DateTime? OpenTime { get; set; }
     public DateTime? CloseTime { get; set; }
     public int? TimeLimitMinutes { get; set; }
-    public double? PassingScore { get; set; }
+    /// <summary>Điểm đạt — int từ DB; giữ nullable để đồng bộ với ClassQuizSession / Quiz.</summary>
+    public int? PassingScore { get; set; }
 }

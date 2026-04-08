@@ -117,6 +117,7 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.SendEmail).HasDefaultValueSql("true");
 
             entity.HasOne(d => d.Class).WithMany(p => p.Announcements).HasConstraintName("announcements_class_id_fkey");
         });

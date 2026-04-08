@@ -1,6 +1,8 @@
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.EntityFrameworkCore;
 
@@ -163,23 +165,28 @@ public class StudentLearningService : IStudentLearningService
         if (attempt.CompletedAt.HasValue)
             throw new InvalidOperationException("Quiz này đã được nộp.");
 
-        var utcNow = DateTime.UtcNow;
+        if (attempt.Quiz == null)
+            throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-        var classIds = await _unitOfWork.Context.ClassEnrollments
-            .Where(e => e.StudentId == studentId)
-            .Select(e => e.ClassId)
-            .ToListAsync();
+        // Quiz AI tự tạo không gắn ClassQuizSession — chỉ kiểm tra cửa sổ nộp cho quiz lớp.
+        if (!attempt.Quiz.IsAiGenerated)
+        {
+            var utcNow = DateTime.UtcNow;
+            var classIds = await _unitOfWork.Context.ClassEnrollments
+                .Where(e => e.StudentId == studentId)
+                .Select(e => e.ClassId)
+                .ToListAsync();
 
-        // Kiểm tra quiz còn đang mở không
-        var session = await _unitOfWork.Context.ClassQuizSessions
-            .FirstOrDefaultAsync(cqs =>
-                cqs.QuizId == attempt.QuizId &&
-                classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+            var session = await _unitOfWork.Context.ClassQuizSessions
+                .FirstOrDefaultAsync(cqs =>
+                    cqs.QuizId == attempt.QuizId &&
+                    classIds.Contains(cqs.ClassId) &&
+                    (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
+                    (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
 
-        if (session == null)
-            throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
+            if (session == null)
+                throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
+        }
 
         var quiz = await _unitOfWork.Context.Quizzes
             .Include(q => q.QuizQuestions)
@@ -198,10 +205,7 @@ public class StudentLearningService : IStudentLearningService
                 throw new InvalidOperationException("Phát hiện câu trả lời không thuộc quiz này.");
 
             var existing = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == answer.QuestionId);
-            var isCorrect = string.Equals(
-                answer.StudentAnswer?.Trim(),
-                question.CorrectAnswer?.Trim(),
-                StringComparison.OrdinalIgnoreCase);
+            var isCorrect = QuizAnswerMatchesCorrect(question.CorrectAnswer, answer.StudentAnswer);
 
             if (existing == null)
             {
@@ -224,8 +228,20 @@ public class StudentLearningService : IStudentLearningService
             }
         }
 
+        // Đồng bộ cờ is_correct cho mọi dòng đã lưu (tránh NULL / lệch so với đáp án khi lecturer đếm).
+        foreach (var row in attempt.StudentQuizAnswers.ToList())
+        {
+            if (!questionMap.TryGetValue(row.QuestionId, out var q)) continue;
+            row.IsCorrect = QuizAnswerMatchesCorrect(q.CorrectAnswer, row.StudentAnswer);
+        }
+
         var totalQuestions = quiz.QuizQuestions.Count;
-        var correctAnswers = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true);
+        // Chỉ đếm đúng theo từng câu hiện có trong quiz (tránh dòng answer “mồ côi” sau khi đổi đề).
+        var correctAnswers = quiz.QuizQuestions.Count(q =>
+        {
+            var row = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == q.Id);
+            return row != null && row.IsCorrect == true;
+        });
         var score = totalQuestions == 0 ? 0 : (double)correctAnswers * 100 / totalQuestions;
 
         attempt.Score = score;
@@ -243,6 +259,141 @@ public class StudentLearningService : IStudentLearningService
             TotalQuestions = totalQuestions,
             CorrectAnswers = correctAnswers
         };
+    }
+
+    private static bool QuizAnswerMatchesCorrect(string? correctAnswer, string? studentAnswer)
+    {
+        return string.Equals(
+            studentAnswer?.Trim(),
+            correctAnswer?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// Lưu quiz AI vào DB (tạo Quiz + QuizAttempt mới), trả về session để student bắt đầu làm.
+    public async Task<StudentGeneratedQuizAttemptDto> SaveAndStartGeneratedQuizAsync(
+        Guid studentId,
+        AIQuizGenerationResultDto generated,
+        string? topic,
+        string? difficulty)
+    {
+        if (!generated.Success || generated.Questions.Count == 0)
+            throw new InvalidOperationException("Không có câu hỏi để lưu.");
+
+        // 1. Tạo Quiz record
+        var quiz = new BoneVisQA.Repositories.Models.Quiz
+        {
+            Id = Guid.NewGuid(),
+            Title = $"AI Quiz: {topic ?? "Practice"} {(difficulty != null ? $"({difficulty})" : "")}",
+            IsAiGenerated = true,
+            Topic = topic,
+            Difficulty = difficulty,
+            PassingScore = 70,
+            TimeLimit = 30,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByExpertId = studentId,
+        };
+        await _unitOfWork.QuizRepository.AddAsync(quiz);
+
+        // 2. Tạo QuizQuestion records
+        foreach (var q in generated.Questions)
+        {
+            var question = new BoneVisQA.Repositories.Models.QuizQuestion
+            {
+                Id = Guid.NewGuid(),
+                QuizId = quiz.Id,
+                QuestionText = q.QuestionText,
+                Type = q.Type ?? "MultipleChoice",
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                CorrectAnswer = q.CorrectAnswer,
+                CaseId = q.CaseId,
+            };
+            await _unitOfWork.QuizQuestionRepository.AddAsync(question);
+        }
+
+        // 3. Tạo QuizAttempt (chưa nộp)
+        var attempt = new BoneVisQA.Repositories.Models.QuizAttempt
+        {
+            Id = Guid.NewGuid(),
+            QuizId = quiz.Id,
+            StudentId = studentId,
+            StartedAt = DateTime.UtcNow,
+            Score = null,
+            CompletedAt = null,
+        };
+        await _unitOfWork.QuizAttemptRepository.AddAsync(attempt);
+        await _unitOfWork.SaveAsync();
+
+        // 4. Load questions để trả về
+        var questions = await _unitOfWork.Context.QuizQuestions
+            .AsNoTracking()
+            .Where(q => q.QuizId == quiz.Id)
+            .OrderBy(q => q.Id)
+            .Select(q => new StudentQuizQuestionDto
+            {
+                QuestionId = q.Id,
+                QuestionText = q.QuestionText,
+                Type = q.Type,
+                CaseId = q.CaseId,
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                ImageUrl = null,
+            })
+            .ToListAsync();
+
+        return new StudentGeneratedQuizAttemptDto
+        {
+            AttemptId = attempt.Id,
+            QuizId = quiz.Id,
+            Title = quiz.Title,
+            Topic = topic,
+            Questions = questions,
+            SavedToHistory = true,
+        };
+    }
+
+    /// Trả về lịch sử tất cả quiz attempt của student (gồm quiz giao + quiz AI tự tạo).
+    public async Task<IReadOnlyList<StudentQuizAttemptSummaryDto>> GetQuizAttemptHistoryAsync(Guid studentId)
+    {
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Include(a => a.Quiz)
+            .Where(a => a.StudentId == studentId)
+            .OrderByDescending(a => a.CompletedAt ?? a.StartedAt)
+            .ToListAsync();
+
+        var result = new List<StudentQuizAttemptSummaryDto>();
+        foreach (var attempt in attempts)
+        {
+            var correctCount = await _unitOfWork.Context.StudentQuizAnswers
+                .CountAsync(a => a.AttemptId == attempt.Id && a.IsCorrect == true);
+
+            result.Add(new StudentQuizAttemptSummaryDto
+            {
+                AttemptId = attempt.Id,
+                QuizId = attempt.QuizId,
+                QuizTitle = attempt.Quiz?.Title ?? "Untitled Quiz",
+                Topic = attempt.Quiz?.Topic,
+                Difficulty = attempt.Quiz?.Difficulty,
+                ClassName = null, // AI quiz không gắn class
+                StartedAt = attempt.StartedAt,
+                CompletedAt = attempt.CompletedAt,
+                Score = attempt.Score,
+                PassingScore = attempt.Quiz?.PassingScore,
+                Passed = attempt.Score.HasValue && attempt.Quiz != null
+                    ? !attempt.Quiz.PassingScore.HasValue || attempt.Score >= attempt.Quiz.PassingScore.Value
+                    : false,
+                TotalQuestions = await _unitOfWork.Context.QuizQuestions.CountAsync(q => q.QuizId == attempt.QuizId),
+                CorrectAnswers = correctCount,
+                IsAiGenerated = attempt.Quiz?.IsAiGenerated ?? false,
+            });
+        }
+
+        return result;
     }
 
     public async Task<StudentProgressDto> GetProgressSummaryAsync(Guid studentId)
@@ -415,6 +566,11 @@ public class StudentLearningService : IStudentLearningService
         if (expiredSessions.Count == 0)
             return;
 
+        var expiredQuizIds = expiredSessions
+            .Select(s => s.QuizId)
+            .Distinct()
+            .ToList();
+
         var expiredQuizClassPairs = expiredSessions
             .Select(s => new { s.QuizId, s.ClassId })
             .ToList();
@@ -425,7 +581,7 @@ public class StudentLearningService : IStudentLearningService
             .Include(a => a.Quiz)
                 .ThenInclude(q => q.QuizQuestions)
             .Where(a => a.CompletedAt == null)
-            .Where(a => expiredQuizClassPairs.Any(p => p.QuizId == a.QuizId))
+            .Where(a => expiredQuizIds.Contains(a.QuizId))
             .ToListAsync();
 
         foreach (var attempt in expiredAttempts)
@@ -433,10 +589,16 @@ public class StudentLearningService : IStudentLearningService
             var quiz = attempt.Quiz;
             if (quiz == null) continue;
 
+            // Các classId mà quiz này đã đóng cho sinh viên này
+            var closedClassIds = expiredQuizClassPairs
+                .Where(p => p.QuizId == attempt.QuizId)
+                .Select(p => p.ClassId)
+                .ToHashSet();
+
             // Kiểm tra student có trong lớp của quiz đã đóng không
             var isStudentInClass = await _unitOfWork.Context.ClassEnrollments
                 .AnyAsync(e => e.StudentId == attempt.StudentId &&
-                              expiredQuizClassPairs.Any(p => p.QuizId == attempt.QuizId && p.ClassId == e.ClassId));
+                              closedClassIds.Contains(e.ClassId));
 
             if (!isStudentInClass) continue;
 
@@ -493,6 +655,78 @@ public class StudentLearningService : IStudentLearningService
             return question.Case.Title;
 
         return "Personal Upload";
+    }
+
+    public async Task<QuizAttemptReviewDto> GetQuizAttemptReviewAsync(Guid studentId, Guid attemptId)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.Quiz)
+            .Include(a => a.StudentQuizAnswers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
+
+        if (!attempt.CompletedAt.HasValue)
+            throw new InvalidOperationException("This quiz has not been submitted yet.");
+
+        var questions = await _unitOfWork.Context.QuizQuestions
+            .AsNoTracking()
+            .Where(q => q.QuizId == attempt.QuizId)
+            .OrderBy(q => q.Id)
+            .ToListAsync();
+
+        var answerMap = attempt.StudentQuizAnswers.ToDictionary(a => a.QuestionId, a => a);
+
+        var reviewItems = questions.Select(q =>
+        {
+            answerMap.TryGetValue(q.Id, out var studentAnswer);
+            var isCorrect = studentAnswer != null &&
+                QuizAnswerMatchesCorrect(q.CorrectAnswer, studentAnswer.StudentAnswer);
+            return new QuestionReviewItemDto
+            {
+                QuestionId = q.Id,
+                QuestionText = q.QuestionText,
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                StudentAnswer = studentAnswer?.StudentAnswer,
+                CorrectAnswer = q.CorrectAnswer,
+                IsCorrect = isCorrect,
+                ImageUrl = q.ImageUrl,
+                CaseId = q.CaseId?.ToString(),
+            };
+        }).ToList();
+
+        var correctCount = reviewItems.Count(r => r.IsCorrect);
+        var total = reviewItems.Count;
+        var score = total == 0 ? 0.0 : (double)correctCount * 100 / total;
+
+        var quizForPass = attempt.Quiz;
+        var passed = quizForPass == null || !quizForPass.PassingScore.HasValue
+            || score >= quizForPass.PassingScore.Value;
+
+        return new QuizAttemptReviewDto
+        {
+            AttemptId = attempt.Id,
+            QuizTitle = attempt.Quiz?.Title ?? "Quiz",
+            Score = score,
+            TotalQuestions = total,
+            CorrectAnswers = correctCount,
+            Passed = passed,
+            Questions = reviewItems,
+        };
+    }
+
+    public async Task DeleteQuizAttemptAsync(Guid studentId, Guid attemptId)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.StudentQuizAnswers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
+
+        _unitOfWork.Context.StudentQuizAnswers.RemoveRange(attempt.StudentQuizAnswers);
+        _unitOfWork.Context.QuizAttempts.Remove(attempt);
+        await _unitOfWork.SaveAsync();
     }
 
     private sealed class StudentTopicStatAccumulator

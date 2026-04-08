@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -22,6 +22,9 @@ public partial class Announcement
 
     [Column("content")]
     public string Content { get; set; } = null!;
+
+    [Column("send_email")]
+    public bool SendEmail { get; set; } = true;
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }

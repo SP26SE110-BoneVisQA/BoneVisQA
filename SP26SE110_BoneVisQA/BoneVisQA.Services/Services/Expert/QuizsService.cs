@@ -20,36 +20,206 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
+        public async Task<PagedResult<GetQuizDTO>> GetQuizDTO(int pageIndex, int pageSize)
+        {
+            var query = await _unitOfWork.QuizRepository.GetAllAsync();
 
-        public async Task<QuizDto> CreateQuizAsync(QuizDto request)
+            var totalCount = query.Count();
+
+            var quizzes = query
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(q => new GetQuizDTO
+                {
+                    Id = q.Id,
+                    Title = q.Title,
+                    Topic = q.Topic,
+                    OpenTime = q.OpenTime,
+                    CloseTime = q.CloseTime,
+                    TimeLimit = q.TimeLimit,
+                    PassingScore = q.PassingScore,
+                    IsAiGenerated = q.IsAiGenerated,
+                    Difficulty = q.Difficulty,
+                    Classification = q.Classification,
+                    CreatedAt = q.CreatedAt
+                })
+                .ToList();
+
+            return new PagedResult<GetQuizDTO>
+            {
+                Items = quizzes,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+        public async Task<CreateQuizResponseDTO> CreateQuizAsync(CreateQuizRequestDTO request)
         {
             var quiz = new Quiz
             {
                 Id = Guid.NewGuid(),
                 Title = request.Title,
-                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+
+                CreatedByExpertId = request.CreatedByExpertId,
+
+                Topic = request.Topic,
+
+                OpenTime = request.OpenTime.HasValue? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc): null,
+
+                CloseTime = request.CloseTime.HasValue? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc): null,
+
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
+
+                IsAiGenerated = false,
+
+                Difficulty = request.Difficulty,
+                Classification = request.Classification,
+
                 CreatedAt = DateTime.UtcNow
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
             await _unitOfWork.SaveAsync();
 
-            return new QuizDto
+            string? expertName = null;
+
+            if (request.CreatedByExpertId.HasValue)
+            {
+                var expert = await _unitOfWork.UserRepository.GetByIdAsync(request.CreatedByExpertId.Value);
+
+                expertName = expert?.FullName;
+            }
+
+            return new CreateQuizResponseDTO
             {
                 Id = quiz.Id,
                 Title = quiz.Title,
+
+                ExpertName = expertName,
+
+                Topic = quiz.Topic,
+                OpenTime = quiz.OpenTime,
+                CloseTime = quiz.CloseTime,
+
+                TimeLimit = quiz.TimeLimit,
+                PassingScore = quiz.PassingScore,
+
+                IsAiGenerated = quiz.IsAiGenerated,
+                Difficulty = quiz.Difficulty,
+                Classification = quiz.Classification,
+
+                CreatedAt = quiz.CreatedAt
+            };
+        }
+        public async Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update)
+        {
+            var quiz = await _unitOfWork.QuizRepository
+                .GetByIdAsync(update.Id);
+
+            if (quiz == null)
+                throw new KeyNotFoundException("Quiz không tồn tại.");
+
+            quiz.Title = update.Title;
+
+            quiz.Topic = update.Topic;
+
+            quiz.OpenTime = update.OpenTime.HasValue
+                ? DateTime.SpecifyKind(update.OpenTime.Value, DateTimeKind.Utc)
+                : null;
+
+            quiz.CloseTime = update.CloseTime.HasValue
+                ? DateTime.SpecifyKind(update.CloseTime.Value, DateTimeKind.Utc)
+                : null;
+
+            quiz.TimeLimit = update.TimeLimit;
+
+            quiz.PassingScore = update.PassingScore;
+
+            quiz.Difficulty = update.Difficulty;
+
+            quiz.Classification = update.Classification;
+
+            await _unitOfWork.QuizRepository.UpdateAsync(quiz);
+
+            await _unitOfWork.SaveAsync();
+
+            return new UpdateQuizResponseDTO
+            {
+                Title = quiz.Title,
+                Topic = quiz.Topic,
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
                 TimeLimit = quiz.TimeLimit,
                 PassingScore = quiz.PassingScore,
+                Difficulty = quiz.Difficulty,
+                Classification = quiz.Classification,
                 CreatedAt = quiz.CreatedAt
             };
         }
+        public async Task<bool> DeleteQuizAsync(Guid quizId)
+        {
+            var quiz = await _unitOfWork.QuizRepository
+                .GetByIdAsync(quizId);
 
-        public async Task<QuizQuestionDto> CreateQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
+            if (quiz == null)
+                return false;
+
+            await _unitOfWork.QuizRepository.RemoveAsync(quiz);
+
+            await _unitOfWork.SaveAsync();
+
+            return true;
+        }
+
+        //================================================================================================================
+        public async Task<List<GetQuizQuestionDTO>> GetQuizQuestionDTO(Guid quizId)
+        {
+            var quiz = await _unitOfWork.QuizRepository
+                .GetByIdAsync(quizId);
+
+            if (quiz == null)
+                throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+            var questions = await _unitOfWork.QuizQuestionRepository
+                .FindAsync(q => q.QuizId == quizId);
+
+            var result = new List<GetQuizQuestionDTO>();
+
+            foreach (var q in questions)
+            {
+                string? caseTitle = null;
+
+                if (q.CaseId.HasValue)
+                {
+                    var medicalCase = await _unitOfWork.MedicalCaseRepository
+                        .GetByIdAsync(q.CaseId.Value);
+
+                    caseTitle = medicalCase?.Title;
+                }
+
+                result.Add(new GetQuizQuestionDTO
+                {
+                    QuestionId = q.Id,
+                    QuizTitle = quiz.Title,
+                    CaseTitle = caseTitle,
+
+                    QuestionText = q.QuestionText,
+                    Type = q.Type,
+
+                    OptionA = q.OptionA,
+                    OptionB = q.OptionB,
+                    OptionC = q.OptionC,
+                    OptionD = q.OptionD,
+
+                    CorrectAnswer = q.CorrectAnswer
+                });
+            }
+
+            return result;
+        }
+        public async Task<CreateQuizQuestionResponseDTO> CreateQuizQuestionAsync(Guid quizId, CreateQuizQuestionRequestDTO request)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
                 ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
@@ -78,7 +248,7 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
             await _unitOfWork.SaveAsync();
 
-            return new QuizQuestionDto
+            return new CreateQuizQuestionResponseDTO
             {
                 Id = question.Id,
                 QuizId = question.QuizId,
@@ -94,6 +264,78 @@ namespace BoneVisQA.Services.Services.Expert
                 CorrectAnswer = question.CorrectAnswer
             };
         }
+        public async Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update)
+        {
+            var question = await _unitOfWork.QuizQuestionRepository
+                .GetByIdAsync(update.QuestionId);
+
+            if (question == null)
+                throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+
+            var quiz = await _unitOfWork.QuizRepository
+                .GetByIdAsync(update.QuizId);
+
+            if (quiz == null)
+                throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+            var medicalCase = await _unitOfWork.MedicalCaseRepository
+                .GetByIdAsync(update.CaseId);
+
+            if (medicalCase == null)
+                throw new KeyNotFoundException("Không tìm thấy medical case.");
+
+            question.QuizId = update.QuizId;
+            question.CaseId = update.CaseId;
+
+            question.QuestionText = update.QuestionText;
+            question.Type = update.Type;
+
+            question.OptionA = update.OptionA;
+            question.OptionB = update.OptionB;
+            question.OptionC = update.OptionC;
+            question.OptionD = update.OptionD;
+
+            question.CorrectAnswer = update.CorrectAnswer;
+
+            await _unitOfWork.QuizQuestionRepository.UpdateAsync(question);
+
+            await _unitOfWork.SaveAsync();
+
+            return new UpdateQuizQuestionResponseDTO
+            {
+                QuestionText = question.QuestionText,
+
+                QuizTitle = quiz.Title,
+
+                CaseTitle = medicalCase.Title,
+
+                Type = question.Type,
+
+                CorrectAnswer = question.CorrectAnswer,
+
+                OptionA = question.OptionA,
+                OptionB = question.OptionB,
+                OptionC = question.OptionC,
+                OptionD = question.OptionD
+            };
+        }
+        public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
+        {
+            var question = await _unitOfWork.QuizQuestionRepository
+                .GetByIdAsync(questionId);
+
+            if (question == null)
+                return false;
+
+            await _unitOfWork.QuizQuestionRepository.RemoveAsync(question);
+
+            await _unitOfWork.SaveAsync();
+
+            return true;
+        }
+
+
+        //================================================================================================================
         public async Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto)
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
@@ -132,6 +374,16 @@ namespace BoneVisQA.Services.Services.Expert
 
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
+           
+            string? expertName = null;
+
+            if (dto.AssignedExpertId.HasValue)
+            {
+                var expert = await _unitOfWork.UserRepository
+                    .GetByIdAsync(dto.AssignedExpertId.Value);
+
+                expertName = expert?.FullName;
+            }
 
             return new ClassQuizSessionResponseDTO
             {
@@ -141,6 +393,7 @@ namespace BoneVisQA.Services.Services.Expert
                 QuizId = classQuiz.QuizId,
                 QuizName = quiz.Title,
 
+                ExpertName = expertName, 
                 AssignedAt = classQuiz.CreatedAt,
 
                 OpenTime = classQuiz.OpenTime,

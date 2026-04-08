@@ -1,16 +1,14 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoneVisQA.Services.Models.Student;
+namespace BoneVisQA.Services.Models.Expert;
 
-public class StudentProfileDto
+public class ExpertProfileDto
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    /// <summary>Primary role for compact UI (first assigned role).</summary>
-    public string? Role { get; set; }
-    public string? SchoolCohort { get; set; }
+    public string? Specialty { get; set; }
     public string? AvatarUrl { get; set; }
     public bool IsActive { get; set; }
     public DateTime? CreatedAt { get; set; }
@@ -26,12 +24,18 @@ public class StudentProfileDto
     public string? Address { get; set; }
     public string? Bio { get; set; }
     public string? EmergencyContact { get; set; }
+
+    // Expert-specific preferences
+    public int AutoApproveThreshold { get; set; } = 90;
+    public bool NotifyNewQA { get; set; } = true;
+    public bool NotifyFlagged { get; set; } = true;
+    public bool NotifyQuizComplete { get; set; } = false;
 }
 
-public class UpdateStudentProfileRequestDto
+public class UpdateExpertProfileRequestDto
 {
     public string FullName { get; set; } = string.Empty;
-    public string? SchoolCohort { get; set; }
+    public string? Specialty { get; set; }
     public string? AvatarUrl { get; set; }
 
     public DateOnly? DateOfBirth { get; set; }
@@ -42,4 +46,9 @@ public class UpdateStudentProfileRequestDto
     public string? Address { get; set; }
     public string? Bio { get; set; }
     public string? EmergencyContact { get; set; }
+
+    public int AutoApproveThreshold { get; set; } = 90;
+    public bool NotifyNewQA { get; set; } = true;
+    public bool NotifyFlagged { get; set; } = true;
+    public bool NotifyQuizComplete { get; set; } = false;
 }

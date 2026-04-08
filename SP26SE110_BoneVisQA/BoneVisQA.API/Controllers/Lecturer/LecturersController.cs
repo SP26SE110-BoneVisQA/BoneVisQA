@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -25,6 +26,13 @@ public class LecturersController : ControllerBase
     {
         _lecturerService = lecturerService;
         _aiQuizService = aiQuizService;
+    }
+
+    private static Guid? TryGetJwtUserId(ClaimsPrincipal user)
+    {
+        var s = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        return Guid.TryParse(s, out var id) && id != Guid.Empty ? id : null;
     }
 
     #region Class Management
@@ -245,6 +253,63 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("classes/{classId:guid}/assignments")]
+    public async Task<ActionResult<List<ClassAssignmentDto>>> GetClassAssignments(Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetClassAssignmentsAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Lấy tất cả assignments (case + quiz) của tất cả lớp thuộc giảng viên hiện tại.</summary>
+    [HttpGet("assignments")]
+    public async Task<ActionResult<List<ClassAssignmentDto>>> GetAllAssignmentsForLecturer()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>Không dùng :guid trên route — nếu id sai sẽ trả 400 thay vì 404 do router.</summary>
+    [HttpPut("classes/{classId}/announcements/{announcementId}")]
+    public async Task<ActionResult<AnnouncementDto>> UpdateAnnouncement(
+        string classId,
+        string announcementId,
+        [FromBody] UpdateAnnouncementRequestDto request)
+    {
+        if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
+            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+        try
+        {
+            var result = await _lecturerService.UpdateAnnouncementAsync(cId, aId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("classes/{classId}/announcements/{announcementId}")]
+    public async Task<IActionResult> DeleteAnnouncement(string classId, string announcementId)
+    {
+        if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
+            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+        var deleted = await _lecturerService.DeleteAnnouncementAsync(cId, aId);
+        if (!deleted)
+            return NotFound(new { message = "Thông báo không tồn tại." });
+        return NoContent();
+    }
+
     #endregion
 
     #region Quiz Management
@@ -258,7 +323,8 @@ public class LecturersController : ControllerBase
 
         try
         {
-            var result = await _lecturerService.CreateQuizAsync(request);
+            var creatorId = TryGetJwtUserId(User);
+            var result = await _lecturerService.CreateQuizAsync(request, creatorId);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -269,11 +335,13 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách quiz gắn với mọi lớp của giảng viên.</summary>
     [HttpGet("quizzes")]
-    public async Task<ActionResult<IReadOnlyList<ClassQuizDto>>> GetQuizzesForLecturer([FromQuery] Guid lecturerId)
+    public async Task<ActionResult<IReadOnlyList<ClassQuizDto>>> GetQuizzesForLecturer()
     {
-        if (lecturerId == Guid.Empty)
-            return BadRequest(new { message = "lecturerId là bắt buộc." });
-        var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId.Value);
         return Ok(result);
     }
 
@@ -372,6 +440,40 @@ public class LecturersController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("quizzes/{quizId:guid}")]
+    public async Task<IActionResult> DeleteQuiz(Guid quizId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var deleted = await _lecturerService.DeleteQuizAsync(quizId);
+        if (!deleted)
+            return NotFound(new { message = "Quiz không tồn tại." });
+        return NoContent();
+    }
+
+    [HttpPost("classes/{classId:guid}/quizzes/{quizId:guid}")]
+    public async Task<ActionResult<ClassQuizDto>> AssignQuizToClass(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _lecturerService.AssignQuizToClassAsync(classId, quizId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
     #endregion
 
     #region AI Quiz Management
@@ -438,7 +540,8 @@ public class LecturersController : ControllerBase
                 PassingScore = request.PassingScore
             };
 
-            var quiz = await _lecturerService.CreateQuizAsync(createRequest);
+            var creatorId = TryGetJwtUserId(User);
+            var quiz = await _lecturerService.CreateQuizAsync(createRequest, creatorId);
 
             // 2. Tạo questions từ AI
             var questionsResult = await _aiQuizService.GenerateQuizQuestionsAsync(

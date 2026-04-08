@@ -141,4 +141,57 @@ public class StudentsController : ControllerBase
         var result = await _studentService.GetProgressAsync(studentId);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Trả về danh sách lớp học mà sinh viên đã đăng ký (qua ClassEnrollments).
+    /// </summary>
+    [HttpGet("classes")]
+    public async Task<ActionResult<IReadOnlyList<StudentClassDto>>> GetEnrolledClasses()
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        var enrollments = await _studentService.GetEnrolledClassesAsync(studentId);
+        return Ok(enrollments);
+    }
+
+    /// <summary>
+    /// Trả về chi tiết đầy đủ của một lớp học (quiz, sinh viên, thông báo).
+    /// </summary>
+    [HttpGet("classes/{classId:guid}")]
+    public async Task<ActionResult<StudentClassDetailDto>> GetClassDetail(Guid classId)
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        try
+        {
+            var result = await _studentService.GetClassDetailAsync(studentId, classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Sinh viên tự hủy đăng ký (rời lớp).
+    /// </summary>
+    [HttpDelete("classes/{classId:guid}")]
+    public async Task<IActionResult> LeaveEnrolledClass(Guid classId)
+    {
+        if (!TryGetAuthenticatedStudentId(out var studentId))
+            return StudentIdentityRequired();
+
+        try
+        {
+            await _studentService.LeaveEnrolledClassAsync(studentId, classId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
 }
