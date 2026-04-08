@@ -1,4 +1,5 @@
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ public class ExpertDashboardService : IExpertDashboardService
             .ToListAsync();
         var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
-            .Where(a => a.Status == "Escalated")
+            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
             .Where(a =>
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == a.Question.StudentId &&
@@ -63,7 +64,7 @@ public class ExpertDashboardService : IExpertDashboardService
                 .ThenInclude(q => q.Case)
                     .ThenInclude(mc => mc!.Category)
             .Include(a => a.ExpertReviews)
-            .Where(a => a.Status == "Escalated")
+            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
             .Where(a =>
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == a.Question.StudentId &&

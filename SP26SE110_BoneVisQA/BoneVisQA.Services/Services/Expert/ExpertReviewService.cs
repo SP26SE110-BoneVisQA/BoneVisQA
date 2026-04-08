@@ -1,6 +1,8 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Exceptions;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +12,17 @@ namespace BoneVisQA.Services.Services.Expert;
 public class ExpertReviewService : IExpertReviewService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly INotificationService _notificationService;
+    private readonly IRagExpertAnswerIndexingSignal _ragExpertAnswerIndexingSignal;
 
-    public ExpertReviewService(IUnitOfWork unitOfWork)
+    public ExpertReviewService(
+        IUnitOfWork unitOfWork,
+        INotificationService notificationService,
+        IRagExpertAnswerIndexingSignal ragExpertAnswerIndexingSignal)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
+        _ragExpertAnswerIndexingSignal = ragExpertAnswerIndexingSignal;
     }
 
     public async Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId)
@@ -28,7 +37,7 @@ public class ExpertReviewService : IExpertReviewService
             .Include(a => a.Citations)
                 .ThenInclude(c => c.Chunk)
                     .ThenInclude(ch => ch.Doc)
-            .Where(a => a.Status == "Escalated")
+            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
             .Where(a =>
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == a.Question.StudentId &&
@@ -97,11 +106,9 @@ public class ExpertReviewService : IExpertReviewService
         if (enrollment == null && existingReview == null)
             throw new InvalidOperationException("Chuyên gia không có quyền xử lý câu trả lời này.");
 
-        // Concurrency guard: already resolved answers must not be resolved again.
-        if (!string.Equals(answer.Status, "Escalated", StringComparison.OrdinalIgnoreCase))
+        if (!CaseAnswerStatuses.IsEscalatedToExpert(answer.Status))
             throw new ConflictException("Câu trả lời này đã được xử lý trước đó.");
 
-        var resolvedStatus = DetermineResolvedStatus(answer, request);
         answer.AnswerText = request.AnswerText;
         answer.StructuredDiagnosis = request.StructuredDiagnosis;
         answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
@@ -109,7 +116,7 @@ public class ExpertReviewService : IExpertReviewService
         answer.ReflectiveQuestions = request.ReflectiveQuestions;
         answer.ReviewedById = expertId;
         answer.ReviewedAt = DateTime.UtcNow;
-        answer.Status = resolvedStatus;
+        answer.Status = CaseAnswerStatuses.ExpertApproved;
 
         if (existingReview == null)
         {
@@ -133,6 +140,15 @@ public class ExpertReviewService : IExpertReviewService
 
         await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
         await _unitOfWork.SaveAsync();
+
+        await _notificationService.SendNotificationToUserAsync(
+            answer.Question.StudentId,
+            "Chuyên gia đã xử lý câu hỏi của bạn",
+            "Câu trả lời đã được chuyên gia duyệt. Bạn có thể xem lại trong lịch sử câu hỏi.",
+            "expert_review",
+            $"/student/cases/history");
+
+        await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(answer.Id);
 
         return new ExpertEscalatedAnswerDto
         {
@@ -172,7 +188,11 @@ public class ExpertReviewService : IExpertReviewService
         var canReviewChunk = await _unitOfWork.Context.Citations
             .Where(c => c.ChunkId == chunkId)
             .AnyAsync(c =>
-                (c.Answer.Status == "Escalated" || c.Answer.Status == "Approved" || c.Answer.Status == "Revised") &&
+                (c.Answer.Status == CaseAnswerStatuses.EscalatedToExpert
+                 || c.Answer.Status == CaseAnswerStatuses.Escalated
+                 || c.Answer.Status == CaseAnswerStatuses.Approved
+                 || c.Answer.Status == CaseAnswerStatuses.Revised
+                 || c.Answer.Status == CaseAnswerStatuses.ExpertApproved) &&
                 (_unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == c.Answer.Question.StudentId &&
                     e.Class.ExpertId == expertId) ||
@@ -187,18 +207,6 @@ public class ExpertReviewService : IExpertReviewService
             await _unitOfWork.DocumentChunkRepository.UpdateAsync(chunk);
             await _unitOfWork.SaveAsync();
         }
-    }
-
-    private static string DetermineResolvedStatus(CaseAnswer answer, ResolveEscalatedAnswerRequestDto request)
-    {
-        var answerChanged =
-            !string.Equals(answer.AnswerText ?? string.Empty, request.AnswerText ?? string.Empty, StringComparison.Ordinal) ||
-            !string.Equals(answer.StructuredDiagnosis ?? string.Empty, request.StructuredDiagnosis ?? string.Empty, StringComparison.Ordinal) ||
-            !string.Equals(answer.DifferentialDiagnoses ?? string.Empty, request.DifferentialDiagnoses ?? string.Empty, StringComparison.Ordinal) ||
-            !string.Equals(answer.KeyImagingFindings ?? string.Empty, request.KeyImagingFindings ?? string.Empty, StringComparison.Ordinal) ||
-            !string.Equals(answer.ReflectiveQuestions ?? string.Empty, request.ReflectiveQuestions ?? string.Empty, StringComparison.Ordinal);
-
-        return answerChanged ? "Revised" : "Approved";
     }
 
     private static List<ExpertCitationDto> MapCitations(IEnumerable<Citation> citations)

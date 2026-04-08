@@ -9,6 +9,7 @@ namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/users")]
+[Tags("Users")]
 [Authorize]
 public class UsersController : ControllerBase
 {

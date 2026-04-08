@@ -75,5 +75,9 @@ public class VisualQAResponseDto
     /// Persisted on <c>case_answers.ai_confidence_score</c>.
     /// </summary>
     public double? AiConfidenceScore { get; set; }
+
+    /// <summary>Optional client-facing explanation when the AI pipeline failed after retries (not persisted).</summary>
+    public string? ErrorMessage { get; set; }
+
     public List<CitationItemDto> Citations { get; set; } = new();
 }

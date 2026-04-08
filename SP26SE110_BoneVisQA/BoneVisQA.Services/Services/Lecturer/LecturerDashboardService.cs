@@ -36,18 +36,20 @@ public class LecturerDashboardService : ILecturerDashboardService
             .CountAsync(a =>
                 a.Question != null &&
                 studentIds.Contains(a.Question.StudentId) &&
-                a.Status == "Escalated");
+                (a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated));
 
         var pendingReviews = await _unitOfWork.Context.CaseAnswers
             .Include(a => a.Question)
             .CountAsync(a =>
                 a.Question != null &&
                 studentIds.Contains(a.Question.StudentId) &&
-                (a.Status == "Escalated"
+                (a.Status == CaseAnswerStatuses.EscalatedToExpert
+                 || a.Status == CaseAnswerStatuses.Escalated
                  || (
-                     a.Status != "Approved"
-                     && a.Status != "Revised"
-                     && a.Status != "Edited"
+                     a.Status != CaseAnswerStatuses.Approved
+                     && a.Status != CaseAnswerStatuses.Revised
+                     && a.Status != CaseAnswerStatuses.Edited
+                     && a.Status != CaseAnswerStatuses.ExpertApproved
                      && (a.AiConfidenceScore == null
                          || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage))));
 

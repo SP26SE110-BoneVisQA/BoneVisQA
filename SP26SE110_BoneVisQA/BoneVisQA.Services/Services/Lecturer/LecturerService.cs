@@ -801,11 +801,13 @@ public class LecturerService : ILecturerService
                     .ThenInclude(c => c != null ? c.MedicalImages : null)
             .Where(a => studentIds.Contains(a.Question.StudentId))
             .Where(a =>
-                a.Status == "Escalated"
+                a.Status == CaseAnswerStatuses.EscalatedToExpert
+                || a.Status == CaseAnswerStatuses.Escalated
                 || (
-                    a.Status != "Approved"
-                    && a.Status != "Revised"
-                    && a.Status != "Edited"
+                    a.Status != CaseAnswerStatuses.Approved
+                    && a.Status != CaseAnswerStatuses.Revised
+                    && a.Status != CaseAnswerStatuses.Edited
+                    && a.Status != CaseAnswerStatuses.ExpertApproved
                     && (a.AiConfidenceScore == null
                         || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage)))
             .OrderByDescending(a => a.Question.CreatedAt)
@@ -840,7 +842,8 @@ public class LecturerService : ILecturerService
                 Status = a.Status ?? "Pending",
                 AiConfidenceScore = a.AiConfidenceScore,
                 AskedAt = a.Question.CreatedAt,
-                IsEscalated = a.Status == "Escalated",
+                IsEscalated = a.Status == CaseAnswerStatuses.EscalatedToExpert
+                              || a.Status == CaseAnswerStatuses.Escalated,
                 EscalatedByName = a.EscalatedById.HasValue
                     ? expertNames.GetValueOrDefault(a.EscalatedById.Value)
                     : null,
@@ -893,7 +896,8 @@ public class LecturerService : ILecturerService
             ReviewedById = answer?.ReviewedById,
             ReviewedByName = answer?.ReviewedBy?.FullName,
             ReviewedAt = answer?.ReviewedAt,
-            IsEscalated = answer?.Status == "Escalated",
+            IsEscalated = answer?.Status == CaseAnswerStatuses.EscalatedToExpert
+                          || answer?.Status == CaseAnswerStatuses.Escalated,
             EscalatedByName = null,
             EscalatedAt = answer?.EscalatedAt
         };
@@ -924,7 +928,7 @@ public class LecturerService : ILecturerService
                 AnswerText = request.AnswerText,
                 StructuredDiagnosis = request.StructuredDiagnosis,
                 DifferentialDiagnoses = request.DifferentialDiagnoses,
-                Status = request.Approve ? "Approved" : "Edited",
+                Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited,
                 GeneratedAt = DateTime.UtcNow
             };
             await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
@@ -934,7 +938,7 @@ public class LecturerService : ILecturerService
             answer.AnswerText = request.AnswerText;
             answer.StructuredDiagnosis = request.StructuredDiagnosis;
             answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
-            answer.Status = request.Approve ? "Approved" : "Edited";
+            answer.Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited;
             await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
         }
 
@@ -998,7 +1002,10 @@ public class LecturerService : ILecturerService
 
         var escalatedMap = await _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
-            .Where(a => a.Status == "Escalated" && a.Question != null && studentIds.Contains(a.Question.StudentId))
+            .Where(a =>
+                (a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
+                && a.Question != null
+                && studentIds.Contains(a.Question.StudentId))
             .GroupBy(a => a.Question.StudentId)
             .Select(g => new { StudentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StudentId, x => x.Count);

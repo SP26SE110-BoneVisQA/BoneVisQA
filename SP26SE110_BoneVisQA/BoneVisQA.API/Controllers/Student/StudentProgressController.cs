@@ -8,6 +8,7 @@ namespace BoneVisQA.API.Controllers.Student;
 
 [ApiController]
 [Route("api/student/progress")]
+[Tags("Student - Progress")]
 [Authorize(Roles = "Student")]
 public class StudentProgressController : ControllerBase
 {

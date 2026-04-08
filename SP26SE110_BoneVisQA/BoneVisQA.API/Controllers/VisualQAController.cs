@@ -29,6 +29,7 @@ public class VisualQAFileUploadRequest
 
 [ApiController]
 [Route("api/student/visual-qa")]
+[Tags("Student - Visual QA")]
 [Authorize]
 public class VisualQAController : ControllerBase
 {

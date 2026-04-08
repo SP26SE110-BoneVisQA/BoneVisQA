@@ -18,6 +18,8 @@ public class VisualQaAiService : IVisualQaAiService
         "Vector search is temporarily unavailable due to high network demand. Please try again later.";
     private const string TemporaryAiGenerationUnavailableAnswer =
         "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
+    private const string AiOverloadVietnameseMessage =
+        "Hệ thống AI đang quá tải. Vui lòng thử lại sau.";
 
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
@@ -60,12 +62,13 @@ public class VisualQaAiService : IVisualQaAiService
         {
             return new VisualQAResponseDto
             {
-                AnswerText = TemporaryVectorSearchUnavailableAnswer,
+                AnswerText = AiOverloadVietnameseMessage,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
                 AiConfidenceScore = null,
+                ErrorMessage = AiOverloadVietnameseMessage,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -143,12 +146,13 @@ public class VisualQaAiService : IVisualQaAiService
             // Do not attach RAG similarity here: generation failed and the answer must stay on the triage queue.
             return new VisualQAResponseDto
             {
-                AnswerText = TemporaryAiGenerationUnavailableAnswer,
+                AnswerText = AiOverloadVietnameseMessage,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
                 AiConfidenceScore = null,
+                ErrorMessage = AiOverloadVietnameseMessage,
                 Citations = new List<CitationItemDto>()
             };
         }

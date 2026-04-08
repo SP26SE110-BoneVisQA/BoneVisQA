@@ -14,12 +14,13 @@ public static class LecturerTriageThresholds
     /// </summary>
     public static bool IsInLecturerTriageQueue(string? status, double? aiConfidenceScore)
     {
-        if (string.Equals(status, "Escalated", StringComparison.OrdinalIgnoreCase))
+        if (CaseAnswerStatuses.IsEscalatedToExpert(status))
             return true;
 
-        if (string.Equals(status, "Approved", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "Revised", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "Edited", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(status, CaseAnswerStatuses.ExpertApproved, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, CaseAnswerStatuses.Approved, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, CaseAnswerStatuses.Revised, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, CaseAnswerStatuses.Edited, StringComparison.OrdinalIgnoreCase))
             return false;
 
         return !aiConfidenceScore.HasValue || aiConfidenceScore.Value < MinConfidenceToBypassTriage;

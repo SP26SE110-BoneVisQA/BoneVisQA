@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using BoneVisQA.API;
 using BoneVisQA.API.Hubs;
+using BoneVisQA.API.Policies;
 using BoneVisQA.API.Services;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
@@ -14,6 +15,8 @@ using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
+using BoneVisQA.Services.Services.DocumentUpload;
+using BoneVisQA.Services.Services.Rag;
 using BoneVisQA.Services.Services.Auth;
 using BoneVisQA.Services.Services.Email;
 using BoneVisQA.Services.Services.Expert;
@@ -173,19 +176,25 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
 builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-});
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 
 builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
 builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-});
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
+builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
+builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
+builder.Services.AddScoped<IRagExpertAnswerIndexingSignal, NoOpRagExpertAnswerIndexingSignal>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();

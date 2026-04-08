@@ -375,7 +375,7 @@ public class StudentService : IStudentService
 
     public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
     {
-        // PostgreSQL case_answers_status_check: only 'Pending', 'Approved', 'Edited', 'Rejected'.
+        // PostgreSQL case_answers_status_check — see CaseAnswerStatuses / db scripts.
         var status = ClassifyVisualQaAnswerStatus(response);
 
         var answer = new CaseAnswer
@@ -439,13 +439,13 @@ public class StudentService : IStudentService
     private static string ClassifyVisualQaAnswerStatus(VisualQAResponseDto response)
     {
         if (IsVisualQaRejectedResponse(response))
-            return "Rejected";
+            return CaseAnswerStatuses.Rejected;
 
         if (response.AiConfidenceScore.HasValue
             && response.AiConfidenceScore.Value >= LecturerTriageThresholds.MinConfidenceToBypassTriage)
-            return "Approved";
+            return CaseAnswerStatuses.Approved;
 
-        return "Pending";
+        return CaseAnswerStatuses.RequiresLecturerReview;
     }
 
     /// <summary>

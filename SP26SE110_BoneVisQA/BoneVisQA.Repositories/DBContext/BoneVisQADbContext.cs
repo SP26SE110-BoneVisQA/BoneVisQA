@@ -136,7 +136,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("case_answers_pkey");
             entity.ToTable(t => t.HasCheckConstraint(
                 "case_answers_status_check",
-                "status = ANY (ARRAY['Pending'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'Revised'::text])"));
+                "status = ANY (ARRAY['Pending'::text, 'RequiresLecturerReview'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'EscalatedToExpert'::text, 'ExpertApproved'::text, 'Revised'::text])"));
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.GeneratedAt).HasDefaultValueSql("now()");

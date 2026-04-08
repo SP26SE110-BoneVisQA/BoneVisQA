@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Models.Search;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace BoneVisQA.API.Controllers;
 
 [ApiController]
 [Route("api/search")]
+[Tags("Search")]
 [Authorize]
 public class SearchController : ControllerBase
 {
@@ -159,7 +161,7 @@ public class SearchController : ControllerBase
             response.EscalatedQuestions = await _unitOfWork.Context.CaseAnswers
                 .AsNoTracking()
                 .Include(a => a.Question)
-                .Where(a => a.Status == "Escalated")
+                .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
                 .Where(a => (a.Question.QuestionText != null && a.Question.QuestionText.ToLower().Contains(lowered)) ||
                             (a.AnswerText != null && a.AnswerText.ToLower().Contains(lowered)))
                 .OrderByDescending(a => a.EscalatedAt)
