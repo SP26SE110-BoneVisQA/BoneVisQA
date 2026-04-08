@@ -218,6 +218,14 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+
+        [HttpGet("attempts/{quizId}")]
+        public async Task<IActionResult> GetAttempts(Guid quizId)
+        {
+            var result = await _quizService.GetAttemptsByQuizAsync(quizId);
+
+            return Ok(result);
+        }
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {

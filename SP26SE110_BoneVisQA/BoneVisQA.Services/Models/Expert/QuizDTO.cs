@@ -234,6 +234,27 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TimeLimitMinutes { get; set; }
     }
 
-    public class GetClassDTO { public Guid Id { get; set; } public string ClassName { get; set; } = null!; }
-    public class GetExpertDTO { public Guid Id { get; set; } public string FullName { get; set; } = null!; }
+    public class GetClassDTO 
+    { 
+        public Guid Id { get; set; } 
+        public string ClassName { get; set; } = null!; 
+    }
+
+    public class GetExpertDTO 
+    { 
+        public Guid Id { get; set; } 
+        public string FullName { get; set; } = null!; 
+    }
+
+    public class GetQuizAttemptDTO
+    {
+        public Guid AttemptId { get; set; }
+        public Guid QuizId { get; set; }
+        public string? QuizTitle { get; set; }
+        public Guid StudentId { get; set; }
+        public string? StudentName { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public double? Score { get; set; }
+    }
 }

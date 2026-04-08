@@ -27,6 +27,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
         //================================================================================================================
         Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizDTO(int pageIndex, int pageSize);
         Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto);
+        Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId);
         Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId);
 
 
