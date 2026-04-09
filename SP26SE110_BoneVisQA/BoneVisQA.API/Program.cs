@@ -240,7 +240,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
     await next();
 });
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseSwagger();
 app.UseSwaggerUI();
 //
