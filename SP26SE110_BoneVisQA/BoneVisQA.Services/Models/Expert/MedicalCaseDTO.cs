@@ -143,8 +143,7 @@ namespace BoneVisQA.Services.Models.Expert
         public string ImageUrl { get; set; } = null!;
         public string FileName { get; set; } = null!;
     }
-<<<<<<< Updated upstream
-=======
+
 
     public class GetAllAnnotationDTO
     {
@@ -154,5 +153,4 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Coordinates { get; set; }
         
     }
->>>>>>> Stashed changes
 }

@@ -511,23 +511,6 @@ namespace BoneVisQA.Services.Services.Expert
                 CompletedAt = attempt.CompletedAt
             };
         }
-<<<<<<< Updated upstream
-        public async Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId)
-        {
-            var attempts = await _unitOfWork.QuizAttemptRepository
-                .FindAsync(x => x.QuizId == quizId);
-
-            return attempts.Select(x => new GetQuizAttemptDTO
-            {
-                AttemptId = x.Id,
-                StudentId = x.StudentId,
-                StartedAt = x.StartedAt,
-                CompletedAt = x.CompletedAt,
-                Score = x.Score
-            }).ToList();
-        }
-=======
->>>>>>> Stashed changes
 
         public async Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize)
         {

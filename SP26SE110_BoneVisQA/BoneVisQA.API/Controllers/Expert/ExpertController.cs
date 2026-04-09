@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-   // [Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/expert")]
     [Tags("Expert")]
@@ -226,10 +226,7 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {
@@ -292,8 +289,6 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
-<<<<<<< Updated upstream
-=======
         [HttpGet("annotation")]
         public async Task<IActionResult> GetAllAnnotation(int pageIndex = 1, int pageSize = 10)
         {
@@ -302,7 +297,6 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
->>>>>>> Stashed changes
         [HttpGet("assign")]
         public async Task<IActionResult> GetAssignQuizList(int pageIndex = 1,int pageSize = 10)
         {

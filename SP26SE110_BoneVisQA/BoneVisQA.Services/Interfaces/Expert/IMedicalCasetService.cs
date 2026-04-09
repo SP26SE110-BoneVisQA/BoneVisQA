@@ -21,12 +21,8 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize);
         Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
-
-<<<<<<< Updated upstream
-        Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize);
-=======
        
->>>>>>> Stashed changes
+
         Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize);
         Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize);
 

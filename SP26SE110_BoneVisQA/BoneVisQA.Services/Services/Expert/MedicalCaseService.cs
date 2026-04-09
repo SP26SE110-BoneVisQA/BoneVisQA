@@ -248,9 +248,6 @@ namespace BoneVisQA.Services.Services.Expert
                 Coordinates = annotation.Coordinates
             };
         }
-<<<<<<< Updated upstream
-
-=======
         public async Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize)
         {
             var request = _httpContextAccessor.HttpContext.Request;
@@ -283,7 +280,6 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
->>>>>>> Stashed changes
         public async Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.CategoryRepository.GetQueryable();
