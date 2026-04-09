@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace BoneVisQA.Services.Services.Lecturer;
@@ -10,19 +11,27 @@ namespace BoneVisQA.Services.Services.Lecturer;
 public class LecturerAssignmentService : ILecturerAssignmentService
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailService _emailService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LecturerAssignmentService> _logger;
 
-    public LecturerAssignmentService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<LecturerAssignmentService> logger)
+    public LecturerAssignmentService(
+        IUnitOfWork unitOfWork,
+        IServiceScopeFactory scopeFactory,
+        ILogger<LecturerAssignmentService> logger)
     {
         _unitOfWork = unitOfWork;
-        _emailService = emailService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
     public async Task<IReadOnlyList<ClassCaseAssignmentDto>> AssignCasesAsync(Guid lecturerId, Guid classId, AssignCasesRequestDto request)
     {
+        var t0 = DateTime.UtcNow;
+        _logger.LogInformation("[AssignCases] START - classId={ClassId}, caseCount={CaseCount}", classId, request.CaseIds.Count);
+
         var academicClass = await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+        var elapsed1 = (DateTime.UtcNow - t0).TotalSeconds;
+        _logger.LogInformation("[AssignCases] Step1 EnsureOwnsClass done in {Elapsed}s", elapsed1);
 
         var caseIds = request.CaseIds
             .Where(id => id != Guid.Empty)
@@ -35,6 +44,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var medicalCases = await _unitOfWork.Context.MedicalCases
             .Where(c => caseIds.Contains(c.Id))
             .ToListAsync();
+        var elapsed2 = (DateTime.UtcNow - t0).TotalSeconds;
+        _logger.LogInformation("[AssignCases] Step2 LoadMedicalCases done in {Elapsed}s, found={Count}", elapsed2, medicalCases.Count);
 
         if (medicalCases.Count != caseIds.Count)
             throw new KeyNotFoundException("Một hoặc nhiều case không tồn tại.");
@@ -42,6 +53,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var existingAssignments = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
             .ToListAsync();
+        var elapsed3 = (DateTime.UtcNow - t0).TotalSeconds;
+        _logger.LogInformation("[AssignCases] Step3 LoadExisting done in {Elapsed}s, existing={Count}", elapsed3, existingAssignments.Count);
 
         var now = DateTime.UtcNow;
         foreach (var caseId in caseIds)
@@ -65,11 +78,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }
 
         await _unitOfWork.SaveAsync();
+        var elapsed4 = (DateTime.UtcNow - t0).TotalSeconds;
+        _logger.LogInformation("[AssignCases] Step4 SaveAsync done in {Elapsed}s", elapsed4);
 
-        // Gửi email thông báo cho sinh viên trong lớp
-        await NotifyStudentsAsync(academicClass, "Case Assignment", "Medical Case", request.DueDate);
+        // Phải await phần đọc DB (DbContext scoped); SMTP vẫn chạy nền bên trong QueueAssignmentEmailsAsync
+        await QueueAssignmentEmailsAsync(
+            academicClass.Id,
+            academicClass.ClassName,
+            "Case Assignment",
+            "Medical Case",
+            request.DueDate);
 
-        return medicalCases
+        var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
+        _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
+
+        var result = medicalCases
             .OrderBy(c => c.Title)
             .Select(c =>
             {
@@ -85,6 +108,9 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 };
             })
             .ToList();
+
+        _logger.LogInformation("[AssignCases] DONE total={Elapsed}s", (DateTime.UtcNow - t0).TotalSeconds);
+        return result;
     }
 
     public async Task<ClassQuizSessionDto> AssignQuizSessionAsync(Guid lecturerId, Guid classId, AssignQuizSessionRequestDto request)
@@ -128,8 +154,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         await _unitOfWork.SaveAsync();
 
-        // Gửi email thông báo cho sinh viên trong lớp
-        await NotifyStudentsAsync(academicClass, quiz.Title, "Quiz", request.CloseTime);
+        await QueueAssignmentEmailsAsync(
+            academicClass.Id,
+            academicClass.ClassName,
+            quiz.Title,
+            "Quiz",
+            request.CloseTime);
 
         return new ClassQuizSessionDto
         {
@@ -218,46 +248,95 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         await _unitOfWork.SaveAsync();
     }
 
-    private async Task NotifyStudentsAsync(AcademicClass academicClass, string assignmentTitle, string assignmentType, DateTime? dueDate)
+    /// <summary>
+    /// Đọc danh sách email trong request (DbContext còn sống), rồi gửi SMTP ở background để API trả 200 ngay.
+    /// Cấu hình SMTP là <c>Email:Username</c>/<c>Email:Password</c> (Gmail App Password, v.v.) — không liên quan Google OAuth Console.
+    /// </summary>
+    private async Task QueueAssignmentEmailsAsync(
+        Guid classId,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate)
     {
+        _logger.LogInformation("[AssignmentEmail] Queue started for class {ClassId}", classId);
+
+        List<(string Email, string Name)> items;
         try
         {
-            var students = await _unitOfWork.Context.ClassEnrollments
+            var rows = await _unitOfWork.Context.ClassEnrollments
                 .AsNoTracking()
-                .Where(e => e.ClassId == academicClass.Id)
-                .Include(e => e.Student)
+                .Where(e => e.ClassId == classId)
+                .Select(e => new { e.Student!.Email, e.Student.FullName })
                 .ToListAsync();
 
-            var dueDateDisplay = dueDate.HasValue
-                ? dueDate.Value.ToString("dd/MM/yyyy HH:mm")
-                : null;
+            items = rows
+                .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .ToList();
 
-            foreach (var enrollment in students)
-            {
-                if (string.IsNullOrWhiteSpace(enrollment.Student.Email))
-                    continue;
-
-                var sent = await _emailService.SendAssignmentEmailAsync(
-                    enrollment.Student.Email,
-                    enrollment.Student.FullName ?? "Sinh viên",
-                    academicClass.ClassName,
-                    assignmentTitle,
-                    assignmentType,
-                    dueDate,
-                    dueDateDisplay);
-
-                if (!sent)
-                    _logger.LogWarning("[NotifyStudentsAsync] Email failed to send to {Email}", enrollment.Student.Email);
-            }
-
-            _logger.LogInformation("[NotifyStudentsAsync] Sent {Count} assignment notification emails for class {ClassName}",
-                students.Count, academicClass.ClassName);
+            _logger.LogInformation("[AssignmentEmail] Loaded {Count} recipients for class {ClassId} — firing background send", items.Count, classId);
         }
         catch (Exception ex)
         {
-            // Không throw — email thất bại không nên roll back assignment đã lưu
-            _logger.LogError(ex, "[NotifyStudentsAsync] Error sending assignment emails for class {ClassId}", academicClass.Id);
+            _logger.LogError(ex, "[AssignmentEmail] Failed to load recipients for class {ClassId}", classId);
+            return;
         }
+
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("[AssignmentEmail] No student email for class {ClassId}", classId);
+            return;
+        }
+
+        var dueDateDisplay = dueDate.HasValue
+            ? dueDate.Value.ToString("dd/MM/yyyy HH:mm")
+            : null;
+
+        var nameCopy = className;
+        var titleCopy = assignmentTitle;
+        var typeCopy = assignmentType;
+        var dueCopy = dueDate;
+        var dueDisplayCopy = dueDateDisplay;
+        var log = _logger;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                foreach (var (email, studentName) in items)
+                {
+                    try
+                    {
+                        var sent = await emailService.SendAssignmentEmailAsync(
+                            email,
+                            studentName,
+                            nameCopy,
+                            titleCopy,
+                            typeCopy,
+                            dueCopy,
+                            dueDisplayCopy);
+                        if (!sent)
+                            log.LogWarning("[AssignmentEmail] SMTP returned false for {Email}", email);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogError(ex, "[AssignmentEmail] Error sending to {Email}", email);
+                    }
+                }
+
+                log.LogInformation(
+                    "[AssignmentEmail] Background send finished for class {ClassName}, {Count} recipients",
+                    nameCopy,
+                    items.Count);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[AssignmentEmail] Background task failed for class {ClassId}", classId);
+            }
+        });
     }
 
     private async Task<AcademicClass> EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
