@@ -68,7 +68,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",
                 "https://localhost:3000",
                 "http://localhost:5173",
-                "https://localhost:5173"
+                "https://localhost:5173",
+                "https://localhost:5046",
+                "https://localhost:5047"
             };
         }
 
@@ -232,9 +234,15 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 var app = builder.Build();
 
 app.UseCors("AllowAll");
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
+    await next();
+});
+//app.UseHttpsRedirection();
 app.UseSwagger();
 app.UseSwaggerUI();
-app.UseHttpsRedirection();
 //
 app.UseStaticFiles();
 app.UseAuthentication();

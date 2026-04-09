@@ -37,7 +37,8 @@ public class EmailService : IEmailService
         _smtpHost = smtpHost ?? "smtp.gmail.com";
         _smtpPort = int.TryParse(smtpPort, out var port) ? port : 587;
         _smtpUsername = smtpUsername ?? "";
-        _smtpPassword = smtpPassword ?? "";
+        // Gmail App Password thường copy kèm dấu cách giữa 4 nhóm — SMTP cần chuỗi liền
+        _smtpPassword = (smtpPassword ?? "").Replace(" ", "", StringComparison.Ordinal);
         _fromEmail = fromEmail ?? _smtpUsername;
         _fromName = fromName ?? "BoneVisQA";
 
