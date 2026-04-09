@@ -128,28 +128,73 @@ public class StudentRepository : IStudentRepository
             .Select(e => e.ClassId)
             .ToListAsync();
 
+        if (classIds.Count == 0)
+            return new List<Quiz>();
 
-        //    if (classIds.Count == 0)
-        //    {
-        //        return new List<Quiz>();
-        //    }
-
-        var quizIds = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => classIds.Contains(cq.ClassId))
-            .Select(cq => cq.QuizId)
+        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
             .ToListAsync();
 
         if (quizIds.Count == 0)
-        {
             return new List<Quiz>();
-        }
 
-        return await _unitOfWork.QuizRepository
-            .FindByCondition(q => quizIds.Contains(q.Id)
-                        && (q.OpenTime == null || q.OpenTime <= utcNow)
-                        && (q.CloseTime == null || q.CloseTime >= utcNow))
+        return await _unitOfWork.Context.Quizzes
+            .Where(q => quizIds.Contains(q.Id))
             .Include(q => q.QuizAttempts)
             .ToListAsync();
+    }
+
+    public async Task<List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>> GetQuizzesWithSessionForStudentAsync(Guid studentId, DateTime utcNow)
+    {
+        var classIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+            return new List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>();
+
+        return await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Class)
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
+            {
+                QuizId = cqs.QuizId,
+                Title = cqs.Quiz != null ? cqs.Quiz.Title : string.Empty,
+                ClassId = cqs.ClassId,
+                ClassName = cqs.Class != null ? cqs.Class.ClassName : string.Empty,
+                OpenTime = cqs.OpenTime,
+                CloseTime = cqs.CloseTime,
+                // Session có thể null: fallback sang cấu hình trên bản ghi quiz (giống lecturer UI).
+                TimeLimitMinutes = cqs.TimeLimitMinutes ?? (cqs.Quiz != null ? cqs.Quiz.TimeLimit : null),
+                PassingScore = cqs.PassingScore ?? (cqs.Quiz != null ? cqs.Quiz.PassingScore : null)
+            })
+            .ToListAsync();
+    }
+
+    public async Task<bool> IsStudentEligibleForAssignedQuizAsync(Guid studentId, Guid quizId, DateTime utcNow)
+    {
+        var classIds = await _unitOfWork.ClassEnrollmentRepository
+            .FindByCondition(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count == 0)
+            return false;
+
+        return await _unitOfWork.Context.ClassQuizSessions
+            .AnyAsync(cqs => cqs.QuizId == quizId
+                && classIds.Contains(cqs.ClassId)
+                && (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
+                && (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
     }
 
     public async Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId)
@@ -157,6 +202,8 @@ public class StudentRepository : IStudentRepository
         return await _unitOfWork.QuizRepository
             .FindByCondition(q => q.Id == quizId)
             .Include(q => q.QuizQuestions)
+                .ThenInclude(qq => qq.Case)
+                    .ThenInclude(c => c!.MedicalImages)
             .FirstOrDefaultAsync();
     }
 
@@ -197,7 +244,7 @@ public class StudentRepository : IStudentRepository
         }
     }
 
-    public async Task<(int totalCasesViewed, int totalQuestionsAsked, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)
+    public async Task<(int totalCasesViewed, int totalQuestionsAsked, int quizzesCompleted, int totalQuizAnswersSubmitted, double? avgQuizScore)> GetStudentAggregateStatsAsync(Guid studentId)
     {
         var totalCasesViewed = await _unitOfWork.CaseViewLogRepository
             .FindByCondition(v => v.StudentId == studentId)
@@ -205,6 +252,14 @@ public class StudentRepository : IStudentRepository
 
         var totalQuestionsAsked = await _unitOfWork.StudentQuestionRepository
             .FindByCondition(q => q.StudentId == studentId)
+            .CountAsync();
+
+        var quizzesCompleted = await _unitOfWork.QuizAttemptRepository
+            .FindByCondition(a => a.StudentId == studentId && (a.CompletedAt != null || a.Score != null))
+            .CountAsync();
+
+        var totalQuizAnswersSubmitted = await _unitOfWork.StudentQuizAnswerRepository
+            .FindByCondition(a => a.Attempt.StudentId == studentId)
             .CountAsync();
 
         var quizAttempts = await _unitOfWork.QuizAttemptRepository
@@ -217,7 +272,7 @@ public class StudentRepository : IStudentRepository
             avgQuizScore = quizAttempts.Average(a => a.Score ?? 0);
         }
 
-        return (totalCasesViewed, totalQuestionsAsked, avgQuizScore);
+        return (totalCasesViewed, totalQuestionsAsked, quizzesCompleted, totalQuizAnswersSubmitted, avgQuizScore);
     }
 
     public async Task<CaseAnswer> CreateCaseAnswerAsync(CaseAnswer answer)

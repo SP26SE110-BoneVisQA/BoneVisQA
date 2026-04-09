@@ -69,6 +69,10 @@ public class AuthService : IAuthService
             Password = HashPassword(request.Password),
             SchoolCohort = request.SchoolCohort,
             IsActive = false,
+            IsMedicalStudent = request.IsMedicalStudent,
+            MedicalSchool = request.MedicalSchool,
+            MedicalStudentId = request.MedicalStudentId,
+            VerificationStatus = request.IsMedicalStudent ? "Pending" : null,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -131,7 +135,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin để được hỗ trợ."
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
             };
         }
 
@@ -219,19 +223,19 @@ public class AuthService : IAuthService
         var feBaseUrl = _env.IsDevelopment() 
             ? "http://localhost:3000" 
             : (_configuration["App:FrontendUrl"] ?? "http://localhost:3000");
-        var resetLink = $"{feBaseUrl.TrimEnd('/')}/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
+        var resetLink = $"{feBaseUrl.TrimEnd('/')}/auth/reset-password?token={Uri.EscapeDataString(resetToken.Token)}";
 
         var emailSent = await _emailService.SendPasswordResetEmailAsync(user.Email, resetLink);
 
         if (!emailSent)
         {
             var devMessage = _env.IsDevelopment()
-                ? $"Không thể gửi email. Token test (chỉ dev): {resetToken.Token}"
+                ? $"Email gửi thất bại. Token dev: {resetToken.Token}"
                 : "Không thể gửi email. Vui lòng thử lại sau.";
             return new AuthResultDto
             {
-                Success = false,
-                Message = devMessage
+                Success = true, // vẫn true để UI không hiện "lỗi" rõ ràng
+                Message = $"Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi.\n[Dev: {devMessage}]"
             };
         }
 
@@ -318,6 +322,109 @@ public class AuthService : IAuthService
         return Convert.ToBase64String(randomBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
 
+    public async Task<AuthResultDto> GoogleRegisterAsync(GoogleLoginRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdToken))
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Google ID Token là bắt buộc."
+            };
+        }
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            var settings = new GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { _configuration["Google:ClientId"] }
+            };
+            payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, settings);
+        }
+        catch (Exception)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Token Google không hợp lệ."
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(payload.Email))
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Tài khoản Google không cung cấp email."
+            };
+        }
+
+        var existing = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.GoogleId == payload.Subject || u.Email == payload.Email)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Email đã được đăng ký. Vui lòng đăng nhập."
+            };
+        }
+
+        var pendingRole = await _unitOfWork.RoleRepository
+            .FindByCondition(r => r.Name == "Pending")
+            .FirstOrDefaultAsync();
+
+        if (pendingRole == null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Role mặc định 'Pending' chưa được cấu hình trong hệ thống."
+            };
+        }
+
+        var now = DateTime.UtcNow;
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = payload.Name ?? payload.Email,
+            Email = payload.Email,
+            GoogleId = payload.Subject,
+            AvatarUrl = payload.Picture,
+            Password = null,
+            IsActive = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        await _unitOfWork.UserRepository.AddAsync(user);
+
+        var userRole = new UserRole
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            RoleId = pendingRole.Id,
+            AssignedAt = now
+        };
+
+        await _unitOfWork.UserRoleRepository.AddAsync(userRole);
+        await _unitOfWork.SaveAsync();
+
+        _ = _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Đăng ký thành công. Vui lòng chờ admin kích hoạt và gán vai trò. Kiểm tra email chào mừng.",
+            UserId = user.Id,
+            FullName = user.FullName,
+            Email = user.Email
+        };
+    }
+
     public async Task<AuthResultDto> GoogleLoginAsync(GoogleLoginRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.IdToken))
@@ -373,16 +480,16 @@ public class AuthService : IAuthService
             }
             else
             {
-                var studentRole = await _unitOfWork.RoleRepository
-                    .FindByCondition(r => r.Name == "Student")
+                var pendingRole = await _unitOfWork.RoleRepository
+                    .FindByCondition(r => r.Name == "Pending")
                     .FirstOrDefaultAsync();
 
-                if (studentRole == null)
+                if (pendingRole == null)
                 {
                     return new AuthResultDto
                     {
                         Success = false,
-                        Message = "Role 'Student' chưa được cấu hình trong hệ thống."
+                        Message = "Role 'Pending' chưa được cấu hình trong hệ thống."
                     };
                 }
 
@@ -394,7 +501,8 @@ public class AuthService : IAuthService
                     Email = payload.Email,
                     GoogleId = payload.Subject,
                     AvatarUrl = payload.Picture,
-                    IsActive = true,
+                    Password = null,
+                    IsActive = false,
                     CreatedAt = now,
                     UpdatedAt = now
                 };
@@ -405,30 +513,39 @@ public class AuthService : IAuthService
                 {
                     Id = Guid.NewGuid(),
                     UserId = user.Id,
-                    RoleId = studentRole.Id,
+                    RoleId = pendingRole.Id,
                     AssignedAt = now
                 };
 
                 await _unitOfWork.UserRoleRepository.AddAsync(userRole);
                 await _unitOfWork.SaveAsync();
+
+                _ = _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
+
+                return new AuthResultDto
+                {
+                    Success = true,
+                    Message = "Đăng nhập Google thành công. Vui lòng xác nhận thông tin y khoa để hoàn tất đăng ký.",
+                    UserId = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    RequiresMedicalVerification = true
+                };
             }
         }
 
-        if (user == null)
-        {
-            return new AuthResultDto
-            {
-                Success = false,
-                Message = "Không thể xử lý đăng nhập Google."
-            };
-        }
+        user = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.Id == user.Id)
+            .Include(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync() ?? user;
 
         if (!user.IsActive)
         {
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng liên hệ admin."
+                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
             };
         }
 
@@ -437,8 +554,10 @@ public class AuthService : IAuthService
         {
             return new AuthResultDto
             {
-                Success = false,
-                Message = "Tài khoản chưa được gán vai trò, liên hệ admin."
+                Success = true,
+                Message = "Tài khoản đang chờ xác minh y khoa. Vui lòng hoàn tất thông tin.",
+                UserId = user.Id,
+                RequiresMedicalVerification = true
             };
         }
 
@@ -457,6 +576,39 @@ public class AuthService : IAuthService
             FullName = user.FullName,
             Email = user.Email,
             Roles = roles
+        };
+    }
+
+    public async Task<AuthResultDto> RequestMedicalVerificationAsync(Guid userId, MedicalVerificationRequestDto request)
+    {
+        var user = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.Id == userId)
+            .FirstOrDefaultAsync();
+
+        if (user == null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Không tìm thấy người dùng."
+            };
+        }
+
+        user.IsMedicalStudent = true;
+        user.MedicalSchool = request.MedicalSchool;
+        user.MedicalStudentId = request.MedicalStudentId;
+        user.VerificationStatus = "Pending";
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.UserRepository.UpdateAsync(user);
+        await _unitOfWork.SaveAsync();
+
+        _ = _emailService.SendMedicalVerificationRequestedEmailAsync(user.Email, user.FullName);
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Yêu cầu xác nhận sinh viên y khoa đã được gửi. Vui lòng chờ admin duyệt."
         };
     }
 }

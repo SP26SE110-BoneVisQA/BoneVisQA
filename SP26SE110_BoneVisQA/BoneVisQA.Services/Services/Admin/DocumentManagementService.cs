@@ -49,11 +49,18 @@ namespace BoneVisQA.Services.Services.Admin
                 Version = doc.Version,
                 IsOutdated = doc.IsOutdated,
                 CreatedAt = doc.CreatedAt,
-                IndexingStatus = doc.IndexingStatus,
+                IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
                 CategoryId = doc.CategoryId,
                 CategoryName = category?.Name,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
             };
+        }
+
+        private static string NormalizeApiStatus(string? status)
+        {
+            return string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase)
+                ? "Completed"
+                : "Failed";
         }
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)
@@ -127,6 +134,34 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.SaveAsync();
 
             return await MapToDTOAsync(doc);
+        }
+
+        // ── GetCategoriesAsync ───────────────────────────────
+        public async Task<List<CategoryDto>> GetCategoriesAsync()
+        {
+            var categories = await _unitOfWork.CategoryRepository.GetAllAsync();
+            return categories
+                .OrderBy(c => c.Name)
+                .Select(c => new CategoryDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Description = c.Description
+                }).ToList();
+        }
+
+        // ── GetTagsAsync ────────────────────────────────────
+        public async Task<List<TagDto>> GetTagsAsync()
+        {
+            var tags = await _unitOfWork.TagRepository.GetAllAsync();
+            return tags
+                .OrderBy(t => t.Name)
+                .Select(t => new TagDto
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    Type = t.Type
+                }).ToList();
         }
     }
 }

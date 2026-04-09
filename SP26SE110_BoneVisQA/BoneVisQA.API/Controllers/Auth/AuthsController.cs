@@ -16,6 +16,7 @@ namespace BoneVisQA.API.Controllers.Auth;
 
 [ApiController]
 [Route("api/[controller]")]
+[Tags("Auth")]
 [AllowAnonymous]
 public class AuthsController : ControllerBase
 {
@@ -122,6 +123,62 @@ public class AuthsController : ControllerBase
         if (result.UserId.HasValue)
         {
             result.Token = GenerateJwtToken(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Đăng ký bằng Google: tạo tài khoản Pending, gửi email chào mừng, chờ admin gán vai trò.
+    /// </summary>
+    [HttpPost("google-register")]
+    public async Task<IActionResult> GoogleRegister([FromBody] GoogleLoginRequestDto request)
+    {
+        var result = await _authService.GoogleRegisterAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gửi yêu cầu xác minh sinh viên y khoa (dành cho user đã đăng nhập bằng Google).
+    /// </summary>
+    [HttpPost("request-medical-verification")]
+    public async Task<IActionResult> RequestMedicalVerification(
+        [FromBody] MedicalVerificationRequestDto request,
+        [FromHeader(Name = "X-User-Id")] string? headerUserId = null)
+    {
+        Guid userId;
+
+        // Ưu tiên lấy từ JWT claims (user đã đăng nhập)
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+        if (!string.IsNullOrWhiteSpace(userIdClaim) && Guid.TryParse(userIdClaim, out var claimUserId))
+        {
+            userId = claimUserId;
+        }
+        // Fallback: lấy từ header X-User-Id (user Pending - chưa có token)
+        else if (!string.IsNullOrWhiteSpace(headerUserId) && Guid.TryParse(headerUserId, out var headerUid))
+        {
+            userId = headerUid;
+        }
+        else
+        {
+            return Unauthorized(new AuthResultDto
+            {
+                Success = false,
+                Message = "Không xác định được người dùng."
+            });
+        }
+
+        var result = await _authService.RequestMedicalVerificationAsync(userId, request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
         }
 
         return Ok(result);

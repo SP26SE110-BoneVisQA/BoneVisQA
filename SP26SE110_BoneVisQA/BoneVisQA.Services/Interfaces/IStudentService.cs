@@ -9,11 +9,14 @@ namespace BoneVisQA.Services.Interfaces;
 
 public interface IStudentService
 {
+    Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null);
     Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId);
 
     Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter);
 
     Task<CaseDetailDto?> GetCaseDetailAsync(Guid caseId, Guid studentId);
+
+    Task<IReadOnlyList<StudentCaseHistoryItemDto>> GetCaseHistoryAsync(Guid studentId);
 
     Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request);
 
@@ -36,5 +39,20 @@ public interface IStudentService
     Task<StudentProgressDto> GetProgressAsync(Guid studentId);
 
     Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDto submit);
+
+    /// <summary>
+    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// </summary>
+    Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId);
+
+    /// <summary>
+    /// Trả về chi tiết đầy đủ của một lớp học (quiz, sinh viên, thông báo) — chỉ khi student đã đăng ký lớp đó.
+    /// </summary>
+    Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId);
+
+    /// <summary>
+    /// Sinh viên tự rời lớp (xóa ClassEnrollment của chính mình).
+    /// </summary>
+    Task LeaveEnrolledClassAsync(Guid studentId, Guid classId);
 }
 

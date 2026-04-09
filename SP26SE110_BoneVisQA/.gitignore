@@ -1,0 +1,18 @@
+# Visual Studio (cache — không commit, tránh Permission denied khi commit)
+.vs/
+**/.vs/
+*.vsidx
+*.suo
+*.user
+*.userosscache
+
+# Build
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.dll
+*.pdb
+
+# NuGet
+**/packages/

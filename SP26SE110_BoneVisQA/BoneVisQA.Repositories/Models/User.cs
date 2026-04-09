@@ -48,11 +48,92 @@ public partial class User
     [MaxLength(1024)]
     public string? AvatarUrl { get; set; }
 
+    [Column("department")]
+    [MaxLength(256)]
+    public string? Department { get; set; }
+
+    [Column("specialty")]
+    [MaxLength(256)]
+    public string? Specialty { get; set; }
+
+    [Column("date_of_birth")]
+    public DateOnly? DateOfBirth { get; set; }
+
+    [Column("phone_number")]
+    [MaxLength(256)]
+    public string? PhoneNumber { get; set; }
+
+    [Column("gender")]
+    [MaxLength(32)]
+    public string? Gender { get; set; }
+
+    /// <summary>Mã sinh viên theo trường (cột student_id).</summary>
+    [Column("student_id")]
+    [MaxLength(256)]
+    public string? StudentSchoolId { get; set; }
+
+    [Column("class_code")]
+    [MaxLength(256)]
+    public string? ClassCode { get; set; }
+
+    [Column("address")]
+    public string? Address { get; set; }
+
+    [Column("bio")]
+    public string? Bio { get; set; }
+
+    [Column("emergency_contact")]
+    [MaxLength(256)]
+    public string? EmergencyContact { get; set; }
+
+    // Medical Student Verification Fields
+    [Column("is_medical_student")]
+    public bool IsMedicalStudent { get; set; } = false;
+
+    [Column("medical_school")]
+    [MaxLength(256)]
+    public string? MedicalSchool { get; set; }
+
+    [Column("medical_student_id")]
+    [MaxLength(100)]
+    public string? MedicalStudentId { get; set; }
+
+    [Column("verification_status")]
+    [MaxLength(50)]
+    public string? VerificationStatus { get; set; } // "Pending", "Approved", "Rejected"
+
+    [Column("verification_notes")]
+    public string? VerificationNotes { get; set; }
+
+    [Column("verified_at")]
+    public DateTime? VerifiedAt { get; set; }
+
+    [Column("verified_by")]
+    public Guid? VerifiedBy { get; set; }
+
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
 
+    [InverseProperty("Expert")]
+    public virtual ICollection<AcademicClass> ExpertAcademicClasses { get; set; } = new List<AcademicClass>();
+
+    [InverseProperty("CreatedByExpert")]
+    public virtual ICollection<MedicalCase> CreatedMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("AssignedExpert")]
+    public virtual ICollection<MedicalCase> AssignedMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("CreatedByExpert")]
+    public virtual ICollection<Quiz> CreatedQuizzes { get; set; } = new List<Quiz>();
+
+    [InverseProperty("AssignedExpert")]
+    public virtual ICollection<Quiz> AssignedQuizzes { get; set; } = new List<Quiz>();
+
     [InverseProperty("ReviewedBy")]
     public virtual ICollection<CaseAnswer> CaseAnswers { get; set; } = new List<CaseAnswer>();
+
+    [InverseProperty("EscalatedBy")]
+    public virtual ICollection<CaseAnswer> EscalatedCaseAnswers { get; set; } = new List<CaseAnswer>();
 
     [InverseProperty("Student")]
     public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();
@@ -74,4 +155,7 @@ public partial class User
 
     [InverseProperty("User")]
     public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
+    [InverseProperty("User")]
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

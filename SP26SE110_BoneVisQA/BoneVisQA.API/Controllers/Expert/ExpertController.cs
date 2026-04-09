@@ -2,6 +2,7 @@ using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Services;
+using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +10,8 @@ namespace BoneVisQA.API.Controllers.Expert
 {
     [Authorize(Roles = "Expert")]
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/expert")]
+    [Tags("Expert")]
     public class ExpertController : ControllerBase
     {
         private readonly IMedicalCaseService _medicalcaseService;
@@ -22,9 +24,16 @@ namespace BoneVisQA.API.Controllers.Expert
             _quizService = quizService;
             _tagCaseService = tagCaseService;
         }
+        [HttpGet("cases")]
+        public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize);
+
+            return Ok(result);
+        }
 
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(MedicalCaseDTOResponse dto)
+        public async Task<IActionResult> CreateCase(CreateMedicalCaseRequestDTO dto)
         {
             var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
 
@@ -33,6 +42,28 @@ namespace BoneVisQA.API.Controllers.Expert
                 message = "Medical case created successfully",
                 caseId
             });
+        }
+
+        [HttpPut("cases/{id}")]
+        public async Task<IActionResult> UpdateMedicalCase(Guid id,UpdateMedicalCaseDTORequest request)
+        {
+            var result = await _medicalcaseService.UpdateMedicalCaseAsync(id, request);
+
+            if (result == null)
+                return NotFound("Medical case not found");
+
+            return Ok(result);
+        }
+
+        [HttpDelete("cases/{id}")]
+        public async Task<IActionResult> DeleteMedicalCase(Guid id)
+        {
+            var result = await _medicalcaseService.DeleteMedicalCaseAsync(id);
+
+            if (!result)
+                return NotFound("Medical case not found");
+
+            return Ok("Delete medical case successfully");
         }
 
         [HttpPost("images")]
@@ -56,9 +87,20 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+        //=====================================================   QUIZ  ==========================================================
+        [HttpGet("quizzes")]
+        public async Task<IActionResult> GetQuizzes(int pageIndex = 1, int pageSize = 10)
+        {
+            var result = await _quizService.GetQuizDTO(pageIndex, pageSize);
 
+            return Ok(new
+            {
+                message = "Get quizzes successfully",
+                result
+            });
+        }
         [HttpPost("quizzes")]
-        public async Task<IActionResult> CreateQuiz([FromBody] QuizDto request)
+        public async Task<IActionResult> CreateQuiz([FromBody] CreateQuizRequestDTO request)
         {
             if (request == null)
             {
@@ -73,16 +115,60 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
-
-        [HttpPost("quizzes/{quizId}/questions")]
-        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionDto request)
+        [HttpPut("quizzes")]
+        public async Task<IActionResult> UpdateQuiz(UpdateQuizRequestDTO request)
         {
             if (request == null)
             {
                 return BadRequest("Invalid request");
             }
 
-            var result = await _quizService.CreateQuestionAsync(quizId, request);
+            var result = await _quizService.UpdateQuizAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz updated successfully",
+                result
+            });
+        }
+        [HttpDelete("quizzes/{quizId}")]
+        public async Task<IActionResult> DeleteQuiz(Guid quizId)
+        {
+            var deleted = await _quizService.DeleteQuizAsync(quizId);
+
+            if (!deleted)
+            {
+                return NotFound("Quiz not found");
+            }
+
+            return Ok(new
+            {
+                message = "Quiz deleted successfully"
+            });
+        }
+
+        //=====================================================   QUESTION  ==========================================================
+
+        [HttpGet("quizzes/{quizId}/questions")]
+        public async Task<IActionResult> GetQuestionsByQuiz(Guid quizId)
+        {
+            var result = await _quizService.GetQuizQuestionDTO(quizId);
+
+            return Ok(new
+            {
+                message = "Get quiz questions successfully",
+                result
+            });
+        }
+        [HttpPost("quizzes/{quizId}/questions")]
+        public async Task<IActionResult> CreateQuestion(Guid quizId, CreateQuizQuestionRequestDTO request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            var result = await _quizService.CreateQuizQuestionAsync(quizId, request);
 
             return Ok(new
             {
@@ -90,18 +176,48 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
-
-        [HttpPost("class/{classId}/assign/{quizId}")]
-        public async Task<IActionResult> AssignToClass(Guid classId, Guid quizId)
+        [HttpPut("questions")]
+        public async Task<IActionResult> UpdateQuestion(UpdateQuizQuestionRequestDTO request)
         {
-            var result = await _quizService.AssignQuizToClassAsync(classId, quizId);
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            var result = await _quizService.UpdateQuizQuestionAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz question updated successfully",
+                result
+            });
+        }
+        [HttpDelete("questions/{questionId}")]
+        public async Task<IActionResult> DeleteQuestion(Guid questionId)
+        {
+            var deleted = await _quizService.DeleteQuizQuestionAsync(questionId);
+
+            if (!deleted)
+            {
+                return NotFound("Question not found");
+            }
+
+            return Ok(new
+            {
+                message = "Quiz question deleted successfully"
+            });
+        }
+        //================================================================================================================
+        [HttpPost("assign")]
+        public async Task<IActionResult> AssignToClass(AssignQuizRequestDTO dto)
+        {
+            var result = await _quizService.AssignQuizToClassAsync(dto);
             return Ok(new
             {
                 Message = "AssignQuiz successfully.",
                 result
             });
         }
-
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {

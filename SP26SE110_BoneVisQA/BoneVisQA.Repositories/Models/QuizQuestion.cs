@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -39,6 +39,9 @@ public partial class QuizQuestion
 
     [Column("correct_answer")]
     public string? CorrectAnswer { get; set; }
+
+    [Column("image_url")]
+    public string? ImageUrl { get; set; }
 
     [ForeignKey("CaseId")]
     [InverseProperty("QuizQuestions")]

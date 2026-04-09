@@ -128,9 +128,7 @@ namespace BoneVisQA.Repositories.Basic
         }
 
         // 2. FindIncludeAsync
-        public virtual async Task<List<TEntity>> FindIncludeAsync(
-            Expression<Func<TEntity, bool>> filter,
-            params Expression<Func<TEntity, object>>[] includes)
+        public virtual async Task<List<TEntity>> FindIncludeAsync(Expression<Func<TEntity, bool>> filter,params Expression<Func<TEntity, object>>[] includes)
         {
             IQueryable<TEntity> query = _dbSet.Where(filter);
             foreach (var include in includes)
@@ -161,7 +159,10 @@ namespace BoneVisQA.Repositories.Basic
         {
             return _dbSet.Where(expression);
         }
-
+        public IQueryable<TEntity> GetQueryable()
+        {
+            return _context.Set<TEntity>().AsQueryable();
+        }
         public async Task<int> DeleteAsync(Guid id)
         {
 
@@ -174,9 +175,6 @@ namespace BoneVisQA.Repositories.Basic
             }
             return 0;
         }
-
-
-
         public virtual async Task<IList<TEntity>> GetAllAsync(Expression<Func<IQueryable<TEntity>, IQueryable<TEntity>>>? include)
         {
             IQueryable<TEntity> query = _dbSet;

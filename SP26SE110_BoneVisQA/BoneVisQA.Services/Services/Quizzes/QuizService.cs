@@ -26,8 +26,12 @@ public class QuizService : IQuizService
         {
             Id = Guid.NewGuid(),
             Title = request.Title,
-            OpenTime = request.OpenTime,
-            CloseTime = request.CloseTime,
+            Topic = request.Topic,
+            IsAiGenerated = request.IsAiGenerated,
+            Difficulty = request.Difficulty,
+            Classification = request.Classification,
+            OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+            CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
             CreatedAt = now
@@ -38,13 +42,18 @@ public class QuizService : IQuizService
 
         if (request.ClassId != Guid.Empty)
         {
-            var classQuiz = new ClassQuiz
+            var classQuiz = new ClassQuizSession
             {
+                Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                AssignedAt = now
+                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
+                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+                PassingScore = request.PassingScore,
+                TimeLimitMinutes = request.TimeLimit,
+                CreatedAt = now
             };
-            await _unitOfWork.ClassQuizRepository.AddAsync(classQuiz);
+            await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
             await _unitOfWork.SaveAsync();
         }
 
@@ -82,9 +91,10 @@ public class QuizService : IQuizService
 
     public async Task<List<QuizDto>> GetQuizzesByClassAsync(Guid classId)
     {
-        var quizIds = await _unitOfWork.ClassQuizRepository
-            .FindByCondition(cq => cq.ClassId == classId)
-            .Select(cq => cq.QuizId)
+        var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
             .ToListAsync();
 
         if (quizIds.Count == 0)
@@ -101,6 +111,10 @@ public class QuizService : IQuizService
             Id = q.Id,
             ClassId = classId,
             Title = q.Title,
+            Topic = q.Topic,
+            IsAiGenerated = q.IsAiGenerated,
+            Difficulty = q.Difficulty,
+            Classification = q.Classification,
             OpenTime = q.OpenTime,
             CloseTime = q.CloseTime,
             TimeLimit = q.TimeLimit,
@@ -121,6 +135,10 @@ public class QuizService : IQuizService
             Id = q.Id,
             ClassId = Guid.Empty,
             Title = q.Title,
+            Topic = q.Topic,
+            IsAiGenerated = q.IsAiGenerated,
+            Difficulty = q.Difficulty,
+            Classification = q.Classification,
             OpenTime = q.OpenTime,
             CloseTime = q.CloseTime,
             TimeLimit = q.TimeLimit,

@@ -1,6 +1,10 @@
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using BoneVisQA.API;
+using BoneVisQA.API.Hubs;
+using BoneVisQA.API.Policies;
+using BoneVisQA.API.Services;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
@@ -11,15 +15,19 @@ using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
+using BoneVisQA.Services.Services.DocumentUpload;
+using BoneVisQA.Services.Services.Rag;
 using BoneVisQA.Services.Services.Auth;
 using BoneVisQA.Services.Services.Email;
 using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
+using BoneVisQA.Services.Services.AiQuizServices;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -45,14 +53,35 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+        var origins = configuredOrigins
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Select(o => o.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (origins.Length == 0)
+        {
+            // Safe local defaults for development when config is absent.
+            origins = new[]
+            {
+                "http://localhost:3000",
+                "https://localhost:3000",
+                "http://localhost:5173",
+                "https://localhost:5173"
+            };
+        }
+
+        policy.WithOrigins(origins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddMemoryCache();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
@@ -85,6 +114,9 @@ builder.Services.AddSwaggerGen(c =>
     c.OperationFilter<SwaggerAuthFilter>();
 });
 
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, JwtUserIdProvider>();
+
 builder.Services.AddDbContext<BoneVisQADbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
         npgsqlOptions =>
@@ -111,6 +143,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                // SignalR WebSocket fallback: access_token in query string.
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddGoogle(options =>
     {
@@ -127,25 +176,39 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
 builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-});
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 
 builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
 builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-});
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
+builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
+builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
+builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
+builder.Services.AddScoped<IRagExpertAnswerIndexingSignal, NoOpRagExpertAnswerIndexingSignal>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILecturerService, LecturerService>();
+builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService>();
+builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
+builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
+builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
+builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
+builder.Services.AddScoped<IAIQuizService, AIQuizService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -155,22 +218,29 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
 });
 
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
+builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
+builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
+builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
 builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 var app = builder.Build();
 
 app.UseCors("AllowAll");
 app.UseSwagger();
 app.UseSwaggerUI();
-//app.UseHttpsRedirection();
+app.UseHttpsRedirection();
+//
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 // Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)
 // Token lấy từ URL: /reset-password?token=XXX (KHÔNG phải JWT từ login!)
@@ -179,7 +249,7 @@ app.MapGet("/reset-password", (HttpContext ctx) =>
     var token = ctx.Request.Query["token"].ToString();
     if (string.IsNullOrEmpty(token))
     {
-        return Results.Content(@"<!DOCTYPE html><html><body><h1>Lỗi</h1><p class=""error"">Thiếu token. Vui lòng dùng link từ email.</p><p><a href=""/swagger"">Về trang chủ</a></p></body></html>", "text/html; charset=utf-8");
+        return Results.Content(@"<!DOCTYPE html><html><body><h1>Error</h1><p class=""error"">Token missing. Please use the link from your email.</p><p><a href=""/swagger"">Go to homepage</a></p></body></html>", "text/html; charset=utf-8");
     }
     var tokenEscaped = token.Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
     var html = @"<!DOCTYPE html>

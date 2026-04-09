@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Pgvector;
@@ -11,25 +12,34 @@ namespace BoneVisQA.Services.Services;
 
 public class DocumentService : IDocumentService
 {
+    private const string InternalProcessingStatus = "Processing";
+    private const string CompletedStatus = "Completed";
+    private const string FailedStatus = "Failed";
+    private const string NoExtractableTextLog = "Uploaded PDF contains no extractable text-base content.";
+    private const string ProgressCacheKeyPrefix = "document-ingestion-progress:";
+
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMemoryCache _memoryCache;
     private readonly ILogger<DocumentService> _logger;
 
     public DocumentService(
         IUnitOfWork unitOfWork,
         ISupabaseStorageService storageService,
         IServiceScopeFactory scopeFactory,
+        IMemoryCache memoryCache,
         ILogger<DocumentService> logger)
     {
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _scopeFactory = scopeFactory;
+        _memoryCache = memoryCache;
         _logger = logger;
     }
 
     /// <summary>
-    /// Uploads the PDF to storage, persists metadata with <see cref="Document.IndexingStatus"/> = Processing,
+    /// Uploads the PDF to storage, persists metadata with an internal processing state,
     /// then returns immediately. Text extraction, chunking, and embeddings run in a fire-and-forget background task
     /// so the HTTP response is not blocked by heavy RAG ingestion.
     /// </summary>
@@ -43,7 +53,7 @@ public class DocumentService : IDocumentService
             Title = metadata.Title,
             FilePath = fileUrl,
             CategoryId = metadata.CategoryId,
-            IndexingStatus = "Processing",
+            IndexingStatus = InternalProcessingStatus,
             Version = 1,
             IsOutdated = false,
             CreatedAt = DateTime.UtcNow
@@ -51,6 +61,29 @@ public class DocumentService : IDocumentService
 
         await _unitOfWork.DocumentRepository.AddAsync(document);
         await _unitOfWork.SaveAsync();
+        SetProgress(docId: document.Id, 0, "Queued for ingestion...");
+
+        // documents.category_id is 1-to-many, while document_tags is the many-to-many mapping.
+        if (metadata.TagIds != null && metadata.TagIds.Count > 0)
+        {
+            var tagIds = metadata.TagIds
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (tagIds.Count > 0)
+            {
+                var toAdd = tagIds.Select(tagId => new DocumentTag
+                {
+                    DocumentId = document.Id,
+                    TagId = tagId,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+
+                await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
+                await _unitOfWork.SaveAsync();
+            }
+        }
 
         var docId = document.Id;
         var url = fileUrl;
@@ -106,10 +139,11 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document == null || string.IsNullOrEmpty(document.FilePath)) return false;
 
-        document.IndexingStatus = "Processing";
+        document.IndexingStatus = InternalProcessingStatus;
         document.Version += 1;
         await _unitOfWork.DocumentRepository.UpdateAsync(document);
         await _unitOfWork.SaveAsync();
+        SetProgress(docId: document.Id, 0, "Queued for re-indexing...");
 
         var docId = document.Id;
         var url = document.FilePath;
@@ -137,10 +171,49 @@ public class DocumentService : IDocumentService
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document != null)
         {
-            document.IndexingStatus = status;
+            document.IndexingStatus = NormalizeStoredStatus(status);
             await _unitOfWork.DocumentRepository.UpdateAsync(document);
             await _unitOfWork.SaveAsync();
         }
+    }
+
+    public string MapStatusForApi(string? rawStatus)
+    {
+        return NormalizeApiStatus(rawStatus);
+    }
+
+    public async Task<DocumentIngestionStatusDto?> GetIngestionStatusAsync(Guid id)
+    {
+        var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
+        if (document == null)
+            return null;
+
+        var normalizedStatus = NormalizeApiStatus(document.IndexingStatus);
+        if (_memoryCache.TryGetValue(GetProgressCacheKey(id), out DocumentIngestionStatusDto? progress)
+            && progress != null)
+        {
+            if (!string.Equals(normalizedStatus, InternalProcessingStatus, StringComparison.OrdinalIgnoreCase))
+            {
+                progress.Status = normalizedStatus;
+                if (string.Equals(normalizedStatus, CompletedStatus, StringComparison.OrdinalIgnoreCase))
+                    progress.ProgressPercentage = 100;
+                else if (string.Equals(normalizedStatus, FailedStatus, StringComparison.OrdinalIgnoreCase))
+                    progress.ProgressPercentage = Math.Min(progress.ProgressPercentage, 99);
+            }
+
+            return progress;
+        }
+
+        return new DocumentIngestionStatusDto
+        {
+            Status = normalizedStatus,
+            ProgressPercentage = string.Equals(normalizedStatus, CompletedStatus, StringComparison.OrdinalIgnoreCase) ? 100 : 0,
+            CurrentOperation = string.Equals(normalizedStatus, CompletedStatus, StringComparison.OrdinalIgnoreCase)
+                ? "Completed."
+                : string.Equals(normalizedStatus, FailedStatus, StringComparison.OrdinalIgnoreCase)
+                    ? "Failed."
+                    : "Queued for ingestion..."
+        };
     }
 
     public async Task IngestDocumentInBackgroundAsync(Guid docId, string fileUrl)
@@ -154,10 +227,29 @@ public class DocumentService : IDocumentService
 
             _logger.LogInformation("Background ingestion started for Document ID {DocumentId}", docId);
 
-            await SetStatusAsync(uow, docId, "Processing");
+            await SetStatusAsync(uow, docId, InternalProcessingStatus);
+            SetProgress(docId, 10, "Downloading and opening PDF...");
 
             var fullText = await pdf.DownloadAndExtractPdfTextAsync(fileUrl);
+            SetProgress(docId, 30, "Extracting raw text...");
+            if (string.IsNullOrWhiteSpace(fullText))
+            {
+                _logger.LogError(NoExtractableTextLog);
+                await SetStatusAsync(uow, docId, FailedStatus);
+                SetProgress(docId, 100, "Failed.");
+                throw new EmbeddingFailedException(NoExtractableTextLog);
+            }
+
             var chunkTexts = SplitTextRecursively(fullText, maxSize: 800, overlap: 150);
+
+            if (chunkTexts.Count == 0 || chunkTexts.Sum(c => c.Length) == 0)
+            {
+                _logger.LogError(NoExtractableTextLog);
+                await SetStatusAsync(uow, docId, FailedStatus);
+                SetProgress(docId, 100, "Failed.");
+                throw new EmbeddingFailedException(NoExtractableTextLog);
+            }
+
             _logger.LogInformation("Extracted {ChunkCount} chunks. Starting embedding generation...", chunkTexts.Count);
 
             var existing = await uow.DocumentChunkRepository.FindAsync(c => c.DocId == docId);
@@ -170,6 +262,8 @@ public class DocumentService : IDocumentService
             var entities = new List<DocumentChunk>();
             for (var i = 0; i < chunkTexts.Count; i++)
             {
+                var progress = (int)Math.Round((i + 1d) / chunkTexts.Count * 50d + 40d);
+                SetProgress(docId, progress, $"Vectorizing chunk {i + 1} of {chunkTexts.Count}...");
                 var vec = await embedding.EmbedTextAsync(chunkTexts[i]);
                 entities.Add(new DocumentChunk
                 {
@@ -188,18 +282,21 @@ public class DocumentService : IDocumentService
                 await uow.DocumentChunkRepository.AddRangeAsync(entities);
 
             await uow.SaveAsync();
-            await SetStatusAsync(uow, docId, "Completed");
+            await SetStatusAsync(uow, docId, CompletedStatus);
+            SetProgress(docId, 100, "Completed.");
             _logger.LogInformation("Background ingestion completed successfully for Document ID {DocumentId}", docId);
         }
         catch (EmbeddingFailedException ex)
         {
             _logger.LogError(ex, "Embedding failed; aborting ingestion for Document ID {DocumentId}", docId);
             await MarkIndexingFailedInNewScopeAsync(docId);
+            SetProgress(docId, 100, "Failed.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "FATAL ERROR in background ingestion for Document ID {DocumentId}", docId);
             await MarkIndexingFailedInNewScopeAsync(docId);
+            SetProgress(docId, 100, "Failed.");
         }
     }
 
@@ -212,7 +309,7 @@ public class DocumentService : IDocumentService
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            await SetStatusAsync(uow, docId, "Failed");
+            await SetStatusAsync(uow, docId, FailedStatus);
             _logger.LogWarning("Document {DocumentId} IndexingStatus set to Failed (new DbContext scope).", docId);
         }
         catch (Exception inner)
@@ -226,7 +323,7 @@ public class DocumentService : IDocumentService
         var doc = await uow.DocumentRepository.GetByIdAsync(docId);
         if (doc != null)
         {
-            doc.IndexingStatus = status;
+            doc.IndexingStatus = NormalizeStoredStatus(status);
             await uow.DocumentRepository.UpdateAsync(doc);
             await uow.SaveAsync();
         }
@@ -238,11 +335,31 @@ public class DocumentService : IDocumentService
         Title = doc.Title,
         FilePath = doc.FilePath,
         CategoryId = doc.CategoryId,
-        IndexingStatus = doc.IndexingStatus,
+        IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
         Version = doc.Version,
         IsOutdated = doc.IsOutdated,
         CreatedAt = doc.CreatedAt
     };
+
+    private static string NormalizeStoredStatus(string? status)
+    {
+        if (string.Equals(status, CompletedStatus, StringComparison.OrdinalIgnoreCase))
+            return CompletedStatus;
+        if (string.Equals(status, FailedStatus, StringComparison.OrdinalIgnoreCase))
+            return FailedStatus;
+
+        return InternalProcessingStatus;
+    }
+
+    private static string NormalizeApiStatus(string? status)
+    {
+        if (string.Equals(status, CompletedStatus, StringComparison.OrdinalIgnoreCase))
+            return CompletedStatus;
+        if (string.Equals(status, InternalProcessingStatus, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "In Progress", StringComparison.OrdinalIgnoreCase))
+            return InternalProcessingStatus;
+        return FailedStatus;
+    }
 
     /// <summary>
     /// Recursive character text splitter for better RAG:
@@ -335,4 +452,22 @@ public class DocumentService : IDocumentService
         // Absolute fallback: hard cut.
         return windowLen;
     }
+
+    private void SetProgress(Guid docId, int percentage, string operation)
+    {
+        var value = new DocumentIngestionStatusDto
+        {
+            Status = percentage >= 100 && string.Equals(operation, "Completed.", StringComparison.OrdinalIgnoreCase)
+                ? CompletedStatus
+                : percentage >= 100 && string.Equals(operation, "Failed.", StringComparison.OrdinalIgnoreCase)
+                    ? FailedStatus
+                    : InternalProcessingStatus,
+            ProgressPercentage = Math.Clamp(percentage, 0, 100),
+            CurrentOperation = operation
+        };
+
+        _memoryCache.Set(GetProgressCacheKey(docId), value, TimeSpan.FromHours(4));
+    }
+
+    private static string GetProgressCacheKey(Guid docId) => $"{ProgressCacheKeyPrefix}{docId}";
 }

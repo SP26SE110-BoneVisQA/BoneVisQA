@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Services.Models.Admin;
+using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -17,5 +17,23 @@ namespace BoneVisQA.Services.Interfaces.Admin
         // ── Quản lý phiên bản & lỗi thời ────────────────────
         Task<DocumentDTO> UploadNewVersionAsync(Guid documentId);
         Task<DocumentDTO> MarkOutdatedAsync(Guid documentId, bool isOutdated);
+
+        // ── Danh sách categories & tags ──────────────────────
+        Task<List<CategoryDto>> GetCategoriesAsync();
+        Task<List<TagDto>> GetTagsAsync();
+    }
+
+    public class CategoryDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+
+    public class TagDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
     }
 }
