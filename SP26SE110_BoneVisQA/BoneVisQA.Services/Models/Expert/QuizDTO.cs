@@ -234,6 +234,7 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TimeLimitMinutes { get; set; }
     }
 
+<<<<<<< Updated upstream
     public class GetClassDTO 
     { 
         public Guid Id { get; set; } 
@@ -245,6 +246,10 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid Id { get; set; } 
         public string FullName { get; set; } = null!; 
     }
+=======
+    public class GetClassDTO { public Guid Id { get; set; } public string ClassName { get; set; } = null!; }
+    public class GetExpertDTO { public Guid Id { get; set; } public string FullName { get; set; } = null!; }
+>>>>>>> Stashed changes
 
     public class GetQuizAttemptDTO
     {
@@ -257,4 +262,8 @@ namespace BoneVisQA.Services.Models.Expert
         public DateTime? CompletedAt { get; set; }
         public double? Score { get; set; }
     }
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 }

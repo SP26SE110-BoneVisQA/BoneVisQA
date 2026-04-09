@@ -143,4 +143,16 @@ namespace BoneVisQA.Services.Models.Expert
         public string ImageUrl { get; set; } = null!;
         public string FileName { get; set; } = null!;
     }
+<<<<<<< Updated upstream
+=======
+
+    public class GetAllAnnotationDTO
+    {
+        public Guid Id { get; set; }
+        public string ImageUrl { get; set; } = null!;
+        public string Label { get; set; } = null!;
+        public string? Coordinates { get; set; }
+        
+    }
+>>>>>>> Stashed changes
 }

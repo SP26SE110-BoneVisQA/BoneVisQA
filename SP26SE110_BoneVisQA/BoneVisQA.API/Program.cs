@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
@@ -5,34 +6,44 @@ using BoneVisQA.API;
 using BoneVisQA.API.Hubs;
 using BoneVisQA.API.Policies;
 using BoneVisQA.API.Services;
+=======
+using BoneVisQA.API;
+using BoneVisQA.Domain.Settings;
+>>>>>>> Stashed changes
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Domain.Settings;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
+<<<<<<< Updated upstream
 using BoneVisQA.Services.Services.DocumentUpload;
 using BoneVisQA.Services.Services.Rag;
+=======
+using BoneVisQA.Services.Services.AiQuizServices;
+>>>>>>> Stashed changes
 using BoneVisQA.Services.Services.Auth;
 using BoneVisQA.Services.Services.Email;
 using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
-using BoneVisQA.Services.Services.AiQuizServices;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHttpContextAccessor();
 
 // Align with Supabase free-tier storage limits (50 MB max upload).
 builder.WebHost.ConfigureKestrel(options =>
@@ -249,6 +260,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "uploads")),
+    RequestPath = "/uploads"
+});
 
 // Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)
 // Token lấy từ URL: /reset-password?token=XXX (KHÔNG phải JWT từ login!)

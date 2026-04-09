@@ -8,8 +8,12 @@ namespace BoneVisQA.API.Controllers.Expert;
 
 [ApiController]
 [Route("api/expert/dashboard")]
+<<<<<<< Updated upstream
 [Tags("Expert - Dashboard")]
 [Authorize(Roles = "Expert")]
+=======
+//[Authorize(Roles = "Expert")]
+>>>>>>> Stashed changes
 public class ExpertDashboardController : ControllerBase
 {
     private readonly IExpertDashboardService _expertDashboardService;
