@@ -57,10 +57,7 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
-# ASP.NET / local settings
-appsettings.Development.json
-*.Development.json
-launchSettings.json
+
 
 # Coverage / diagnostics
 *.coverage
