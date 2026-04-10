@@ -95,7 +95,7 @@ namespace BoneVisQA.Services.Services.Admin
             foreach (var doc in outdatedDocs)
                 dtos.Add(await BuildDTOAsync(doc));
 
-            return dtos.OrderBy(d => d.CreatedAt).ToList();
+            return dtos.OrderByDescending(d => d.CreatedAt ?? DateTime.MinValue).ToList();
         }
 
         public async Task<List<DocumentQualityDTO>> GetDocumentsFlaggedForReviewAsync()
@@ -111,7 +111,7 @@ namespace BoneVisQA.Services.Services.Admin
             }
 
             return dtos.OrderByDescending(d => d.NegativeReviewCount)
-                       .ThenBy(d => d.CreatedAt)
+                       .ThenByDescending(d => d.CreatedAt ?? DateTime.MinValue)
                        .ToList();
         }
     }
