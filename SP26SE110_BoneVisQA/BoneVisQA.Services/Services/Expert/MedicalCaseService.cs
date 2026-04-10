@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Student;
+using DocumentFormat.OpenXml.Office2016.Excel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,13 @@ namespace BoneVisQA.Services.Services.Expert
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWebHostEnvironment _env;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public MedicalCaseService(IUnitOfWork unitOfWork, IWebHostEnvironment env)
+        public MedicalCaseService(IUnitOfWork unitOfWork, IWebHostEnvironment env, IHttpContextAccessor httpContextAccessor)
         {
             _unitOfWork = unitOfWork;
             _env = env;
+            _httpContextAccessor = httpContextAccessor;
         }
         private async Task<string> SaveImageAsync(IFormFile file)
         {
@@ -245,7 +248,38 @@ namespace BoneVisQA.Services.Services.Expert
                 Coordinates = annotation.Coordinates
             };
         }
+        public async Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize)
+        {
+            var request = _httpContextAccessor.HttpContext.Request;
 
+            var baseUrl = $"{request.Scheme}://{request.Host}";
+
+            var query = _unitOfWork.CaseAnnotationRepository
+                .GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var annotations = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetAllAnnotationDTO
+                {
+                    Id = x.Id,
+                    ImageUrl = baseUrl + x.Image.ImageUrl,
+                    Label = x.Label,
+                    Coordinates = x.Coordinates
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetAllAnnotationDTO>
+            {
+                Items = annotations,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
         public async Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.CategoryRepository.GetQueryable();

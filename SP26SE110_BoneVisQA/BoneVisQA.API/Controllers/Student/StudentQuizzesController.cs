@@ -237,6 +237,31 @@ public class StudentQuizzesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer.
+    /// </summary>
+    [HttpPost("{quizId:guid}/request-retake")]
+    public async Task<ActionResult> RequestRetake(Guid quizId)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _studentService.RequestRetakeAsync(studentId.Value, quizId);
+            return Ok(new { message = "Retake request has been sent to your lecturer." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private Guid? GetUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);

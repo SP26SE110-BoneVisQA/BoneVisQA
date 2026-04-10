@@ -6,6 +6,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
+using BoneVisQA.Services.Models.Notification;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System;
@@ -30,13 +31,20 @@ public class StudentService : IStudentService
         IStudentRepository studentRepository,
         IUnitOfWork unitOfWork,
         ILogger<StudentService> logger,
-        IStudentLearningService studentLearningService)
+        IStudentLearningService studentLearningService,
+        INotificationService notificationService,
+        IEmailService emailService)
     {
         _studentRepository = studentRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
         _studentLearningService = studentLearningService;
+        _notificationService = notificationService;
+        _emailService = emailService;
     }
+
+    private readonly INotificationService _notificationService;
+    private readonly IEmailService _emailService;
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
     {
@@ -647,11 +655,12 @@ public class StudentService : IStudentService
 
         var classSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == quizId &&
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
         QuizAttempt attempt;
@@ -666,7 +675,7 @@ public class StudentService : IStudentService
                 if (!globalRetake && !lecturerRetake)
                 {
                     throw new InvalidOperationException(
-                        "Bạn đã nộp bài quiz này. Giảng viên sẽ cho phép làm lại khi cần.");
+                        "You have already submitted this quiz. Your lecturer will enable retake when needed.");
                 }
 
                 // Được retake: xóa đáp án cũ và reset
@@ -774,11 +783,12 @@ public class StudentService : IStudentService
             .ToListAsync();
 
         var session = await _unitOfWork.Context.ClassQuizSessions
+            .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == attempt.QuizId &&
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         if (session == null)
             throw new InvalidOperationException("Quiz đã hết thời gian làm bài.");
@@ -1116,5 +1126,69 @@ public class StudentService : IStudentService
         await _unitOfWork.ClassEnrollmentRepository.DeleteAsync(enrollment.Id);
         await _unitOfWork.SaveAsync();
         _logger.LogInformation("[LeaveEnrolledClassAsync] Student {StudentId} left class {ClassId}.", studentId, classId);
+    }
+
+    public async Task RequestRetakeAsync(Guid studentId, Guid quizId)
+    {
+        var student = await _unitOfWork.Context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == studentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy sinh viên.");
+
+        var quiz = await _unitOfWork.Context.Quizzes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        var classSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Class)
+            .Where(cqs => cqs.QuizId == quizId)
+            .Where(cqs => cqs.Class != null)
+            .ToListAsync();
+
+        if (classSession.Count == 0)
+            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+
+        // Gửi notification + email cho lecturer của mỗi lớp
+        foreach (var session in classSession)
+        {
+            var academicClass = session.Class!;
+            if (academicClass.LecturerId == null) continue;
+
+            // Notification (SignalR real-time)
+            var notifTitle = $"Retake Request: {quiz.Title}";
+            var notifMsg = $"Student \"{student.FullName}\" requested a retake for quiz \"{quiz.Title}\" in class \"{academicClass.ClassName}\".";
+            await _notificationService.SendNotificationToUserAsync(
+                academicClass.LecturerId.Value,
+                notifTitle,
+                notifMsg,
+                "retake_request",
+                $"/lecturer/quizzes/{quizId}/results"
+            );
+
+            // Email (nền — không chặn nếu thất bại)
+            try
+            {
+                var lecturer = await _unitOfWork.Context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == academicClass.LecturerId);
+                if (lecturer != null)
+                {
+                    await _emailService.SendRetakeRequestEmailAsync(
+                        lecturer.Email,
+                        student.FullName,
+                        quiz.Title,
+                        academicClass.ClassName,
+                        lecturer.FullName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[RequestRetakeAsync] Failed to send retake email for quiz {QuizId}", quizId);
+            }
+        }
+
+        _logger.LogInformation("[RequestRetakeAsync] Student {StudentId} requested retake for quiz {QuizId}", studentId, quizId);
     }
 }

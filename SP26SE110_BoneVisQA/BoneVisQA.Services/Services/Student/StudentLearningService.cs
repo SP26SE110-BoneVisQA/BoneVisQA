@@ -52,8 +52,8 @@ public class StudentLearningService : IStudentLearningService
             .Include(q => q.ClassQuizSessions)
             .Where(q => q.ClassQuizSessions.Any(cqs =>
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow)))
+                ((cqs.OpenTime ?? q.OpenTime) == null || (cqs.OpenTime ?? q.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? q.CloseTime) == null || (cqs.CloseTime ?? q.CloseTime) >= utcNow)))
             .Where(q => !q.IsAiGenerated)
             .Where(q => q.QuizQuestions.Any());
 
@@ -87,8 +87,8 @@ public class StudentLearningService : IStudentLearningService
             .Include(q => q.ClassQuizSessions)
             .Where(q => q.ClassQuizSessions.Any(cqs =>
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow)))
+                ((cqs.OpenTime ?? q.OpenTime) == null || (cqs.OpenTime ?? q.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? q.CloseTime) == null || (cqs.CloseTime ?? q.CloseTime) >= utcNow)))
             .Where(q => q.QuizQuestions.Any())
             .FirstOrDefaultAsync();
 
@@ -201,11 +201,12 @@ public class StudentLearningService : IStudentLearningService
                 .ToListAsync();
 
             var session = await _unitOfWork.Context.ClassQuizSessions
+                .Include(cqs => cqs.Quiz)
                 .FirstOrDefaultAsync(cqs =>
                     cqs.QuizId == attempt.QuizId &&
                     classIds.Contains(cqs.ClassId) &&
-                    (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                    (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                    ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                    ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
             if (session == null)
                 throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
@@ -582,7 +583,9 @@ public class StudentLearningService : IStudentLearningService
 
         // Tìm tất cả quiz sessions đã đóng
         var expiredSessions = await _unitOfWork.Context.ClassQuizSessions
-            .Where(s => s.CloseTime != null && s.CloseTime < utcNow)
+            .Include(s => s.Quiz)
+            .Where(s => (s.CloseTime ?? s.Quiz!.CloseTime) != null
+                        && (s.CloseTime ?? s.Quiz!.CloseTime) < utcNow)
             .Select(s => new { s.QuizId, s.ClassId })
             .ToListAsync();
 

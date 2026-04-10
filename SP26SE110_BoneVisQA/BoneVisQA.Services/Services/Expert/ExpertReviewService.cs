@@ -126,7 +126,7 @@ public class ExpertReviewService : IExpertReviewService
                 ExpertId = expertId,
                 AnswerId = answer.Id,
                 ReviewNote = request.ReviewNote,
-                Action = "Resolved",
+                Action = "Approve",
                 CreatedAt = DateTime.UtcNow
             };
             await _unitOfWork.ExpertReviewRepository.AddAsync(existingReview);
@@ -134,7 +134,7 @@ public class ExpertReviewService : IExpertReviewService
         else
         {
             existingReview.ReviewNote = request.ReviewNote;
-            existingReview.Action = "Resolved";
+            existingReview.Action = "Approve";
             await _unitOfWork.ExpertReviewRepository.UpdateAsync(existingReview);
         }
 
@@ -198,8 +198,8 @@ public class ExpertReviewService : IExpertReviewService
                     e.Class.ExpertId == expertId) ||
                  c.Answer.ExpertReviews.Any(r => r.ExpertId == expertId)));
 
-        if (!canReviewChunk)
-            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+        //if (!canReviewChunk)
+        //    throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
 
         if (!chunk.IsFlagged)
         {

@@ -442,6 +442,30 @@ namespace BoneVisQA.Services.Services.Expert
                 TimeLimitMinutes = classQuiz.TimeLimitMinutes
             };
         }
+        public async Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId)
+        {
+            var attempts = await _unitOfWork.QuizAttemptRepository
+        .GetQueryable()
+        .Where(x => x.QuizId == quizId)
+        .Select(x => new GetQuizAttemptDTO
+        {
+            AttemptId = x.Id,
+            QuizId = x.QuizId,
+
+            StudentId = x.StudentId,
+            StudentName = x.Student.FullName,
+
+            QuizTitle = x.Quiz.Title,
+
+            StartedAt = x.StartedAt,
+            CompletedAt = x.CompletedAt,
+            Score = x.Score
+        })
+        .ToListAsync();
+
+            return attempts;
+        }
+
         public async Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId)
         {
             var attempt = await _unitOfWork.QuizAttemptRepository
@@ -486,20 +510,6 @@ namespace BoneVisQA.Services.Services.Expert
                 IsPassed = isPassed,
                 CompletedAt = attempt.CompletedAt
             };
-        }
-        public async Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId)
-        {
-            var attempts = await _unitOfWork.QuizAttemptRepository
-                .FindAsync(x => x.QuizId == quizId);
-
-            return attempts.Select(x => new GetQuizAttemptDTO
-            {
-                AttemptId = x.Id,
-                StudentId = x.StudentId,
-                StartedAt = x.StartedAt,
-                CompletedAt = x.CompletedAt,
-                Score = x.Score
-            }).ToList();
         }
 
         public async Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize)

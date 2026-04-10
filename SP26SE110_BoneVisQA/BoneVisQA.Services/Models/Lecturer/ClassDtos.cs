@@ -9,6 +9,7 @@ public class ClassDto
     public string Semester { get; set; } = string.Empty;
     public Guid? LecturerId { get; set; }
     public Guid? ExpertId { get; set; }
+    public string? ExpertName { get; set; }
     public DateTime? CreatedAt { get; set; }
 }
 
@@ -17,6 +18,13 @@ public class UpdateClassRequestDto
     public string ClassName { get; set; } = string.Empty;
     public string Semester { get; set; } = string.Empty;
     public Guid? ExpertId { get; set; }
+}
+
+public class ExpertOptionDto
+{
+    public Guid Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string? Email { get; set; }
 }
 
 public class ClassStatsDto
