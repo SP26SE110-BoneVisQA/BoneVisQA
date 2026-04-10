@@ -33,6 +33,7 @@ public class VisualQAFileUploadRequest
 [Authorize]
 public class VisualQAController : ControllerBase
 {
+    private const long MaxVisualImageBytes = 5 * 1024 * 1024;
     private readonly IStudentService _studentService;
     private readonly IVisualQaAiService _visualQaAiService;
     private readonly ISupabaseStorageService _storageService;
@@ -51,8 +52,8 @@ public class VisualQAController : ControllerBase
     }
 
     [HttpPost("ask")]
-    [RequestSizeLimit(52428800)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+    [RequestSizeLimit(MaxVisualImageBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxVisualImageBytes)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<VisualQAResponseDto>> Ask([FromForm] VisualQAFileUploadRequest formRequest, CancellationToken cancellationToken)
     {
@@ -65,8 +66,16 @@ public class VisualQAController : ControllerBase
 
         if (formRequest.CustomImage == null || formRequest.CustomImage.Length == 0)
             return BadRequest(new { message = "File không được để trống." });
-        if (formRequest.CustomImage.Length > 52428800)
-            return BadRequest(new { message = "File quá lớn. Dung lượng tối đa là 50MB." });
+        if (formRequest.CustomImage.Length > MaxVisualImageBytes)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "Ảnh vượt quá giới hạn 5MB.",
+                Instance = HttpContext.Request.Path
+            });
+        }
 
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var extension = Path.GetExtension(formRequest.CustomImage.FileName).ToLowerInvariant();
@@ -77,7 +86,8 @@ public class VisualQAController : ControllerBase
         var imageUrl = await _storageService.UploadFileAsync(
             formRequest.CustomImage,
             "student_uploads",
-            $"images/{studentId}");
+            $"images/{studentId}",
+            cancellationToken);
 
         List<PointDto>? polygon = null;
         if (!string.IsNullOrWhiteSpace(formRequest.CustomPolygonJson))

@@ -13,6 +13,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 [Tags("Admin - Documents")]
 public class AdminDocumentsController : ControllerBase
 {
+    private const long MaxDocumentUploadBytes = 10 * 1024 * 1024;
     private readonly IDocumentManagementService _documentManagementService;
     private readonly IDocumentQualityService _documentQualityService;
     private readonly IDocumentService _documentService;
@@ -135,8 +136,8 @@ public class AdminDocumentsController : ControllerBase
     /// Upload one PDF (legacy <c>File</c>) or multiple PDFs (<c>Files</c>). Same route as before for FE compatibility.
     /// </summary>
     [HttpPost("upload")]
-    [RequestSizeLimit(52428800)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+    [RequestSizeLimit(MaxDocumentUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxDocumentUploadBytes)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(DocumentDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(IReadOnlyList<DocumentUploadResultItemDto>), StatusCodes.Status200OK)]
@@ -151,8 +152,16 @@ public class AdminDocumentsController : ControllerBase
 
         foreach (var file in batch)
         {
-            if (file.Length > 52428800)
-                return BadRequest(new { message = $"File size exceeds the 50MB limit ({file.FileName})." });
+            if (file.Length > MaxDocumentUploadBytes)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid request",
+                    Status = StatusCodes.Status400BadRequest,
+                    Detail = $"File '{file.FileName}' vượt quá giới hạn 10MB.",
+                    Instance = HttpContext.Request.Path
+                });
+            }
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (extension != ".pdf")
@@ -172,7 +181,7 @@ public class AdminDocumentsController : ControllerBase
             return Ok(results);
         }
 
-        var document = await _documentService.UploadDocumentAsync(batch[0], metadata);
+        var document = await _documentService.UploadDocumentAsync(batch[0], metadata, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = document.Id }, document);
     }
 
