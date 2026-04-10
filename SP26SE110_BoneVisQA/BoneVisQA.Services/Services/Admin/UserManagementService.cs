@@ -632,26 +632,37 @@ namespace BoneVisQA.Services.Services.Admin
             user.VerifiedBy = adminId;
             user.UpdatedAt = DateTime.UtcNow;
 
-            // Nếu duyệt → tự động kích hoạt tài khoản
             if (isApproved)
             {
                 user.IsActive = true;
+
+                // Tự động gán role Student — xóa Pending, thêm Student
+                var studentRole = await _unitOfWork.RoleRepository
+                    .FirstOrDefaultAsync(r => r.Name == "Student")
+                    ?? throw new InvalidOperationException("Role 'Student' not found in database.");
+
+                var currentRoles = await _unitOfWork.UserRoleRepository
+                    .FindAsync(ur => ur.UserId == userId);
+                foreach (var ur in currentRoles)
+                    await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
+
+                await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    RoleId = studentRole.Id,
+                    AssignedAt = DateTime.UtcNow
+                });
+
+                _logger.LogInformation("[ApproveMedicalVerificationAsync] Auto-assigned Student role to {UserId}.", userId);
             }
 
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
 
-            // Không được query DbContext trong Task.Run — scope/request đã dispose trước khi task chạy.
+            // Không dùng DbContext trong Task.Run — capture dữ liệu trước
             var emailForMail = user.Email ?? string.Empty;
             var fullNameForMail = user.FullName ?? string.Empty;
-            string? welcomeRoleName = null;
-            if (isApproved)
-            {
-                welcomeRoleName = user.UserRoles
-                    .Where(ur => ur.Role != null && ur.Role.Name != "Pending")
-                    .Select(ur => ur.Role!.Name)
-                    .FirstOrDefault();
-            }
 
             _ = Task.Run(async () =>
             {
@@ -659,20 +670,13 @@ namespace BoneVisQA.Services.Services.Admin
                 {
                     if (isApproved)
                     {
-                        if (!string.IsNullOrEmpty(welcomeRoleName))
-                        {
-                            await _emailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, welcomeRoleName);
-                            _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved + role exists. Welcome email sent to {Email}", emailForMail);
-                        }
-                        else
-                        {
-                            _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved but no role assigned. Waiting for role assignment for {Email}", emailForMail);
-                        }
+                        await _emailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, "Student");
+                        _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved. Welcome email sent to {Email}.", emailForMail);
                     }
                     else
                     {
                         await _emailService.SendMedicalVerificationRejectedEmailAsync(emailForMail, fullNameForMail, notes);
-                        _logger.LogInformation("[ApproveMedicalVerificationAsync] Medical verification REJECTED for {Email}", emailForMail);
+                        _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification rejected for {Email}.", emailForMail);
                     }
                 }
                 catch (Exception ex)

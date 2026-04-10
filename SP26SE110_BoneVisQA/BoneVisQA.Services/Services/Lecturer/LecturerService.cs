@@ -1838,4 +1838,46 @@ public class LecturerService : ILecturerService
         await _unitOfWork.SaveAsync();
         return result;
     }
+
+    public async Task<IReadOnlyList<ExpertOptionDto>> GetExpertsAsync()
+    {
+        var experts = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name == "Expert"))
+            .Select(u => new ExpertOptionDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                Email = u.Email
+            })
+            .ToListAsync();
+
+        return experts;
+    }
+
+    public async Task<ClassDto> AssignExpertToClassAsync(Guid lecturerId, Guid classId, Guid? expertId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .Include(c => c.Expert)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new UnauthorizedAccessException("Bạn không có quyền sửa lớp học này.");
+
+        academicClass.ExpertId = expertId;
+        academicClass.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.SaveAsync();
+
+        return new ClassDto
+        {
+            Id = academicClass.Id,
+            ClassName = academicClass.ClassName,
+            Semester = academicClass.Semester,
+            LecturerId = academicClass.LecturerId,
+            ExpertId = academicClass.ExpertId,
+            ExpertName = academicClass.Expert?.FullName,
+            CreatedAt = academicClass.CreatedAt
+        };
+    }
 }
