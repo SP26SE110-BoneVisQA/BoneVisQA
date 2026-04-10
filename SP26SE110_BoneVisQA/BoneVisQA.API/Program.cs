@@ -263,6 +263,8 @@ if (!Directory.Exists(uploadsPath))
 
 app.UseStaticFiles(new StaticFileOptions
 {
+    // FileProvider = new PhysicalFileProvider(
+    //     Path.Combine(builder.Environment.ContentRootPath, "uploads")),
     FileProvider = new PhysicalFileProvider(uploadsPath),
     RequestPath = "/uploads"
 });
