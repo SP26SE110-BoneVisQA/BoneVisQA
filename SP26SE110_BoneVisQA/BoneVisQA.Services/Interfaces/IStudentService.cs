@@ -54,5 +54,10 @@ public interface IStudentService
     /// Sinh viên tự rời lớp (xóa ClassEnrollment của chính mình).
     /// </summary>
     Task LeaveEnrolledClassAsync(Guid studentId, Guid classId);
+
+    /// <summary>
+    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer của lớp gán quiz.
+    /// </summary>
+    Task RequestRetakeAsync(Guid studentId, Guid quizId);
 }
 

@@ -29,13 +29,11 @@ public interface IEmailService
         DateTime? dueDate,
         string? dueDateDisplay);
 
-    //Task SendAssignmentEmailsToClassAsync(Guid classId, string className, string assignmentTitle, string assignmentType, DateTime? dueDate);
-    //Task<bool> SendAssignmentEmailAsync(
-    //   string toEmail,
-    //   string studentName,
-    //   string className,
-    //   string assignmentTitle,
-    //   string assignmentType,
-    //   DateTime? dueDate,
-    //   string? dueDateDisplay);
+    // Retake request email
+    Task<bool> SendRetakeRequestEmailAsync(
+        string toEmail,
+        string studentName,
+        string quizTitle,
+        string className,
+        string lecturerName);
 }
