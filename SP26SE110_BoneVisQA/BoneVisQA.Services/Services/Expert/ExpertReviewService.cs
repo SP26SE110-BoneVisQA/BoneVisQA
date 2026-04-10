@@ -235,8 +235,7 @@ public class ExpertReviewService : IExpertReviewService
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new InvalidOperationException("Lý do flag chunk là bắt buộc.");
 
-        var chunk = await _unitOfWork.Context.DocumentChunks
-            .FirstOrDefaultAsync(ch => ch.Id == chunkId)
+        var chunk = await _unitOfWork.Context.DocumentChunks.FirstOrDefaultAsync(ch => ch.Id == chunkId)
             ?? throw new KeyNotFoundException("Không tìm thấy document chunk.");
 
         var canReviewChunk = await _unitOfWork.Context.Citations
@@ -252,8 +251,8 @@ public class ExpertReviewService : IExpertReviewService
                     e.Class.ExpertId == expertId) ||
                  c.Answer.ExpertReviews.Any(r => r.ExpertId == expertId)));
 
-        //if (!canReviewChunk)
-        //    throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+        if (!canReviewChunk)
+            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
 
         if (!chunk.IsFlagged)
         {
