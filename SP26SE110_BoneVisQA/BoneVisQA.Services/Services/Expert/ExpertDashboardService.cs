@@ -26,6 +26,7 @@ public class ExpertDashboardService : IExpertDashboardService
             .AsNoTracking()
             .Where(a => a.ExpertReviews.Any(r => r.ExpertId == expertId))
             .ToListAsync();
+       
         var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
             .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
@@ -34,8 +35,9 @@ public class ExpertDashboardService : IExpertDashboardService
                     e.StudentId == a.Question.StudentId &&
                     e.Class.ExpertId == expertId))
             .CountAsync();
+       
         var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        var approvedThisMonth = reviews.Count(r => r.Action == "Approved" && r.CreatedAt >= thisMonthStart);
+        var approvedThisMonth = reviews.Count(r => r.Action == "Approve" && r.CreatedAt >= thisMonthStart);
 
         var studentsInExpertClasses = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -114,9 +116,7 @@ public class ExpertDashboardService : IExpertDashboardService
             BoneLocation = "Unknown",
             LesionType = c.Category?.Name ?? "General",
             Difficulty = c.Difficulty ?? "basic",
-            Status = c.IsApproved == true
-                ? "approved"
-                : (c.IsActive == true ? "pending" : "draft"),
+            Status = c.IsApproved == true? "approved": (c.IsActive == true ? "pending" : "draft"),
             AddedBy = c.CreatedByExpert?.FullName ?? "Unknown",
             AddedDate = c.CreatedAt ?? DateTime.UtcNow,
             ViewCount = c.CaseViewLogs?.Count ?? 0,

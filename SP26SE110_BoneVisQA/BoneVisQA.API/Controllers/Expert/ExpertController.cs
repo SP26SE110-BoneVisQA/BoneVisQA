@@ -226,6 +226,7 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
+
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {
@@ -284,6 +285,14 @@ namespace BoneVisQA.API.Controllers.Expert
         public async Task<IActionResult> GetAllImage( int pageIndex = 1,int pageSize = 10)
         {
             var result = await _medicalcaseService.GetAllImage(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+
+        [HttpGet("annotation")]
+        public async Task<IActionResult> GetAllAnnotation(int pageIndex = 1, int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllAnnotation(pageIndex, pageSize);
 
             return Ok(result);
         }
