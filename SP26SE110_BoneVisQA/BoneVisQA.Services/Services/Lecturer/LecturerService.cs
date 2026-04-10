@@ -215,7 +215,7 @@ public class LecturerService : ILecturerService
         return availableStudents
             .Select(u => new StudentEnrollmentDto
             {
-                EnrollmentId = Guid.Empty,
+                EnrollmentId = null,
                 StudentId = u.Id,
                 StudentName = u.FullName,
                 StudentEmail = u.Email,

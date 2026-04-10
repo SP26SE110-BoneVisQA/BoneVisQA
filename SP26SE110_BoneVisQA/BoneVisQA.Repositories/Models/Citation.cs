@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 namespace BoneVisQA.Repositories.Models;
 
 [Table("citations")]
-[Index("AnswerId", "ChunkId", Name = "citations_answer_id_chunk_id_key", IsUnique = true)]
 [Index("AnswerId", Name = "idx_citations_answer")]
 public partial class Citation
 {

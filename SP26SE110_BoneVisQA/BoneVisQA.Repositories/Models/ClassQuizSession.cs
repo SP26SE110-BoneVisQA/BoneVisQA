@@ -34,6 +34,15 @@ public partial class ClassQuizSession
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
+    [Column("shuffle_questions")]
+    public bool ShuffleQuestions { get; set; }
+
+    [Column("allow_retake")]
+    public bool AllowRetake { get; set; }
+
+    [Column("retake_reset_at")]
+    public DateTime? RetakeResetAt { get; set; }
+
     [ForeignKey("ClassId")]
     [InverseProperty("ClassQuizSessions")]
     public virtual AcademicClass Class { get; set; } = null!;

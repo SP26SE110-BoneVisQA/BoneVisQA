@@ -243,6 +243,8 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ShuffleQuestions).HasDefaultValue(false);
+            entity.Property(e => e.AllowRetake).HasDefaultValue(false);
 
             entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizSessions)
                 .HasForeignKey(d => d.ClassId)
@@ -394,6 +396,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsAiGenerated).HasDefaultValue(false);
 
             entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedQuizzes)
                 .HasForeignKey(d => d.CreatedByExpertId)
@@ -484,6 +487,13 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsMedicalStudent).HasDefaultValue(false);
+
+            entity.HasOne(d => d.Verifier)
+                .WithMany(p => p.UsersVerifiedByThisUser)
+                .HasForeignKey(d => d.VerifiedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("users_verified_by_fkey");
         });
 
         modelBuilder.Entity<UserRole>(entity =>

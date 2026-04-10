@@ -38,7 +38,7 @@ public partial class Quiz
     public string? Topic { get; set; }
 
     [Column("is_ai_generated")]
-    public bool IsAiGenerated { get; set; }
+    public bool IsAiGenerated { get; set; } = false;
 
     [Column("difficulty")]
     public string? Difficulty { get; set; }

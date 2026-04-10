@@ -106,7 +106,7 @@ public class LecturerRepository : ILecturerRepository
             .Where(u => studentUserIds.Contains(u.Id) && !enrolledStudentIds.Contains(u.Id))
             .Select(u => new StudentEnrollmentInfo
             {
-                EnrollmentId = Guid.Empty,
+                EnrollmentId = null,
                 StudentId = u.Id,
                 StudentName = u.FullName,
                 StudentEmail = u.Email,

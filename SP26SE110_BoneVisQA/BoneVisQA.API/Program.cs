@@ -31,6 +31,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -117,8 +118,47 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IUserIdProvider, JwtUserIdProvider>();
 
+static string BuildSupabaseConnectionString(IConfiguration configuration)
+{
+    var raw = configuration.GetConnectionString("SupabaseDb");
+    if (string.IsNullOrWhiteSpace(raw))
+        throw new InvalidOperationException(
+            "ConnectionStrings:SupabaseDb is missing. Set it in User Secrets, environment variables, or appsettings (never commit passwords).");
+
+    var hasMaxPool = raw.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+                     || raw.Contains("Max Pool Size", StringComparison.OrdinalIgnoreCase)
+                     || raw.Contains("MaxPoolSize=", StringComparison.OrdinalIgnoreCase);
+
+    var csb = new NpgsqlConnectionStringBuilder(raw)
+    {
+        Pooling = true,
+    };
+
+    if (!hasMaxPool)
+    {
+        csb.MinPoolSize = configuration.GetValue("DatabasePooling:MinimumPoolSize", 0);
+        csb.MaxPoolSize = configuration.GetValue("DatabasePooling:MaximumPoolSize", 15);
+    }
+
+    var idle = configuration.GetValue<int?>("DatabasePooling:ConnectionIdleLifetimeSeconds");
+    if (idle is > 0)
+        csb.ConnectionIdleLifetime = idle.Value;
+
+    var timeout = configuration.GetValue<int?>("DatabasePooling:TimeoutSeconds");
+    if (timeout is > 0)
+        csb.Timeout = timeout.Value;
+
+    var cmdTimeout = configuration.GetValue<int?>("DatabasePooling:CommandTimeoutSeconds");
+    if (cmdTimeout is > 0)
+        csb.CommandTimeout = cmdTimeout.Value;
+
+    return csb.ConnectionString;
+}
+
+var supabaseConnectionString = BuildSupabaseConnectionString(builder.Configuration);
+
 builder.Services.AddDbContext<BoneVisQADbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
+    options.UseNpgsql(supabaseConnectionString,
         npgsqlOptions =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);

@@ -34,8 +34,9 @@ public partial class CaseAnswer
     [Column("reflective_questions")]
     public string? ReflectiveQuestions { get; set; }
 
+    /// <summary>Matches DB default <c>'Pending'</c>; app code may set workflow values per <c>case_answers_status_check</c>.</summary>
     [Column("status")]
-    public string Status { get; set; } = "RequiresLecturerReview";
+    public string Status { get; set; } = "Pending";
 
     [Column("reviewed_by_id")]
     public Guid? ReviewedById { get; set; }
