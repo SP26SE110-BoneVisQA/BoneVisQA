@@ -655,11 +655,12 @@ public class StudentService : IStudentService
 
         var classSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == quizId &&
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
         QuizAttempt attempt;
@@ -782,11 +783,12 @@ public class StudentService : IStudentService
             .ToListAsync();
 
         var session = await _unitOfWork.Context.ClassQuizSessions
+            .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == attempt.QuizId &&
                 classIds.Contains(cqs.ClassId) &&
-                (cqs.OpenTime == null || cqs.OpenTime <= utcNow) &&
-                (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         if (session == null)
             throw new InvalidOperationException("Quiz đã hết thời gian làm bài.");

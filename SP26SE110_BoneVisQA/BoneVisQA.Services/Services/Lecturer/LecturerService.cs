@@ -1685,8 +1685,11 @@ public class LecturerService : ILecturerService
             Id = Guid.NewGuid(),
             ClassId = classId,
             QuizId = quizId,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimitMinutes = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore,
             CreatedAt = DateTime.UtcNow
-            // open/close time sẽ được lecturer đặt riêng qua AssignQuizSessionAsync
         };
 
         await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
