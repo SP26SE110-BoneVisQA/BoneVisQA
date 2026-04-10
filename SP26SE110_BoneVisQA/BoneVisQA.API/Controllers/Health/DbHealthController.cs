@@ -28,14 +28,14 @@ public class DbHealthController : ControllerBase
 
             if (canConnect)
             {
-                return Ok(new { status = "ok", message = "Kết nối Supabase thành công." });
+                return Ok(new { status = "ok", message = "Supabase connection successful." });
             }
 
-            return StatusCode(500, new { status = "error", message = "Không kết nối được đến Supabase." });
+            return StatusCode(500, new { status = "error", message = "Cannot connect to Supabase." });
         }
         catch (DbUpdateException)
         {
-            return StatusCode(500, new { status = "error", message = "Lỗi khi kết nối đến Supabase." });
+            return StatusCode(500, new { status = "error", message = "Error connecting to Supabase." });
         }
         catch (System.Exception ex)
         {

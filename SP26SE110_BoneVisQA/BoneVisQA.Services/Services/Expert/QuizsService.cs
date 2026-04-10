@@ -336,6 +336,45 @@ namespace BoneVisQA.Services.Services.Expert
 
 
         //================================================================================================================
+        public async Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizDTO(
+    int pageIndex,
+    int pageSize)
+        {
+            var query = _unitOfWork.ClassQuizSessionRepository
+                .GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var sessions = await query
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ClassQuizSessionDTO
+                {
+                    ClassId = x.ClassId,
+                    ClassName = x.Class.ClassName,
+
+                    QuizId = x.QuizId,
+                    QuizName = x.Quiz.Title,
+
+                    AssignedAt = x.CreatedAt,
+
+                    OpenTime = x.OpenTime,
+                    CloseTime = x.CloseTime,
+
+                    PassingScore = x.PassingScore,
+                    TimeLimitMinutes = x.TimeLimitMinutes
+                })
+                .ToListAsync();
+
+            return new PagedResult<ClassQuizSessionDTO>
+            {
+                Items = sessions,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
         public async Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto)
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
@@ -403,6 +442,30 @@ namespace BoneVisQA.Services.Services.Expert
                 TimeLimitMinutes = classQuiz.TimeLimitMinutes
             };
         }
+        public async Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId)
+        {
+            var attempts = await _unitOfWork.QuizAttemptRepository
+        .GetQueryable()
+        .Where(x => x.QuizId == quizId)
+        .Select(x => new GetQuizAttemptDTO
+        {
+            AttemptId = x.Id,
+            QuizId = x.QuizId,
+
+            StudentId = x.StudentId,
+            StudentName = x.Student.FullName,
+
+            QuizTitle = x.Quiz.Title,
+
+            StartedAt = x.StartedAt,
+            CompletedAt = x.CompletedAt,
+            Score = x.Score
+        })
+        .ToListAsync();
+
+            return attempts;
+        }
+
         public async Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId)
         {
             var attempt = await _unitOfWork.QuizAttemptRepository
@@ -446,6 +509,59 @@ namespace BoneVisQA.Services.Services.Expert
                 PassingScore = quiz.PassingScore,
                 IsPassed = isPassed,
                 CompletedAt = attempt.CompletedAt
+            };
+        }
+
+        public async Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.AcademicClassRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var classes = await query
+                .OrderBy(x => x.ClassName)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetClassDTO
+                {
+                    Id = x.Id,
+                    ClassName = x.ClassName
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetClassDTO>
+            {
+                Items = classes,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+        public async Task<PagedResult<GetExpertDTO>> GetAllExpert(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.UserRepository
+                .GetQueryable()
+                .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Expert"));
+
+            var totalCount = await query.CountAsync();
+
+            var experts = await query
+                .OrderBy(x => x.FullName)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetExpertDTO
+                {
+                    Id = x.Id,
+                    FullName = x.FullName
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetExpertDTO>
+            {
+                Items = experts,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
             };
         }
     }

@@ -96,16 +96,13 @@ namespace BoneVisQA.Repositories.UnitOfWork
             await _context.Database.RollbackTransactionAsync();
         }
 
-        // IDisposable
+        // IDisposable — DbContext is scoped and disposed by the DI container; do not Dispose here or you can hit
+        // "Can't close, connection is in state Connecting" if the scope ends while a connection is still opening.
         private bool disposed = false;
         protected virtual void Dispose(bool disposing)
         {
             if (!disposed)
             {
-                if (disposing)
-                {
-                    _context.Dispose();
-                }
                 disposed = true;
             }
         }

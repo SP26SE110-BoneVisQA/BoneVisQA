@@ -2,15 +2,15 @@ using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using BoneVisQA.API;
+using BoneVisQA.API.ExceptionHandling;
 using BoneVisQA.API.Hubs;
 using BoneVisQA.API.Policies;
 using BoneVisQA.API.Services;
-using BoneVisQA.API.ExceptionHandling;
+using BoneVisQA.Domain.Settings;
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Interfaces;
 using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Domain.Settings;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
@@ -18,23 +18,25 @@ using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
 using BoneVisQA.Services.Services.Rag;
+using BoneVisQA.Services.Services.AiQuizServices;
 using BoneVisQA.Services.Services.Auth;
 using BoneVisQA.Services.Services.Email;
 using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
-using BoneVisQA.Services.Services.AiQuizServices;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHttpContextAccessor();
 
 // Align with Supabase free-tier storage limits (50 MB max upload).
 builder.WebHost.ConfigureKestrel(options =>
@@ -70,7 +72,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",
                 "https://localhost:3000",
                 "http://localhost:5173",
-                "https://localhost:5173"
+                "https://localhost:5173",
+                "https://localhost:5046",
+                "https://localhost:5047"
             };
         }
 
@@ -279,15 +283,36 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseCors("AllowAll");
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
+    await next();
+});
+//app.UseHttpsRedirection();
 app.UseSwagger();
 app.UseSwaggerUI();
-app.UseHttpsRedirection();
 //
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+
+// Đảm bảo thư mục uploads tồn tại trước khi sử dụng PhysicalFileProvider
+var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    // FileProvider = new PhysicalFileProvider(
+    //     Path.Combine(builder.Environment.ContentRootPath, "uploads")),
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 
 // Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)
 // Token lấy từ URL: /reset-password?token=XXX (KHÔNG phải JWT từ login!)
@@ -296,7 +321,7 @@ app.MapGet("/reset-password", (HttpContext ctx) =>
     var token = ctx.Request.Query["token"].ToString();
     if (string.IsNullOrEmpty(token))
     {
-        return Results.Content(@"<!DOCTYPE html><html><body><h1>Lỗi</h1><p class=""error"">Thiếu token. Vui lòng dùng link từ email.</p><p><a href=""/swagger"">Về trang chủ</a></p></body></html>", "text/html; charset=utf-8");
+        return Results.Content(@"<!DOCTYPE html><html><body><h1>Error</h1><p class=""error"">Token missing. Please use the link from your email.</p><p><a href=""/swagger"">Go to homepage</a></p></body></html>", "text/html; charset=utf-8");
     }
     var tokenEscaped = token.Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
     var html = @"<!DOCTYPE html>

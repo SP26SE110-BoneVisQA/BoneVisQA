@@ -16,8 +16,19 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<bool>DeleteMedicalCaseAsync(Guid medicalCaseId);
 
 
-
+        Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize);
         Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
+
+        Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize);
         Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
+       
+
+        Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize);
+        Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize);
+
+
+
+
+
     }
 }

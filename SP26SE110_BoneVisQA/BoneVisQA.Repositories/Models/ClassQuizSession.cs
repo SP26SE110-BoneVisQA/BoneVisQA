@@ -37,9 +37,11 @@ public partial class ClassQuizSession
     [Column("shuffle_questions")]
     public bool ShuffleQuestions { get; set; }
 
+    /// <summary>Cho phép sinh viên làm lại quiz sau khi đã nộp (retake).</summary>
     [Column("allow_retake")]
-    public bool AllowRetake { get; set; }
+    public bool AllowRetake { get; set; } = false;
 
+    /// <summary>Đánh dấu lecturer đã bật retake cho attempt cụ thể — reset khi student nộp lại.</summary>
     [Column("retake_reset_at")]
     public DateTime? RetakeResetAt { get; set; }
 

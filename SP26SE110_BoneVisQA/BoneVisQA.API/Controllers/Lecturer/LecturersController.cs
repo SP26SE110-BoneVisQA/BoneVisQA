@@ -287,7 +287,7 @@ public class LecturersController : ControllerBase
         [FromBody] UpdateAnnouncementRequestDto request)
     {
         if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
-            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+            return BadRequest(new { message = "Invalid class ID or announcement ID." });
         try
         {
             var result = await _lecturerService.UpdateAnnouncementAsync(cId, aId, request);
@@ -303,10 +303,10 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> DeleteAnnouncement(string classId, string announcementId)
     {
         if (!Guid.TryParse(classId, out var cId) || !Guid.TryParse(announcementId, out var aId))
-            return BadRequest(new { message = "Mã lớp hoặc thông báo không hợp lệ." });
+            return BadRequest(new { message = "Invalid class ID or announcement ID." });
         var deleted = await _lecturerService.DeleteAnnouncementAsync(cId, aId);
         if (!deleted)
-            return NotFound(new { message = "Thông báo không tồn tại." });
+            return NotFound(new { message = "Announcement does not exist." });
         return NoContent();
     }
 
@@ -397,7 +397,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizQuestionsAsync(quizId);
         if (result == null || !result.Any())
-            return NotFound(new { message = "Không tìm thấy câu hỏi nào." });
+            return NotFound(new { message = "No questions found." });
         return Ok(result);
     }
 
@@ -428,7 +428,7 @@ public class LecturersController : ControllerBase
             return BadRequest("Invalid request data.");
 
         var updated = await _lecturerService.UpdateQuizQuestionAsync(questionId, request);
-        return Ok(new { message = "Cập nhật câu hỏi thành công." });
+            return Ok(new { message = "Question updated successfully." });
     }
 
     [HttpDelete("quizzes/questions/{questionId:guid}")]
@@ -502,7 +502,7 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<AIQuizGenerationResultDto>> SuggestQuestions([FromBody] AISuggestQuestionsRequestDto request)
     {
         if (request.Cases == null || request.Cases.Count == 0)
-            return BadRequest(new { message = "Cần chọn ít nhất 1 case." });
+            return BadRequest(new { message = "At least 1 case is required." });
 
         var result = await _aiQuizService.SuggestQuestionsFromCasesAsync(
             request.Cases,
@@ -575,7 +575,7 @@ public class LecturersController : ControllerBase
                 quizId = quiz.Id,
                 title = quiz.Title,
                 questionsCreated = questionsResult.Questions.Count,
-                message = $"Đã tạo quiz với {questionsResult.Questions.Count} câu hỏi"
+                message = $"Quiz created with {questionsResult.Questions.Count} questions"
             });
         }
         catch (Exception ex)
@@ -673,6 +673,40 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId);
         return Ok(result);
+    }
+
+    #endregion
+
+    #region Expert Assignment
+
+    [HttpGet("experts")]
+    public async Task<ActionResult<IReadOnlyList<ExpertOptionDto>>> GetExperts()
+    {
+        var result = await _lecturerService.GetExpertsAsync();
+        return Ok(result);
+    }
+
+    public class AssignExpertRequestDto
+    {
+        public Guid? ExpertId { get; set; }
+    }
+
+    [HttpPut("classes/{classId:guid}/expert")]
+    public async Task<ActionResult<ClassDto>> AssignExpertToClass(Guid classId, [FromBody] AssignExpertRequestDto request)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _lecturerService.AssignExpertToClassAsync(lecturerId.Value, classId, request.ExpertId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
     }
 
     #endregion

@@ -37,7 +37,8 @@ public class EmailService : IEmailService
         _smtpHost = smtpHost ?? "smtp.gmail.com";
         _smtpPort = int.TryParse(smtpPort, out var port) ? port : 587;
         _smtpUsername = smtpUsername ?? "";
-        _smtpPassword = smtpPassword ?? "";
+        // Gmail App Password thường copy kèm dấu cách giữa 4 nhóm — SMTP cần chuỗi liền
+        _smtpPassword = (smtpPassword ?? "").Replace(" ", "", StringComparison.Ordinal);
         _fromEmail = fromEmail ?? _smtpUsername;
         _fromName = fromName ?? "BoneVisQA";
 
@@ -1071,6 +1072,101 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SendAssignmentEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    // ── Retake Request Email ─────────────────────────────────────────────────────
+
+    public async Task<bool> SendRetakeRequestEmailAsync(
+        string toEmail,
+        string studentName,
+        string quizTitle,
+        string className,
+        string lecturerName)
+    {
+        _logger.LogInformation("[SendRetakeRequestEmailAsync] Sending to {ToEmail}", toEmail);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendRetakeRequestEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        var subject = $"[BoneVisQA] Retake Request — {studentName}";
+
+        var body = $@"
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden;
+                     box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #00478d, #006a68); color: white; padding: 24px 32px; }}
+        .header h1 {{ margin: 0; font-size: 20px; }}
+        .content {{ padding: 24px 32px; color: #333; }}
+        .content p {{ margin: 0 0 14px; line-height: 1.6; }}
+        .highlight {{ background: #fff3cd; border-left: 4px solid #ffc107;
+                     padding: 12px 16px; border-radius: 6px; margin: 16px 0; }}
+        .highlight strong {{ color: #856404; }}
+        .action-btn {{ display: inline-block; background: linear-gradient(135deg, #00478d, #006a68);
+                       color: white !important; padding: 12px 28px; border-radius: 8px;
+                       text-decoration: none; font-weight: bold; margin-top: 8px; }}
+        .footer {{ padding: 16px 32px; background: #f9f9f9; color: #888; font-size: 12px;
+                   text-align: center; border-top: 1px solid #eee; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>Quiz Retake Request</h1>
+        </div>
+        <div class='content'>
+            <p>Dear <strong>{lecturerName}</strong>,</p>
+            <p>Student <strong>{studentName}</strong> has requested a retake for a quiz.</p>
+
+            <div class='highlight'>
+                <p><strong>Quiz:</strong> {quizTitle}</p>
+                <p><strong>Class:</strong> {className}</p>
+            </div>
+
+            <p>Please log in to BoneVisQA and enable <strong>Retake</strong> for this student
+               from <strong>Quizzes → Results</strong>.</p>
+        </div>
+        <div class='footer'>
+            <p>This is an automated email from BoneVisQA — please do not reply to this message.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        try
+        {
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendRetakeRequestEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendRetakeRequestEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
             return false;
         }
     }

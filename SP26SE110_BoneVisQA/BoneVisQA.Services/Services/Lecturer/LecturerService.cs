@@ -872,12 +872,14 @@ public class LecturerService : ILecturerService
     {
         var c = await _unitOfWork.AcademicClassRepository
             .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .Include(x => x.Expert)
             .FirstOrDefaultAsync();
         if (c == null) return null;
         return new ClassDto
         {
             Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
-            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId,
+            ExpertName = c.Expert?.FullName, CreatedAt = c.CreatedAt
         };
     }
 
@@ -885,6 +887,7 @@ public class LecturerService : ILecturerService
     {
         var c = await _unitOfWork.AcademicClassRepository
             .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .Include(x => x.Expert)
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
         c.ClassName = request.ClassName;
@@ -896,7 +899,8 @@ public class LecturerService : ILecturerService
         return new ClassDto
         {
             Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
-            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId,
+            ExpertName = c.Expert?.FullName, CreatedAt = c.CreatedAt
         };
     }
 
@@ -1681,8 +1685,11 @@ public class LecturerService : ILecturerService
             Id = Guid.NewGuid(),
             ClassId = classId,
             QuizId = quizId,
+            OpenTime = quiz.OpenTime,
+            CloseTime = quiz.CloseTime,
+            TimeLimitMinutes = quiz.TimeLimit,
+            PassingScore = quiz.PassingScore,
             CreatedAt = DateTime.UtcNow
-            // open/close time sẽ được lecturer đặt riêng qua AssignQuizSessionAsync
         };
 
         await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuiz);
@@ -1837,5 +1844,47 @@ public class LecturerService : ILecturerService
 
         await _unitOfWork.SaveAsync();
         return result;
+    }
+
+    public async Task<IReadOnlyList<ExpertOptionDto>> GetExpertsAsync()
+    {
+        var experts = await _unitOfWork.UserRepository
+            .FindByCondition(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name == "Expert"))
+            .Select(u => new ExpertOptionDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                Email = u.Email
+            })
+            .ToListAsync();
+
+        return experts;
+    }
+
+    public async Task<ClassDto> AssignExpertToClassAsync(Guid lecturerId, Guid classId, Guid? expertId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .Include(c => c.Expert)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new UnauthorizedAccessException("Bạn không có quyền sửa lớp học này.");
+
+        academicClass.ExpertId = expertId;
+        academicClass.UpdatedAt = DateTime.UtcNow;
+
+        await _unitOfWork.SaveAsync();
+
+        return new ClassDto
+        {
+            Id = academicClass.Id,
+            ClassName = academicClass.ClassName,
+            Semester = academicClass.Semester,
+            LecturerId = academicClass.LecturerId,
+            ExpertId = academicClass.ExpertId,
+            ExpertName = academicClass.Expert?.FullName,
+            CreatedAt = academicClass.CreatedAt
+        };
     }
 }

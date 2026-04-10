@@ -58,5 +58,8 @@ public interface ILecturerService
     Task<QuizDto> UpdateQuizAsync(Guid quizId, UpdateQuizRequestDto request);
     Task<ClassQuizDto> AssignQuizToClassAsync(Guid classId, Guid quizId);
     Task<ImportStudentsSummaryDto> ImportStudentsFromExcelAsync(Guid classId, Stream fileStream, string fileName);
+
+    Task<IReadOnlyList<ExpertOptionDto>> GetExpertsAsync();
+    Task<ClassDto> AssignExpertToClassAsync(Guid lecturerId, Guid classId, Guid? expertId);
 }
 

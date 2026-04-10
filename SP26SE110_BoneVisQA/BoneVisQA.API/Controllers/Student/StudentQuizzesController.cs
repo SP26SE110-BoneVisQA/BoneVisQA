@@ -46,8 +46,19 @@ public class StudentQuizzesController : ControllerBase
         if (studentId == null)
             return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
-        var result = await _studentService.StartQuizAsync(studentId.Value, quizId);
-        return Ok(result);
+        try
+        {
+            var result = await _studentService.StartQuizAsync(studentId.Value, quizId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpGet("practice")]
@@ -223,6 +234,31 @@ public class StudentQuizzesController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer.
+    /// </summary>
+    [HttpPost("{quizId:guid}/request-retake")]
+    public async Task<ActionResult> RequestRetake(Guid quizId)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _studentService.RequestRetakeAsync(studentId.Value, quizId);
+            return Ok(new { message = "Retake request has been sent to your lecturer." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 

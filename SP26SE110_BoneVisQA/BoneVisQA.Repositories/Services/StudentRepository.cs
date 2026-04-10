@@ -21,6 +21,7 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetAllCasesAsync()
     {
         return await _unitOfWork.MedicalCaseRepository
+
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.MedicalImages)
@@ -31,6 +32,7 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetFilteredCasesAsync(CaseFilter filter)
     {
         var query = _unitOfWork.MedicalCaseRepository
+
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
@@ -130,9 +132,12 @@ public class StudentRepository : IStudentRepository
             return new List<Quiz>();
 
         var quizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Include(cqs => cqs.Quiz)
             .Where(cqs => classIds.Contains(cqs.ClassId))
-            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
-                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Where(cqs =>
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
+                && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
+                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow))
             .Select(cqs => cqs.QuizId)
             .Distinct()
             .ToListAsync();
@@ -161,8 +166,10 @@ public class StudentRepository : IStudentRepository
             .Include(cqs => cqs.Quiz)
             .Include(cqs => cqs.Class)
             .Where(cqs => classIds.Contains(cqs.ClassId))
-            .Where(cqs => (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
-                       && (cqs.CloseTime == null || cqs.CloseTime >= utcNow))
+            .Where(cqs =>
+                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
+                && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
+                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow))
             .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
             {
                 QuizId = cqs.QuizId,
@@ -189,10 +196,13 @@ public class StudentRepository : IStudentRepository
             return false;
 
         return await _unitOfWork.Context.ClassQuizSessions
+            .Include(cqs => cqs.Quiz)
             .AnyAsync(cqs => cqs.QuizId == quizId
                 && classIds.Contains(cqs.ClassId)
-                && (cqs.OpenTime == null || cqs.OpenTime <= utcNow)
-                && (cqs.CloseTime == null || cqs.CloseTime >= utcNow));
+                && ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null
+                    || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
+                && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
+                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
     }
 
     public async Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId)

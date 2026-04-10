@@ -21,12 +21,18 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<List<GetQuizQuestionDTO>> GetQuizQuestionDTO(Guid quizId);
         Task<CreateQuizQuestionResponseDTO> CreateQuizQuestionAsync(Guid quizId, CreateQuizQuestionRequestDTO request);
         Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update);  
-        Task<bool> DeleteQuizQuestionAsync(Guid questionId);  
+        Task<bool> DeleteQuizQuestionAsync(Guid questionId);
 
 
         //================================================================================================================
+        Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizDTO(int pageIndex, int pageSize);
         Task<ClassQuizSessionResponseDTO> AssignQuizToClassAsync(AssignQuizRequestDTO dto);
+        Task<List<GetQuizAttemptDTO>> GetAttemptsByQuizAsync(Guid quizId);
         Task<QuizScoreResultDto> CalculateScoreAsync(Guid attemptId);
+
+
+        Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize);
+        Task<PagedResult<GetExpertDTO>> GetAllExpert(int pageIndex, int pageSize);
 
     }
 }

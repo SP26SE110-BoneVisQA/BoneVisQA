@@ -218,6 +218,15 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+
+        [HttpGet("attempts/{quizId}")]
+        public async Task<IActionResult> GetAttempts(Guid quizId)
+        {
+            var result = await _quizService.GetAttemptsByQuizAsync(quizId);
+
+            return Ok(result);
+        }
+
         [HttpPost("attempts/{attemptId}/score")]
         public async Task<IActionResult> CalculateScore(Guid attemptId)
         {
@@ -228,6 +237,7 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+
         [HttpPost("case-tag")]
         public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)
         {
@@ -238,6 +248,61 @@ namespace BoneVisQA.API.Controllers.Expert
                 Message = "Tags added successfully",
                 result
             });
+        }
+
+        //==================================================================================================
+       
+        [HttpGet("category")]
+        public async Task<IActionResult> GetCategories(int pageIndex = 1, int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllCategory(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+        [HttpGet("class")]
+        public async Task<IActionResult> GetAllClass(int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _quizService.GetAllClass(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+        [HttpGet("expert")]
+        public async Task<IActionResult> GetAllExpert(int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _quizService.GetAllExpert(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+        [HttpGet("tag")]
+        public async Task<IActionResult> GetAllTag(int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllTag(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+
+        [HttpGet("image")]
+        public async Task<IActionResult> GetAllImage( int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllImage(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+
+        [HttpGet("annotation")]
+        public async Task<IActionResult> GetAllAnnotation(int pageIndex = 1, int pageSize = 10)
+        {
+            var result = await _medicalcaseService.GetAllAnnotation(pageIndex, pageSize);
+
+            return Ok(result);
+        }
+
+        [HttpGet("assign")]
+        public async Task<IActionResult> GetAssignQuizList(int pageIndex = 1,int pageSize = 10)
+        {
+            var result = await _quizService.GetAssignQuizDTO(pageIndex, pageSize);
+
+            return Ok(result);
         }
     }
 }

@@ -40,7 +40,7 @@ public class ExpertDashboardService : IExpertDashboardService
             .AsNoTracking()
             .CountAsync(r =>
                 r.ExpertId == expertId &&
-                r.Action == "Approved" &&
+                (r.Action == "Approved" || r.Action == "Approve") &&
                 r.CreatedAt >= thisMonthStart);
 
         var studentsInExpertClasses = await _unitOfWork.Context.ClassEnrollments
