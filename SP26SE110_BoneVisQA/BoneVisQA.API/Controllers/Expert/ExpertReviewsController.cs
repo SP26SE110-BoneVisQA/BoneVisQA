@@ -24,6 +24,20 @@ public class ExpertReviewsController : ControllerBase
     /// <summary>
     /// Gets the expert's escalated review queue together with the retrieved RAG evidence chunks.
     /// </summary>
+
+    [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [HttpGet("case-answer")]
+    public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetCaseAanswer()
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _expertReviewService.GetCaseAnswersAsync(expertId.Value);
+        return Ok(result);
+    }
+
     [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [HttpGet("escalated")]

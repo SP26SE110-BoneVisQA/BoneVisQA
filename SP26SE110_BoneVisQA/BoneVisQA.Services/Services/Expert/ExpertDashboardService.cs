@@ -18,15 +18,21 @@ public class ExpertDashboardService : IExpertDashboardService
     public async Task<ExpertDashboardStatsDto> GetDashboardStatsAsync(Guid expertId)
     {
         var cases = await _unitOfWork.Context.MedicalCases.AsNoTracking().ToListAsync();
+       
+        
         var reviews = await _unitOfWork.Context.ExpertReviews
             .AsNoTracking()
             .Where(r => r.ExpertId == expertId)
             .ToListAsync();
+       
+        
         var answers = await _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
             .Where(a => a.ExpertReviews.Any(r => r.ExpertId == expertId))
             .ToListAsync();
        
+       
+        
         var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
             .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
@@ -36,9 +42,12 @@ public class ExpertDashboardService : IExpertDashboardService
                     e.Class.ExpertId == expertId))
             .CountAsync();
        
+        
         var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var approvedThisMonth = reviews.Count(r => r.Action == "Approve" && r.CreatedAt >= thisMonthStart);
 
+            
+        
         var studentsInExpertClasses = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .Where(e => e.Class.ExpertId == expertId)
