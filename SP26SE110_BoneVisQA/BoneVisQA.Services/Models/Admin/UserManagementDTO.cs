@@ -55,37 +55,41 @@ namespace BoneVisQA.Services.Models.Admin
         public string? SchoolCohort { get; set; }
     }
 
-    // ── User Class Management ─────────────────────────────────────────────────
+    
+    
+    
+    
+    //// ── User Class Management ─────────────────────────────────────────────────
 
-    /// <summary>Thông tin một lớp trong danh sách.</summary>
-    public class UserClassInfo
-    {
-        public Guid Id { get; set; }
-        public string ClassName { get; set; } = null!;
-        /// "Lecturer" | "Student"
-        public string RelationType { get; set; } = null!;
-        public DateTime? EnrolledAt { get; set; }
-    }
+    ///// <summary>Thông tin một lớp trong danh sách.</summary>
+    //public class UserClassInfo
+    //{
+    //    public Guid Id { get; set; }
+    //    public string ClassName { get; set; } = null!;
+    //    /// "Lecturer" | "Student"
+    //    public string RelationType { get; set; } = null!;
+    //    public DateTime? EnrolledAt { get; set; }
+    //}
 
-    /// <summary>Danh sách lớp của một user (gộp AcademicClass + ClassEnrollment).</summary>
-    public class UserClassListDto
-    {
-        public Guid UserId { get; set; }
-        public List<UserClassInfo> Classes { get; set; } = new();
-    }
+    ///// <summary>Danh sách lớp của một user (gộp AcademicClass + ClassEnrollment).</summary>
+    //public class UserClassListDto
+    //{
+    //    public Guid UserId { get; set; }
+    //    public List<UserClassInfo> Classes { get; set; } = new();
+    //}
 
-    /// <summary>Tất cả lớp có sẵn trong hệ thống để admin gán.</summary>
-    public class AvailableClassDto
-    {
-        public Guid Id { get; set; }
-        public string ClassName { get; set; } = null!;
-        public string? LecturerName { get; set; }
-        public int StudentCount { get; set; }
-    }
+    ///// <summary>Tất cả lớp có sẵn trong hệ thống để admin gán.</summary>
+    //public class AvailableClassDto
+    //{
+    //    public Guid Id { get; set; }
+    //    public string ClassName { get; set; } = null!;
+    //    public string? LecturerName { get; set; }
+    //    public int StudentCount { get; set; }
+    //}
 
-    public class AssignUserToClassRequestDto
-    {
-        [Required]
-        public Guid ClassId { get; set; }
-    }
+    //public class AssignUserToClassRequestDto
+    //{
+    //    [Required]
+    //    public Guid ClassId { get; set; }
+    //}
 }

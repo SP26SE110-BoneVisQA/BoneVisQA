@@ -20,7 +20,7 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
-        public async Task<PagedResult<GetQuizDTO>> GetQuizDTO(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
         {
             var query = await _unitOfWork.QuizRepository.GetAllAsync();
 

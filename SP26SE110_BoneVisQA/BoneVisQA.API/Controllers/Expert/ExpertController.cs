@@ -91,7 +91,7 @@ namespace BoneVisQA.API.Controllers.Expert
         [HttpGet("quizzes")]
         public async Task<IActionResult> GetQuizzes(int pageIndex = 1, int pageSize = 10)
         {
-            var result = await _quizService.GetQuizDTO(pageIndex, pageSize);
+            var result = await _quizService.GetQuizAsync(pageIndex, pageSize);
 
             return Ok(new
             {
