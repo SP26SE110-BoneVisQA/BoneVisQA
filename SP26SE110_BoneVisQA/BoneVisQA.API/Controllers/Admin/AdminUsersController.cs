@@ -130,25 +130,14 @@ public class AdminUsersController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(new { message = "Invalid request data.", errors = ModelState });
 
-        try
-        {
-            var result = await _userManagementService.CreateUserAsync(request);
-            return result == null
-                ? BadRequest(new { message = "Failed to create user." })
-                : CreatedAtAction(nameof(GetAllUsers), new { }, new
-                {
-                    Message = "User created successfully.",
-                    Result = result
-                });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _userManagementService.CreateUserAsync(request);
+        return result == null
+            ? BadRequest(new { message = "Failed to create user." })
+            : CreatedAtAction(nameof(GetAllUsers), new { }, new
+            {
+                Message = "User created successfully.",
+                Result = result
+            });
     }
 
     /// PUT /api/admin/users/{id}  –  Update user FullName / SchoolCohort
