@@ -122,9 +122,9 @@ public class ExpertDashboardService : IExpertDashboardService
         {
             Id = c.Id,
             Title = c.Title ?? "Untitled Case",
-            BoneLocation = "Unknown",
+           // BoneLocation = "Unknown",
             LesionType = c.Category?.Name ?? "General",
-            Difficulty = c.Difficulty ?? "basic",
+            Difficulty = c.Difficulty ?? "Easy",
             Status = c.IsApproved == true? "approved": (c.IsActive == true ? "pending" : "draft"),
             AddedBy = c.CreatedByExpert?.FullName ?? "Unknown",
             AddedDate = c.CreatedAt ?? DateTime.UtcNow,
