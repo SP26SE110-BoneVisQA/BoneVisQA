@@ -872,12 +872,14 @@ public class LecturerService : ILecturerService
     {
         var c = await _unitOfWork.AcademicClassRepository
             .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .Include(x => x.Expert)
             .FirstOrDefaultAsync();
         if (c == null) return null;
         return new ClassDto
         {
             Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
-            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId,
+            ExpertName = c.Expert?.FullName, CreatedAt = c.CreatedAt
         };
     }
 
@@ -885,6 +887,7 @@ public class LecturerService : ILecturerService
     {
         var c = await _unitOfWork.AcademicClassRepository
             .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
+            .Include(x => x.Expert)
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
         c.ClassName = request.ClassName;
@@ -896,7 +899,8 @@ public class LecturerService : ILecturerService
         return new ClassDto
         {
             Id = c.Id, ClassName = c.ClassName, Semester = c.Semester,
-            LecturerId = c.LecturerId, ExpertId = c.ExpertId, CreatedAt = c.CreatedAt
+            LecturerId = c.LecturerId, ExpertId = c.ExpertId,
+            ExpertName = c.Expert?.FullName, CreatedAt = c.CreatedAt
         };
     }
 

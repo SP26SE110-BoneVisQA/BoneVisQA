@@ -676,4 +676,38 @@ public class LecturersController : ControllerBase
     }
 
     #endregion
+
+    #region Expert Assignment
+
+    [HttpGet("experts")]
+    public async Task<ActionResult<IReadOnlyList<ExpertOptionDto>>> GetExperts()
+    {
+        var result = await _lecturerService.GetExpertsAsync();
+        return Ok(result);
+    }
+
+    public class AssignExpertRequestDto
+    {
+        public Guid? ExpertId { get; set; }
+    }
+
+    [HttpPut("classes/{classId:guid}/expert")]
+    public async Task<ActionResult<ClassDto>> AssignExpertToClass(Guid classId, [FromBody] AssignExpertRequestDto request)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _lecturerService.AssignExpertToClassAsync(lecturerId.Value, classId, request.ExpertId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    #endregion
 }
