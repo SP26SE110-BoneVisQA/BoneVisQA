@@ -260,11 +260,16 @@ public partial class BoneVisQADbContext : DbContext
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("documents_pkey");
+            entity.HasIndex(e => e.ContentHash)
+                .IsUnique()
+                .HasFilter("\"content_hash\" IS NOT NULL")
+                .HasDatabaseName("ux_documents_content_hash");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsOutdated).HasDefaultValue(false);
             entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.IndexingProgress).HasDefaultValue(0);
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)

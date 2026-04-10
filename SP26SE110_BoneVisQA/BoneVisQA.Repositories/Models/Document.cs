@@ -34,6 +34,13 @@ public partial class Document
     [Column("indexing_status")]
     public string IndexingStatus { get; set; } = "Pending";
 
+    [Column("indexing_progress")]
+    public int IndexingProgress { get; set; } = 0;
+
+    [Column("content_hash")]
+    [StringLength(64)]
+    public string? ContentHash { get; set; }
+
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
     public virtual Category? Category { get; set; }
