@@ -201,14 +201,18 @@ public class StudentLearningService : IStudentLearningService
                 .ToListAsync();
 
             var session = await _unitOfWork.Context.ClassQuizSessions
+                .AsNoTracking()
                 .Include(cqs => cqs.Quiz)
                 .FirstOrDefaultAsync(cqs =>
                     cqs.QuizId == attempt.QuizId &&
-                    classIds.Contains(cqs.ClassId) &&
-                    ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
-                    ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
+                    classIds.Contains(cqs.ClassId));
 
             if (session == null)
+                throw new InvalidOperationException("Quiz không được gán qua lớp học.");
+
+            // Kiểm tra quiz đã đóng chưa
+            var effectiveCloseTime = session.CloseTime ?? session.Quiz?.CloseTime;
+            if (effectiveCloseTime.HasValue && effectiveCloseTime.Value < utcNow)
                 throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
         }
 
