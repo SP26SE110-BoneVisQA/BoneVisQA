@@ -249,6 +249,7 @@ builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>(
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
