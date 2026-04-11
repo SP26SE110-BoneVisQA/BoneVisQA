@@ -60,7 +60,7 @@ namespace BoneVisQA.Services.Models.Admin
 
         public string? ClassName { get; set; }
 
-        public Guid StudentId { get; set; }
+        public List<Guid>? StudentIds { get; set; }
 
         public Guid? LecturerId { get; set; }
 
@@ -70,18 +70,10 @@ namespace BoneVisQA.Services.Models.Admin
     }
     public class UpdateAssignClassDTO
     {
-        public Guid? EnrollmentId { get; set; }
-
         public Guid ClassId { get; set; }
-
-        public string? ClassName { get; set; }
-
-        public Guid StudentId { get; set; }
 
         public Guid? LecturerId { get; set; }
 
         public Guid? ExpertId { get; set; }
-
-        public DateTime? EnrolledAt { get; set; }
     }
 }

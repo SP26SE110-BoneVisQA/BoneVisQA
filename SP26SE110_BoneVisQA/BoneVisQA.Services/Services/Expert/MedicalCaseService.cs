@@ -307,31 +307,6 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize)
-        {
-            var query = _unitOfWork.TagRepository.GetQueryable();
-
-            var totalCount = await query.CountAsync();
-
-            var tags = await query
-                .OrderBy(x => x.Name)
-                .Skip((pageIndex - 1) * pageSize)
-                .Take(pageSize)
-                .Select(x => new GetTagDTO
-                {
-                    Id = x.Id,
-                    Name = x.Name
-                })
-                .ToListAsync();
-
-            return new PagedResult<GetTagDTO>
-            {
-                Items = tags,
-                TotalCount = totalCount,
-                PageIndex = pageIndex,
-                PageSize = pageSize
-            };
-        }
         public async Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize)
         {            
             var query = _unitOfWork.MedicalImageRepository.GetQueryable();
