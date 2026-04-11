@@ -113,66 +113,74 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost("classes/{classId:guid}/enroll")]
-    public async Task<IActionResult> EnrollStudent(Guid classId, [FromBody] EnrollStudentRequestDto request)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    // ========================================================================
+    // DISABLED: Student CRUD endpoints — Lecturer không CRUD student trong lớp
+    // ========================================================================
 
-        bool created;
-        try
-        {
-            created = await _lecturerService.EnrollStudentAsync(lecturerId.Value, classId, request.StudentId);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        if (!created)
-            return Conflict(new { message = "Student đã có trong lớp này." });
-        return NoContent();
-    }
+    // [HttpPost("classes/{classId:guid}/enroll")]
+    // public async Task<IActionResult> EnrollStudent(Guid classId, [FromBody] EnrollStudentRequestDto request)
+    // {
+    //     var lecturerId = GetLecturerId();
+    //     if (lecturerId == null)
+    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //
+    //     bool created;
+    //     try
+    //     {
+    //         created = await _lecturerService.EnrollStudentAsync(lecturerId.Value, classId, request.StudentId);
+    //     }
+    //     catch (UnauthorizedAccessException ex)
+    //     {
+    //         return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+    //     }
+    //     if (!created)
+    //         return Conflict(new { message = "Student đã có trong lớp này." });
+    //     return NoContent();
+    // }
 
-    [HttpPost("classes/{classId:guid}/enrollmany")]
-    public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> EnrollManyStudents(Guid classId, [FromBody] EnrollStudentsRequestDto request)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    // [HttpPost("classes/{classId:guid}/enrollmany")]
+    // public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> EnrollManyStudents(Guid classId, [FromBody] EnrollStudentsRequestDto request)
+    // {
+    //     var lecturerId = GetLecturerId();
+    //     if (lecturerId == null)
+    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //
+    //     IReadOnlyList<StudentEnrollmentDto> result;
+    //     try
+    //     {
+    //         result = await _lecturerService.EnrollStudentsAsync(lecturerId.Value, classId, request);
+    //     }
+    //     catch (UnauthorizedAccessException ex)
+    //     {
+    //         return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+    //     }
+    //     return Ok(result);
+    // }
 
-        IReadOnlyList<StudentEnrollmentDto> result;
-        try
-        {
-            result = await _lecturerService.EnrollStudentsAsync(lecturerId.Value, classId, request);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        return Ok(result);
-    }
+    // [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
+    // public async Task<IActionResult> RemoveStudent(Guid classId, Guid studentId)
+    // {
+    //     var lecturerId = GetLecturerId();
+    //     if (lecturerId == null)
+    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //
+    //     bool removed;
+    //     try
+    //     {
+    //         removed = await _lecturerService.RemoveStudentAsync(lecturerId.Value, classId, studentId);
+    //     }
+    //     catch (UnauthorizedAccessException ex)
+    //     {
+    //         return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+    //     }
+    //     if (!removed)
+    //         return NotFound(new { message = "Student không tồn tại trong lớp này." });
+    //     return NoContent();
+    // }
 
-    [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
-    public async Task<IActionResult> RemoveStudent(Guid classId, Guid studentId)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
-
-        bool removed;
-        try
-        {
-            removed = await _lecturerService.RemoveStudentAsync(lecturerId.Value, classId, studentId);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        if (!removed)
-            return NotFound(new { message = "Student không tồn tại trong lớp này." });
-        return NoContent();
-    }
+    // ========================================================================
+    // Student Management - Chỉ xem, không CRUD
+    // ========================================================================
 
     [HttpGet("classes/{classId:guid}/students")]
     public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetStudentsInClass(Guid classId)
@@ -193,40 +201,46 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("classes/{classId:guid}/students/available")]
-    public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetAvailableStudents(Guid classId)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    // DISABLED: GetAvailableStudents — Lecturer không thêm student
+    // [HttpGet("classes/{classId:guid}/students/available")]
+    // public async Task<ActionResult<IReadOnlyList<StudentEnrollmentDto>>> GetAvailableStudents(Guid classId)
+    // {
+    //     var lecturerId = GetLecturerId();
+    //     if (lecturerId == null)
+    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //
+    //     IReadOnlyList<StudentEnrollmentDto> result;
+    //     try
+    //     {
+    //         result = await _lecturerService.GetAvailableStudentsAsync(lecturerId.Value, classId);
+    //     }
+    //     catch (UnauthorizedAccessException ex)
+    //     {
+    //         return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+    //     }
+    //     return Ok(result);
+    // }
 
-        IReadOnlyList<StudentEnrollmentDto> result;
-        try
-        {
-            result = await _lecturerService.GetAvailableStudentsAsync(lecturerId.Value, classId);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-        return Ok(result);
-    }
+    // DISABLED: ImportStudentsFromExcel — Lecturer không thêm student
+    // [HttpPost("classes/{classId:guid}/import-students")]
+    // [Consumes("multipart/form-data")]
+    // public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
+    // {
+    //     if (file == null || file.Length == 0)
+    //         return BadRequest(new { message = "File không được để trống." });
+    //
+    //     var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+    //     if (extension != ".xlsx" && extension != ".xls")
+    //         return BadRequest(new { message = "Chỉ chấp nhận file .xlsx hoặc .xls." });
+    //
+    //     await using var stream = file.OpenReadStream();
+    //     var result = await _lecturerService.ImportStudentsFromExcelAsync(classId, stream, file.FileName);
+    //     return Ok(result);
+    // }
 
-    [HttpPost("classes/{classId:guid}/import-students")]
-    [Consumes("multipart/form-data")]
-    public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
-    {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { message = "File không được để trống." });
-
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (extension != ".xlsx" && extension != ".xls")
-            return BadRequest(new { message = "Chỉ chấp nhận file .xlsx hoặc .xls." });
-
-        await using var stream = file.OpenReadStream();
-        var result = await _lecturerService.ImportStudentsFromExcelAsync(classId, stream, file.FileName);
-        return Ok(result);
-    }
+    // ========================================================================
+    // END DISABLED: Student CRUD endpoints
+    // ========================================================================
 
     [HttpPost("classes/{classId:guid}/announcements")]
     public async Task<ActionResult<AnnouncementDto>> CreateAnnouncement(Guid classId, [FromBody] CreateAnnouncementRequestDto request)
@@ -677,37 +691,42 @@ public class LecturersController : ControllerBase
 
     #endregion
 
-    #region Expert Assignment
+    // ========================================================================
+    // DISABLED: Expert Assignment — Lecturer không gán expert
+    // ========================================================================
 
-    [HttpGet("experts")]
-    public async Task<ActionResult<IReadOnlyList<ExpertOptionDto>>> GetExperts()
-    {
-        var result = await _lecturerService.GetExpertsAsync();
-        return Ok(result);
-    }
+    // [HttpGet("experts")]
+    // public async Task<ActionResult<IReadOnlyList<ExpertOptionDto>>> GetExperts()
+    // {
+    //     var result = await _lecturerService.GetExpertsAsync();
+    //     return Ok(result);
+    // }
 
-    public class AssignExpertRequestDto
-    {
-        public Guid? ExpertId { get; set; }
-    }
+    // public class AssignExpertRequestDto
+    // {
+    //     public Guid? ExpertId { get; set; }
+    // }
 
-    [HttpPut("classes/{classId:guid}/expert")]
-    public async Task<ActionResult<ClassDto>> AssignExpertToClass(Guid classId, [FromBody] AssignExpertRequestDto request)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    // [HttpPut("classes/{classId:guid}/expert")]
+    // public async Task<ActionResult<ClassDto>> AssignExpertToClass(Guid classId, [FromBody] AssignExpertRequestDto request)
+    // {
+    //     var lecturerId = GetLecturerId();
+    //     if (lecturerId == null)
+    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //
+    //     try
+    //     {
+    //         var result = await _lecturerService.AssignExpertToClassAsync(lecturerId.Value, classId, request.ExpertId);
+    //         return Ok(result);
+    //     }
+    //     catch (UnauthorizedAccessException ex)
+    //     {
+    //         return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+    //     }
+    // }
 
-        try
-        {
-            var result = await _lecturerService.AssignExpertToClassAsync(lecturerId.Value, classId, request.ExpertId);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-    }
+    // ========================================================================
+    // END DISABLED: Expert Assignment
+    // ========================================================================
 
-    #endregion
 }

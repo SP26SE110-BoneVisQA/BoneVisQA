@@ -81,7 +81,61 @@ public class ExpertReviewService : IExpertReviewService
             Citations = MapCitations(x.Answer.Citations)
         }).ToList();
     }
+    public async Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId)
+    {
+        var query = _unitOfWork.Context.CaseAnswers
+            .AsNoTracking()
+            .Include(a => a.Question)
+                .ThenInclude(q => q.Student)
+            .Include(a => a.Question)
+                .ThenInclude(q => q.Case)
+            .Include(a => a.ExpertReviews)
+            .Include(a => a.Citations)
+                .ThenInclude(c => c.Chunk)
+                    .ThenInclude(ch => ch.Doc)
+            .Where(a =>
+                _unitOfWork.Context.ClassEnrollments.Any(e =>
+                    e.StudentId == a.Question.StudentId &&
+                    e.Class.ExpertId == expertId) ||
+                a.ExpertReviews.Any(r => r.ExpertId == expertId))
+            .Select(a => new
+            {
+                Answer = a,
+                Enrollment = _unitOfWork.Context.ClassEnrollments
+                    .Include(e => e.Class)
+                    .Where(e => e.StudentId == a.Question.StudentId && e.Class.ExpertId == expertId)
+                    .OrderByDescending(e => e.EnrolledAt)
+                    .FirstOrDefault(),
+                Review = a.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId)
+            });
 
+        var rows = await query.ToListAsync();
+
+        return rows.Select(x => new ExpertEscalatedAnswerDto
+        {
+            AnswerId = x.Answer.Id,
+            QuestionId = x.Answer.QuestionId,
+            StudentId = x.Answer.Question.StudentId,
+            StudentName = x.Answer.Question.Student?.FullName ?? string.Empty,
+            StudentEmail = x.Answer.Question.Student?.Email ?? string.Empty,
+            CaseId = x.Answer.Question.CaseId,
+            CaseTitle = x.Answer.Question.Case?.Title ?? string.Empty,
+            QuestionText = x.Answer.Question.QuestionText,
+            CurrentAnswerText = x.Answer.AnswerText,
+            StructuredDiagnosis = x.Answer.StructuredDiagnosis,
+            DifferentialDiagnoses = x.Answer.DifferentialDiagnoses,
+            KeyImagingFindings = x.Answer.KeyImagingFindings,
+            ReflectiveQuestions = x.Answer.ReflectiveQuestions,
+            Status = x.Answer.Status,
+            EscalatedById = x.Answer.EscalatedById,
+            EscalatedAt = x.Answer.EscalatedAt,
+            AiConfidenceScore = x.Answer.AiConfidenceScore,
+            ClassId = x.Enrollment?.ClassId,
+            ClassName = x.Enrollment?.Class?.ClassName ?? string.Empty,
+            ReviewNote = x.Review?.ReviewNote,
+            Citations = MapCitations(x.Answer.Citations)
+        }).ToList();
+    }
     public async Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid answerId, ResolveEscalatedAnswerRequestDto request)
     {
         var answer = await _unitOfWork.Context.CaseAnswers
@@ -181,8 +235,7 @@ public class ExpertReviewService : IExpertReviewService
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new InvalidOperationException("Lý do flag chunk là bắt buộc.");
 
-        var chunk = await _unitOfWork.Context.DocumentChunks
-            .FirstOrDefaultAsync(ch => ch.Id == chunkId)
+        var chunk = await _unitOfWork.Context.DocumentChunks.FirstOrDefaultAsync(ch => ch.Id == chunkId)
             ?? throw new KeyNotFoundException("Không tìm thấy document chunk.");
 
         var canReviewChunk = await _unitOfWork.Context.Citations
@@ -198,8 +251,8 @@ public class ExpertReviewService : IExpertReviewService
                     e.Class.ExpertId == expertId) ||
                  c.Answer.ExpertReviews.Any(r => r.ExpertId == expertId)));
 
-        //if (!canReviewChunk)
-        //    throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+        if (!canReviewChunk)
+            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
 
         if (!chunk.IsFlagged)
         {

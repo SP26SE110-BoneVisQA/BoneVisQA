@@ -11,7 +11,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
     public interface IQuizsService
     {
         //=====================================================   QUIZ  ==========================================================
-        Task<PagedResult<GetQuizDTO>> GetQuizDTO(int pageIndex, int pageSize);
+        Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize);
         Task<CreateQuizResponseDTO> CreateQuizAsync(CreateQuizRequestDTO request);
         Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update);
         Task<bool> DeleteQuizAsync(Guid quizId);

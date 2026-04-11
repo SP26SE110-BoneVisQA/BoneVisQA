@@ -258,6 +258,7 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
+builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -289,7 +290,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
     await next();
 });
-//app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 app.UseSwagger();
 app.UseSwaggerUI();
 //
