@@ -348,6 +348,91 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         });
     }
 
+    private async Task QueueAssignmentUpdateEmailsAsync(
+        Guid classId,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate)
+    {
+        _logger.LogInformation("[AssignmentUpdateEmail] Queue started for class {ClassId}", classId);
+
+        List<(string Email, string Name)> items;
+        try
+        {
+            var rows = await _unitOfWork.Context.ClassEnrollments
+                .AsNoTracking()
+                .Where(e => e.ClassId == classId)
+                .Select(e => new { e.Student!.Email, e.Student.FullName })
+                .ToListAsync();
+
+            items = rows
+                .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .ToList();
+
+            _logger.LogInformation("[AssignmentUpdateEmail] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AssignmentUpdateEmail] Failed to load recipients for class {ClassId}", classId);
+            return;
+        }
+
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("[AssignmentUpdateEmail] No student email for class {ClassId}", classId);
+            return;
+        }
+
+        var dueDateDisplay = dueDate.HasValue
+            ? dueDate.Value.ToString("dd/MM/yyyy HH:mm")
+            : null;
+
+        var nameCopy = className;
+        var titleCopy = assignmentTitle;
+        var typeCopy = assignmentType;
+        var dueCopy = dueDate;
+        var dueDisplayCopy = dueDateDisplay;
+        var log = _logger;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                foreach (var (email, studentName) in items)
+                {
+                    try
+                    {
+                        await emailService.SendAssignmentUpdateEmailAsync(
+                            email,
+                            studentName,
+                            nameCopy,
+                            titleCopy,
+                            typeCopy,
+                            dueCopy,
+                            dueDisplayCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogError(ex, "[AssignmentUpdateEmail] Error sending to {Email}", email);
+                    }
+                }
+
+                log.LogInformation(
+                    "[AssignmentUpdateEmail] Background send finished for class {ClassName}, {Count} recipients",
+                    nameCopy,
+                    items.Count);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[AssignmentUpdateEmail] Background task failed for class {ClassId}", classId);
+            }
+        });
+    }
+
     private async Task<AcademicClass> EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
     {
         return await _unitOfWork.Context.AcademicClasses
@@ -616,6 +701,17 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 classCase.IsMandatory = request.IsMandatory.Value;
 
             await _unitOfWork.SaveAsync();
+
+            if (request.SendEmailUpdate)
+            {
+                await QueueAssignmentUpdateEmailsAsync(
+                    classCase.ClassId,
+                    classCase.Class.ClassName,
+                    classCase.Case.Title ?? "Bài tập ca lâm sàng",
+                    "Ca Lâm Sàng",
+                    classCase.DueDate);
+            }
+
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
@@ -644,6 +740,17 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             quizSession.ShowResultsAfterSubmission = request.ShowResultsAfterSubmission.Value;
 
         await _unitOfWork.SaveAsync();
+
+        if (request.SendEmailUpdate)
+        {
+            await QueueAssignmentUpdateEmailsAsync(
+                quizSession.ClassId,
+                quizSession.Class.ClassName,
+                quizSession.Quiz?.Title ?? "Quiz",
+                "Quiz",
+                quizSession.CloseTime);
+        }
+
         return await GetAssignmentByIdAsync(assignmentId);
     }
 

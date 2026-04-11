@@ -337,6 +337,7 @@ public class StudentLearningService : IStudentLearningService
                 OptionD = q.OptionD,
                 CorrectAnswer = q.CorrectAnswer,
                 CaseId = q.CaseId,
+                ImageUrl = q.ImageUrl,
             };
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
         }
@@ -369,7 +370,7 @@ public class StudentLearningService : IStudentLearningService
                 OptionB = q.OptionB,
                 OptionC = q.OptionC,
                 OptionD = q.OptionD,
-                ImageUrl = null,
+                ImageUrl = q.ImageUrl,
             })
             .ToListAsync();
 

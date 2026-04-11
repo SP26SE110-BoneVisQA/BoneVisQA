@@ -32,6 +32,7 @@ public class AIQuizQuestionDto
     public string CorrectAnswer { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
+    public string? ImageUrl { get; set; }
     public string? Explanation { get; set; }
 }
 

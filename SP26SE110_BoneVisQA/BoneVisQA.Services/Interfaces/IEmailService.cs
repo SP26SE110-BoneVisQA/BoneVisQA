@@ -29,6 +29,15 @@ public interface IEmailService
         DateTime? dueDate,
         string? dueDateDisplay);
 
+    Task<bool> SendAssignmentUpdateEmailAsync(
+        string toEmail,
+        string studentName,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate,
+        string? dueDateDisplay);
+
     // Retake request email
     Task<bool> SendRetakeRequestEmailAsync(
         string toEmail,

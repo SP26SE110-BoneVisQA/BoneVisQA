@@ -266,6 +266,8 @@ public class UpdateAssignmentRequestDto
     public bool? AllowLate { get; set; }
     public bool? AllowRetake { get; set; }
     public bool? ShowResultsAfterSubmission { get; set; }
+    /// <summary>Gửi email thông báo cập nhật cho sinh viên.</summary>
+    public bool SendEmailUpdate { get; set; } = true;
 }
 
 /// <summary>Thông tin submission của một sinh viên.</summary>

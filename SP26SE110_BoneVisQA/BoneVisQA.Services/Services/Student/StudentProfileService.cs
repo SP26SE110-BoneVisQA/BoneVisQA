@@ -42,8 +42,8 @@ public class StudentProfileService : IStudentProfileService
             request.DateOfBirth,
             request.PhoneNumber,
             request.Gender,
-            request.StudentSchoolId,
             request.ClassCode,
+            request.StudentSchoolId,
             request.Address,
             request.Bio,
             request.EmergencyContact);
