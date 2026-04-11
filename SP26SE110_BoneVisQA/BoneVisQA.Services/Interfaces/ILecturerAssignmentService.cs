@@ -15,4 +15,20 @@ public interface ILecturerAssignmentService
     // Retake methods
     Task AllowRetakeForAttemptAsync(Guid lecturerId, Guid attemptId);
     Task AllowRetakeAllAsync(Guid lecturerId, Guid classId, Guid quizId);
+
+    // Assignment CRUD methods
+    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId);
+
+    /// <summary>Cập nhật thông tin assignment.</summary>
+    Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request);
+
+    /// <summary>Xóa một assignment.</summary>
+    Task DeleteAssignmentAsync(Guid assignmentId);
+
+    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId);
+
+    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
 }

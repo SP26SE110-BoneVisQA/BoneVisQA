@@ -23,6 +23,24 @@ public class LecturerService : ILecturerService
         _emailService = emailService;
     }
 
+    /// <summary>
+    /// Chuyển DateTime sang UTC một cách chính xác:
+    /// - Kind=Utc: giữ nguyên
+    /// - Kind=Local: cộng thêm offset để ra UTC
+    /// - Kind=Unspecified: giả sử là giờ local → cộng offset để ra UTC
+    /// Kết quả luôn được đánh dấu Kind=Utc để đảm bảo lưu đúng múi giờ.
+    /// </summary>
+    private static DateTime? ToUtc(DateTime? dt)
+    {
+        if (!dt.HasValue) return null;
+        return dt.Value.Kind switch
+        {
+            DateTimeKind.Utc => dt.Value,                          // đã là UTC, giữ nguyên
+            DateTimeKind.Local => dt.Value.ToUniversalTime(),       // local → UTC
+            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime() // unspecified → giả sử local → UTC
+        };
+    }
+
     private async Task EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
     {
         var ownsClass = await _unitOfWork.AcademicClassRepository
@@ -421,8 +439,8 @@ public class LecturerService : ILecturerService
             Classification = request.Classification,
             IsAiGenerated = request.IsAiGenerated,
             CreatedByExpertId = creatingUserId,
-            OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-            CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+            OpenTime = ToUtc(request.OpenTime),
+            CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
             CreatedAt = now
@@ -438,8 +456,8 @@ public class LecturerService : ILecturerService
                 Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+                OpenTime = ToUtc(request.OpenTime),
+                CloseTime = ToUtc(request.CloseTime),
                 TimeLimitMinutes = request.TimeLimit,
                 PassingScore = request.PassingScore,
                 CreatedAt = now
@@ -1572,8 +1590,8 @@ public class LecturerService : ILecturerService
             throw new KeyNotFoundException("Quiz không tồn tại.");
 
         quiz.Title = request.Title;
-        quiz.OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null;
-        quiz.CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null;
+        quiz.OpenTime = ToUtc(request.OpenTime);
+        quiz.CloseTime = ToUtc(request.CloseTime);
         quiz.TimeLimit = request.TimeLimit;
         quiz.PassingScore = request.PassingScore;
 
@@ -1886,5 +1904,261 @@ public class LecturerService : ILecturerService
             ExpertName = academicClass.Expert?.FullName,
             CreatedAt = academicClass.CreatedAt
         };
+    }
+
+    // ── Assignment CRUD Methods ─────────────────────────────────────────────────
+
+    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
+    {
+        // Thử tìm trong ClassCases (case assignment)
+        var classCase = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Include(cc => cc.Class)
+            .Include(cc => cc.Case)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
+
+        if (classCase != null)
+        {
+            var totalStudents = await _unitOfWork.Context.ClassEnrollments
+                .CountAsync(e => e.ClassId == classCase.ClassId);
+
+            var submittedCount = await _unitOfWork.Context.CaseViewLogs
+                .CountAsync(v => v.CaseId == classCase.CaseId && v.IsCompleted == true);
+
+            return new AssignmentDetailDto
+            {
+                Id = classCase.CaseId,
+                ClassId = classCase.ClassId,
+                ClassName = classCase.Class?.ClassName ?? "",
+                ClassCode = null,
+                Type = "case",
+                Title = classCase.Case?.Title ?? "Untitled Case",
+                Description = classCase.Case?.Description,
+                DueDate = classCase.DueDate,
+                OpenDate = classCase.AssignedAt,
+                IsMandatory = classCase.IsMandatory,
+                AssignedAt = classCase.AssignedAt,
+                TotalStudents = totalStudents,
+                SubmittedCount = submittedCount,
+                GradedCount = 0,
+                AllowLate = false,
+                CreatedAt = classCase.AssignedAt
+            };
+        }
+
+        // Thử tìm trong ClassQuizSessions (quiz assignment)
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Class)
+            .Include(cqs => cqs.Quiz)
+            .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
+
+        if (quizSession == null)
+            throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        var quizTotalStudents = await _unitOfWork.Context.ClassEnrollments
+            .CountAsync(e => e.ClassId == quizSession.ClassId);
+
+        var quizSubmittedCount = await _unitOfWork.Context.QuizAttempts
+            .CountAsync(a => a.QuizId == quizSession.QuizId && a.CompletedAt.HasValue);
+
+        var quizGradedCount = await _unitOfWork.Context.QuizAttempts
+            .CountAsync(a => a.QuizId == quizSession.QuizId && a.Score.HasValue);
+
+        var quizAvgScore = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.QuizId == quizSession.QuizId && a.Score.HasValue)
+            .AverageAsync(a => (double?)a.Score) ?? null;
+
+        return new AssignmentDetailDto
+        {
+            Id = quizSession.Id,
+            ClassId = quizSession.ClassId,
+            ClassName = quizSession.Class?.ClassName ?? "",
+            ClassCode = null,
+            Type = "quiz",
+            Title = quizSession.Quiz?.Title ?? "Untitled Quiz",
+            Description = null,
+            Instructions = null,
+            DueDate = quizSession.CloseTime,
+            OpenDate = quizSession.OpenTime,
+            IsMandatory = false,
+            AssignedAt = quizSession.CreatedAt,
+            TotalStudents = quizTotalStudents,
+            SubmittedCount = quizSubmittedCount,
+            GradedCount = quizGradedCount,
+            MaxScore = 100,
+            PassingScore = quizSession.PassingScore,
+            TimeLimitMinutes = quizSession.TimeLimitMinutes,
+            AllowLate = quizSession.AllowLate,
+            AllowRetake = quizSession.AllowRetake,
+            ShowResultsAfterSubmission = quizSession.ShowResultsAfterSubmission,
+            AvgScore = quizAvgScore,
+            CreatedAt = quizSession.CreatedAt
+        };
+    }
+
+    /// <summary>Cập nhật thông tin assignment.</summary>
+    public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
+    {
+        // Thử cập nhật ClassCase
+        var classCase = await _unitOfWork.Context.ClassCases
+            .Include(cc => cc.Class)
+            .Include(cc => cc.Case)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
+
+        if (classCase != null)
+        {
+            if (request.DueDate.HasValue)
+                classCase.DueDate = ToUtc(request.DueDate);
+            if (request.IsMandatory.HasValue)
+                classCase.IsMandatory = request.IsMandatory.Value;
+
+            await _unitOfWork.SaveAsync();
+            return await GetAssignmentByIdAsync(assignmentId);
+        }
+
+        // Thử cập nhật ClassQuizSession
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .Include(cqs => cqs.Class)
+            .Include(cqs => cqs.Quiz)
+            .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
+
+        if (quizSession == null)
+            throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        if (request.DueDate.HasValue)
+            quizSession.CloseTime = ToUtc(request.DueDate);
+        if (request.OpenDate.HasValue)
+            quizSession.OpenTime = ToUtc(request.OpenDate);
+        if (request.PassingScore.HasValue)
+            quizSession.PassingScore = request.PassingScore.Value;
+        if (request.TimeLimitMinutes.HasValue)
+            quizSession.TimeLimitMinutes = request.TimeLimitMinutes.Value;
+        if (request.AllowRetake.HasValue)
+            quizSession.AllowRetake = request.AllowRetake.Value;
+        if (request.AllowLate.HasValue)
+            quizSession.AllowLate = request.AllowLate.Value;
+        if (request.ShowResultsAfterSubmission.HasValue)
+            quizSession.ShowResultsAfterSubmission = request.ShowResultsAfterSubmission.Value;
+
+        await _unitOfWork.SaveAsync();
+        return await GetAssignmentByIdAsync(assignmentId);
+    }
+
+    /// <summary>Xóa một assignment.</summary>
+    public async Task DeleteAssignmentAsync(Guid assignmentId)
+    {
+        // Thử xóa ClassCase
+        var classCase = await _unitOfWork.Context.ClassCases
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
+
+        if (classCase != null)
+        {
+            _unitOfWork.Context.ClassCases.Remove(classCase);
+            await _unitOfWork.SaveAsync();
+            return;
+        }
+
+        // Thử xóa ClassQuizSession
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
+
+        if (quizSession == null)
+            throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        _unitOfWork.Context.ClassQuizSessions.Remove(quizSession);
+        await _unitOfWork.SaveAsync();
+    }
+
+    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
+    {
+        // Thử lấy submissions từ ClassCases (case)
+        var classCase = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Include(cc => cc.Class)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
+
+        if (classCase != null)
+        {
+            var enrollments = await _unitOfWork.Context.ClassEnrollments
+                .AsNoTracking()
+                .Include(e => e.Student)
+                .Where(e => e.ClassId == classCase.ClassId)
+                .ToListAsync();
+
+            var viewLogs = await _unitOfWork.Context.CaseViewLogs
+                .AsNoTracking()
+                .Where(v => v.CaseId == assignmentId)
+                .ToDictionaryAsync(v => v.StudentId);
+
+            return enrollments.Select(e => new AssignmentSubmissionDto
+            {
+                StudentId = e.StudentId,
+                StudentName = e.Student?.FullName ?? "Unknown",
+                StudentCode = e.Student?.SchoolCohort,
+                SubmittedAt = viewLogs.TryGetValue(e.StudentId, out var log) ? log.ViewedAt : null,
+                Score = null,
+                Status = viewLogs.ContainsKey(e.StudentId) ? "graded" : "not-submitted"
+            }).ToList();
+        }
+
+        // Lấy submissions từ ClassQuizSessions (quiz)
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        var quizEnrollments = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Student)
+            .Where(e => e.ClassId == quizSession.ClassId)
+            .ToListAsync();
+
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => a.QuizId == quizSession.QuizId)
+            .ToDictionaryAsync(a => a.StudentId);
+
+        return quizEnrollments.Select(e => new AssignmentSubmissionDto
+        {
+            StudentId = e.StudentId,
+            StudentName = e.Student?.FullName ?? "Unknown",
+            StudentCode = e.Student?.SchoolCohort,
+            SubmittedAt = attempts.TryGetValue(e.StudentId, out var attempt) ? attempt.CompletedAt : null,
+            Score = attempts.TryGetValue(e.StudentId, out var attempt2) ? attempt2.Score : null,
+            Status = attempts.TryGetValue(e.StudentId, out var attempt3)
+                ? (attempt3.Score.HasValue ? "graded" : "pending")
+                : "not-submitted"
+        }).ToList();
+    }
+
+    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    public async Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(
+        Guid assignmentId, UpdateSubmissionsRequestDto request)
+    {
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.QuizId == quizSession.QuizId && studentIds.Contains(a.StudentId))
+            .ToDictionaryAsync(a => a.StudentId);
+
+        foreach (var update in request.Submissions)
+        {
+            if (attempts.TryGetValue(update.StudentId, out var attempt))
+            {
+                attempt.Score = update.Score;
+            }
+        }
+
+        await _unitOfWork.SaveAsync();
+        return await GetAssignmentSubmissionsAsync(assignmentId);
     }
 }

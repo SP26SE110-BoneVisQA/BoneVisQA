@@ -19,6 +19,17 @@ public class QuizService : IQuizService
         _unitOfWork = unitOfWork;
     }
 
+    private static DateTime? ToUtc(DateTime? dt)
+    {
+        if (!dt.HasValue) return null;
+        return dt.Value.Kind switch
+        {
+            DateTimeKind.Utc => dt.Value,
+            DateTimeKind.Local => dt.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime()
+        };
+    }
+
     public async Task<QuizDto> CreateQuizAsync(QuizDto request)
     {
         var now = DateTime.UtcNow;
@@ -30,8 +41,8 @@ public class QuizService : IQuizService
             IsAiGenerated = request.IsAiGenerated,
             Difficulty = request.Difficulty,
             Classification = request.Classification,
-            OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-            CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+            OpenTime = ToUtc(request.OpenTime),
+            CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore,
             CreatedAt = now
@@ -47,8 +58,8 @@ public class QuizService : IQuizService
                 Id = Guid.NewGuid(),
                 ClassId = request.ClassId,
                 QuizId = quiz.Id,
-                OpenTime = request.OpenTime.HasValue ? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc) : null,
-                CloseTime = request.CloseTime.HasValue ? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc) : null,
+                OpenTime = ToUtc(request.OpenTime),
+                CloseTime = ToUtc(request.CloseTime),
                 PassingScore = request.PassingScore,
                 TimeLimitMinutes = request.TimeLimit,
                 CreatedAt = now

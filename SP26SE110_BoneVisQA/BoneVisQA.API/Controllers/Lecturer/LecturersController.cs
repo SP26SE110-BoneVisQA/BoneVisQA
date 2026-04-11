@@ -620,6 +620,86 @@ public class LecturersController : ControllerBase
 
     #endregion
 
+    #region Assignment CRUD
+
+    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    [HttpGet("assignments/{assignmentId:guid}")]
+    public async Task<ActionResult<AssignmentDetailDto>> GetAssignmentById(Guid assignmentId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetAssignmentByIdAsync(assignmentId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Cập nhật thông tin assignment.</summary>
+    [HttpPut("assignments/{assignmentId:guid}")]
+    public async Task<ActionResult<AssignmentDetailDto>> UpdateAssignment(Guid assignmentId, [FromBody] UpdateAssignmentRequestDto request)
+    {
+        try
+        {
+            var result = await _lecturerService.UpdateAssignmentAsync(assignmentId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Xóa một assignment.</summary>
+    [HttpDelete("assignments/{assignmentId:guid}")]
+    public async Task<IActionResult> DeleteAssignment(Guid assignmentId)
+    {
+        try
+        {
+            await _lecturerService.DeleteAssignmentAsync(assignmentId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    [HttpGet("assignments/{assignmentId:guid}/submissions")]
+    public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> GetAssignmentSubmissions(Guid assignmentId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetAssignmentSubmissionsAsync(assignmentId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    [HttpPut("assignments/{assignmentId:guid}/submissions")]
+    public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> UpdateAssignmentSubmissions(
+        Guid assignmentId, [FromBody] UpdateSubmissionsRequestDto request)
+    {
+        try
+        {
+            var result = await _lecturerService.UpdateAssignmentSubmissionsAsync(assignmentId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    #endregion
+
     #region QA Triage
 
     /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>

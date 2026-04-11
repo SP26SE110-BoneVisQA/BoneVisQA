@@ -61,5 +61,12 @@ public interface ILecturerService
 
     Task<IReadOnlyList<ExpertOptionDto>> GetExpertsAsync();
     Task<ClassDto> AssignExpertToClassAsync(Guid lecturerId, Guid classId, Guid? expertId);
+
+    // Assignment CRUD methods (delegates to LecturerAssignmentService)
+    Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId);
+    Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request);
+    Task DeleteAssignmentAsync(Guid assignmentId);
+    Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId);
+    Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
 }
 
