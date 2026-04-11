@@ -126,6 +126,8 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Coordinates { get; set; }
     }
 
+
+    //==========================================================================
     public class GetTagDTO 
     { 
         public Guid Id { get; set; } 
@@ -140,6 +142,7 @@ namespace BoneVisQA.Services.Models.Expert
     public class GetAllImageDTO
     {
         public Guid Id { get; set; }
+        public Guid CaseId { get; set; }    
         public string ImageUrl { get; set; } = null!;
         public string FileName { get; set; } = null!;
     }
@@ -148,6 +151,7 @@ namespace BoneVisQA.Services.Models.Expert
     public class GetAllAnnotationDTO
     {
         public Guid Id { get; set; }
+        public Guid ImageId { get; set; }
         public string ImageUrl { get; set; } = null!;
         public string Label { get; set; } = null!;
         public string? Coordinates { get; set; }

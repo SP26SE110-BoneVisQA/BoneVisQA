@@ -266,6 +266,7 @@ namespace BoneVisQA.Services.Services.Expert
                 .Select(x => new GetAllAnnotationDTO
                 {
                     Id = x.Id,
+                    ImageId = x.ImageId,    
                     ImageUrl = baseUrl + x.Image.ImageUrl,
                     Label = x.Label,
                     Coordinates = x.Coordinates
@@ -332,7 +333,7 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
         public async Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize)
-        {
+        {            
             var query = _unitOfWork.MedicalImageRepository.GetQueryable();
 
             var totalCount = await query.CountAsync();
@@ -344,6 +345,7 @@ namespace BoneVisQA.Services.Services.Expert
               .Select(x => new GetAllImageDTO
               {
                   Id = x.Id,
+                  CaseId = x.CaseId,
                   ImageUrl = x.ImageUrl,
                   FileName = Path.GetFileName(x.ImageUrl)
               })
