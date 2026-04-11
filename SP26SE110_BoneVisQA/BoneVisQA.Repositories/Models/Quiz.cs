@@ -46,6 +46,9 @@ public partial class Quiz
     [Column("classification")]
     public string? Classification { get; set; }
 
+    [Column("is_verified_curriculum")]
+    public bool IsVerifiedCurriculum { get; set; } = false;
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

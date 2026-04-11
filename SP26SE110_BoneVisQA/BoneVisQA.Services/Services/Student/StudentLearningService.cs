@@ -53,7 +53,7 @@ public class StudentLearningService : IStudentLearningService
             .Where(q => q.ClassQuizSessions.Any(cqs =>
                 classIds.Contains(cqs.ClassId) &&
                 ((cqs.OpenTime ?? q.OpenTime) == null || (cqs.OpenTime ?? q.OpenTime) <= utcNow) &&
-                ((cqs.CloseTime ?? q.CloseTime) == null || (cqs.CloseTime ?? q.CloseTime) >= utcNow)))
+                ((cqs.CloseTime ?? q.CloseTime) == null || (cqs.CloseTime ?? q.CloseTime) > utcNow)))
             .Where(q => !q.IsAiGenerated)
             .Where(q => q.QuizQuestions.Any());
 

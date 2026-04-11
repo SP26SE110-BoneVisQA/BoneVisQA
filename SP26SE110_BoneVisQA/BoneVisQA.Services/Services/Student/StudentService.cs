@@ -658,9 +658,23 @@ public class StudentService : IStudentService
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == quizId &&
-                classIds.Contains(cqs.ClassId) &&
-                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
-                ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
+                classIds.Contains(cqs.ClassId));
+
+        // Kiểm tra thời gian mở — trả lỗi rõ ràng
+        var effectiveOpenTime = classSession?.OpenTime ?? quiz.OpenTime;
+        var effectiveCloseTime = classSession?.CloseTime ?? quiz.CloseTime;
+
+        if (effectiveOpenTime.HasValue && effectiveOpenTime.Value > utcNow)
+        {
+            throw new InvalidOperationException(
+                $"Quiz chưa mở. Thời gian mở: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (giờ Việt Nam).");
+        }
+
+        if (effectiveCloseTime.HasValue && effectiveCloseTime.Value <= utcNow)
+        {
+            throw new InvalidOperationException(
+                "Quiz đã đóng. Không thể bắt đầu hoặc tiếp tục làm bài.");
+        }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
         QuizAttempt attempt;
