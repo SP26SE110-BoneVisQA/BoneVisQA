@@ -30,6 +30,7 @@ public class AdminUsersController : ControllerBase
             {
                 Message = "Get users successfully.",
                 Result = paged.Items,
+                Items = paged.Items,
                 TotalCount = paged.TotalCount,
                 Page = paged.Page,
                 PageSize = paged.PageSize
@@ -40,19 +41,26 @@ public class AdminUsersController : ControllerBase
         return Ok(new
         {
             Message = "Get all users successfully.",
-            Result = users
+            Result = users,
+            Items = users,
+            TotalCount = users.Count,
+            Page = 1,
+            PageSize = users.Count
         });
     }
 
 
     [HttpGet("roles/{role}")]
+    [HttpGet("/api/Admin/role/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
     {
         var users = await _userManagementService.GetUserByRoleAsync(role);
         return Ok(new
         {
-            Message = "Get Users by role successfully.",
-            users
+            Message = "Get users by role successfully.",
+            Result = users,
+            Items = users,
+            TotalCount = users.Count
         });
     }
 

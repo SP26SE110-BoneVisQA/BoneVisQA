@@ -58,27 +58,40 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
-        var origins = configuredOrigins
-            .Where(o => !string.IsNullOrWhiteSpace(o))
-            .Select(o => o.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var originSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (origins.Length == 0)
+        foreach (var o in configuredOrigins.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            originSet.Add(o);
+
+        if (builder.Environment.IsDevelopment())
         {
-            // Safe local defaults for development when config is absent.
-            origins = new[]
-            {
-                "http://localhost:3000",
-                "https://localhost:3000",
-                "http://localhost:5173",
-                "https://localhost:5173",
-                "https://localhost:5046",
-                "https://localhost:5047"
-            };
+            foreach (var o in new[]
+                     {
+                         "http://localhost:3000",
+                         "https://localhost:3000",
+                         "http://localhost:5173",
+                         "https://localhost:5173",
+                         "http://localhost:5046",
+                         "https://localhost:7046"
+                     })
+                originSet.Add(o);
         }
 
-        policy.WithOrigins(origins)
+        if (originSet.Count == 0)
+        {
+            foreach (var o in new[]
+                     {
+                         "http://localhost:3000",
+                         "https://localhost:3000",
+                         "http://localhost:5173",
+                         "https://localhost:5173",
+                         "http://localhost:5046",
+                         "https://localhost:7046"
+                     })
+                originSet.Add(o);
+        }
+
+        policy.WithOrigins(originSet.ToArray())
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

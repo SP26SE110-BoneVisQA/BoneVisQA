@@ -65,39 +65,51 @@ namespace BoneVisQA.Services.Services.Admin
         {
             if (!_validRoles.Contains(role)) throw new ArgumentException("Role not found");
 
-            var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
-                q.Include(u => u.UserRoles)
-                 .ThenInclude(ur => ur.Role)
-            );
-
-            var result = users
+            var result = await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
                 .Where(u => u.UserRoles.Any(r => r.Role.Name == role))
-                .Select(MapUser)
-                .ToList();
-
-            return result;
-        }
-
-        public async Task<List<UserManagementDTO>> GetAllUsersAsync()
-        {
-
-            var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
-                q.Include(u => u.UserRoles)
-                 .ThenInclude(ur => ur.Role)
-            );
-
-            return users.Select(u => new UserManagementDTO 
-            {
+                .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(u => u.Id)
+                .Select(u => new UserManagementDTO
+                {
                     Id = u.Id,
                     FullName = u.FullName,
-                    Email = u.Email ?? "",
+                    Email = u.Email ?? string.Empty,
                     SchoolCohort = u.SchoolCohort,
                     LastLogin = u.LastLogin,
                     Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
                     IsActive = u.IsActive,
                     CreatedAt = u.CreatedAt,
                     UpdatedAt = u.UpdatedAt
-            }).ToList();
+                })
+                .ToListAsync();
+
+            return result;
+        }
+
+        public async Task<List<UserManagementDTO>> GetAllUsersAsync()
+        {
+            return await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(u => u.Id)
+                .Select(u => new UserManagementDTO
+                {
+                    Id = u.Id,
+                    FullName = u.FullName,
+                    Email = u.Email ?? string.Empty,
+                    SchoolCohort = u.SchoolCohort,
+                    LastLogin = u.LastLogin,
+                    Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                })
+                .ToListAsync();
         }
 
         public async Task<PagedUsersResultDto> GetUsersPagedAsync(int page, int pageSize)
