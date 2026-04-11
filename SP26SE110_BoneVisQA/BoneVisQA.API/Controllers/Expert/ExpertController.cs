@@ -276,7 +276,7 @@ namespace BoneVisQA.API.Controllers.Expert
         [HttpGet("tag")]
         public async Task<IActionResult> GetAllTag(int pageIndex = 1,int pageSize = 10)
         {
-            var result = await _medicalcaseService.GetAllTag(pageIndex, pageSize);
+            var result = await _tagCaseService.GetAllTag(pageIndex, pageSize);
 
             return Ok(result);
         }
