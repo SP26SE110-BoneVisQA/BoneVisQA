@@ -71,7 +71,7 @@ namespace BoneVisQA.API.Controllers.Admin
         }
 
         [HttpPut("assign")]
-        public async Task<IActionResult> UpdateAssignClass(AssignClassDTO dto)
+        public async Task<IActionResult> UpdateAssignClass(UpdateAssignClassDTO dto)
         {
             var result = await _classservice.UpdateAssignClassAsync(dto);
 

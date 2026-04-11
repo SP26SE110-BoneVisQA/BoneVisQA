@@ -111,7 +111,8 @@ namespace BoneVisQA.Services.Services.Admin
         //=======================================================  ASSIGN CLASS  ===================================================
         public async Task<PagedResult<GetAssignClassDTO>> GetAssignClassAsync(int pageIndex,int pageSize)
         {
-            var query = _unitOfWork.ClassEnrollmentRepository
+            var query = _unitOfWork
+                .ClassEnrollmentRepository
                 .GetQueryable()
                 .Include(x => x.Class)
                 .ThenInclude(x => x.Lecturer)
@@ -120,22 +121,38 @@ namespace BoneVisQA.Services.Services.Admin
                 .Include(x => x.Student);
 
 
-            var totalCount = await query.CountAsync();
+            var groupedQuery = query
+                .GroupBy(x => x.ClassId)
+                .Select(g => new GetAssignClassDTO
+                {
+                    ClassId = g.Key,
+
+                    ClassName = g.First().Class.ClassName,
+
+                    LecturerName = g.First().Class.Lecturer != null
+                        ? g.First().Class.Lecturer.FullName
+                        : null,
+
+                    ExpertName = g.First().Class.Expert != null
+                        ? g.First().Class.Expert.FullName
+                        : null,
+
+                    Students = g
+                        .Select(x => x.Student.FullName)
+                        .ToList(),
+
+                    LastEnrollment = g
+                        .Max(x => x.EnrolledAt)
+                });
 
 
-            var data = await query
-                .OrderByDescending(x => x.EnrolledAt)
+            var totalCount = await groupedQuery.CountAsync();
+
+
+            var data = await groupedQuery
+                .OrderByDescending(x => x.LastEnrollment)
                 .Skip((pageIndex - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new GetAssignClassDTO
-                {
-                    Id = x.Id,
-                    ClassName = x.Class.ClassName,
-                    LecturerName = x.Class.Lecturer.FullName,
-                    ExpertName = x.Class.Expert.FullName,
-                    StudentName = x.Student.FullName,
-                    EnrolledAt = x.EnrolledAt
-                })
                 .ToListAsync();
 
 
@@ -147,10 +164,10 @@ namespace BoneVisQA.Services.Services.Admin
                 PageSize = pageSize
             };
         }
-       
+
         public async Task<AssignClassDTO> AssignClassAsync(AssignClassDTO dto)
         {
-            var classEntity = await _unitOfWork.AcademicClassRepository .GetByIdAsync(dto.ClassId);
+            var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId);
 
             if (classEntity == null) throw new Exception("Class not found");
 
@@ -160,51 +177,58 @@ namespace BoneVisQA.Services.Services.Admin
                 .ThenInclude(x => x.Role)
                 .Where(x =>
                     x.Id == dto.StudentId ||
-                    x.Id == dto.LecturerId ||
-                    x.Id == dto.ExpertId)
+                    (dto.LecturerId != null && x.Id == dto.LecturerId) ||
+                    (dto.ExpertId != null && x.Id == dto.ExpertId))
                 .ToListAsync();
 
 
+            // check student
             var student = users.FirstOrDefault(x => x.Id == dto.StudentId);
 
-            if (student == null ||
-                !student.UserRoles.Any(r => r.Role.Name == "Student"))
+            if (student == null ||!student.UserRoles.Any(r => r.Role.Name == "Student"))
             {
                 throw new Exception("User is not Student");
             }
 
-
-            var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId);
-
-            if (lecturer == null ||
-                !lecturer.UserRoles.Any(r => r.Role.Name == "Lecturer"))
-            {
-                throw new Exception("User is not Lecturer");
-            }
-
-
-            var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId);
-
-            if (expert == null ||
-                !expert.UserRoles.Any(r => r.Role.Name == "Expert"))
-            {
-                throw new Exception("User is not Expert");
-            }
-
-
-            // assign Lecturer nếu chưa có
+            // assign Lecturer nếu class chưa có Lecturer
             if (classEntity.LecturerId == null)
+            {
+                if (dto.LecturerId == null) throw new Exception("Lecturer is required for this class");
+
+                var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId);
+
+                if (lecturer == null ||
+                    !lecturer.UserRoles.Any(r => r.Role.Name == "Lecturer"))
+                {
+                    throw new Exception("User is not Lecturer");
+                }
+
                 classEntity.LecturerId = dto.LecturerId;
+            }
 
 
-            // assign Expert nếu chưa có
+            // assign Expert nếu class chưa có Expert
             if (classEntity.ExpertId == null)
+            {
+                if (dto.ExpertId == null)
+                    throw new Exception("Expert is required for this class");
+
+                var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId);
+
+                if (expert == null ||
+                    !expert.UserRoles.Any(r => r.Role.Name == "Expert"))
+                {
+                    throw new Exception("User is not Expert");
+                }
+
                 classEntity.ExpertId = dto.ExpertId;
+            }
+
 
             _unitOfWork.AcademicClassRepository.Update(classEntity);
 
 
-            // check student already enrolled chưa
+            // check student enrolled chưa
             var existed = await _unitOfWork
                 .ClassEnrollmentRepository
                 .GetQueryable()
@@ -212,14 +236,15 @@ namespace BoneVisQA.Services.Services.Admin
                     x.ClassId == dto.ClassId &&
                     x.StudentId == dto.StudentId);
 
-            if (existed) throw new Exception("Student already enrolled");
+            if (existed)
+                throw new Exception("Student already enrolled");
 
 
             var enrollment = new ClassEnrollment
             {
                 Id = Guid.NewGuid(),
                 ClassId = dto.ClassId,
-                StudentId = dto.StudentId,
+                StudentId = dto.StudentId,               
                 EnrolledAt = DateTime.UtcNow
             };
 
@@ -229,39 +254,36 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.SaveAsync();
 
 
-            dto.ClassName = enrollment.ClassName;
+            // trả ClassName từ AcademicClass (best practice)
+            dto.ClassName = classEntity.ClassName;
 
             return dto;
         }
 
-        public async Task<AssignClassDTO> UpdateAssignClassAsync(AssignClassDTO dto)
+        public async Task<UpdateAssignClassDTO> UpdateAssignClassAsync(UpdateAssignClassDTO dto)
         {
-            var classEntity = await _unitOfWork .AcademicClassRepository.GetByIdAsync(dto.ClassId);
+            var classEntity = await _unitOfWork
+                .AcademicClassRepository
+                .GetByIdAsync(dto.ClassId);
 
-            if (classEntity == null) throw new Exception("Class not found");
-
-
-            var enrollment = await _unitOfWork.ClassEnrollmentRepository
-                .GetQueryable()
-                .FirstOrDefaultAsync(x =>
-                    x.ClassId == dto.ClassId &&
-                    x.StudentId == dto.StudentId);
-
-            if (enrollment == null) throw new Exception("Enrollment not found");
+            if (classEntity == null)
+                throw new Exception("Class not found");
 
 
-            var users = await _unitOfWork.UserRepository
+            var enrollment = await _unitOfWork
+                .ClassEnrollmentRepository
+                .GetByIdAsync(dto.EnrollmentId);
+
+            if (enrollment == null)
+                throw new Exception("Enrollment not found");
+
+
+            var student = await _unitOfWork
+                .UserRepository
                 .GetQueryable()
                 .Include(x => x.UserRoles)
                 .ThenInclude(x => x.Role)
-                .Where(x =>
-                    x.Id == dto.StudentId ||
-                    x.Id == dto.LecturerId ||
-                    x.Id == dto.ExpertId)
-                .ToListAsync();
-
-
-            var student = users.FirstOrDefault(x => x.Id == dto.StudentId);
+                .FirstOrDefaultAsync(x => x.Id == dto.StudentId);
 
             if (student == null ||
                 !student.UserRoles.Any(r => r.Role.Name == "Student"))
@@ -270,48 +292,21 @@ namespace BoneVisQA.Services.Services.Admin
             }
 
 
-            var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId);
-
-            if (lecturer == null ||
-                !lecturer.UserRoles.Any(r => r.Role.Name == "Lecturer"))
-            {
-                throw new Exception("User is not Lecturer");
-            }
-
-
-            var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId);
-
-            if (expert == null ||
-                !expert.UserRoles.Any(r => r.Role.Name == "Expert"))
-            {
-                throw new Exception("User is not Expert");
-            }
-
-
-            // assign Lecturer nếu class chưa có
-            if (classEntity.LecturerId == null)
-                classEntity.LecturerId = dto.LecturerId;
-
-
-            // assign Expert nếu class chưa có
-            if (classEntity.ExpertId == null)
-                classEntity.ExpertId = dto.ExpertId;
-
-
-
-            _unitOfWork.AcademicClassRepository.Update(classEntity);
-
-
+            // update student enrollment
+            enrollment.StudentId = dto.StudentId;
             enrollment.EnrolledAt = DateTime.UtcNow;
 
 
-            _unitOfWork.ClassEnrollmentRepository.Update(enrollment);
+            _unitOfWork
+                .ClassEnrollmentRepository
+                .Update(enrollment);
 
 
             await _unitOfWork.SaveAsync();
 
 
-            dto.ClassName = enrollment.ClassName;
+            // lấy ClassName từ AcademicClass
+            dto.ClassName = classEntity.ClassName;
 
             return dto;
         }

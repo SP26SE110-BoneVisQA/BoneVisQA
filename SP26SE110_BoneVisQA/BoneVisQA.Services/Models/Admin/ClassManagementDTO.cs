@@ -43,29 +43,44 @@ namespace BoneVisQA.Services.Models.Admin
     //=======================================================  ASSIGN CLASS  ===================================================
     public class GetAssignClassDTO
     {
-        public Guid Id { get; set; }
+        public Guid ClassId { get; set; }
 
         public string? ClassName { get; set; }
 
         public string? LecturerName { get; set; }
 
         public string? ExpertName { get; set; }
+        public List<string>? Students { get; set; }
 
-        public string? StudentName { get; set; }
-       
-        public DateTime? EnrolledAt { get; set; }
+        public DateTime? LastEnrollment { get; set; }
     }
     public class AssignClassDTO
-    {       
+    {
         public Guid ClassId { get; set; }
 
         public string? ClassName { get; set; }
 
         public Guid StudentId { get; set; }
 
-        public Guid LecturerId { get; set; }
+        public Guid? LecturerId { get; set; }
 
-        public Guid ExpertId { get; set; }
+        public Guid? ExpertId { get; set; }
+
+        public DateTime? EnrolledAt { get; set; }
+    }
+    public class UpdateAssignClassDTO
+    {
+        public Guid? EnrollmentId { get; set; }
+
+        public Guid ClassId { get; set; }
+
+        public string? ClassName { get; set; }
+
+        public Guid StudentId { get; set; }
+
+        public Guid? LecturerId { get; set; }
+
+        public Guid? ExpertId { get; set; }
 
         public DateTime? EnrolledAt { get; set; }
     }
