@@ -1,9 +1,9 @@
 ﻿using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Student;
-using DocumentFormat.OpenXml.Office2016.Excel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +11,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Expert
@@ -21,7 +23,10 @@ namespace BoneVisQA.Services.Services.Expert
         private readonly IWebHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public MedicalCaseService(IUnitOfWork unitOfWork, IWebHostEnvironment env, IHttpContextAccessor httpContextAccessor)
+        public MedicalCaseService(
+            IUnitOfWork unitOfWork,
+            IWebHostEnvironment env,
+            IHttpContextAccessor httpContextAccessor)
         {
             _unitOfWork = unitOfWork;
             _env = env;
@@ -50,7 +55,7 @@ namespace BoneVisQA.Services.Services.Expert
         }
         public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex,int pageSize)
         {
-            var query = _unitOfWork.MedicalCaseRepository.GetQueryable();
+            var query = _unitOfWork.MedicalCaseRepository.GetQueryable().AsNoTracking();
 
             var totalCount = await query.CountAsync();
 
@@ -63,19 +68,27 @@ namespace BoneVisQA.Services.Services.Expert
                     Id = x.Id,
                     Title = x.Title,
                     CreatedByExpertId = x.CreatedByExpertId,
-                    ExpertName = x.CreatedByExpert!.FullName,
+                    ExpertName = x.CreatedByExpert != null ? x.CreatedByExpert.FullName : null,
                     Description = x.Description,
                     Difficulty = x.Difficulty,
                     CategoryId = x.CategoryId,
-                    CategoryName = x.Category!.Name, 
+                    CategoryName = x.Category != null ? x.Category.Name : null,
+                    BoneLocation = x.CaseTags
+                        .Where(ct => ct.Tag != null &&
+                            (ct.Tag.Type == "Location" || ct.Tag.Type == "BoneLocation"))
+                        .Select(ct => ct.Tag!.Name)
+                        .FirstOrDefault() ?? string.Empty,
                     IsApproved = x.IsApproved,
                     IsActive = x.IsActive,
                     SuggestedDiagnosis = x.SuggestedDiagnosis,
-                    ReflectiveQuestions = x.ReflectiveQuestions,
                     KeyFindings = x.KeyFindings,
-                    CreatedAt = x.CreatedAt
+                    CreatedAt = x.CreatedAt,
+                    UpdatedAt = x.UpdatedAt
                 })
                 .ToListAsync();
+
+            foreach (var row in medicalCases)
+                ExpertMedicalCaseDisplayHelper.ApplyListDefaults(row);
 
             return new PagedResult<GetMedicalCaseDTO>
             {
@@ -84,6 +97,64 @@ namespace BoneVisQA.Services.Services.Expert
                 PageIndex = pageIndex,
                 PageSize = pageSize
             };
+        }
+
+        public async Task<GetExpertMedicalCaseDetailDto?> GetMedicalCaseByIdAsync(Guid id)
+        {
+            var entity = await _unitOfWork.MedicalCaseRepository.GetQueryable()
+                .AsNoTracking()
+                .Include(c => c.Category)
+                .Include(c => c.CreatedByExpert)
+                .Include(c => c.CaseTags)
+                    .ThenInclude(ct => ct.Tag)
+                .Include(c => c.MedicalImages)
+                .FirstOrDefaultAsync(c => c.Id == id);
+
+            if (entity == null)
+                return null;
+
+            var boneLocation = ExpertMedicalCaseDisplayHelper.ResolveBoneLocationFromTags(entity.CaseTags);
+
+            var dto = new GetExpertMedicalCaseDetailDto
+            {
+                Id = entity.Id,
+                Title = entity.Title,
+                CreatedByExpertId = entity.CreatedByExpertId,
+                ExpertName = entity.CreatedByExpert?.FullName,
+                Description = entity.Description,
+                Difficulty = entity.Difficulty,
+                CategoryId = entity.CategoryId,
+                CategoryName = entity.Category?.Name,
+                BoneLocation = boneLocation,
+                IsApproved = entity.IsApproved,
+                IsActive = entity.IsActive,
+                SuggestedDiagnosis = entity.SuggestedDiagnosis,
+                KeyFindings = entity.KeyFindings,
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt,
+                MedicalImages = entity.MedicalImages
+                    .OrderByDescending(m => m.CreatedAt)
+                    .Select(m => new ExpertMedicalCaseImageSummaryDto
+                    {
+                        Id = m.Id,
+                        ImageUrl = m.ImageUrl,
+                        Modality = m.Modality,
+                        CreatedAt = m.CreatedAt
+                    })
+                    .ToList(),
+                Tags = entity.CaseTags
+                    .Where(ct => ct.Tag != null)
+                    .Select(ct => new ExpertCaseTagSummaryDto
+                    {
+                        Id = ct.Tag!.Id,
+                        Name = ct.Tag.Name,
+                        Type = ct.Tag.Type
+                    })
+                    .ToList()
+            };
+
+            ExpertMedicalCaseDisplayHelper.ApplyDetailDefaults(dto);
+            return dto;
         }
         public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto)
         {
@@ -106,7 +177,6 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = dto.CategoryId,
                 SuggestedDiagnosis = dto.SuggestedDiagnosis,
                 KeyFindings = dto.KeyFindings,
-                ReflectiveQuestions = dto.ReflectiveQuestions,
                 IsApproved = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
@@ -126,11 +196,93 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = medicalCase.IsApproved,
                 IsActive = medicalCase.IsActive,
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
-                ReflectiveQuestions = medicalCase.ReflectiveQuestions,  
                 KeyFindings = medicalCase.KeyFindings,
                 CreatedAt = medicalCase.CreatedAt,
             };
         }
+
+    public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(
+        CreateExpertMedicalCaseJsonRequest request,
+        Guid expertUserId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var dto = new CreateMedicalCaseRequestDTO
+        {
+            Title = request.Title,
+            Description = request.Description,
+            Difficulty = request.Difficulty,
+            CategoryId = request.CategoryId,
+            SuggestedDiagnosis = request.SuggestedDiagnosis,
+            KeyFindings = request.KeyFindings,
+            CreatedByExpertId = expertUserId
+        };
+
+        var created = await CreateMedicalCaseAsync(dto);
+        var caseId = created.Id;
+
+        foreach (var img in request.MedicalImages ?? Enumerable.Empty<CreateExpertMedicalCaseImageJson>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(img.ImageUrl))
+                continue;
+
+            var image = new MedicalImage
+            {
+                Id = Guid.NewGuid(),
+                CaseId = caseId,
+                ImageUrl = img.ImageUrl.Trim(),
+                Modality = img.Modality,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _unitOfWork.MedicalImageRepository.AddAsync(image);
+
+            foreach (var ann in img.Annotations ?? Enumerable.Empty<CreateAnnotationDTO>())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await _unitOfWork.CaseAnnotationRepository.AddAsync(new CaseAnnotation
+                {
+                    Id = Guid.NewGuid(),
+                    ImageId = image.Id,
+                    Label = ann.Label ?? string.Empty,
+                    Coordinates = ann.Coordinates,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await _unitOfWork.SaveAsync();
+
+        await ApplyCaseTagIdsAsync(caseId, request.TagIds, cancellationToken);
+
+        return created;
+    }
+
+    private async Task ApplyCaseTagIdsAsync(Guid caseId, IEnumerable<Guid>? tagIds, CancellationToken cancellationToken)
+    {
+        if (tagIds == null)
+            return;
+
+        foreach (var tagId in tagIds.Distinct())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tagExists = await _unitOfWork.TagRepository.ExistsAsync(t => t.Id == tagId);
+            if (!tagExists)
+                continue;
+            var exists = await _unitOfWork.CaseTagRepository.ExistsAsync(x => x.CaseId == caseId && x.TagId == tagId);
+            if (exists)
+                continue;
+            await _unitOfWork.CaseTagRepository.AddAsync(new CaseTag
+            {
+                CaseId = caseId,
+                TagId = tagId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        await _unitOfWork.SaveAsync();
+    }
 
         public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
         {
@@ -147,7 +299,6 @@ namespace BoneVisQA.Services.Services.Expert
             medicalCase.IsApproved = request.IsApproved;
             medicalCase.IsActive = request.IsActive;
             medicalCase.SuggestedDiagnosis = request.SuggestedDiagnosis;
-            medicalCase.ReflectiveQuestions = request.ReflectiveQuestions;
             medicalCase.KeyFindings = request.KeyFindings;
             medicalCase.CreatedByExpertId = request.CreatedByExpertId;
             medicalCase.UpdatedAt = DateTime.UtcNow;
@@ -173,7 +324,6 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = medicalCase.IsApproved,
                 IsActive = medicalCase.IsActive,
                 SuggestedDiagnosis = medicalCase.SuggestedDiagnosis,
-                ReflectiveQuestions = medicalCase.ReflectiveQuestions,
                 KeyFindings = medicalCase.KeyFindings,
                 UpdatedAt = medicalCase.UpdatedAt
             };

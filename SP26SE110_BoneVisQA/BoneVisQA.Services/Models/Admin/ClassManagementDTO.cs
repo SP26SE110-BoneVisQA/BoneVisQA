@@ -11,6 +11,8 @@ namespace BoneVisQA.Services.Models.Admin
 {
     public class GetClassManagementDTO
     {
+        public Guid Id { get; set; }
+
         public string ClassName { get; set; } = null!;
 
         public string Semester { get; set; } = null!;
@@ -56,16 +58,22 @@ namespace BoneVisQA.Services.Models.Admin
         public DateTime? EnrolledAt { get; set; }
     }
     public class AssignClassDTO
-    {       
+    {
         public Guid ClassId { get; set; }
 
         public string? ClassName { get; set; }
 
-        public Guid StudentId { get; set; }
+        /// <summary>Optional: enroll this student (must have Student role).</summary>
+        public Guid? StudentId { get; set; }
 
-        public Guid LecturerId { get; set; }
+        /// <summary>Optional: set or replace class lecturer (must have Lecturer role).</summary>
+        public Guid? LecturerId { get; set; }
 
-        public Guid ExpertId { get; set; }
+        /// <summary>Optional: set or replace class expert (must have Expert role).</summary>
+        public Guid? ExpertId { get; set; }
+
+        /// <summary>When true, clears the class expert (cannot combine with <see cref="ExpertId"/>).</summary>
+        public bool RemoveExpert { get; set; }
 
         public DateTime? EnrolledAt { get; set; }
     }

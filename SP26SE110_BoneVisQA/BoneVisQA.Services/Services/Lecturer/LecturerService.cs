@@ -915,6 +915,25 @@ public class LecturerService : ILecturerService
         return true;
     }
 
+    /// <summary>Personal Visual QA uses <see cref="StudentQuestion.CustomImageUrl"/>; assigned cases use the first case image (by <see cref="MedicalImage.CreatedAt"/>).</summary>
+    private static string? ResolveQuestionImageUrl(StudentQuestion? question)
+    {
+        if (question == null)
+            return null;
+        if (!string.IsNullOrWhiteSpace(question.CustomImageUrl))
+            return question.CustomImageUrl.Trim();
+
+        var images = question.Case?.MedicalImages;
+        if (images == null || images.Count == 0)
+            return null;
+
+        return images
+            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(m => m.Id)
+            .Select(m => m.ImageUrl)
+            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+    }
+
     public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId)
     {
         var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
@@ -929,11 +948,12 @@ public class LecturerService : ILecturerService
             return new List<LecturerTriageRowDto>();
 
         var answers = await _unitOfWork.Context.CaseAnswers
+            .AsSplitQuery()
             .Include(a => a.Question)
                 .ThenInclude(q => q.Student)
             .Include(a => a.Question)
-                .ThenInclude(q => q.Case)
-                    .ThenInclude(c => c != null ? c.MedicalImages : null)
+                .ThenInclude(q => q.Case!)
+                    .ThenInclude(c => c.MedicalImages)
             .Where(a => studentIds.Contains(a.Question.StudentId))
             .Where(a =>
                 a.Status == CaseAnswerStatuses.EscalatedToExpert
@@ -960,29 +980,44 @@ public class LecturerService : ILecturerService
 
         return answers
             .Where(a => a.Question != null)
-            .Select(a => new LecturerTriageRowDto
+            .Select(a =>
             {
+                var q = a.Question!;
+                // Flat image URL for FE: personal Visual QA first, else first case image (matches API contract).
+                var flatImageUrl = !string.IsNullOrWhiteSpace(q.CustomImageUrl)
+                    ? q.CustomImageUrl.Trim()
+                    : q.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl;
+                if (string.IsNullOrWhiteSpace(flatImageUrl))
+                    flatImageUrl = null;
+                else
+                    flatImageUrl = flatImageUrl.Trim();
+
+                return new LecturerTriageRowDto
+            {
+                // Row is keyed by CaseAnswer; this id is required for PUT .../reviews/{answerId}/escalate.
                 AnswerId = a.Id,
                 QuestionId = a.QuestionId,
-                StudentId = a.Question.StudentId,
-                StudentName = a.Question.Student?.FullName ?? string.Empty,
-                StudentEmail = a.Question.Student?.Email,
+                StudentId = q.StudentId,
+                StudentName = q.Student?.FullName ?? string.Empty,
+                StudentEmail = q.Student?.Email,
                 ClassId = classId,
                 ClassName = cls.ClassName,
-                CaseId = a.Question.CaseId,
-                CaseTitle = a.Question.Case?.Title,
-                ThumbnailUrl = a.Question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
-                QuestionText = a.Question.QuestionText,
+                CaseId = q.CaseId,
+                CaseTitle = q.Case?.Title,
+                ThumbnailUrl = flatImageUrl,
+                ImageUrl = flatImageUrl,
+                QuestionText = q.QuestionText,
                 AnswerText = a.AnswerText,
                 Status = a.Status ?? CaseAnswerStatuses.RequiresLecturerReview,
                 AiConfidenceScore = a.AiConfidenceScore,
-                AskedAt = a.Question.CreatedAt,
+                AskedAt = q.CreatedAt,
                 IsEscalated = a.Status == CaseAnswerStatuses.EscalatedToExpert
                               || a.Status == CaseAnswerStatuses.Escalated,
                 EscalatedByName = a.EscalatedById.HasValue
                     ? expertNames.GetValueOrDefault(a.EscalatedById.Value)
                     : null,
                 EscalatedAt = a.EscalatedAt
+            };
             })
             .ToList();
     }
@@ -991,11 +1026,12 @@ public class LecturerService : ILecturerService
     {
         var question = await _unitOfWork.StudentQuestionRepository
             .FindByCondition(q => q.Id == questionId)
+            .AsSplitQuery()
             .Include(q => q.Student)
-            .Include(q => q.Case)
-                .ThenInclude(c => c != null ? c.MedicalImages : null)
+            .Include(q => q.Case!)
+                .ThenInclude(c => c.MedicalImages)
             .Include(q => q.CaseAnswers)
-                .ThenInclude(a => a != null ? a.ReviewedBy : null)
+                .ThenInclude(a => a.ReviewedBy)
             .FirstOrDefaultAsync();
 
         if (question == null) return null;
@@ -1005,8 +1041,14 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == question.StudentId);
         if (enrollment == null) return null;
 
-        var answer = question.CaseAnswers?.FirstOrDefault();
+        var answer = question.CaseAnswers == null || question.CaseAnswers.Count == 0
+            ? null
+            : question.CaseAnswers
+                .OrderByDescending(x => x.GeneratedAt ?? x.ReviewedAt ?? DateTime.MinValue)
+                .ThenByDescending(x => x.Id)
+                .FirstOrDefault();
         var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
+        var detailImageUrl = ResolveQuestionImageUrl(question);
 
         return new LectStudentQuestionDetailDto
         {
@@ -1017,7 +1059,8 @@ public class LecturerService : ILecturerService
             CaseId = question.CaseId,
             CaseTitle = question.Case?.Title,
             CaseDescription = question.Case?.Description,
-            CaseThumbnailUrl = question.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl,
+            CaseThumbnailUrl = detailImageUrl,
+            ImageUrl = detailImageUrl,
             CaseDifficulty = question.Case?.Difficulty,
             QuestionText = question.QuestionText,
             Language = question.Language,
@@ -1180,6 +1223,7 @@ public class LecturerService : ILecturerService
             .FindByCondition(q => studentIdsInClass.Contains(q.StudentId))
             .Include(q => q.Student)
             .Include(q => q.Case)
+                .ThenInclude(c => c!.MedicalImages)
             .Include(q => q.CaseAnswers)
             .AsQueryable();
 
@@ -1196,22 +1240,31 @@ public class LecturerService : ILecturerService
         var questions = await query.OrderByDescending(q => q.CreatedAt).ToListAsync();
 
         return questions
-            .Select(q => new LectStudentQuestionDto
+            .Select(q =>
             {
-                Id = q.Id,
-                StudentId = q.StudentId,
-                StudentName = q.Student?.FullName ?? string.Empty,
-                StudentEmail = q.Student?.Email ?? string.Empty,
-                CaseId = q.CaseId ?? Guid.Empty,
-                CaseTitle = q.Case?.Title ?? string.Empty,
-                QuestionText = q.QuestionText,
-                Language = q.Language,
-                CreatedAt = q.CreatedAt,
-                AnswerText = q.CaseAnswers?.FirstOrDefault()?.AnswerText,
-                AnswerStatus = q.CaseAnswers?.FirstOrDefault()?.Status,
-                EscalatedById = q.CaseAnswers?.FirstOrDefault()?.EscalatedById,
-                EscalatedAt = q.CaseAnswers?.FirstOrDefault()?.EscalatedAt,
-                AiConfidenceScore = q.CaseAnswers?.FirstOrDefault()?.AiConfidenceScore
+                var latestAnswer = q.CaseAnswers
+                    .OrderByDescending(a => a.GeneratedAt ?? DateTime.MinValue)
+                    .ThenByDescending(a => a.Id)
+                    .FirstOrDefault();
+
+                return new LectStudentQuestionDto
+                {
+                    Id = q.Id,
+                    AnswerId = latestAnswer?.Id,
+                    StudentId = q.StudentId,
+                    StudentName = q.Student?.FullName ?? string.Empty,
+                    StudentEmail = q.Student?.Email ?? string.Empty,
+                    CaseId = q.CaseId ?? Guid.Empty,
+                    CaseTitle = q.Case?.Title ?? string.Empty,
+                    QuestionText = q.QuestionText,
+                    Language = q.Language,
+                    CreatedAt = q.CreatedAt,
+                    AnswerText = latestAnswer?.AnswerText,
+                    AnswerStatus = latestAnswer?.Status,
+                    EscalatedById = latestAnswer?.EscalatedById,
+                    EscalatedAt = latestAnswer?.EscalatedAt,
+                    AiConfidenceScore = latestAnswer?.AiConfidenceScore
+                };
             })
             .ToList();
     }

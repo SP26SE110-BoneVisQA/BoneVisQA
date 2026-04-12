@@ -12,83 +12,97 @@ namespace BoneVisQA.API.Controllers.Admin
     public class ClassManagementController : ControllerBase
     {
         private readonly IClassManagementService _classservice;
+
         public ClassManagementController(IClassManagementService classservice)
         {
             _classservice = classservice;
         }
 
-        [HttpGet("classes")]
-        public async Task<IActionResult> GetAll(int pageIndex = 1,int pageSize = 10)
+        [HttpGet]
+        public async Task<IActionResult> GetAll(int pageIndex = 1, int pageSize = 10)
         {
             var result = await _classservice.GetAcademicClassAsync(pageIndex, pageSize);
-
             return Ok(result);
         }
 
-        [HttpPost("classes")]
-        public async Task<IActionResult> Create(CreateClassManagementDTO dto)
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CreateClassManagementDTO dto)
         {
             var result = await _classservice.CreateAcademicClassAsync(dto);
-
-            return Ok(result);  
-        }
-
-        [HttpPut("classes")]
-        public async Task<IActionResult> Update(UpdateClassManagementDTO dto)
-        {
-            var result = await _classservice.UpdateAcademicClassAsync(dto);
-
             return Ok(result);
         }
 
-        [HttpDelete("classes/{id}")]
+        [HttpPut]
+        public async Task<IActionResult> Update([FromBody] UpdateClassManagementDTO dto)
+        {
+            try
+            {
+                var result = await _classservice.UpdateAcademicClassAsync(dto);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await _classservice.DeleteAcademicClassAsync(id);
-
             if (!result)
-                return NotFound("Class not found");
-
-            return Ok(result);
+                return NotFound(new { message = "Class not found" });
+            return Ok(new { deleted = true });
         }
 
-
-
-        [HttpGet("assign")]
-        public async Task<IActionResult> GetAssignClass(int pageIndex = 1,int pageSize = 10)
+        /// <summary>Paged list of class enrollments (student in class + class staff snapshot).</summary>
+        [HttpGet("/api/admin/classes/enrollments")]
+        public async Task<IActionResult> GetEnrollments(int pageIndex = 1, int pageSize = 10)
         {
             var result = await _classservice.GetAssignClassAsync(pageIndex, pageSize);
-
             return Ok(result);
         }
 
-        [HttpPost("assign")]
-        public async Task<IActionResult> AssignClass(AssignClassDTO dto)
+        /// <summary>
+        /// Admin: assign or replace lecturer/expert on a class, enroll a student, and/or clear expert.
+        /// At least one of <c>LecturerId</c>, <c>ExpertId</c>, <c>StudentId</c>, or <c>RemoveExpert</c> must be used.
+        /// </summary>
+        [HttpPost("/api/admin/classes/enrollments")]
+        public async Task<IActionResult> AssignClass([FromBody] AssignClassDTO dto)
         {
-            var result = await _classservice.AssignClassAsync(dto);
-
-            return Ok(result);
+            try
+            {
+                var result = await _classservice.AssignClassAsync(dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        [HttpPut("assign")]
-        public async Task<IActionResult> UpdateAssignClass(AssignClassDTO dto)
+        /// <summary>Refresh enrollment timestamp and/or update class lecturer/expert (same payload rules as POST).</summary>
+        [HttpPut("/api/admin/classes/enrollments")]
+        public async Task<IActionResult> UpdateAssignClass([FromBody] AssignClassDTO dto)
         {
-            var result = await _classservice.UpdateAssignClassAsync(dto);
-
-            return Ok(result);
+            try
+            {
+                var result = await _classservice.UpdateAssignClassAsync(dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteAssignClass(Guid id)
+        [HttpDelete("/api/admin/classes/enrollments/{id:guid}")]
+        public async Task<IActionResult> DeleteEnrollment(Guid id)
         {
             var deleted = await _classservice.DeleteAssignClassAsync(id);
-
             if (!deleted)
-            {
-                return NotFound("Assignment not found");
-            }
-
-            return Ok(deleted);
+                return NotFound(new { message = "Enrollment not found" });
+            return Ok(new { deleted = true });
         }
     }
 }

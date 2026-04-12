@@ -7,28 +7,28 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Lecturer;
 
+/// <summary>Review actions (escalate to expert, etc.) under <c>/api/lecturer/reviews</c> for FE routing.</summary>
 [ApiController]
-[Route("api/lecturer/triage")]
-[Tags("Lecturer - Triage")]
+[Route("api/lecturer/reviews")]
+[Tags("Lecturer - Reviews")]
 [Authorize(Roles = "Lecturer")]
-public class LecturerTriageController : ControllerBase
+public class LecturerReviewsController : ControllerBase
 {
     private readonly ILecturerTriageService _lecturerTriageService;
 
-    public LecturerTriageController(ILecturerTriageService lecturerTriageService)
+    public LecturerReviewsController(ILecturerTriageService lecturerTriageService)
     {
         _lecturerTriageService = lecturerTriageService;
     }
 
-    /// <summary>Same as <c>PUT /api/lecturer/reviews/{answerId}/escalate</c>; kept for older clients.</summary>
-    [HttpPost("{answerId:guid}/escalate")]
+    /// <summary>Escalate a case answer to the class expert (<c>CaseAnswer.Status</c> → <c>EscalatedToExpert</c>).</summary>
     [HttpPut("{answerId:guid}/escalate")]
     [ProducesResponseType(typeof(EscalatedAnswerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<EscalatedAnswerDto>> Escalate(Guid answerId, [FromBody] EscalateAnswerRequestDto? request)
+    public async Task<ActionResult<EscalatedAnswerDto>> EscalatePut(Guid answerId, [FromBody] EscalateAnswerRequestDto? request)
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)

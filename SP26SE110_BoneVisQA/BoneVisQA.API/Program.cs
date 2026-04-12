@@ -38,15 +38,16 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
-// Align with Supabase free-tier storage limits (50 MB max upload).
+// Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
+const long maxUploadBodyBytes = 104857600; // 100 MB
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 52428800;
+    options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
 });
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 52428800;
+    options.MultipartBodyLengthLimit = maxUploadBodyBytes;
     options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
 });
 
@@ -71,8 +72,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046",
-                         "https://localhost:7046"
+                         "http://localhost:5046"
                      })
                 originSet.Add(o);
         }
@@ -85,8 +85,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046",
-                         "https://localhost:7046"
+                         "http://localhost:5046"
                      })
                 originSet.Add(o);
         }
@@ -303,7 +302,10 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
     await next();
 });
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseSwagger();
 app.UseSwaggerUI();
 //
