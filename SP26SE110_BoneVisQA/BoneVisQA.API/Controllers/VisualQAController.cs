@@ -1,4 +1,3 @@
-using System.Text.Json;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
@@ -16,13 +15,8 @@ public class VisualQAFileUploadRequest
     public string QuestionText { get; set; } = string.Empty;
     public IFormFile? CustomImage { get; set; }
 
-    /// <summary>
-    /// JSON array of points: <c>[{"x":0.12,"y":0.34},...]</c> (same contract as <see cref="VisualQARequestDto.CustomPolygon"/>).
-    /// </summary>
-    [DefaultValue(null)]
-    public string? CustomPolygonJson { get; set; }
-
-    /// <summary>Legacy bounding box JSON <c>{"x","y","w","h"}</c> when no polygon is sent.</summary>
+    /// <summary>Normalized bounding box JSON <c>{"x","y","width","height"}</c> (0–1). FE field name <c>customPolygon</c> (legacy).</summary>
+    [FromForm(Name = "customPolygon")]
     [DefaultValue(null)]
     public string? Coordinates { get; set; }
 }
@@ -30,7 +24,7 @@ public class VisualQAFileUploadRequest
 [ApiController]
 [Route("api/student/visual-qa")]
 [Tags("Student - Visual QA")]
-[Authorize]
+[Authorize(Roles = "Student")]
 public class VisualQAController : ControllerBase
 {
     private const long MaxVisualImageBytes = 5 * 1024 * 1024;
@@ -89,27 +83,10 @@ public class VisualQAController : ControllerBase
             $"images/{studentId}",
             cancellationToken);
 
-        List<PointDto>? polygon = null;
-        if (!string.IsNullOrWhiteSpace(formRequest.CustomPolygonJson))
-        {
-            try
-            {
-                polygon = JsonSerializer.Deserialize<List<PointDto>>(formRequest.CustomPolygonJson);
-            }
-            catch
-            {
-                return BadRequest(new { message = "CustomPolygonJson must be a valid JSON array of {x,y} points." });
-            }
-
-            if (polygon is { Count: > 0 } && polygon.Count < 3)
-                return BadRequest(new { message = "Polygon requires at least 3 points." });
-        }
-
         var request = new VisualQARequestDto
         {
             QuestionText = formRequest.QuestionText,
             ImageUrl = imageUrl,
-            CustomPolygon = polygon,
             Coordinates = formRequest.Coordinates,
             CaseId = null,
             AnnotationId = null
