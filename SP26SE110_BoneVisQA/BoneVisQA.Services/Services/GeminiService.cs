@@ -78,11 +78,42 @@ public class GeminiService : IGeminiService
             };
         }
 
+        var modelIds = _settings.GetResolvedModelIds();
+        if (modelIds.Count == 0)
+        {
+            _logger.LogWarning(
+                "Gemini model ids missing (configure Gemini:Models or Gemini:ModelId). Returning empty safe response.");
+            return new VisualQAResponseDto
+            {
+                AnswerText = FallbackNoReliableInfoAnswer,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = FallbackNoReliableInfoAnswer,
+                Citations = new List<CitationItemDto>()
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
+        {
+            _logger.LogWarning("Gemini base URL missing (Gemini:BaseUrl). Returning empty safe response.");
+            return new VisualQAResponseDto
+            {
+                AnswerText = FallbackNoReliableInfoAnswer,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = FallbackNoReliableInfoAnswer,
+                Citations = new List<CitationItemDto>()
+            };
+        }
+
         var apiKey = _settings.ApiKey;
-        var baseUrl = (_settings.BaseUrl ?? string.Empty).TrimEnd('/');
-        var modelId = _settings.ModelId ?? "gemini-1.5-flash";
-        // v1 endpoint: {BaseUrl}/models/{ModelId}:generateContent?key={ApiKey}
-        var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={apiKey}";
+        var baseUrl = _settings.BaseUrl.TrimEnd('/');
 
         string? base64Image = null;
         string? mimeType = null;
@@ -106,9 +137,20 @@ public class GeminiService : IGeminiService
             }
         }
 
-        var retryAttempts = 3;
-        for (var attempt = 1; attempt <= retryAttempts; attempt++)
+        var failureSummaries = new List<string>();
+        var totalModels = modelIds.Count;
+        var attemptIndex = 0;
+
+        foreach (var modelId in modelIds)
         {
+            attemptIndex++;
+            _logger.LogInformation(
+                "[GeminiService] generateContent attempt {AttemptIndex}/{TotalModels} using model id \"{ModelId}\"",
+                attemptIndex,
+                totalModels,
+                modelId);
+            var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={apiKey}";
+
             try
             {
                 var payload = BuildVisionPayload(prompt, base64Image, mimeType ?? MimeTypeJpeg);
@@ -120,98 +162,92 @@ public class GeminiService : IGeminiService
                     "application/json");
 
                 var client = _httpClientFactory.CreateClient(HttpClientName);
+                _logger.LogDebug("[GeminiService] POST {BaseUrl}/models/{ModelId}:generateContent", baseUrl, modelId);
                 var resp = await client.SendAsync(req, cancellationToken);
                 var bytes = await resp.Content.ReadAsByteArrayAsync(cancellationToken);
                 var raw = Encoding.UTF8.GetString(bytes);
 
                 _logger.LogInformation(
-                    "Gemini raw response (first 2000 chars): {Raw}",
+                    "[GeminiService] Model id \"{ModelId}\": HTTP {StatusCode}; raw response (first 2000 chars): {Raw}",
+                    modelId,
+                    (int)resp.StatusCode,
                     raw.Length > 2000 ? raw[..2000] : raw);
 
                 if (!resp.IsSuccessStatusCode)
                 {
-                    if (IsTransient(resp.StatusCode) && attempt < retryAttempts)
+                    var bodySnippet = raw.Length > 500 ? raw[..500] : raw;
+                    failureSummaries.Add($"{modelId}: HTTP {(int)resp.StatusCode} — {bodySnippet}");
+
+                    if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                     {
-                        await DelayBeforeRetryAsync(attempt, cancellationToken);
+                        _logger.LogWarning(
+                            "[GeminiService] Model id \"{ModelId}\" returned HTTP 404 (not available for this key/project). No retry on this id — advancing to next configured model.",
+                            modelId);
                         continue;
                     }
 
-                    _logger.LogWarning(
-                        "Gemini HTTP {Status}. Returning safe empty response.",
-                        resp.StatusCode);
-
-                    return new VisualQAResponseDto
+                    if (IsTransient(resp.StatusCode))
                     {
-                        AnswerText = FallbackNoReliableInfoAnswer,
-                        SuggestedDiagnosis = null,
-                        DifferentialDiagnoses = null,
-                        KeyImagingFindings = null,
-                        ReflectiveQuestions = null,
-                        AiConfidenceScore = null,
-                        ErrorMessage = FallbackNoReliableInfoAnswer,
-                        Citations = new List<CitationItemDto>()
-                    };
+                        _logger.LogWarning(
+                            "[GeminiService] Model id \"{ModelId}\" reached quota or transient limit (HTTP {StatusCode}). Switching to next available model...",
+                            modelId,
+                            (int)resp.StatusCode);
+                        await Task.Delay(1000, cancellationToken);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "[GeminiService] Model id \"{ModelId}\": HTTP {StatusCode}. Trying next configured model.",
+                            modelId,
+                            (int)resp.StatusCode);
+                    }
+
+                    continue;
                 }
+
+                _logger.LogInformation(
+                    "[GeminiService] Model id \"{ModelId}\" returned success (HTTP {StatusCode}); parsing response body.",
+                    modelId,
+                    (int)resp.StatusCode);
 
                 try
                 {
-                    return ParseGeminiResponse(raw);
+                    var parsed = ParseGeminiResponse(raw);
+                    _logger.LogInformation(
+                        "[GeminiService] Completed successfully using model id \"{ModelId}\" (attempt {AttemptIndex}/{TotalModels}).",
+                        modelId,
+                        attemptIndex,
+                        totalModels);
+                    return parsed;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse Gemini response JSON. Returning raw text truncated.");
-                    return new VisualQAResponseDto
-                    {
-                        AnswerText = FallbackNoReliableInfoAnswer,
-                        SuggestedDiagnosis = null,
-                        DifferentialDiagnoses = null,
-                        KeyImagingFindings = null,
-                        ReflectiveQuestions = null,
-                        AiConfidenceScore = null,
-                        ErrorMessage = FallbackNoReliableInfoAnswer,
-                        Citations = new List<CitationItemDto>()
-                    };
+                    failureSummaries.Add($"{modelId}: response parse error — {ex.Message}");
+                    _logger.LogWarning(
+                        ex,
+                        "[GeminiService] Failed to parse Gemini JSON for model id \"{ModelId}\". Trying next configured model.",
+                        modelId);
+                    continue;
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch (Exception ex) when (attempt < retryAttempts)
-            {
-                // Retry transient failures (network, timeouts, etc.)
-                _logger.LogWarning(ex, "Gemini call failed (attempt {Attempt}/{Max}). Retrying...", attempt, retryAttempts);
-                await DelayBeforeRetryAsync(attempt, cancellationToken);
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Gemini call failed permanently. Returning safe empty response.");
-                return new VisualQAResponseDto
-                {
-                    AnswerText = FallbackNoReliableInfoAnswer,
-                    SuggestedDiagnosis = null,
-                    DifferentialDiagnoses = null,
-                    KeyImagingFindings = null,
-                    ReflectiveQuestions = null,
-                    AiConfidenceScore = null,
-                    ErrorMessage = FallbackNoReliableInfoAnswer,
-                    Citations = new List<CitationItemDto>()
-                };
+                failureSummaries.Add($"{modelId}: {ex.GetType().Name} — {ex.Message}");
+                _logger.LogWarning(
+                    ex,
+                    "[GeminiService] Model id \"{ModelId}\" request failed. Switching to next available model...",
+                    modelId);
+                await Task.Delay(1000, cancellationToken);
+                continue;
             }
         }
 
-        // Should not reach here, but keeps behavior explicit.
-        return new VisualQAResponseDto
-        {
-            AnswerText = FallbackNoReliableInfoAnswer,
-            SuggestedDiagnosis = null,
-            DifferentialDiagnoses = null,
-            KeyImagingFindings = null,
-            ReflectiveQuestions = null,
-            AiConfidenceScore = null,
-            ErrorMessage = FallbackNoReliableInfoAnswer,
-            Citations = new List<CitationItemDto>()
-        };
+        throw new InvalidOperationException(
+            $"All configured Gemini models failed ({modelIds.Count} model(s)). Summary: {string.Join(" | ", failureSummaries)}");
     }
 
     private static Dictionary<string, object> BuildVisionPayload(string prompt, string? base64Image, string mimeType)
@@ -244,6 +280,30 @@ public class GeminiService : IGeminiService
             ["generationConfig"] = new Dictionary<string, object>
             {
                 ["responseMimeType"] = "application/json"
+            },
+            // Medical X-rays often false-trigger default safety filters; relax for legitimate clinical education use.
+            ["safetySettings"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["category"] = "HARM_CATEGORY_HARASSMENT",
+                    ["threshold"] = "BLOCK_NONE"
+                },
+                new Dictionary<string, object>
+                {
+                    ["category"] = "HARM_CATEGORY_HATE_SPEECH",
+                    ["threshold"] = "BLOCK_NONE"
+                },
+                new Dictionary<string, object>
+                {
+                    ["category"] = "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    ["threshold"] = "BLOCK_NONE"
+                },
+                new Dictionary<string, object>
+                {
+                    ["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    ["threshold"] = "BLOCK_NONE"
+                }
             },
             ["contents"] = new object[]
             {
@@ -372,17 +432,17 @@ public class GeminiService : IGeminiService
         var result = parsed.RootElement;
 
         var answerText = result.TryGetProperty("answerText", out var a) ? a.GetString() : null;
-        var suggestedDiagnosis = result.TryGetProperty("suggestedDiagnosis", out var s) && s.ValueKind != JsonValueKind.Null
-            ? s.GetString()
+        var suggestedDiagnosis = result.TryGetProperty("suggestedDiagnosis", out var s)
+            ? ReadStringOrJoinedArray(s)
             : null;
-        var differentialDiagnoses = result.TryGetProperty("differentialDiagnoses", out var d) && d.ValueKind != JsonValueKind.Null
-            ? d.GetString()
+        var differentialDiagnoses = result.TryGetProperty("differentialDiagnoses", out var d)
+            ? ReadStringOrJoinedArray(d)
             : null;
-        var keyImagingFindings = result.TryGetProperty("keyImagingFindings", out var kfi) && kfi.ValueKind != JsonValueKind.Null
-            ? kfi.GetString()
+        var keyImagingFindings = result.TryGetProperty("keyImagingFindings", out var kfi)
+            ? ReadStringOrJoinedArray(kfi)
             : null;
-        var reflectiveQuestions = result.TryGetProperty("reflectiveQuestions", out var rq) && rq.ValueKind != JsonValueKind.Null
-            ? rq.GetString()
+        var reflectiveQuestions = result.TryGetProperty("reflectiveQuestions", out var rq)
+            ? ReadStringOrJoinedArray(rq)
             : null;
 
         if (ShouldNullifyDiagnosisFields(answerText))
@@ -419,6 +479,48 @@ public class GeminiService : IGeminiService
             AiConfidenceScore = null,
             ErrorMessage = null,
             Citations = citations
+        };
+    }
+
+    /// <summary>
+    /// Gemini sometimes returns list-valued fields as JSON arrays instead of a single string.
+    /// Accept <see cref="JsonValueKind.String"/>, <see cref="JsonValueKind.Null"/>, or <see cref="JsonValueKind.Array"/> (joined with newline + bullet).
+    /// </summary>
+    private static string? ReadStringOrJoinedArray(JsonElement el)
+    {
+        switch (el.ValueKind)
+        {
+            case JsonValueKind.Null:
+                return null;
+            case JsonValueKind.String:
+                return el.GetString();
+            case JsonValueKind.Array:
+            {
+                var segments = new List<string>();
+                foreach (var item in el.EnumerateArray())
+                {
+                    var s = JsonElementToPlainSegment(item);
+                    if (!string.IsNullOrWhiteSpace(s))
+                        segments.Add(s.Trim());
+                }
+
+                return segments.Count == 0 ? null : string.Join("\n- ", segments);
+            }
+            default:
+                return el.GetRawText();
+        }
+    }
+
+    private static string JsonElementToPlainSegment(JsonElement el)
+    {
+        return el.ValueKind switch
+        {
+            JsonValueKind.String => el.GetString() ?? string.Empty,
+            JsonValueKind.Number => el.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => string.Empty,
+            _ => el.GetRawText()
         };
     }
 
@@ -483,14 +585,6 @@ public class GeminiService : IGeminiService
         return statusCode == (System.Net.HttpStatusCode)429 ||
                statusCode == (System.Net.HttpStatusCode)408 ||
                (code >= 500 && code <= 599);
-    }
-
-    private static Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
-    {
-        // Exponential backoff with a small deterministic jitter.
-        var backoffMs = Math.Min(5000, 250 * (int)Math.Pow(2, attempt - 1));
-        var jitterMs = (attempt * 137) % 250;
-        return Task.Delay(backoffMs + jitterMs, cancellationToken);
     }
 }
 

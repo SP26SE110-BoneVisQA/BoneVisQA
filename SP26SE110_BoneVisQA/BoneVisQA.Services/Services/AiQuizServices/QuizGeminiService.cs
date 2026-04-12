@@ -53,8 +53,21 @@ public class QuizGeminiService : IQuizGeminiService
             return null;
         }
 
-        var baseUrl = (_settings.BaseUrl ?? string.Empty).TrimEnd('/');
-        var modelId = _settings.ModelId ?? "gemini-1.5-flash";
+        var resolvedModels = _settings.GetResolvedModelIds();
+        if (resolvedModels.Count == 0)
+        {
+            _logger.LogWarning("QuizGeminiService: Gemini:Models or Gemini:ModelId not configured. Skipping.");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
+        {
+            _logger.LogWarning("QuizGeminiService: Gemini:BaseUrl not configured. Skipping.");
+            return null;
+        }
+
+        var baseUrl = _settings.BaseUrl.TrimEnd('/');
+        var modelId = resolvedModels[0];
         var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={_settings.ApiKey}";
 
         string? base64Image = null;
