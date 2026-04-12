@@ -1,28 +1,51 @@
-# Visual Studio (cache — không commit, tránh Permission denied khi commit)
+# =============================================================================
+# BoneVisQA backend — build artifacts, IDE, local secrets, datasets
+# =============================================================================
+
+# Visual Studio / MSBuild
 .vs/
 **/.vs/
 *.vsidx
 *.suo
 *.user
 *.userosscache
+*.rsuser
+*.sln.docstates
 
-# Build
+# Build outputs
 [Bb]in/
 [Oo]bj/
 [Dd]ebug/
 [Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+TestResults/
+[Bb]enchmark[Dr]ot[Nn]et.Artifacts/
+
+# Compiled / generated (avoid committing binaries)
 *.dll
+*.exe
 *.pdb
+*.mdb
+*.cache
+*.ilk
+*.meta
 
 # NuGet
-
 **/packages/
-
+*.nupkg
+*.snupkg
 *.nuget.props
 *.nuget.targets
 project.lock.json
 project.fragment.lock.json
-artifacts/
 
 # Coverage / diagnostics
 *.coverage
@@ -32,18 +55,50 @@ coverage-results/
 
 # Logs
 *.log
-logs/
 
-# OS junk
+# OS
 .DS_Store
 Thumbs.db
 
-# Copilot / project evaluation caches
+# JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# Copilot / evaluation caches
 **/CopilotIndices/
 CopilotIndices/
 *.v9.bin
 
-# Temporary files
+# Temporary
 *.tmp
 *.temp
 *~
+
+# -----------------------------------------------------------------------------
+# Project-specific (BoneVisQA)
+# -----------------------------------------------------------------------------
+# Alternate dotnet build output paths (e.g. -o _build_out)
+**/_build_out/
+**/_build_out_svc/
+
+# Local / heavy datasets (LabelMe, archives) — keep out of Git LFS unless intended
+dataset/
+dataset.rar
+
+# -----------------------------------------------------------------------------
+# Configuration: tracked vs ignored (explicit)
+# -----------------------------------------------------------------------------
+# TRACKED (do not add ignore rules for these):
+#   - appsettings.json (base config; placeholders OK)
+#   - **/Properties/launchSettings.json (see negation below — never ignore)
+#
+# IGNORED (local / secrets):
+**/appsettings.Development.json
+**/appsettings.*.local.json
+**/secrets.json
+
+# Re-include template next to ignored Development file (explicit; basename differs anyway).
+!**/appsettings.Development.json.example
+
+# Never ignore launch profiles (URLs, env for local run) — explicit allow.
+!**/Properties/launchSettings.json
