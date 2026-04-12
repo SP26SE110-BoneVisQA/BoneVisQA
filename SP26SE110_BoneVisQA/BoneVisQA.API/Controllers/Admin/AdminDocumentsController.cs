@@ -13,7 +13,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 [Tags("Admin - Documents")]
 public class AdminDocumentsController : ControllerBase
 {
-    private const long MaxDocumentUploadBytes = 10 * 1024 * 1024;
+    private const long MaxDocumentUploadBytes = 100 * 1024 * 1024;
     private readonly IDocumentManagementService _documentManagementService;
     private readonly IDocumentQualityService _documentQualityService;
     private readonly IDocumentService _documentService;
@@ -158,7 +158,7 @@ public class AdminDocumentsController : ControllerBase
                 {
                     Title = "Invalid request",
                     Status = StatusCodes.Status400BadRequest,
-                    Detail = $"File '{file.FileName}' vượt quá giới hạn 10MB.",
+                    Detail = $"File '{file.FileName}' vượt quá giới hạn 100MB.",
                     Instance = HttpContext.Request.Path
                 });
             }

@@ -163,7 +163,6 @@ public class StudentService : IStudentService
             CategoryName = entity.Category?.Name,
             ExpertSummary = entity.SuggestedDiagnosis,
             KeyFindings = entity.KeyFindings,
-            ReflectiveQuestions = entity.ReflectiveQuestions,
             PrimaryImageUrl = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
                 .Select(i => i.ImageUrl)
@@ -243,8 +242,8 @@ public class StudentService : IStudentService
 
     public async Task<AnnotationDto> CreateAnnotationAsync(Guid studentId, CreateAnnotationRequestDto request)
     {
-        var coordinatesJson = request.CustomPolygon is { Count: >= 3 }
-            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+        var coordinatesJson = BoundingBoxParser.TryParseFromJson(request.Coordinates) is { } box
+            ? BoundingBoxParser.Serialize(box)
             : TryParseCoordinatesJson(request.Coordinates);
 
         var entity = new CaseAnnotation
@@ -304,16 +303,8 @@ public class StudentService : IStudentService
         var caseIdToSave = isPersonalUpload ? null : request.CaseId;
         var annotationIdToSave = isPersonalUpload ? null : request.AnnotationId;
 
-        // Promote polygon sent as raw JSON string in Coordinates (multipart / legacy clients).
-        if (request.CustomPolygon == null && !string.IsNullOrWhiteSpace(request.Coordinates))
-        {
-            var parsed = PolygonAnnotationParser.TryParsePolygonFromJson(request.Coordinates);
-            if (parsed is { Count: >= 3 })
-                request.CustomPolygon = parsed;
-        }
-
-        string? coordsToSave = request.CustomPolygon is { Count: >= 3 }
-            ? PolygonAnnotationParser.SerializePolygon(request.CustomPolygon)
+        string? coordsToSave = BoundingBoxParser.TryParseFromJson(request.Coordinates) is { } b
+            ? BoundingBoxParser.Serialize(b)
             : TryParseCoordinatesJson(request.Coordinates);
         string? imageUrlToSave = request.ImageUrl;
 
@@ -333,17 +324,9 @@ public class StudentService : IStudentService
             }
 
             coordsToSave = annotation.Coordinates;
-            var fromDb = PolygonAnnotationParser.TryParsePolygonFromJson(coordsToSave);
-            if (fromDb is { Count: >= 3 })
-            {
-                request.CustomPolygon = fromDb;
-                request.Coordinates = null;
-            }
-            else
-            {
-                request.CustomPolygon = null;
-                request.Coordinates = coordsToSave;
-            }
+            request.Coordinates = BoundingBoxParser.TryParseFromJson(coordsToSave) is { } dbBox
+                ? BoundingBoxParser.Serialize(dbBox)
+                : coordsToSave;
 
             if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
             {
@@ -961,6 +944,8 @@ public class StudentService : IStudentService
             .AsNoTracking()
             .Include(e => e.Class)
                 .ThenInclude(c => c!.Lecturer)
+            .Include(e => e.Class)
+                .ThenInclude(c => c!.Expert)
             .Where(e => e.StudentId == studentId)
             .ToListAsync();
 
@@ -1000,6 +985,8 @@ public class StudentService : IStudentService
                 Semester = c.Semester,
                 LecturerId = c.LecturerId,
                 LecturerName = c.Lecturer?.FullName,
+                ExpertId = c.ExpertId,
+                ExpertName = c.Expert?.FullName,
                 TotalAnnouncements = announcementCounts.GetValueOrDefault(c.Id, 0),
                 TotalQuizzes = quizCounts.GetValueOrDefault(c.Id, 0),
                 TotalCases = caseCounts.GetValueOrDefault(c.Id, 0),
@@ -1017,6 +1004,8 @@ public class StudentService : IStudentService
             .AsNoTracking()
             .Include(e => e.Class)
                 .ThenInclude(c => c!.Lecturer)
+            .Include(e => e.Class)
+                .ThenInclude(c => c!.Expert)
             .FirstOrDefaultAsync(e => e.StudentId == studentId && e.ClassId == classId)
             ?? throw new KeyNotFoundException("You are not enrolled in this class.");
 
@@ -1106,6 +1095,8 @@ public class StudentService : IStudentService
             Semester = cls.Semester,
             LecturerId = cls.LecturerId,
             LecturerName = cls.Lecturer?.FullName,
+            ExpertId = cls.ExpertId,
+            ExpertName = cls.Expert?.FullName,
             EnrolledAt = enrollment.EnrolledAt,
             Quizzes = quizzes,
             Students = students,
