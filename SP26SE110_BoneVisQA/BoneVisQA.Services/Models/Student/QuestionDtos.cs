@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Models.Student;
 
@@ -8,9 +6,7 @@ public class CreateAnnotationRequestDto
 {
     public Guid ImageId { get; set; }
     public string Label { get; set; } = string.Empty;
-    /// <summary>Preferred: closed polygon (≥3 points). Serialized to <c>case_annotations.coordinates</c> JSON.</summary>
-    public List<PointDto>? CustomPolygon { get; set; }
-    /// <summary>Legacy box JSON or raw polygon JSON string when <see cref="CustomPolygon"/> is not sent.</summary>
+    /// <summary>Normalized bounding box JSON <c>{"x","y","width","height"}</c> (0–1) for <c>case_annotations.coordinates</c>.</summary>
     public string? Coordinates { get; set; }
 }
 

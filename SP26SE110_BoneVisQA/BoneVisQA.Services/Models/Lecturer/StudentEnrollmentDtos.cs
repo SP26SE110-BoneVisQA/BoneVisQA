@@ -5,7 +5,8 @@ namespace BoneVisQA.Services.Models.Lecturer;
 
 public class StudentEnrollmentDto
 {
-    public Guid EnrollmentId { get; set; }
+    /// <summary>Enrollment row id when the student is in this class; <c>null</c> for the &quot;available to enroll&quot; pool.</summary>
+    public Guid? EnrollmentId { get; set; }
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;

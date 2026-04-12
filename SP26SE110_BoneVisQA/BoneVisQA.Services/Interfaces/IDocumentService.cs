@@ -19,6 +19,8 @@ public class DocumentDto
     public string? FilePath { get; set; }
     public Guid? CategoryId { get; set; }
     public string IndexingStatus { get; set; } = "Pending";
+    public int IndexingProgress { get; set; }
+    public string? ContentHash { get; set; }
     public int Version { get; set; }
     public bool IsOutdated { get; set; }
     public DateTime? CreatedAt { get; set; }
@@ -56,7 +58,10 @@ public interface IDocumentService
     /// </summary>
     Task IngestDocumentInBackgroundAsync(Guid documentId, string fileUrl);
 
-    Task<DocumentDto> UploadDocumentAsync(IFormFile file, DocumentUploadDto metadata);
+    Task<DocumentDto> UploadDocumentAsync(
+        IFormFile file,
+        DocumentUploadDto metadata,
+        CancellationToken cancellationToken = default);
     Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync();
     Task<DocumentDto?> GetDocumentByIdAsync(Guid id);
     Task<bool> DeleteDocumentAsync(Guid id);

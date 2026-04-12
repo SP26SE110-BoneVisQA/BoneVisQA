@@ -1,15 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace BoneVisQA.Services.Models.VisualQA;
-
-/// <summary>Single vertex for polygon lesion annotations (normalized, percent, or pixel — see API contract).</summary>
-public class PointDto
-{
-    public double X { get; set; }
-    public double Y { get; set; }
-}
 
 public class VisualQARequestDto
 {
@@ -20,13 +12,8 @@ public class VisualQARequestDto
     public string? ImageUrl { get; set; }
 
     /// <summary>
-    /// Lesion outline as a closed polygon (≥3 points). Preferred over <see cref="Coordinates"/>.
-    /// Persisted as JSON in <c>student_questions.custom_coordinates</c>.
-    /// </summary>
-    public List<PointDto>? CustomPolygon { get; set; }
-
-    /// <summary>
-    /// Legacy rectangular ROI: JSON <c>{"x","y","w","h"}</c>. Used only when <see cref="CustomPolygon"/> is null/empty.
+    /// Normalized bounding box ROI (0–1): JSON <c>{"x":0.1,"y":0.2,"width":0.3,"height":0.4}</c> (also accepts <c>w</c>/<c>h</c>).
+    /// Persisted in <c>student_questions.custom_coordinates</c>.
     /// </summary>
     [DefaultValue(null)]
     public string? Coordinates { get; set; }
@@ -38,7 +25,7 @@ public class VisualQARequestDto
 
     /// <summary>
     /// Optional Annotation ID. Provide for inquiries on existing cases
-    /// (polygon/box will be fetched from DB). Leave null for NEW personal uploads.
+    /// (bounding box will be fetched from DB). Leave null for NEW personal uploads.
     /// </summary>
     public Guid? AnnotationId { get; set; }
 

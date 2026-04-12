@@ -18,7 +18,7 @@ namespace BoneVisQA.Services.Interfaces.Admin
         //=======================================================  ASSIGN CLASS  ===================================================
         Task<PagedResult<GetAssignClassDTO>> GetAssignClassAsync(int pageIndex, int pageSize);
         Task<AssignClassDTO> AssignClassAsync(AssignClassDTO assignClassDTO);
-        Task<UpdateAssignClassDTO> UpdateAssignClassAsync(UpdateAssignClassDTO assignClassDTO);
+        Task<AssignClassDTO> UpdateAssignClassAsync(AssignClassDTO assignClassDTO);
         Task<bool> DeleteAssignClassAsync(Guid id);
     }
 }

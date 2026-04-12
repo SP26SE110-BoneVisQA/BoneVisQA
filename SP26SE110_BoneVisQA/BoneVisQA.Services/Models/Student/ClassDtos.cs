@@ -12,6 +12,8 @@ public class StudentClassDto
     public string Semester { get; set; } = string.Empty;
     public Guid? LecturerId { get; set; }
     public string? LecturerName { get; set; }
+    public Guid? ExpertId { get; set; }
+    public string? ExpertName { get; set; }
     public int TotalAnnouncements { get; set; }
     public int TotalQuizzes { get; set; }
     public int TotalCases { get; set; }
@@ -28,6 +30,8 @@ public class StudentClassDetailDto
     public string Semester { get; set; } = string.Empty;
     public Guid? LecturerId { get; set; }
     public string? LecturerName { get; set; }
+    public Guid? ExpertId { get; set; }
+    public string? ExpertName { get; set; }
     public DateTime? EnrolledAt { get; set; }
 
     public List<ClassQuizSummaryDto> Quizzes { get; set; } = new();

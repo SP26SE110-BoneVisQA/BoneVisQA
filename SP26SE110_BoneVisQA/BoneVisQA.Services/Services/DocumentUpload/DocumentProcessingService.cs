@@ -49,7 +49,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                     TagIds = baseMetadata.TagIds
                 };
 
-                var doc = await _documentService.UploadDocumentAsync(file, meta);
+                var doc = await _documentService.UploadDocumentAsync(file, meta, cancellationToken);
                 results.Add(new DocumentUploadResultItemDto
                 {
                     FileName = file.FileName,

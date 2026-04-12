@@ -40,6 +40,7 @@ namespace BoneVisQA.Services.Services.Admin
                 .Take(pageSize)
                 .Select(x => new GetClassManagementDTO
                 {
+                    Id = x.Id,
                     ClassName = x.ClassName,
                     Semester = x.Semester,
                     CreatedAt = x.CreatedAt,
@@ -111,8 +112,7 @@ namespace BoneVisQA.Services.Services.Admin
         //=======================================================  ASSIGN CLASS  ===================================================
         public async Task<PagedResult<GetAssignClassDTO>> GetAssignClassAsync(int pageIndex,int pageSize)
         {
-            var query = _unitOfWork
-                .ClassEnrollmentRepository
+            var query = _unitOfWork.ClassEnrollmentRepository
                 .GetQueryable()
                 .Include(x => x.Class)
                 .ThenInclude(x => x.Lecturer)
@@ -121,38 +121,22 @@ namespace BoneVisQA.Services.Services.Admin
                 .Include(x => x.Student);
 
 
-            var groupedQuery = query
-                .GroupBy(x => x.ClassId)
-                .Select(g => new GetAssignClassDTO
-                {
-                    ClassId = g.Key,
-
-                    ClassName = g.First().Class.ClassName,
-
-                    LecturerName = g.First().Class.Lecturer != null
-                        ? g.First().Class.Lecturer.FullName
-                        : null,
-
-                    ExpertName = g.First().Class.Expert != null
-                        ? g.First().Class.Expert.FullName
-                        : null,
-
-                    Students = g
-                        .Select(x => x.Student.FullName)
-                        .ToList(),
-
-                    LastEnrollment = g
-                        .Max(x => x.EnrolledAt)
-                });
+            var totalCount = await query.CountAsync();
 
 
-            var totalCount = await groupedQuery.CountAsync();
-
-
-            var data = await groupedQuery
-                .OrderByDescending(x => x.LastEnrollment)
+            var data = await query
+                .OrderByDescending(x => x.EnrolledAt)
                 .Skip((pageIndex - 1) * pageSize)
                 .Take(pageSize)
+                .Select(x => new GetAssignClassDTO
+                {
+                    Id = x.Id,
+                    ClassName = x.Class.ClassName,
+                    LecturerName = x.Class.Lecturer != null ? x.Class.Lecturer.FullName : null,
+                    ExpertName = x.Class.Expert != null ? x.Class.Expert.FullName : null,
+                    StudentName = x.Student.FullName,
+                    EnrolledAt = x.EnrolledAt
+                })
                 .ToListAsync();
 
 
@@ -164,188 +148,166 @@ namespace BoneVisQA.Services.Services.Admin
                 PageSize = pageSize
             };
         }
-
+       
         public async Task<AssignClassDTO> AssignClassAsync(AssignClassDTO dto)
         {
-            if (dto.StudentIds == null || !dto.StudentIds.Any()) throw new Exception("Must assign at least 1 student into class");
+            if (!dto.LecturerId.HasValue && !dto.ExpertId.HasValue && !dto.StudentId.HasValue && !dto.RemoveExpert)
+                throw new InvalidOperationException("Cần ít nhất một thao tác: gán LecturerId, ExpertId, StudentId (enroll), hoặc RemoveExpert.");
 
+            if (dto.RemoveExpert && dto.ExpertId.HasValue)
+                throw new InvalidOperationException("Không thể vừa RemoveExpert vừa gán ExpertId.");
 
-            var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId);
+            var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId)
+                ?? throw new InvalidOperationException("Class not found");
 
-            if (classEntity == null) throw new Exception("Class not found");
+            var userIds = new HashSet<Guid>();
+            if (dto.StudentId.HasValue) userIds.Add(dto.StudentId.Value);
+            if (dto.LecturerId.HasValue) userIds.Add(dto.LecturerId.Value);
+            if (dto.ExpertId.HasValue) userIds.Add(dto.ExpertId.Value);
 
+            var users = userIds.Count == 0
+                ? new List<User>()
+                : await _unitOfWork.UserRepository
+                    .GetQueryable()
+                    .Include(x => x.UserRoles)
+                    .ThenInclude(x => x.Role)
+                    .Where(x => userIds.Contains(x.Id))
+                    .ToListAsync();
 
-            var users = await _unitOfWork.UserRepository
-                .GetQueryable()
-                .Include(x => x.UserRoles)
-                .ThenInclude(x => x.Role)
-                .Where(x =>
-                    dto.StudentIds.Contains(x.Id) ||
-                    (dto.LecturerId != null && x.Id == dto.LecturerId) ||
-                    (dto.ExpertId != null && x.Id == dto.ExpertId))
-                .ToListAsync();
+            static bool HasRole(User u, string roleName) =>
+                u.UserRoles.Any(r => r.Role != null && r.Role.Name == roleName);
 
-
-            // validate students
-            var students = users
-                .Where(x => dto.StudentIds.Contains(x.Id))
-                .ToList();
-
-            if (students.Count != dto.StudentIds.Count) throw new Exception("Some students not found");
-
-
-            foreach (var student in students)
+            if (dto.LecturerId.HasValue)
             {
-                if (!student.UserRoles.Any(r => r.Role.Name == "Student"))
-                    throw new Exception($"User {student.FullName} is not Student");
+                var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId.Value)
+                    ?? throw new InvalidOperationException("Lecturer not found.");
+                if (!HasRole(lecturer, "Lecturer"))
+                    throw new InvalidOperationException("User is not Lecturer.");
+                classEntity.LecturerId = dto.LecturerId.Value;
             }
 
-
-            // assign Lecturer nếu class chưa có
-            if (classEntity.LecturerId == null)
+            if (dto.RemoveExpert)
+                classEntity.ExpertId = null;
+            else if (dto.ExpertId.HasValue)
             {
-                if (dto.LecturerId == null)
-                    throw new Exception("Lecturer is required for this class");
-
-                var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId);
-
-                if (lecturer == null ||
-                    !lecturer.UserRoles.Any(r => r.Role.Name == "Lecturer"))
-                {
-                    throw new Exception("User is not Lecturer");
-                }
-
-                classEntity.LecturerId = dto.LecturerId;
+                var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId.Value)
+                    ?? throw new InvalidOperationException("Expert not found.");
+                if (!HasRole(expert, "Expert"))
+                    throw new InvalidOperationException("User is not Expert.");
+                classEntity.ExpertId = dto.ExpertId.Value;
             }
 
-
-            // assign Expert nếu class chưa có
-            if (classEntity.ExpertId == null)
-            {
-                if (dto.ExpertId == null)
-                    throw new Exception("Expert is required for this class");
-
-                var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId);
-
-                if (expert == null ||!expert.UserRoles.Any(r => r.Role.Name == "Expert"))
-                {
-                    throw new Exception("User is not Expert");
-                }
-
-                classEntity.ExpertId = dto.ExpertId;
-            }
-
-
+            classEntity.UpdatedAt = DateTime.UtcNow;
             _unitOfWork.AcademicClassRepository.Update(classEntity);
 
+            if (dto.StudentId.HasValue)
+            {
+                var student = users.FirstOrDefault(x => x.Id == dto.StudentId.Value)
+                    ?? throw new InvalidOperationException("Student not found.");
+                if (!HasRole(student, "Student"))
+                    throw new InvalidOperationException("User is not Student.");
 
-            // check existed students
-            var existedStudents = await _unitOfWork
-                .ClassEnrollmentRepository
-                .GetQueryable()
-                .Where(x =>
-                    x.ClassId == dto.ClassId &&
-                    dto.StudentIds.Contains(x.StudentId))
-                .Select(x => x.StudentId)
-                .ToListAsync();
+                var existed = await _unitOfWork.ClassEnrollmentRepository
+                    .GetQueryable()
+                    .AnyAsync(x => x.ClassId == dto.ClassId && x.StudentId == dto.StudentId.Value);
+                if (existed)
+                    throw new InvalidOperationException("Student already enrolled.");
 
-
-            var newStudents = dto.StudentIds
-                .Except(existedStudents)
-                .ToList();
-
-
-            if (!newStudents.Any())
-                throw new Exception("Student already enrolled");
-
-
-            var enrollments = newStudents.Select(studentId =>
-                new ClassEnrollment
+                var enrollment = new ClassEnrollment
                 {
                     Id = Guid.NewGuid(),
                     ClassId = dto.ClassId,
-                    StudentId = studentId,
-                    EnrolledAt = DateTime.UtcNow,   
-                });
-
-
-            await _unitOfWork.ClassEnrollmentRepository.AddRangeAsync(enrollments);
-
+                    StudentId = dto.StudentId.Value,
+                    ClassName = classEntity.ClassName,
+                    EnrolledAt = DateTime.UtcNow
+                };
+                await _unitOfWork.ClassEnrollmentRepository.AddAsync(enrollment);
+            }
 
             await _unitOfWork.SaveAsync();
 
             dto.ClassName = classEntity.ClassName;
-
             return dto;
         }
 
-        public async Task<UpdateAssignClassDTO> UpdateAssignClassAsync(UpdateAssignClassDTO dto)
+        public async Task<AssignClassDTO> UpdateAssignClassAsync(AssignClassDTO dto)
         {
-            var classEntity = await _unitOfWork
-                .AcademicClassRepository
-                .GetByIdAsync(dto.ClassId);
+            if (!dto.LecturerId.HasValue && !dto.ExpertId.HasValue && !dto.RemoveExpert && !dto.StudentId.HasValue)
+                throw new InvalidOperationException("Cần ít nhất một trường: StudentId (cập nhật enrollment), LecturerId, ExpertId, hoặc RemoveExpert.");
 
-            if (classEntity == null)
-                throw new Exception("Class not found");
+            if (dto.RemoveExpert && dto.ExpertId.HasValue)
+                throw new InvalidOperationException("Không thể vừa RemoveExpert vừa gán ExpertId.");
 
+            var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId)
+                ?? throw new InvalidOperationException("Class not found");
 
-            var userIds = new List<Guid>();
+            ClassEnrollment? enrollment = null;
+            if (dto.StudentId.HasValue)
+            {
+                enrollment = await _unitOfWork.ClassEnrollmentRepository
+                    .GetQueryable()
+                    .FirstOrDefaultAsync(x =>
+                        x.ClassId == dto.ClassId &&
+                        x.StudentId == dto.StudentId.Value);
+                if (enrollment == null)
+                    throw new InvalidOperationException("Enrollment not found.");
+            }
+
+            var userIds = new HashSet<Guid>();
+            if (dto.StudentId.HasValue) userIds.Add(dto.StudentId.Value);
+            if (dto.LecturerId.HasValue) userIds.Add(dto.LecturerId.Value);
+            if (dto.ExpertId.HasValue) userIds.Add(dto.ExpertId.Value);
+
+            var users = userIds.Count == 0
+                ? new List<User>()
+                : await _unitOfWork.UserRepository
+                    .GetQueryable()
+                    .Include(x => x.UserRoles)
+                    .ThenInclude(x => x.Role)
+                    .Where(x => userIds.Contains(x.Id))
+                    .ToListAsync();
+
+            static bool HasRole(User u, string roleName) =>
+                u.UserRoles.Any(r => r.Role != null && r.Role.Name == roleName);
 
             if (dto.LecturerId.HasValue)
-                userIds.Add(dto.LecturerId.Value);
-
-            if (dto.ExpertId.HasValue)
-                userIds.Add(dto.ExpertId.Value);
-
-
-            var users = await _unitOfWork.UserRepository
-                .GetQueryable()
-                .Include(x => x.UserRoles)
-                .ThenInclude(x => x.Role)
-                .Where(x => userIds.Contains(x.Id))
-                .ToListAsync();
-
-
-            // update Lecturer nếu truyền vào
-            if (dto.LecturerId == null)
             {
-                var lecturer = users
-                    .FirstOrDefault(x => x.Id == dto.LecturerId);
-
-                if (lecturer == null ||!lecturer.UserRoles.Any(r => r.Role.Name == "Lecturer"))
-                {
-                    throw new Exception("User is not Lecturer");
-                }
-
-                classEntity.LecturerId = dto.LecturerId;
+                var lecturer = users.FirstOrDefault(x => x.Id == dto.LecturerId.Value)
+                    ?? throw new InvalidOperationException("Lecturer not found.");
+                if (!HasRole(lecturer, "Lecturer"))
+                    throw new InvalidOperationException("User is not Lecturer.");
+                classEntity.LecturerId = dto.LecturerId.Value;
             }
 
-
-            // update Expert nếu truyền vào
-            if (dto.ExpertId == null)
+            if (dto.RemoveExpert)
+                classEntity.ExpertId = null;
+            else if (dto.ExpertId.HasValue)
             {
-                var expert = users
-                    .FirstOrDefault(x => x.Id == dto.ExpertId);
-
-                if (expert == null || !expert.UserRoles.Any(r => r.Role.Name == "Expert"))
-                {
-                    throw new Exception("User is not Expert");
-                }
-
-                classEntity.ExpertId = dto.ExpertId;
+                var expert = users.FirstOrDefault(x => x.Id == dto.ExpertId.Value)
+                    ?? throw new InvalidOperationException("Expert not found.");
+                if (!HasRole(expert, "Expert"))
+                    throw new InvalidOperationException("User is not Expert.");
+                classEntity.ExpertId = dto.ExpertId.Value;
             }
 
+            if (dto.StudentId.HasValue)
+            {
+                var student = users.FirstOrDefault(x => x.Id == dto.StudentId.Value)
+                    ?? throw new InvalidOperationException("Student not found.");
+                if (!HasRole(student, "Student"))
+                    throw new InvalidOperationException("User is not Student.");
+                enrollment!.EnrolledAt = DateTime.UtcNow;
+                _unitOfWork.ClassEnrollmentRepository.Update(enrollment);
+            }
 
-            _unitOfWork
-                .AcademicClassRepository
-                .Update(classEntity);
-
+            classEntity.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.AcademicClassRepository.Update(classEntity);
 
             await _unitOfWork.SaveAsync();
 
+            dto.ClassName = classEntity.ClassName;
             return dto;
         }
-
         public async Task<bool> DeleteAssignClassAsync(Guid id)
         {
             var enrollment = await _unitOfWork.ClassEnrollmentRepository.GetByIdAsync(id);

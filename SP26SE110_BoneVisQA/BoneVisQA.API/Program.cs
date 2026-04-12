@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
 using BoneVisQA.API;
+using BoneVisQA.API.ExceptionHandling;
 using BoneVisQA.API.Hubs;
 using BoneVisQA.API.Policies;
 using BoneVisQA.API.Services;
@@ -32,21 +33,21 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Security.Cryptography;
-using System.Text;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
-// Align with Supabase free-tier storage limits (50 MB max upload).
+// Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
+const long maxUploadBodyBytes = 104857600; // 100 MB
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 52428800;
+    options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
 });
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 52428800;
+    options.MultipartBodyLengthLimit = maxUploadBodyBytes;
     options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
 });
 
@@ -58,27 +59,38 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
-        var origins = configuredOrigins
-            .Where(o => !string.IsNullOrWhiteSpace(o))
-            .Select(o => o.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var originSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (origins.Length == 0)
+        foreach (var o in configuredOrigins.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            originSet.Add(o);
+
+        if (builder.Environment.IsDevelopment())
         {
-            // Safe local defaults for development when config is absent.
-            origins = new[]
-            {
-                "http://localhost:3000",
-                "https://localhost:3000",
-                "http://localhost:5173",
-                "https://localhost:5173",
-                "https://localhost:5046",
-                "https://localhost:5047"
-            };
+            foreach (var o in new[]
+                     {
+                         "http://localhost:3000",
+                         "https://localhost:3000",
+                         "http://localhost:5173",
+                         "https://localhost:5173",
+                         "http://localhost:5046"
+                     })
+                originSet.Add(o);
         }
 
-        policy.WithOrigins(origins)
+        if (originSet.Count == 0)
+        {
+            foreach (var o in new[]
+                     {
+                         "http://localhost:3000",
+                         "https://localhost:3000",
+                         "http://localhost:5173",
+                         "https://localhost:5173",
+                         "http://localhost:5046"
+                     })
+                originSet.Add(o);
+        }
+
+        policy.WithOrigins(originSet.ToArray())
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -88,6 +100,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddMemoryCache();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
@@ -123,8 +137,47 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IUserIdProvider, JwtUserIdProvider>();
 
+static string BuildSupabaseConnectionString(IConfiguration configuration)
+{
+    var raw = configuration.GetConnectionString("SupabaseDb");
+    if (string.IsNullOrWhiteSpace(raw))
+        throw new InvalidOperationException(
+            "ConnectionStrings:SupabaseDb is missing. Set it in User Secrets, environment variables, or appsettings (never commit passwords).");
+
+    var hasMaxPool = raw.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+                     || raw.Contains("Max Pool Size", StringComparison.OrdinalIgnoreCase)
+                     || raw.Contains("MaxPoolSize=", StringComparison.OrdinalIgnoreCase);
+
+    var csb = new NpgsqlConnectionStringBuilder(raw)
+    {
+        Pooling = true,
+    };
+
+    if (!hasMaxPool)
+    {
+        csb.MinPoolSize = configuration.GetValue("DatabasePooling:MinimumPoolSize", 0);
+        csb.MaxPoolSize = configuration.GetValue("DatabasePooling:MaximumPoolSize", 15);
+    }
+
+    var idle = configuration.GetValue<int?>("DatabasePooling:ConnectionIdleLifetimeSeconds");
+    if (idle is > 0)
+        csb.ConnectionIdleLifetime = idle.Value;
+
+    var timeout = configuration.GetValue<int?>("DatabasePooling:TimeoutSeconds");
+    if (timeout is > 0)
+        csb.Timeout = timeout.Value;
+
+    var cmdTimeout = configuration.GetValue<int?>("DatabasePooling:CommandTimeoutSeconds");
+    if (cmdTimeout is > 0)
+        csb.CommandTimeout = cmdTimeout.Value;
+
+    return csb.ConnectionString;
+}
+
+var supabaseConnectionString = BuildSupabaseConnectionString(builder.Configuration);
+
 builder.Services.AddDbContext<BoneVisQADbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseDb"),
+    options.UseNpgsql(supabaseConnectionString,
         npgsqlOptions =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);
@@ -212,6 +265,8 @@ builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>(
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
@@ -230,6 +285,7 @@ builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
 builder.Services.AddScoped<ITagCaseService, TagCaseService>();
 builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
@@ -238,6 +294,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 
 var app = builder.Build();
 
+app.UseExceptionHandler();
 app.UseCors("AllowAll");
 app.Use(async (context, next) =>
 {
@@ -245,7 +302,10 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
     await next();
 });
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseSwagger();
 app.UseSwaggerUI();
 //

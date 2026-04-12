@@ -11,6 +11,8 @@ namespace BoneVisQA.Services.Models.Admin
 {
     public class GetClassManagementDTO
     {
+        public Guid Id { get; set; }
+
         public string ClassName { get; set; } = null!;
 
         public string Semester { get; set; } = null!;
@@ -43,16 +45,17 @@ namespace BoneVisQA.Services.Models.Admin
     //=======================================================  ASSIGN CLASS  ===================================================
     public class GetAssignClassDTO
     {
-        public Guid ClassId { get; set; }
+        public Guid Id { get; set; }
 
         public string? ClassName { get; set; }
 
         public string? LecturerName { get; set; }
 
         public string? ExpertName { get; set; }
-        public List<string>? Students { get; set; }
 
-        public DateTime? LastEnrollment { get; set; }
+        public string? StudentName { get; set; }
+       
+        public DateTime? EnrolledAt { get; set; }
     }
     public class AssignClassDTO
     {
@@ -60,20 +63,18 @@ namespace BoneVisQA.Services.Models.Admin
 
         public string? ClassName { get; set; }
 
-        public List<Guid>? StudentIds { get; set; }
+        /// <summary>Optional: enroll this student (must have Student role).</summary>
+        public Guid? StudentId { get; set; }
 
+        /// <summary>Optional: set or replace class lecturer (must have Lecturer role).</summary>
         public Guid? LecturerId { get; set; }
 
+        /// <summary>Optional: set or replace class expert (must have Expert role).</summary>
         public Guid? ExpertId { get; set; }
+
+        /// <summary>When true, clears the class expert (cannot combine with <see cref="ExpertId"/>).</summary>
+        public bool RemoveExpert { get; set; }
 
         public DateTime? EnrolledAt { get; set; }
-    }
-    public class UpdateAssignClassDTO
-    {
-        public Guid ClassId { get; set; }
-
-        public Guid? LecturerId { get; set; }
-
-        public Guid? ExpertId { get; set; }
     }
 }

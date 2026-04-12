@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
@@ -58,6 +59,11 @@ public class ApproveCaseRequestDto
 public class LectStudentQuestionDto
 {
     public Guid Id { get; set; }
+
+    /// <summary>Latest <c>case_answers.id</c> for this question (escalation / reviews).</summary>
+    [JsonPropertyName("answerId")]
+    public Guid? AnswerId { get; set; }
+
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;

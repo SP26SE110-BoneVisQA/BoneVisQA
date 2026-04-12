@@ -9,7 +9,6 @@ namespace BoneVisQA.Repositories.Models;
 [Table("users")]
 [Index("IsActive", Name = "idx_users_is_active")]
 [Index("Email", Name = "users_email_key", IsUnique = true)]
-[Index("IsActive", Name = "idx_users_is_active")]
 public partial class User
 {
     [Key]
@@ -110,6 +109,14 @@ public partial class User
 
     [Column("verified_by")]
     public Guid? VerifiedBy { get; set; }
+
+    /// <summary>Admin/user who performed medical verification (<c>users.verified_by</c> → self-FK).</summary>
+    [ForeignKey("VerifiedBy")]
+    [InverseProperty("UsersVerifiedByThisUser")]
+    public virtual User? Verifier { get; set; }
+
+    [InverseProperty("Verifier")]
+    public virtual ICollection<User> UsersVerifiedByThisUser { get; set; } = new List<User>();
 
     [InverseProperty("Lecturer")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();

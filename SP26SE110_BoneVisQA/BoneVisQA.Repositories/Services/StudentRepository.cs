@@ -21,6 +21,7 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetAllCasesAsync()
     {
         return await _unitOfWork.MedicalCaseRepository
+
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.MedicalImages)
@@ -31,6 +32,7 @@ public class StudentRepository : IStudentRepository
     public async Task<List<MedicalCase>> GetFilteredCasesAsync(CaseFilter filter)
     {
         var query = _unitOfWork.MedicalCaseRepository
+
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)

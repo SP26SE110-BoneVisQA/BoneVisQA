@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
@@ -25,32 +27,74 @@ namespace BoneVisQA.API.Controllers.Expert
             _tagCaseService = tagCaseService;
         }
         [HttpGet("cases")]
+        [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
         {
             var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize);
+            return Ok(result);
+        }
+
+        /// <summary>Single case for expert dashboard / editor (includes images and tags).</summary>
+        [HttpGet("cases/{id:guid}")]
+        [ProducesResponseType(typeof(GetExpertMedicalCaseDetailDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetMedicalCaseById([FromRoute] Guid id)
+        {
+            var result = await _medicalcaseService.GetMedicalCaseByIdAsync(id);
+            if (result == null)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = "The requested medical case was not found.",
+                    Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
+                });
+            }
 
             return Ok(result);
         }
 
+        /// <summary>JSON: case metadata + <c>MedicalImages</c> (public <c>ImageUrl</c> after FE upload to Supabase) and nested annotations; expert id from JWT.</summary>
         [HttpPost("cases")]
-        public async Task<IActionResult> CreateCase(CreateMedicalCaseRequestDTO dto)
+        [Consumes("application/json")]
+        public async Task<IActionResult> CreateCase([FromBody] CreateExpertMedicalCaseJsonRequest body, CancellationToken cancellationToken)
         {
-            var caseId = await _medicalcaseService.CreateMedicalCaseAsync(dto);
+            if (body == null)
+                return BadRequest(new { message = "Request body is required." });
 
+            var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(expertIdStr, out var expertId) || expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+            var created = await _medicalcaseService.CreateMedicalCaseWithImagesJsonAsync(body, expertId, cancellationToken);
             return Ok(new
             {
                 message = "Medical case created successfully",
-                caseId
+                caseId = created.Id,
+                result = created
             });
         }
 
-        [HttpPut("cases/{id}")]
-        public async Task<IActionResult> UpdateMedicalCase(Guid id,UpdateMedicalCaseDTORequest request)
+        [HttpPut("cases/{id:guid}")]
+        [Consumes("application/json")]
+        public async Task<IActionResult> UpdateMedicalCase([FromRoute] Guid id, [FromBody] UpdateMedicalCaseDTORequest request)
         {
+            if (request == null)
+                return BadRequest(new { message = "Request body is required." });
+
             var result = await _medicalcaseService.UpdateMedicalCaseAsync(id, request);
 
             if (result == null)
-                return NotFound("Medical case not found");
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = "The requested medical case was not found.",
+                    Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
+                });
+            }
 
             return Ok(result);
         }
@@ -61,9 +105,17 @@ namespace BoneVisQA.API.Controllers.Expert
             var result = await _medicalcaseService.DeleteMedicalCaseAsync(id);
 
             if (!result)
-                return NotFound("Medical case not found");
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = "The requested medical case was not found.",
+                    Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
+                });
+            }
 
-            return Ok("Delete medical case successfully");
+            return Ok(new { message = "Medical case deleted successfully." });
         }
 
         [HttpPost("images")]
