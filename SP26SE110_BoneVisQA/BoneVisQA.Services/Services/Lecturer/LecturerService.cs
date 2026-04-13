@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Lecturer;
@@ -775,8 +776,8 @@ public class LecturerService : ILecturerService
             : 0;
 
         var totalQuestionsAsked = studentIds.Count > 0
-            ? await _unitOfWork.StudentQuestionRepository
-                .FindByCondition(q => studentIds.Contains(q.StudentId))
+            ? await _unitOfWork.Context.QaMessages
+                .Where(m => m.Role == "User" && studentIds.Contains(m.Session.StudentId))
                 .CountAsync()
             : 0;
 
@@ -935,19 +936,15 @@ public class LecturerService : ILecturerService
         return true;
     }
 
-    /// <summary>Personal Visual QA uses <see cref="StudentQuestion.CustomImageUrl"/>; assigned cases use the first case image (by <see cref="MedicalImage.CreatedAt"/>).</summary>
-    private static string? ResolveQuestionImageUrl(StudentQuestion? question)
+    private static string? ResolveSessionImageUrl(VisualQASession? session)
     {
-        if (question == null)
+        if (session == null)
             return null;
-        if (!string.IsNullOrWhiteSpace(question.CustomImageUrl))
-            return question.CustomImageUrl.Trim();
-
-        var images = question.Case?.MedicalImages;
-        if (images == null || images.Count == 0)
-            return null;
-
-        return images
+        if (!string.IsNullOrWhiteSpace(session.CustomImageUrl))
+            return session.CustomImageUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(session.Image?.ImageUrl))
+            return session.Image.ImageUrl.Trim();
+        return session.Case?.MedicalImages?
             .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
             .ThenBy(m => m.Id)
             .Select(m => m.ImageUrl)
@@ -967,190 +964,197 @@ public class LecturerService : ILecturerService
         if (studentIds.Count == 0)
             return new List<LecturerTriageRowDto>();
 
-        var answers = await _unitOfWork.Context.CaseAnswers
+        var sessions = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
             .AsSplitQuery()
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Student)
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Case!)
-                    .ThenInclude(c => c.MedicalImages)
-            .Where(a => studentIds.Contains(a.Question.StudentId))
-            .Where(a =>
-                a.Status == CaseAnswerStatuses.EscalatedToExpert
-                || a.Status == CaseAnswerStatuses.Escalated
-                || (
-                    a.Status != CaseAnswerStatuses.Approved
-                    && a.Status != CaseAnswerStatuses.Revised
-                    && a.Status != CaseAnswerStatuses.Edited
-                    && a.Status != CaseAnswerStatuses.ExpertApproved
-                    && (a.AiConfidenceScore == null
-                        || a.AiConfidenceScore < LecturerTriageThresholds.MinConfidenceToBypassTriage)))
-            .OrderByDescending(a => a.Question.CreatedAt)
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+            .Where(s => studentIds.Contains(s.StudentId))
+            .Where(s => s.Status == "PendingLecturerReview" || s.Status == "EscalatedToExpert")
+            .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
 
-        var escalatedByIds = answers
-            .Where(a => a.EscalatedById.HasValue)
-            .Select(a => a.EscalatedById!.Value)
-            .Distinct()
-            .ToList();
-
-        var expertNames = await _unitOfWork.UserRepository
-            .FindByCondition(u => escalatedByIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.FullName);
-
-        return answers
-            .Where(a => a.Question != null)
-            .Select(a =>
+        return sessions.Select(s =>
             {
-                var q = a.Question!;
-                // Flat image URL for FE: personal Visual QA first, else first case image (matches API contract).
-                var flatImageUrl = !string.IsNullOrWhiteSpace(q.CustomImageUrl)
-                    ? q.CustomImageUrl.Trim()
-                    : q.Case?.MedicalImages?.FirstOrDefault()?.ImageUrl;
-                if (string.IsNullOrWhiteSpace(flatImageUrl))
-                    flatImageUrl = null;
-                else
-                    flatImageUrl = flatImageUrl.Trim();
+                var userMessage = s.Messages
+                    .Where(m => m.Role == "User")
+                    .OrderBy(m => m.CreatedAt)
+                    .FirstOrDefault();
+                var assistantMessage = s.Messages
+                    .Where(m => m.Role == "Assistant")
+                    .OrderByDescending(m => m.CreatedAt)
+                    .FirstOrDefault();
+                var flatImageUrl = ResolveSessionImageUrl(s);
 
                 return new LecturerTriageRowDto
-            {
-                // Row is keyed by CaseAnswer; this id is required for PUT .../reviews/{answerId}/escalate.
-                AnswerId = a.Id,
-                QuestionId = a.QuestionId,
-                StudentId = q.StudentId,
-                StudentName = q.Student?.FullName ?? string.Empty,
-                StudentEmail = q.Student?.Email,
-                ClassId = classId,
-                ClassName = cls.ClassName,
-                CaseId = q.CaseId,
-                CaseTitle = q.Case?.Title,
-                ThumbnailUrl = flatImageUrl,
-                ImageUrl = flatImageUrl,
-                QuestionText = q.QuestionText,
-                AnswerText = a.AnswerText,
-                Status = a.Status ?? CaseAnswerStatuses.RequiresLecturerReview,
-                AiConfidenceScore = a.AiConfidenceScore,
-                AskedAt = q.CreatedAt,
-                IsEscalated = a.Status == CaseAnswerStatuses.EscalatedToExpert
-                              || a.Status == CaseAnswerStatuses.Escalated,
-                EscalatedByName = a.EscalatedById.HasValue
-                    ? expertNames.GetValueOrDefault(a.EscalatedById.Value)
-                    : null,
-                EscalatedAt = a.EscalatedAt
-            };
+                {
+                    AnswerId = s.Id,
+                    QuestionId = userMessage?.Id ?? Guid.Empty,
+                    StudentId = s.StudentId,
+                    StudentName = s.Student?.FullName ?? string.Empty,
+                    StudentEmail = s.Student?.Email,
+                    ClassId = classId,
+                    ClassName = cls.ClassName,
+                    CaseId = s.CaseId,
+                    CaseTitle = s.Case?.Title,
+                    ThumbnailUrl = flatImageUrl,
+                    ImageUrl = flatImageUrl,
+                    QuestionText = userMessage?.Content ?? string.Empty,
+                    AnswerText = assistantMessage?.Content,
+                    Status = s.Status,
+                    AiConfidenceScore = assistantMessage?.AiConfidenceScore,
+                    AskedAt = s.CreatedAt,
+                    IsEscalated = string.Equals(s.Status, "EscalatedToExpert", StringComparison.Ordinal),
+                    EscalatedByName = null,
+                    EscalatedAt = null
+                };
             })
             .ToList();
     }
 
     public async Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId)
     {
-        var question = await _unitOfWork.StudentQuestionRepository
-            .FindByCondition(q => q.Id == questionId)
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
             .AsSplitQuery()
-            .Include(q => q.Student)
-            .Include(q => q.Case!)
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
                 .ThenInclude(c => c.MedicalImages)
-            .Include(q => q.CaseAnswers)
-                .ThenInclude(a => a.ReviewedBy)
-            .FirstOrDefaultAsync();
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+            .FirstOrDefaultAsync(s => s.Id == questionId);
 
-        if (question == null) return null;
+        if (session == null) return null;
 
         // verify class ownership via enrollment
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
-            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == question.StudentId);
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == session.StudentId);
         if (enrollment == null) return null;
 
-        var answer = question.CaseAnswers == null || question.CaseAnswers.Count == 0
-            ? null
-            : question.CaseAnswers
-                .OrderByDescending(x => x.GeneratedAt ?? x.ReviewedAt ?? DateTime.MinValue)
-                .ThenByDescending(x => x.Id)
-                .FirstOrDefault();
-        var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId);
-        var detailImageUrl = ResolveQuestionImageUrl(question);
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+
+        var userMessage = orderedMessages
+            .Where(m => m.Role == "User")
+            .FirstOrDefault();
+        var latestAssistant = orderedMessages
+            .Where(m => m.Role == "Assistant")
+            .LastOrDefault();
+        var detailImageUrl = ResolveSessionImageUrl(session);
 
         return new LectStudentQuestionDetailDto
         {
-            Id = question.Id,
-            StudentId = question.StudentId,
-            StudentName = question.Student?.FullName ?? string.Empty,
-            StudentEmail = question.Student?.Email ?? string.Empty,
-            CaseId = question.CaseId,
-            CaseTitle = question.Case?.Title,
-            CaseDescription = question.Case?.Description,
+            Id = session.Id,
+            StudentId = session.StudentId,
+            StudentName = session.Student?.FullName ?? string.Empty,
+            StudentEmail = session.Student?.Email ?? string.Empty,
+            CaseId = session.CaseId,
+            CaseTitle = session.Case?.Title,
+            CaseDescription = session.Case?.Description,
             CaseThumbnailUrl = detailImageUrl,
             ImageUrl = detailImageUrl,
-            CaseDifficulty = question.Case?.Difficulty,
-            QuestionText = question.QuestionText,
-            Language = question.Language,
-            CreatedAt = question.CreatedAt,
-            AnswerId = answer?.Id,
-            AnswerText = answer?.AnswerText,
-            StructuredDiagnosis = answer?.StructuredDiagnosis,
-            DifferentialDiagnoses = answer?.DifferentialDiagnoses,
-            AnswerStatus = answer?.Status,
-            AiConfidenceScore = answer?.AiConfidenceScore,
-            ReviewedById = answer?.ReviewedById,
-            ReviewedByName = answer?.ReviewedBy?.FullName,
-            ReviewedAt = answer?.ReviewedAt,
-            IsEscalated = answer?.Status == CaseAnswerStatuses.EscalatedToExpert
-                          || answer?.Status == CaseAnswerStatuses.Escalated,
+            CaseDifficulty = session.Case?.Difficulty,
+            QuestionText = userMessage?.Content ?? string.Empty,
+            Language = "vi",
+            CreatedAt = session.CreatedAt,
+            AnswerId = latestAssistant?.Id,
+            AnswerText = latestAssistant?.Content,
+            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
+            DifferentialDiagnoses = DeserializeJsonArray(latestAssistant?.DifferentialDiagnoses),
+            KeyImagingFindings = latestAssistant?.KeyImagingFindings,
+            AnswerStatus = session.Status,
+            AiConfidenceScore = latestAssistant?.AiConfidenceScore,
+            ReviewedById = null,
+            ReviewedByName = null,
+            ReviewedAt = session.UpdatedAt,
+            IsEscalated = string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal),
             EscalatedByName = null,
-            EscalatedAt = answer?.EscalatedAt
+            EscalatedAt = null,
+            Messages = orderedMessages.Select(m => new LectQAMessageDto
+            {
+                Id = m.Id,
+                Role = m.Role,
+                Content = m.Content,
+                Coordinates = m.Coordinates,
+                CreatedAt = m.CreatedAt
+            }).ToList()
         };
     }
 
     public async Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request)
     {
-        var question = await _unitOfWork.StudentQuestionRepository
-            .FindByCondition(q => q.Id == questionId)
-            .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Messages)
+            .FirstOrDefaultAsync(s => s.Id == questionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
 
         // verify class ownership
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
-            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == question.StudentId)
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == session.StudentId)
             ?? throw new InvalidOperationException("Giảng viên không có quyền trả lời câu hỏi này.");
 
-        var answer = await _unitOfWork.CaseAnswerRepository
-            .FindByCondition(a => a.QuestionId == questionId)
-            .FirstOrDefaultAsync();
+        var answer = session.Messages
+            .Where(m => m.Role == "Assistant")
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefault();
 
         if (answer == null)
         {
-            answer = new BoneVisQA.Repositories.Models.CaseAnswer
+            answer = new QAMessage
             {
                 Id = Guid.NewGuid(),
-                QuestionId = questionId,
-                AnswerText = request.AnswerText,
-                StructuredDiagnosis = request.StructuredDiagnosis,
-                DifferentialDiagnoses = request.DifferentialDiagnoses,
-                Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited,
-                GeneratedAt = DateTime.UtcNow
+                SessionId = session.Id,
+                Role = "Assistant",
+                CreatedAt = DateTime.UtcNow
             };
-            await _unitOfWork.CaseAnswerRepository.AddAsync(answer);
+            await _unitOfWork.Context.QaMessages.AddAsync(answer);
         }
-        else
-        {
-            answer.AnswerText = request.AnswerText;
-            answer.StructuredDiagnosis = request.StructuredDiagnosis;
-            answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
-            answer.Status = request.Approve ? CaseAnswerStatuses.Approved : CaseAnswerStatuses.Edited;
-            await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
-        }
+
+        answer.Content = request.AnswerText;
+        answer.SuggestedDiagnosis = request.StructuredDiagnosis;
+        answer.DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses);
+        answer.CreatedAt = DateTime.UtcNow;
+
+        session.Status = request.Approve ? "LecturerApproved" : "PendingLecturerReview";
+        session.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveAsync();
 
         return new LecturerAnswerDto
         {
             AnswerId = answer.Id,
-            AnswerText = answer.AnswerText,
-            StructuredDiagnosis = answer.StructuredDiagnosis,
-            DifferentialDiagnoses = answer.DifferentialDiagnoses,
-            Status = answer.Status,
+            AnswerText = answer.Content,
+            StructuredDiagnosis = answer.SuggestedDiagnosis,
+            DifferentialDiagnoses = request.DifferentialDiagnoses,
+            Status = session.Status,
             UpdatedAt = DateTime.UtcNow
         };
+    }
+
+    private static List<string>? DeserializeJsonArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? SerializeJsonArray(List<string>? values)
+    {
+        if (values == null || values.Count == 0)
+            return null;
+        return JsonSerializer.Serialize(values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).ToList());
     }
 
     public async Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId)
@@ -1179,10 +1183,10 @@ public class LecturerService : ILecturerService
             })
             .ToDictionaryAsync(x => x.StudentId, x => new { x.Count, x.LastViewedAt });
 
-        var questionsAskedMap = await _unitOfWork.Context.StudentQuestions
+        var questionsAskedMap = await _unitOfWork.Context.QaMessages
             .AsNoTracking()
-            .Where(q => studentIds.Contains(q.StudentId))
-            .GroupBy(q => q.StudentId)
+            .Where(m => m.Role == "User" && studentIds.Contains(m.Session.StudentId))
+            .GroupBy(m => m.Session.StudentId)
             .Select(g => new { StudentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StudentId, x => x.Count);
 

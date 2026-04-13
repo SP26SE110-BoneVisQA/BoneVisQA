@@ -294,14 +294,18 @@ public class StudentService : IStudentService
     }
 
 
-    public async Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request)
+    public async Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request)
     {
         var isPersonalUpload = !request.CaseId.HasValue;
 
-        // Personal uploads must not reference existing case/annotation rows.
-        // This prevents FK violations for dummy or invalid GUIDs coming from the client.
-        var caseIdToSave = isPersonalUpload ? null : request.CaseId;
-        var annotationIdToSave = isPersonalUpload ? null : request.AnnotationId;
+        if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
+        {
+            var existing = await _unitOfWork.Context.VisualQaSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == request.SessionId.Value && s.StudentId == studentId);
+            if (existing != null)
+                return existing.Id;
+        }
 
         string? coordsToSave = BoundingBoxParser.TryParseFromJson(request.Coordinates) is { } b
             ? BoundingBoxParser.Serialize(b)
@@ -336,72 +340,61 @@ public class StudentService : IStudentService
             imageUrlToSave = request.ImageUrl;
         }
 
-        var language = NormalizeLanguage(request.Language);
-
-        var question = new StudentQuestion
+        var session = new VisualQASession
         {
             Id = Guid.NewGuid(),
             StudentId = studentId,
-            CaseId = caseIdToSave,
-            AnnotationId = annotationIdToSave,
-            QuestionText = request.QuestionText,
-            Language = language,
+            CaseId = request.CaseId,
+            ImageId = request.ImageId,
             CustomImageUrl = imageUrlToSave,
-            CustomCoordinates = coordsToSave,
+            Status = "PendingLecturerReview",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.Context.VisualQaSessions.AddAsync(session);
+        await _unitOfWork.SaveAsync();
+
+        return session.Id;
+    }
+
+    public async Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new InvalidOperationException("Visual QA session not found.");
+
+        var userMessage = new QAMessage
+        {
+            Id = Guid.NewGuid(),
+            SessionId = sessionId,
+            Role = "User",
+            Content = request.QuestionText,
+            Coordinates = TryParseCoordinatesJson(request.Coordinates),
             CreatedAt = DateTime.UtcNow
         };
 
-        var created = await _studentRepository.CreateStudentQuestionAsync(question);
-
-        return new StudentQuestionDto
-        {
-            Id = created.Id,
-            StudentId = created.StudentId,
-            CaseId = created.CaseId ?? Guid.Empty,
-            AnnotationId = created.AnnotationId,
-            QuestionText = created.QuestionText,
-            CreatedAt = created.CreatedAt
-        };
-    }
-
-    public async Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response)
-    {
-        // PostgreSQL case_answers_status_check — see CaseAnswerStatuses / db scripts.
-        var status = ClassifyVisualQaAnswerStatus(response);
-
-        var answer = new CaseAnswer
+        var assistantMessage = new QAMessage
         {
             Id = Guid.NewGuid(),
-            QuestionId = questionId,
-            AnswerText = response.AnswerText,
-            StructuredDiagnosis = response.SuggestedDiagnosis,
-            DifferentialDiagnoses = response.DifferentialDiagnoses,
+            SessionId = sessionId,
+            Role = "Assistant",
+            Content = response.AnswerText ?? string.Empty,
+            SuggestedDiagnosis = response.SuggestedDiagnosis,
+            DifferentialDiagnoses = SerializeJsonArray(response.DifferentialDiagnoses),
             KeyImagingFindings = response.KeyImagingFindings,
             ReflectiveQuestions = response.ReflectiveQuestions,
             AiConfidenceScore = response.AiConfidenceScore,
-            Status = status,
-            GeneratedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
-
-        await _studentRepository.CreateCaseAnswerAsync(answer);
-
-        if (response.Citations != null && response.Citations.Count > 0)
-        {
-            var citations = response.Citations.Select(c => new Citation
-            {
-                Id = Guid.NewGuid(),
-                AnswerId = answer.Id,
-                ChunkId = c.ChunkId,
-                SimilarityScore = 0d
-
-            });
-
-            await _studentRepository.AddCitationsAsync(citations);
-        }
 
         try
         {
+            await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync();
+            await _unitOfWork.Context.QaMessages.AddRangeAsync(userMessage, assistantMessage);
+            session.UpdatedAt = DateTime.UtcNow;
             await _unitOfWork.SaveAsync();
+            await transaction.CommitAsync();
         }
         catch (DbUpdateException ex)
         {
@@ -409,85 +402,19 @@ public class StudentService : IStudentService
             {
                 _logger.LogError(
                     ex,
-                    "SaveVisualQAAnswerAsync: database update failed (SQL state {SqlState}) for question {QuestionId}.",
+                    "SaveVisualQAMessagesAsync: database update failed (SQL state {SqlState}) for session {SessionId}.",
                     pg.SqlState,
-                    questionId);
+                    sessionId);
             }
             else
             {
-                _logger.LogError(ex, "SaveVisualQAAnswerAsync: database update failed for question {QuestionId}.", questionId);
+                _logger.LogError(ex, "SaveVisualQAMessagesAsync: database update failed for session {SessionId}.", sessionId);
             }
 
             throw new InvalidOperationException(
-                "Không thể lưu câu trả lời AI vào cơ sở dữ liệu. Vui lòng thử lại sau.",
+                "Không thể lưu hội thoại Visual QA vào cơ sở dữ liệu. Vui lòng thử lại sau.",
                 ex);
         }
-    }
-
-    /// <summary>
-    /// Maps AI outcomes to <c>case_answers.status</c> values allowed by PostgreSQL (<c>case_answers_status_check</c>).
-    /// </summary>
-    private static string ClassifyVisualQaAnswerStatus(VisualQAResponseDto response)
-    {
-        if (IsVisualQaRejectedResponse(response))
-            return CaseAnswerStatuses.Rejected;
-
-        if (response.AiConfidenceScore.HasValue
-            && response.AiConfidenceScore.Value >= LecturerTriageThresholds.MinConfidenceToBypassTriage)
-            return CaseAnswerStatuses.Approved;
-
-        return CaseAnswerStatuses.RequiresLecturerReview;
-    }
-
-    /// <summary>
-    /// Detects pipeline rejections / fallbacks (must stay in sync with GeminiService + VisualQaAiService copy).
-    /// </summary>
-    private static bool IsVisualQaRejectedResponse(VisualQAResponseDto response)
-    {
-        var t = response.AnswerText?.Trim() ?? string.Empty;
-        if (t.Length == 0)
-            return true;
-
-        // Exact / prefix matches for standardized messages.
-        const string noContext =
-            "Dữ liệu y khoa hiện có không chứa thông tin để trả lời câu hỏi này.";
-        if (string.Equals(t, noContext, StringComparison.Ordinal))
-            return true;
-
-        if (t.StartsWith("Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp", StringComparison.Ordinal))
-            return true;
-
-        if (t.StartsWith("Hình ảnh bạn gửi không phải là phim X-quang", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (t.Contains("Không thể truy cập hình ảnh y khoa từ bộ lưu trữ", StringComparison.Ordinal))
-            return true;
-
-        var noDiagnosis = string.IsNullOrWhiteSpace(response.SuggestedDiagnosis)
-                          && string.IsNullOrWhiteSpace(response.DifferentialDiagnoses);
-        var noCitations = response.Citations == null || response.Citations.Count == 0;
-
-        // Typical rejection path: no RAG citations and no structured diagnosis, plus refusal-like wording or short reply.
-        if (noDiagnosis && noCitations)
-        {
-            if (t.Length <= 480)
-                return true;
-
-            if (ContainsRefusalHeuristic(t))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool ContainsRefusalHeuristic(string t)
-    {
-        return t.Contains("không chứa thông tin để trả lời", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("không tìm thấy thông tin đủ tin cậy", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("không phải là phim X-quang", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("Tôi chỉ hỗ trợ phân tích các vấn đề về hệ vận động", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("ngoài phạm vi", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("không thuộc chuyên ngành", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeLanguage(string? language)
@@ -511,6 +438,19 @@ public class StudentService : IStudentService
             return null;
 
         }
+    }
+
+    private static string? SerializeJsonArray(List<string>? values)
+    {
+        if (values == null || values.Count == 0)
+            return null;
+
+        var normalized = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .ToList();
+
+        return normalized.Count == 0 ? null : JsonSerializer.Serialize(normalized);
     }
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)

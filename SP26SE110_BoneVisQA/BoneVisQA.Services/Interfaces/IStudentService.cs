@@ -22,9 +22,9 @@ public interface IStudentService
 
     Task<StudentQuestionDto> AskQuestionAsync(Guid studentId, AskQuestionRequestDto request);
 
-    Task<StudentQuestionDto> CreateVisualQAQuestionAsync(Guid studentId, VisualQARequestDto request);
+    Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
-    Task SaveVisualQAAnswerAsync(Guid questionId, VisualQAResponseDto response);
+    Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 

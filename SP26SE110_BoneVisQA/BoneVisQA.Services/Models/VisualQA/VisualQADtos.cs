@@ -31,6 +31,12 @@ public class VisualQARequestDto
 
     /// <summary>Optional language hint (e.g. vi, en). Defaults to Vietnamese when null or empty.</summary>
     public string? Language { get; set; }
+
+    /// <summary>Optional existing visual QA session id. If null, backend creates/finds by context.</summary>
+    public Guid? SessionId { get; set; }
+
+    /// <summary>Optional image id for disambiguating image inside a medical case.</summary>
+    public Guid? ImageId { get; set; }
 }
 
 public class CitationItemDto
@@ -49,9 +55,10 @@ public class CitationItemDto
 
 public class VisualQAResponseDto
 {
+    public Guid? SessionId { get; set; }
     public string? AnswerText { get; set; }
     public string? SuggestedDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     /// <summary>Key imaging signs to focus on (SEPS).</summary>
     public string? KeyImagingFindings { get; set; }
     /// <summary>Reflective questions for student self-assessment (SEPS).</summary>

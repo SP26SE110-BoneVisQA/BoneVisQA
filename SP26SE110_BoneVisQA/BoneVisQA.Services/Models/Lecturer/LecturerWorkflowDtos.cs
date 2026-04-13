@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
@@ -56,7 +57,8 @@ public class LectStudentQuestionDetailDto
     public Guid? AnswerId { get; set; }
     public string? AnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
+    public string? KeyImagingFindings { get; set; }
     public string? AnswerStatus { get; set; }
     public double? AiConfidenceScore { get; set; }
     public Guid? ReviewedById { get; set; }
@@ -65,13 +67,23 @@ public class LectStudentQuestionDetailDto
     public bool IsEscalated { get; set; }
     public string? EscalatedByName { get; set; }
     public DateTime? EscalatedAt { get; set; }
+    public List<LectQAMessageDto> Messages { get; set; } = new();
+}
+
+public class LectQAMessageDto
+{
+    public Guid Id { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string? Coordinates { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class RespondToQuestionRequestDto
 {
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public bool Approve { get; set; } = false;
 }
 
@@ -80,7 +92,7 @@ public class LecturerAnswerDto
     public Guid AnswerId { get; set; }
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public string Status { get; set; } = "Pending";
     public DateTime UpdatedAt { get; set; }
 }
@@ -117,7 +129,7 @@ public class EscalatedAnswerDto
     public string QuestionText { get; set; } = string.Empty;
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? EscalatedById { get; set; }
     public DateTime? EscalatedAt { get; set; }
