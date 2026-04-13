@@ -430,8 +430,8 @@ public class StudentLearningService : IStudentLearningService
         var totalCasesViewed = await _unitOfWork.Context.CaseViewLogs
             .CountAsync(v => v.StudentId == studentId);
 
-        var totalQuestionsAsked = await _unitOfWork.Context.StudentQuestions
-            .CountAsync(q => q.StudentId == studentId);
+        var totalQuestionsAsked = await _unitOfWork.Context.QaMessages
+            .CountAsync(m => m.Role == "User" && m.Session.StudentId == studentId);
 
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.StudentId == studentId)
@@ -485,11 +485,17 @@ public class StudentLearningService : IStudentLearningService
             .Where(a => a.StudentId == studentId)
             .ToListAsync();
 
-        var questionRows = await _unitOfWork.Context.StudentQuestions
+        var questionTopics = await _unitOfWork.Context.QaMessages
             .AsNoTracking()
-            .Include(q => q.Case)
-                .ThenInclude(c => c!.Category)
-            .Where(q => q.StudentId == studentId)
+            .Include(m => m.Session)
+                .ThenInclude(s => s.Case)
+                    .ThenInclude(c => c!.Category)
+            .Where(m => m.Role == "User" && m.Session.StudentId == studentId)
+            .Select(m => !string.IsNullOrWhiteSpace(m.Session.Case != null && m.Session.Case.Category != null ? m.Session.Case.Category.Name : null)
+                ? m.Session.Case!.Category!.Name
+                : !string.IsNullOrWhiteSpace(m.Session.Case != null ? m.Session.Case.Title : null)
+                    ? m.Session.Case!.Title
+                    : "Personal Upload")
             .ToListAsync();
 
         var topicMap = new Dictionary<string, StudentTopicStatAccumulator>(StringComparer.OrdinalIgnoreCase);
@@ -507,9 +513,8 @@ public class StudentLearningService : IStudentLearningService
             bucket.CorrectQuizAnswers += answers.Count(a => a.IsCorrect == true);
         }
 
-        foreach (var question in questionRows)
+        foreach (var topic in questionTopics)
         {
-            var topic = InferQuestionTopic(question);
             var bucket = GetOrCreateTopicBucket(topicMap, topic);
             bucket.QuestionsAsked++;
         }
@@ -533,24 +538,25 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<IReadOnlyList<StudentRecentActivityDto>> GetRecentActivityAsync(Guid studentId)
     {
-        var recentQuestions = await _unitOfWork.Context.StudentQuestions
+        var recentQuestions = await _unitOfWork.Context.QaMessages
             .AsNoTracking()
-            .Include(q => q.Case)
-                .ThenInclude(c => c!.Category)
-            .Where(q => q.StudentId == studentId)
-            .OrderByDescending(q => q.CreatedAt)
+            .Include(m => m.Session)
+                .ThenInclude(s => s.Case)
+                    .ThenInclude(c => c!.Category)
+            .Where(m => m.Role == "User" && m.Session.StudentId == studentId)
+            .OrderByDescending(m => m.CreatedAt)
             .Take(10)
-            .Select(q => new StudentRecentActivityDto
+            .Select(m => new StudentRecentActivityDto
             {
                 ActivityType = "Question",
-                Title = q.Case != null ? $"Asked a question on {q.Case.Title}" : "Asked a visual QA question",
-                Description = q.QuestionText,
-                Topic = q.Case != null
-                    ? q.Case.Category != null
-                        ? q.Case.Category.Name
-                        : q.Case.Title
+                Title = m.Session.Case != null ? $"Asked a question on {m.Session.Case.Title}" : "Asked a visual QA question",
+                Description = m.Content,
+                Topic = m.Session.Case != null
+                    ? m.Session.Case.Category != null
+                        ? m.Session.Case.Category.Name
+                        : m.Session.Case.Title
                     : "Personal Upload",
-                OccurredAt = q.CreatedAt ?? DateTime.MinValue
+                OccurredAt = m.CreatedAt
             })
             .ToListAsync();
 
@@ -675,17 +681,6 @@ public class StudentLearningService : IStudentLearningService
         return !string.IsNullOrWhiteSpace(attempt.Quiz?.Title)
             ? attempt.Quiz.Title
             : "General";
-    }
-
-    private static string InferQuestionTopic(BoneVisQA.Repositories.Models.StudentQuestion question)
-    {
-        if (!string.IsNullOrWhiteSpace(question.Case?.Category?.Name))
-            return question.Case.Category.Name;
-
-        if (!string.IsNullOrWhiteSpace(question.Case?.Title))
-            return question.Case.Title;
-
-        return "Personal Upload";
     }
 
     public async Task<QuizAttemptReviewDto> GetQuizAttemptReviewAsync(Guid studentId, Guid attemptId)

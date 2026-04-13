@@ -28,8 +28,8 @@ public class LecturerDashboardService : ILecturerDashboardService
             .Distinct()
             .ToListAsync();
 
-        var totalQuestions = await _unitOfWork.Context.StudentQuestions
-            .CountAsync(q => studentIds.Contains(q.StudentId));
+        var totalQuestions = await _unitOfWork.Context.QaMessages
+            .CountAsync(m => m.Role == "User" && studentIds.Contains(m.Session.StudentId));
 
         var escalatedItems = await _unitOfWork.Context.CaseAnswers
             .Include(a => a.Question)
@@ -97,9 +97,9 @@ public class LecturerDashboardService : ILecturerDashboardService
             .Select(g => new { StudentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StudentId, x => x.Count);
 
-        var questionCounts = await _unitOfWork.Context.StudentQuestions
-            .Where(q => studentIds.Contains(q.StudentId))
-            .GroupBy(q => q.StudentId)
+        var questionCounts = await _unitOfWork.Context.QaMessages
+            .Where(m => m.Role == "User" && studentIds.Contains(m.Session.StudentId))
+            .GroupBy(m => m.Session.StudentId)
             .Select(g => new { StudentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StudentId, x => x.Count);
 
@@ -148,8 +148,8 @@ public class LecturerDashboardService : ILecturerDashboardService
                 .Where(v => studentIds.Contains(v.StudentId))
                 .CountAsync();
 
-            var questions = await _unitOfWork.Context.StudentQuestions
-                .Where(q => studentIds.Contains(q.StudentId))
+            var questions = await _unitOfWork.Context.QaMessages
+                .Where(m => m.Role == "User" && studentIds.Contains(m.Session.StudentId))
                 .CountAsync();
 
             var escalated = await _unitOfWork.Context.CaseAnswers
@@ -243,8 +243,8 @@ public class LecturerDashboardService : ILecturerDashboardService
             var cases = await _unitOfWork.Context.CaseViewLogs
                 .CountAsync(v => v.StudentId == sid);
 
-            var questions = await _unitOfWork.Context.StudentQuestions
-                .CountAsync(q => q.StudentId == sid);
+            var questions = await _unitOfWork.Context.QaMessages
+                .CountAsync(m => m.Role == "User" && m.Session.StudentId == sid);
 
             var scores = await _unitOfWork.Context.QuizAttempts
                 .Where(a => a.StudentId == sid && a.Score.HasValue)
