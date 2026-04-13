@@ -32,4 +32,7 @@ public partial class MedicalImage
 
     [InverseProperty("Image")]
     public virtual ICollection<CaseAnnotation> CaseAnnotations { get; set; } = new List<CaseAnnotation>();
+
+    [InverseProperty("Image")]
+    public virtual ICollection<VisualQASession> VisualQASessions { get; set; } = new List<VisualQASession>();
 }
