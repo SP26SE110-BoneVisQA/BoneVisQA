@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,12 +15,15 @@ namespace BoneVisQA.Services.Services;
 public class GeminiService : IGeminiService
 {
     public const string HttpClientName = "Gemini";
+    private const string InvalidImageNotXrayGuardrail = "INVALID_IMAGE_NOT_XRAY";
     private const string MimeTypeJpeg = "image/jpeg";
     private const string FallbackNoReliableInfoAnswer =
         "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
     private const string NoContextAnswer =
         "Dữ liệu y khoa hiện có không chứa thông tin để trả lời câu hỏi này.";
     private const string SystemPrompt =
+        "STEP 1: Analyze if the provided image is a Human Bone X-Ray. If it is NOT (e.g., it is a CT scan, MRI, an animal, or a random object), YOU MUST refuse to answer medical questions and output EXACTLY this string: 'INVALID_IMAGE_NOT_XRAY'. Stop processing further.\n" +
+        "\n" +
         // STRICT: non-medical image/question requests must be refused with no citations.
         "BẮT BUỘC PHÂN TÍCH CÂU HỎI VÀ HÌNH ẢNH (TỪ CHỐI TUYỆT ĐỐI):\n" +
         "Nếu câu hỏi KHÔNG liên quan đến y khoa cơ xương khớp, sức khỏe hoặc chẩn đoán hình ảnh cơ xương khớp (ví dụ: hỏi giá xăng, thời tiết, chính trị, code lập trình...), BẮT BUỘC phải trả lời chính xác bằng câu này: 'Câu hỏi của bạn không liên quan đến lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn hợp lệ.'\n" +
@@ -428,6 +432,21 @@ public class GeminiService : IGeminiService
             };
         }
 
+        if (string.Equals(text.Trim(), InvalidImageNotXrayGuardrail, StringComparison.Ordinal))
+        {
+            return new VisualQAResponseDto
+            {
+                AnswerText = InvalidImageNotXrayGuardrail,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = null,
+                Citations = new List<CitationItemDto>()
+            };
+        }
+
         using var parsed = JsonDocument.Parse(text);
         var result = parsed.RootElement;
 
@@ -436,7 +455,7 @@ public class GeminiService : IGeminiService
             ? ReadStringOrJoinedArray(s)
             : null;
         var differentialDiagnoses = result.TryGetProperty("differentialDiagnoses", out var d)
-            ? ReadStringOrJoinedArray(d)
+            ? ReadStringList(d)
             : null;
         var keyImagingFindings = result.TryGetProperty("keyImagingFindings", out var kfi)
             ? ReadStringOrJoinedArray(kfi)
@@ -509,6 +528,40 @@ public class GeminiService : IGeminiService
             default:
                 return el.GetRawText();
         }
+    }
+
+    private static List<string>? ReadStringList(JsonElement el)
+    {
+        if (el.ValueKind == JsonValueKind.Null)
+            return null;
+
+        if (el.ValueKind == JsonValueKind.String)
+        {
+            var raw = el.GetString();
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+            return raw
+                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim().TrimStart('-', '*').Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (el.ValueKind == JsonValueKind.Array)
+        {
+            var list = new List<string>();
+            foreach (var item in el.EnumerateArray())
+            {
+                var text = JsonElementToPlainSegment(item)?.Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                    list.Add(text);
+            }
+
+            return list.Count == 0 ? null : list;
+        }
+
+        return null;
     }
 
     private static string JsonElementToPlainSegment(JsonElement el)
