@@ -209,6 +209,7 @@ namespace BoneVisQA.Services.Services.Expert
                 result.Add(new GetQuizQuestionDTO
                 {
                     QuestionId = q.Id,
+                    QuizId = q.QuizId,
                     QuizTitle = quiz.Title,
                     CaseTitle = caseTitle,
 
@@ -220,7 +221,8 @@ namespace BoneVisQA.Services.Services.Expert
                     OptionC = q.OptionC,
                     OptionD = q.OptionD,
 
-                    CorrectAnswer = q.CorrectAnswer
+                    CorrectAnswer = q.CorrectAnswer,
+                    ImageUrl = q.ImageUrl  // Trả về URL ảnh
                 });
             }
 
@@ -249,7 +251,8 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionB = request.OptionB,
                 OptionC = request.OptionC,
                 OptionD = request.OptionD,
-                CorrectAnswer = request.CorrectAnswer
+                CorrectAnswer = request.CorrectAnswer,
+                ImageUrl = request.ImageUrl  // Lưu URL ảnh câu hỏi
             };
 
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -268,7 +271,8 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
-                CorrectAnswer = question.CorrectAnswer
+                CorrectAnswer = question.CorrectAnswer,
+                ImageUrl = question.ImageUrl  // Trả về URL ảnh
             };
         }
         public async Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update)
@@ -279,20 +283,25 @@ namespace BoneVisQA.Services.Services.Expert
             if (question == null)
                 throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
 
-            var quiz = await _unitOfWork.QuizRepository
-                .GetByIdAsync(update.QuizId);
+            // Update QuizId only if provided
+            if (update.QuizId.HasValue)
+            {
+                var quiz = await _unitOfWork.QuizRepository
+                    .GetByIdAsync(update.QuizId.Value);
+                if (quiz == null)
+                    throw new KeyNotFoundException("Không tìm thấy quiz.");
+                question.QuizId = update.QuizId.Value;
+            }
 
-            if (quiz == null)
-                throw new KeyNotFoundException("Không tìm thấy quiz.");
-
-            var medicalCase = await _unitOfWork.MedicalCaseRepository
-                .GetByIdAsync(update.CaseId);
-
-            if (medicalCase == null)
-                throw new KeyNotFoundException("Không tìm thấy medical case.");
-
-            question.QuizId = update.QuizId;
-            question.CaseId = update.CaseId;
+            // Update CaseId only if provided
+            if (update.CaseId.HasValue)
+            {
+                var medicalCase = await _unitOfWork.MedicalCaseRepository
+                    .GetByIdAsync(update.CaseId.Value);
+                if (medicalCase == null)
+                    throw new KeyNotFoundException("Không tìm thấy medical case.");
+                question.CaseId = update.CaseId;
+            }
 
             question.QuestionText = update.QuestionText;
             question.Type = update.Type;
@@ -303,27 +312,35 @@ namespace BoneVisQA.Services.Services.Expert
             question.OptionD = update.OptionD;
 
             question.CorrectAnswer = update.CorrectAnswer;
+            question.ImageUrl = update.ImageUrl;
 
             await _unitOfWork.QuizQuestionRepository.UpdateAsync(question);
 
             await _unitOfWork.SaveAsync();
 
+            // Get related data for response
+            var quizForResponse = await _unitOfWork.QuizRepository.GetByIdAsync(question.QuizId);
+            string? caseTitle = null;
+            if (question.CaseId.HasValue)
+            {
+                var medicalCaseForResponse = await _unitOfWork.MedicalCaseRepository
+                    .GetByIdAsync(question.CaseId.Value);
+                caseTitle = medicalCaseForResponse?.Title;
+            }
+
             return new UpdateQuizQuestionResponseDTO
             {
+                QuestionId = question.Id,
                 QuestionText = question.QuestionText,
-
-                QuizTitle = quiz.Title,
-
-                CaseTitle = medicalCase.Title,
-
+                QuizTitle = quizForResponse?.Title,
+                CaseTitle = caseTitle,
                 Type = question.Type,
-
                 CorrectAnswer = question.CorrectAnswer,
-
                 OptionA = question.OptionA,
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
-                OptionD = question.OptionD
+                OptionD = question.OptionD,
+                ImageUrl = question.ImageUrl
             };
         }
         public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
@@ -570,6 +587,178 @@ namespace BoneVisQA.Services.Services.Expert
                 PageIndex = pageIndex,
                 PageSize = pageSize
             };
+        }
+
+        //=====================================================   EXPERT QUIZZES FOR LECTURER  ==========================================================
+
+        /// <summary>
+        /// Lấy danh sách quiz từ thư viện của Expert cho Lecturer.
+        /// 
+        /// MÔ TẢ LUỒNG:
+        /// 1. Expert tạo Quiz với N câu hỏi (ví dụ: 5 câu, 10 câu tùy bài học)
+        /// 2. Quiz được lưu với CreatedByExpertId = Expert đã tạo
+        /// 3. Lecturer muốn xem thư viện quiz để chọn quiz cho lớp mình
+        /// 4. API này trả về danh sách quiz kèm số câu hỏi trong mỗi quiz
+        /// 
+        /// QUAN TRỌNG:
+        /// - Chỉ trả về quiz có CreatedByExpertId != null (do Expert tạo)
+        /// - Không trả về quiz của Lecturer tự tạo
+        /// - Trả về QuestionCount để Lecturer biết quiz có bao nhiêu câu hỏi
+        /// 
+        /// FILTER:
+        /// - topic: Lọc theo chủ đề (vd: "Lower Limb", "Chest X-Ray")
+        /// - difficulty: Lọc theo độ khó (Easy, Medium, Hard)
+        /// - classification: Lọc theo phân loại khóa học (vd: "Year 1", "Year 2")
+        /// 
+        /// TRẢ VỀ:
+        /// - Danh sách quiz với thông tin: Id, Title, Topic, Difficulty, QuestionCount, ExpertName
+        /// </summary>
+        public async Task<PagedResult<ExpertQuizForLecturerDto>> GetExpertQuizzesForLecturerAsync(
+            int pageIndex,
+            int pageSize,
+            string? topic = null,
+            string? difficulty = null,
+            string? classification = null)
+        {
+            var query = _unitOfWork.QuizRepository.GetQueryable();
+
+            // ============================================
+            // BƯỚC 1: Chỉ lấy quiz do Expert tạo
+            // Quiz của Lecturer tự tạo sẽ có CreatedByExpertId = null
+            // ============================================
+            query = query.Where(q => q.CreatedByExpertId != null);
+
+            // ============================================
+            // BƯỚC 2: Áp dụng các bộ lọc tùy chọn
+            // ============================================
+            if (!string.IsNullOrWhiteSpace(topic))
+            {
+                // Tìm kiếm không phân biệt hoa thường
+                query = query.Where(q => q.Topic != null && q.Topic.ToLower().Contains(topic.ToLower()));
+            }
+
+            if (!string.IsNullOrWhiteSpace(difficulty))
+            {
+                // Lọc chính xác theo độ khó
+                query = query.Where(q => q.Difficulty == difficulty);
+            }
+
+            if (!string.IsNullOrWhiteSpace(classification))
+            {
+                // Lọc theo phân loại khóa học
+                query = query.Where(q => q.Classification == classification);
+            }
+
+            // Đếm tổng số quiz thỏa điều kiện
+            var totalCount = await query.CountAsync();
+
+            // ============================================
+            // BƯỚC 3: Lấy danh sách quiz với phân trang
+            // ============================================
+            var quizzes = await query
+                .OrderByDescending(x => x.CreatedAt) // Mới nhất lên đầu
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(q => new ExpertQuizForLecturerDto
+                {
+                    Id = q.Id,
+                    Title = q.Title,
+                    Topic = q.Topic,
+                    OpenTime = q.OpenTime,
+                    CloseTime = q.CloseTime,
+                    TimeLimit = q.TimeLimit,
+                    PassingScore = q.PassingScore,
+                    IsAiGenerated = q.IsAiGenerated,
+                    Difficulty = q.Difficulty,
+                    Classification = q.Classification,
+                    CreatedAt = q.CreatedAt,
+                    ExpertName = q.CreatedByExpert != null ? q.CreatedByExpert.FullName : null,
+                    // QUAN TRỌNG: Đếm số câu hỏi trong quiz
+                    // Đây là số câu hỏi mà Student sẽ nhận được khi làm quiz
+                    QuestionCount = q.QuizQuestions.Count()
+                })
+                .ToListAsync();
+
+            return new PagedResult<ExpertQuizForLecturerDto>
+            {
+                Items = quizzes,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+
+        /// <summary>
+        /// Lấy danh sách câu hỏi trong một quiz (không có đáp án).
+        /// 
+        /// MÔ TẢ LUỒNG:
+        /// 1. Lecturer đã xem danh sách quiz, chọn được quiz phù hợp
+        /// 2. Trước khi gán vào lớp, Lecturer muốn xem trước các câu hỏi
+        /// 3. API này trả về danh sách câu hỏi với các lựa chọn
+        /// 
+        /// BẢO MẬT:
+        /// - KHÔNG trả về CorrectAnswer (đáp án đúng)
+        /// - Chỉ trả về: QuestionText, OptionA, B, C, D, CaseTitle
+        /// 
+        /// KIỂM TRA:
+        /// - Quiz phải tồn tại
+        /// - Quiz phải do Expert tạo (CreatedByExpertId != null)
+        /// 
+        /// TRẢ VỀ:
+        /// - Danh sách câu hỏi không có đáp án
+        /// </summary>
+        public async Task<List<ExpertQuizQuestionDto>> GetExpertQuizQuestionsAsync(Guid quizId)
+        {
+            var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
+            if (quiz == null)
+                throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+            // ============================================
+            // BƯỚC 1: Kiểm tra quiz có phải do Expert tạo không
+            // Chỉ cho phép xem câu hỏi từ quiz của Expert
+            // ============================================
+            if (quiz.CreatedByExpertId == null)
+                throw new InvalidOperationException("Chỉ có thể xem câu hỏi từ quiz của Expert.");
+
+            // ============================================
+            // BƯỚC 2: Lấy tất cả câu hỏi trong quiz
+            // ============================================
+            var questions = await _unitOfWork.QuizQuestionRepository
+                .FindAsync(q => q.QuizId == quizId);
+
+            var result = new List<ExpertQuizQuestionDto>();
+
+            foreach (var q in questions)
+            {
+                string? caseTitle = null;
+                if (q.CaseId.HasValue)
+                {
+                    var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(q.CaseId.Value);
+                    caseTitle = medicalCase?.Title;
+                }
+
+                // ============================================
+                // BƯỚC 3: Map dữ liệu - CÓ CorrectAnswer + ImageUrl
+                // Mỗi câu hỏi đều BẮT BUỘC có đáp án đúng khi được Expert tạo
+                // CorrectAnswer là một trong: "A", "B", "C", "D"
+                // ImageUrl là URL của ảnh đã upload lên Supabase
+                // ============================================
+                result.Add(new ExpertQuizQuestionDto
+                {
+                    QuestionId = q.Id,
+                    QuestionText = q.QuestionText,
+                    Type = q.Type,
+                    OptionA = q.OptionA,
+                    OptionB = q.OptionB,
+                    OptionC = q.OptionC,
+                    OptionD = q.OptionD,
+                    CaseTitle = caseTitle,
+                    CorrectAnswer = q.CorrectAnswer,  // Đáp án đúng: A, B, C hoặc D
+                    ImageUrl = q.ImageUrl  // URL ảnh câu hỏi
+                });
+            }
+
+            return result;
         }
     }
 }

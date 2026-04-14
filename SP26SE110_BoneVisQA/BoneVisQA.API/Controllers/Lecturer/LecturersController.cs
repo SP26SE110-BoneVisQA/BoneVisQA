@@ -1,6 +1,8 @@
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
+using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -21,11 +23,13 @@ public class LecturersController : ControllerBase
 {
     private readonly ILecturerService _lecturerService;
     private readonly IAIQuizService _aiQuizService;
+    private readonly IQuizsService _quizService;
 
-    public LecturersController(ILecturerService lecturerService, IAIQuizService aiQuizService)
+    public LecturersController(ILecturerService lecturerService, IAIQuizService aiQuizService, IQuizsService quizService)
     {
         _lecturerService = lecturerService;
         _aiQuizService = aiQuizService;
+        _quizService = quizService;
     }
 
     private static Guid? TryGetJwtUserId(ClaimsPrincipal user)
@@ -652,6 +656,192 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId);
         return Ok(result);
+    }
+
+    #endregion
+
+    #region Expert Quiz Library - Lecturer lấy quiz từ Expert
+
+    // ================================================================================
+    // LUỒNG HOẠT ĐỘNG:
+    // 1. Lecturer gọi GET /expert-quizzes → Xem danh sách quiz của Expert
+    // 2. Lecturer chọn quiz cụ thể → Gọi GET /expert-quizzes/{id}/questions → Xem trước câu hỏi
+    // 3. Lecturer quyết định gán quiz → Gọi POST /classes/{classId}/expert-quizzes/{quizId}
+    // 4. Hệ thống tự động gán TẤT CẢ câu hỏi trong quiz đó vào lớp (không chọn số lượng)
+    // ================================================================================
+
+    /// <summary>
+    /// Bước 1: Lấy danh sách quiz từ thư viện của Expert.
+    /// 
+    /// Mô tả luồng:
+    /// - Expert đã tạo các bộ quiz với số lượng câu hỏi khác nhau (vd: 5 câu, 10 câu)
+    /// - Lecturer muốn xem thư viện quiz của Expert để chọn quiz phù hợp cho lớp mình
+    /// - API này trả về danh sách quiz kèm số câu hỏi trong mỗi quiz
+    /// 
+    /// Query params:
+    /// - topic: Lọc theo chủ đề (vd: "Lower Limb", "Chest X-Ray")
+    /// - difficulty: Lọc theo độ khó (Easy, Medium, Hard)
+    /// - classification: Lọc theo phân loại (vd: "Year 1", "Year 2")
+    /// - pageIndex, pageSize: Phân trang kết quả
+    /// 
+    /// Trả về:
+    /// - Danh sách quiz với thông tin: tiêu đề, chủ đề, độ khó, số câu hỏi, tên Expert đã tạo
+    /// </summary>
+    [HttpGet("expert-quizzes")]
+    public async Task<ActionResult<PagedResult<ExpertQuizForLecturerDto>>> GetExpertQuizzes(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? topic = null,
+        [FromQuery] string? difficulty = null,
+        [FromQuery] string? classification = null)
+    {
+        if (pageIndex < 1) pageIndex = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 50) pageSize = 50;
+
+        var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+            pageIndex, pageSize, topic, difficulty, classification);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Bước 2 (optional): Lấy thông tin chi tiết một quiz cụ thể từ thư viện Expert.
+    /// 
+    /// Mô tả luồng:
+    /// - Lecturer đã xem danh sách quiz, muốn xem chi tiết một quiz cụ thể
+    /// - API này trả về thông tin đầy đủ của quiz đó
+    /// 
+    /// Trả về:
+    /// - Thông tin quiz: tiêu đề, thời gian mở/đóng, thời gian làm bài, điểm đạt, số câu hỏi
+    /// </summary>
+    [HttpGet("expert-quizzes/{quizId:guid}")]
+    public async Task<ActionResult<ExpertQuizForLecturerDto>> GetExpertQuizById(Guid quizId)
+    {
+        try
+        {
+            var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+                pageIndex: 1,
+                pageSize: 1,
+                topic: null,
+                difficulty: null,
+                classification: null);
+
+            var quiz = result.Items.FirstOrDefault(q => q.Id == quizId);
+            if (quiz == null)
+                return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+            return Ok(quiz);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Bước 3 (optional): Xem trước câu hỏi trong quiz trước khi gán vào lớp.
+    ///
+    /// Mô tả luồng:
+    /// - Lecturer đã chọn được quiz phù hợp
+    /// - Trước khi gán vào lớp, Lecturer muốn xem trước các câu hỏi
+    /// - API này trả về danh sách câu hỏi với các lựa chọn (A, B, C, D)
+    /// - CÓ trả về đáp án đúng (CorrectAnswer) vì Expert đã tạo kèm đáp án
+    ///
+    /// Trả về:
+    /// - Danh sách câu hỏi với: nội dung câu hỏi, các lựa chọn, đáp án đúng, case liên quan
+    /// </summary>
+    [HttpGet("expert-quizzes/{quizId:guid}/questions")]
+    public async Task<IActionResult> GetExpertQuizQuestions(Guid quizId)
+    {
+        try
+        {
+            var result = await _quizService.GetExpertQuizQuestionsAsync(quizId);
+            return Ok(new
+            {
+                message = "Lấy câu hỏi thành công",
+                quizId = quizId,
+                questionCount = result.Count,
+                questions = result
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Bước 4: Gán quiz vào lớp học - Lấy CẢ BỘ câu hỏi.
+    /// 
+    /// Mô tả luồng:
+    /// - Lecturer đã xem và chọn được quiz phù hợp cho lớp mình
+    /// - Lecturer quyết định gán quiz này vào lớp
+    /// - Hệ thống sẽ gán TẤT CẢ câu hỏi trong quiz đó vào ClassQuizSession
+    /// - Không cần chọn số lượng câu hỏi - lấy cả bộ (ví dụ: 5 câu hoặc 10 câu tùy quiz)
+    /// 
+    /// Ví dụ:
+    /// - Quiz "Lower Limb Module" có 10 câu hỏi → Student nhận đủ 10 câu
+    /// - Quiz "Chest X-Ray Basics" có 5 câu hỏi → Student nhận đủ 5 câu
+    /// 
+    /// Body (optional):
+    /// - openTime, closeTime: Thời gian mở/đóng quiz
+    /// - timeLimitMinutes: Thời gian làm bài (override quiz gốc)
+    /// - passingScore: Điểm đạt (override quiz gốc)
+    /// 
+    /// Trả về:
+    /// - Thông báo thành công kèm số câu hỏi đã gán
+    /// </summary>
+    [HttpPost("classes/{classId:guid}/expert-quizzes/{quizId:guid}")]
+    public async Task<IActionResult> AssignExpertQuizToClass(
+        Guid classId,
+        Guid quizId,
+        [FromBody] AssignExpertQuizRequestDto? request = null)
+    {
+        try
+        {
+            // Verify quiz exists and is from Expert
+            var quiz = await _quizService.GetExpertQuizzesForLecturerAsync(
+                pageIndex: 1, pageSize: 1);
+            
+            var expertQuiz = quiz.Items.FirstOrDefault(q => q.Id == quizId);
+            if (expertQuiz == null)
+                return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+            // Convert to AssignQuizRequestDTO
+            var assignRequest = new AssignQuizRequestDTO
+            {
+                ClassId = classId,
+                QuizId = quizId,
+                AssignedExpertId = null,
+                OpenTime = request?.OpenTime,
+                CloseTime = request?.CloseTime,
+                PassingScore = request?.PassingScore,
+                TimeLimitMinutes = request?.TimeLimitMinutes
+            };
+
+            var result = await _quizService.AssignQuizToClassAsync(assignRequest);
+
+            return Ok(new
+            {
+                message = $"Đã gán quiz '{expertQuiz.Title}' vào lớp thành công.",
+                result = result,
+                questionCount = expertQuiz.QuestionCount,
+                note = "Quiz này có " + expertQuiz.QuestionCount + " câu hỏi. Tất cả câu hỏi đã được gán cho lớp."
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     #endregion

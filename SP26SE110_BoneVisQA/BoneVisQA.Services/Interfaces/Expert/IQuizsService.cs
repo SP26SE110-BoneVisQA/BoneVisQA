@@ -34,5 +34,14 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize);
         Task<PagedResult<GetExpertDTO>> GetAllExpert(int pageIndex, int pageSize);
 
+        //=====================================================   EXPERT QUIZZES FOR LECTURER  ==========================================================
+        Task<PagedResult<ExpertQuizForLecturerDto>> GetExpertQuizzesForLecturerAsync(
+            int pageIndex,
+            int pageSize,
+            string? topic = null,
+            string? difficulty = null,
+            string? classification = null);
+
+        Task<List<ExpertQuizQuestionDto>> GetExpertQuizQuestionsAsync(Guid quizId);
     }
 }

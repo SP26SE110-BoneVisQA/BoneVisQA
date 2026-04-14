@@ -13,6 +13,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LecturerAssignmentService> _logger;
+    private readonly INotificationService _notificationService;
 
     private static DateTime? ToUtc(DateTime? dt)
     {
@@ -28,11 +29,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     public LecturerAssignmentService(
         IUnitOfWork unitOfWork,
         IServiceScopeFactory scopeFactory,
-        ILogger<LecturerAssignmentService> logger)
+        ILogger<LecturerAssignmentService> logger,
+        INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task<IReadOnlyList<ClassCaseAssignmentDto>> AssignCasesAsync(Guid lecturerId, Guid classId, AssignCasesRequestDto request)
@@ -97,6 +100,14 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             "Case Assignment",
             "Medical Case",
             request.DueDate);
+
+        // Gửi SignalR notification cho sinh viên
+        await QueueAssignmentNotificationsAsync(
+            academicClass.Id,
+            academicClass.ClassName,
+            "Case Assignment",
+            "Ca Lâm Sàng",
+            "/student/cases");
 
         var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
         _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
@@ -167,6 +178,14 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             quiz.Title,
             "Quiz",
             request.CloseTime);
+
+        // Gửi SignalR notification cho sinh viên
+        await QueueAssignmentNotificationsAsync(
+            academicClass.Id,
+            academicClass.ClassName,
+            quiz.Title,
+            "Quiz",
+            "/student/quizzes");
 
         return new ClassQuizSessionDto
         {
@@ -429,6 +448,91 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             catch (Exception ex)
             {
                 log.LogError(ex, "[AssignmentUpdateEmail] Background task failed for class {ClassId}", classId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Gửi SignalR notification cho tất cả sinh viên trong lớp về bài tập mới được giao.
+    /// </summary>
+    private async Task QueueAssignmentNotificationsAsync(
+        Guid classId,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        string targetUrl)
+    {
+        _logger.LogInformation("[AssignmentNotification] Queue started for class {ClassId}", classId);
+
+        List<(Guid UserId, string Name)> items;
+        try
+        {
+            var rows = await _unitOfWork.Context.ClassEnrollments
+                .AsNoTracking()
+                .Where(e => e.ClassId == classId)
+                .Select(e => new { e.StudentId, e.Student!.FullName })
+                .ToListAsync();
+
+            items = rows
+                .Where(x => x.StudentId != Guid.Empty)
+                .Select(x => (x.StudentId, string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .ToList();
+
+            _logger.LogInformation("[AssignmentNotification] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AssignmentNotification] Failed to load recipients for class {ClassId}", classId);
+            return;
+        }
+
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("[AssignmentNotification] No student for class {ClassId}", classId);
+            return;
+        }
+
+        var nameCopy = className;
+        var titleCopy = assignmentTitle;
+        var typeCopy = assignmentType;
+        var urlCopy = targetUrl;
+        var log = _logger;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                var notificationTitle = $"Bài tập mới: {titleCopy}";
+                var notificationMessage = $"Giảng viên vừa giao bài {typeCopy} mới cho lớp {nameCopy}";
+
+                foreach (var (userId, studentName) in items)
+                {
+                    try
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            userId,
+                            notificationTitle,
+                            notificationMessage,
+                            "assignment",
+                            urlCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogError(ex, "[AssignmentNotification] Error sending to user {UserId}", userId);
+                    }
+                }
+
+                log.LogInformation(
+                    "[AssignmentNotification] Background send finished for class {ClassName}, {Count} recipients",
+                    nameCopy,
+                    items.Count);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[AssignmentNotification] Background task failed for class {ClassId}", classId);
             }
         });
     }

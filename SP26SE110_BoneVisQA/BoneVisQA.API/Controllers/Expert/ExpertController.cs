@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
@@ -19,12 +20,18 @@ namespace BoneVisQA.API.Controllers.Expert
         private readonly IMedicalCaseService _medicalcaseService;
         private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
+        private readonly ISupabaseStorageService _storageService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizsService quizService, ITagCaseService tagCaseService)
+        public ExpertController(
+            IMedicalCaseService medicalService,
+            IQuizsService quizService,
+            ITagCaseService tagCaseService,
+            ISupabaseStorageService storageService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
             _tagCaseService = tagCaseService;
+            _storageService = storageService;
         }
         [HttpGet("cases")]
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
@@ -129,6 +136,35 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
+        /// <summary>Upload quiz question image to Supabase storage</summary>
+        [HttpPost("quiz-questions/upload-image")]
+        [RequestSizeLimit(10485760)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 10485760)]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadQuizQuestionImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required." });
+
+            if (file.Length > 10485760)
+                return BadRequest(new { message = "File size exceeds 10MB limit." });
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(extension))
+                return BadRequest(new { message = "Only JPG, PNG, GIF, WEBP files are allowed." });
+
+            try
+            {
+                var url = await _storageService.UploadFileAsync(file, "medical-cases", "expert-workbench");
+                return Ok(new { url });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Upload failed: {ex.Message}" });
+            }
+        }
+
         [HttpPost("annotations")]
         public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTOResponse dto)
         {
@@ -158,6 +194,14 @@ namespace BoneVisQA.API.Controllers.Expert
             {
                 return BadRequest("Invalid request");
             }
+
+            // Lấy ExpertId từ JWT token và gán vào request
+            var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(expertIdStr, out var expertId) || expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+            // Gán CreatedByExpertId để quiz được hiển thị ở phía Lecturer
+            request.CreatedByExpertId = expertId;
 
             var result = await _quizService.CreateQuizAsync(request);
 
@@ -244,6 +288,39 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+        [HttpPatch("questions")]
+        public async Task<IActionResult> PatchQuestion(UpdateQuizQuestionRequestDTO request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            var result = await _quizService.UpdateQuizQuestionAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz question updated successfully",
+                result
+            });
+        }
+        [HttpPatch("questions/{questionId}")]
+        public async Task<IActionResult> PatchQuestionById(Guid questionId, [FromBody] UpdateQuizQuestionRequestDTO request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            request.QuestionId = questionId;
+            var result = await _quizService.UpdateQuizQuestionAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz question updated successfully",
+                result
+            });
+        }
         [HttpDelete("questions/{questionId}")]
         public async Task<IActionResult> DeleteQuestion(Guid questionId)
         {
@@ -260,6 +337,19 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
         //================================================================================================================
+        // Assign quiz to class - using /api/expert/quizzes/assign (matches frontend)
+        [HttpPost("quizzes/assign")]
+        public async Task<IActionResult> AssignToClassViaQuizzes(AssignQuizRequestDTO dto)
+        {
+            var result = await _quizService.AssignQuizToClassAsync(dto);
+            return Ok(new
+            {
+                Message = "AssignQuiz successfully.",
+                result
+            });
+        }
+
+        // Keep original /api/expert/assign for backward compatibility
         [HttpPost("assign")]
         public async Task<IActionResult> AssignToClass(AssignQuizRequestDTO dto)
         {
