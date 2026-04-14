@@ -241,7 +241,8 @@ public class VisualQaAiService : IVisualQaAiService
             return false;
 
         return answerText.Contains("không phải dữ liệu y khoa hợp lệ", StringComparison.OrdinalIgnoreCase)
-               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase);
+               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase)
+               || answerText.Contains("INVALID_IMAGE_NOT_XRAY", StringComparison.Ordinal);
     }
 
     private static string BuildGeminiPrompt(

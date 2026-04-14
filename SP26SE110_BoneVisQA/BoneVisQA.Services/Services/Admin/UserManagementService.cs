@@ -32,7 +32,7 @@ namespace BoneVisQA.Services.Services.Admin
         {
           "Student",
           "Admin",
-          "Pending",
+          "Guest",
           "Expert",
           "Lecturer",
         };
@@ -320,14 +320,14 @@ namespace BoneVisQA.Services.Services.Admin
             var user = await GetUserWithRolesAsync(userId)
                 ?? throw new KeyNotFoundException("User not found");
 
-            var pendingRole = await _unitOfWork.RoleRepository
-                .FirstOrDefaultAsync(r => r.Name == "Pending")
-                ?? throw new Exception("Pending role not found");
+            var guestRole = await _unitOfWork.RoleRepository
+                .FirstOrDefaultAsync(r => r.Name == "Guest")
+                ?? throw new Exception("Guest role not found");
 
-            var hasPending = await _unitOfWork.UserRoleRepository
-                .ExistsAsync(x => x.UserId == userId && x.RoleId == pendingRole.Id);
-            if (hasPending)
-                throw new InvalidOperationException("User already has Pending role.");
+            var hasGuest = await _unitOfWork.UserRoleRepository
+                .ExistsAsync(x => x.UserId == userId && x.RoleId == guestRole.Id);
+            if (hasGuest)
+                throw new InvalidOperationException("User already has Guest role.");
 
             // Xóa tất cả role hiện tại
             var userRoles = await _unitOfWork.UserRoleRepository
@@ -338,7 +338,7 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
             {
                 UserId = userId,
-                RoleId = pendingRole.Id
+                RoleId = guestRole.Id
             });
 
             await _unitOfWork.SaveAsync();
@@ -348,7 +348,7 @@ namespace BoneVisQA.Services.Services.Admin
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
-                Roles = new List<string> { "Pending" },
+                Roles = new List<string> { "Guest" },
                 SchoolCohort = user.SchoolCohort,
                 LastLogin = user.LastLogin,
                 IsActive = user.IsActive,
@@ -470,7 +470,7 @@ namespace BoneVisQA.Services.Services.Admin
             var pendingUsers = await _unitOfWork.UserRepository.GetAllAsync(q =>
                 q.Include(u => u.UserRoles)
                  .ThenInclude(ur => ur.Role)
-                .Where(u => u.VerificationStatus == "Pending" && u.IsMedicalStudent)
+                .Where(u => u.VerificationStatus == "Pending")
             );
 
             return pendingUsers.Select(u => new PendingVerificationDto
@@ -479,7 +479,6 @@ namespace BoneVisQA.Services.Services.Admin
                 FullName = u.FullName,
                 Email = u.Email,
                 SchoolCohort = u.SchoolCohort,
-                IsMedicalStudent = u.IsMedicalStudent,
                 MedicalSchool = u.MedicalSchool,
                 MedicalStudentId = u.MedicalStudentId,
                 VerificationStatus = u.VerificationStatus,
@@ -502,25 +501,47 @@ namespace BoneVisQA.Services.Services.Admin
             {
                 user.IsActive = true;
 
-                // Tự động gán role Student — xóa Pending, thêm Student
-                var studentRole = await _unitOfWork.RoleRepository
+                // Explicitly resolve role ids from roles table (DB-first contract).
+                var studentRole = await _unitOfWork.Context.Roles
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.Name == "Student")
                     ?? throw new InvalidOperationException("Role 'Student' not found in database.");
 
-                var currentRoles = await _unitOfWork.UserRoleRepository
-                    .FindAsync(ur => ur.UserId == userId);
-                foreach (var ur in currentRoles)
-                    await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
+                var guestRole = await _unitOfWork.Context.Roles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.Name == "Guest");
 
-                await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
+                var currentUserRoles = await _unitOfWork.Context.UserRoles
+                    .Where(ur => ur.UserId == userId)
+                    .ToListAsync();
+
+                // Replace any Guest roles with Student.
+                if (guestRole != null)
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    RoleId = studentRole.Id,
-                    AssignedAt = DateTime.UtcNow
-                });
+                    var guestAssignments = currentUserRoles
+                        .Where(ur => ur.RoleId == guestRole.Id)
+                        .ToList();
+                    foreach (var assignment in guestAssignments)
+                    {
+                        await _unitOfWork.UserRoleRepository.RemoveAsync(assignment);
+                    }
+                }
 
-                _logger.LogInformation("[ApproveMedicalVerificationAsync] Auto-assigned Student role to {UserId}.", userId);
+                var hasStudentRole = currentUserRoles.Any(ur => ur.RoleId == studentRole.Id);
+                if (!hasStudentRole)
+                {
+                    await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        RoleId = studentRole.Id,
+                        AssignedAt = DateTime.UtcNow
+                    });
+                }
+
+                _logger.LogInformation(
+                    "[ApproveMedicalVerificationAsync] Verified user {UserId}; Guest role replaced and Student role ensured.",
+                    userId);
             }
 
             await _unitOfWork.UserRepository.UpdateAsync(user);

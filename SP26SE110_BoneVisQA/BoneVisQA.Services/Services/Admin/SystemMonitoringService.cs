@@ -28,12 +28,12 @@ namespace BoneVisQA.Services.Services.Admin
 
             var thisMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
 
-            // Lấy userId có role Pending
-            var pendingRole = await _unitOfWork.RoleRepository
-                .FirstOrDefaultAsync(r => r.Name == "Pending");
-            var pendingUserIds = pendingRole != null
+            // Lấy userId có role Guest (chưa được verify/assign chính thức)
+            var guestRole = await _unitOfWork.RoleRepository
+                .FirstOrDefaultAsync(r => r.Name == "Guest");
+            var pendingUserIds = guestRole != null
                 ? (await _unitOfWork.UserRoleRepository
-                    .FindAsync(ur => ur.RoleId == pendingRole.Id))
+                    .FindAsync(ur => ur.RoleId == guestRole.Id))
                     .Select(ur => ur.UserId).ToHashSet()
                 : new HashSet<Guid>();
 

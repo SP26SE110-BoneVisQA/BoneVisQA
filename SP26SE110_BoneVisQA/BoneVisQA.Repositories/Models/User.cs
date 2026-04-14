@@ -85,10 +85,6 @@ public partial class User
     [MaxLength(256)]
     public string? EmergencyContact { get; set; }
 
-    // Medical Student Verification Fields
-    [Column("is_medical_student")]
-    public bool IsMedicalStudent { get; set; } = false;
-
     [Column("medical_school")]
     [MaxLength(256)]
     public string? MedicalSchool { get; set; }
@@ -151,6 +147,9 @@ public partial class User
     [InverseProperty("Expert")]
     public virtual ICollection<ExpertReview> ExpertReviews { get; set; } = new List<ExpertReview>();
 
+    [InverseProperty("FlaggedByExpert")]
+    public virtual ICollection<DocumentChunk> FlaggedDocumentChunks { get; set; } = new List<DocumentChunk>();
+
     [InverseProperty("Student")]
     public virtual ICollection<LearningStatistic> LearningStatistics { get; set; } = new List<LearningStatistic>();
 
@@ -159,6 +158,9 @@ public partial class User
 
     [InverseProperty("Student")]
     public virtual ICollection<StudentQuestion> StudentQuestions { get; set; } = new List<StudentQuestion>();
+
+    [InverseProperty("Student")]
+    public virtual ICollection<VisualQASession> VisualQASessions { get; set; } = new List<VisualQASession>();
 
     [InverseProperty("User")]
     public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();

@@ -258,8 +258,8 @@ public class StudentRepository : IStudentRepository
             .FindByCondition(v => v.StudentId == studentId)
             .CountAsync();
 
-        var totalQuestionsAsked = await _unitOfWork.StudentQuestionRepository
-            .FindByCondition(q => q.StudentId == studentId)
+        var totalQuestionsAsked = await _unitOfWork.Context.QaMessages
+            .Where(m => m.Session.StudentId == studentId && m.Role == "User")
             .CountAsync();
 
         var quizzesCompleted = await _unitOfWork.QuizAttemptRepository

@@ -92,19 +92,20 @@ public class VisualQAController : ControllerBase
             AnnotationId = null
         };
 
-        StudentQuestionDto question;
+        Guid sessionId;
         try
         {
-            question = await _studentService.CreateVisualQAQuestionAsync(studentId, request);
+            sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, request);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
         var response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+        response.SessionId = sessionId;
         try
         {
-            await _studentService.SaveVisualQAAnswerAsync(question.Id, response);
+            await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
         }
         catch (InvalidOperationException ex)
         {
@@ -130,19 +131,20 @@ public class VisualQAController : ControllerBase
             return BadRequest(new { message = "Chỉ hỗ trợ phân tích hình ảnh được lưu trữ trên hệ thống." });
         }
 
-        StudentQuestionDto question;
+        Guid sessionId;
         try
         {
-            question = await _studentService.CreateVisualQAQuestionAsync(studentId, request);
+            sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, request);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
         var response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+        response.SessionId = sessionId;
         try
         {
-            await _studentService.SaveVisualQAAnswerAsync(question.Id, response);
+            await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
         }
         catch (InvalidOperationException ex)
         {

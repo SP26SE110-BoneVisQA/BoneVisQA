@@ -29,10 +29,23 @@ public partial class DocumentChunk
     [Column("is_flagged")]
     public bool IsFlagged { get; set; } = false;
 
+    [Column("flagged_by_expert_id")]
+    public Guid? FlaggedByExpertId { get; set; }
+
+    [Column("flag_reason")]
+    public string? FlagReason { get; set; }
+
+    [Column("flagged_at")]
+    public DateTime? FlaggedAt { get; set; }
+
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 
     [ForeignKey("DocId")]
     [InverseProperty("DocumentChunks")]
     public virtual Document Doc { get; set; } = null!;
+
+    [ForeignKey("FlaggedByExpertId")]
+    [InverseProperty("FlaggedDocumentChunks")]
+    public virtual User? FlaggedByExpert { get; set; }
 }
