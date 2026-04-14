@@ -26,7 +26,8 @@ public interface ILecturerRepository
 
 public class StudentEnrollmentInfo
 {
-    public Guid EnrollmentId { get; set; }
+    /// <summary><c>null</c> when listing students not yet enrolled in the class.</summary>
+    public Guid? EnrollmentId { get; set; }
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;

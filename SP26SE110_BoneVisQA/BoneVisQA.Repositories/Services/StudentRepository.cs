@@ -169,7 +169,7 @@ public class StudentRepository : IStudentRepository
             .Where(cqs =>
                 ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
                 && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
-                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow))
+                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) > utcNow))
             .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
             {
                 QuizId = cqs.QuizId,
@@ -202,7 +202,7 @@ public class StudentRepository : IStudentRepository
                 && ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null
                     || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
                 && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
-                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
+                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) > utcNow));
     }
 
     public async Task<Quiz?> GetQuizWithQuestionsAsync(Guid quizId)
@@ -258,8 +258,8 @@ public class StudentRepository : IStudentRepository
             .FindByCondition(v => v.StudentId == studentId)
             .CountAsync();
 
-        var totalQuestionsAsked = await _unitOfWork.StudentQuestionRepository
-            .FindByCondition(q => q.StudentId == studentId)
+        var totalQuestionsAsked = await _unitOfWork.Context.QaMessages
+            .Where(m => m.Session.StudentId == studentId && m.Role == "User")
             .CountAsync();
 
         var quizzesCompleted = await _unitOfWork.QuizAttemptRepository

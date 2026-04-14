@@ -1,5 +1,7 @@
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.EntityFrameworkCore;
@@ -15,29 +17,38 @@ public class ExpertDashboardService : IExpertDashboardService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ExpertDashboardStatsDto> GetDashboardStatsAsync(Guid expertId)
-    {
-        var cases = await _unitOfWork.Context.MedicalCases.AsNoTracking().ToListAsync();
-        var reviews = await _unitOfWork.Context.ExpertReviews
+    /// <summary>Escalated by lecturer + student in a class assigned to this expert.</summary>
+    private IQueryable<CaseAnswer> ExpertEscalatedQueue(Guid expertId) =>
+        _unitOfWork.Context.CaseAnswers
             .AsNoTracking()
-            .Where(r => r.ExpertId == expertId)
-            .ToListAsync();
-        var answers = await _unitOfWork.Context.CaseAnswers
-            .AsNoTracking()
-            .Where(a => a.ExpertReviews.Any(r => r.ExpertId == expertId))
-            .ToListAsync();
-       
-        var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
-            .AsNoTracking()
-            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
+            .Where(a =>
+                a.Status == CaseAnswerStatuses.EscalatedToExpert ||
+                a.Status == CaseAnswerStatuses.Escalated)
             .Where(a =>
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == a.Question.StudentId &&
-                    e.Class.ExpertId == expertId))
-            .CountAsync();
-       
-        var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        var approvedThisMonth = reviews.Count(r => r.Action == "Approve" && r.CreatedAt >= thisMonthStart);
+                    e.Class!.ExpertId == expertId));
+
+    public async Task<ExpertDashboardStatsDto> GetDashboardStatsAsync(Guid expertId)
+    {
+        var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var totalCases = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .CountAsync(c => c.IsActive == true);
+
+        var totalReviews = await _unitOfWork.Context.ExpertReviews
+            .AsNoTracking()
+            .CountAsync(r => r.ExpertId == expertId);
+
+        var pendingReviews = await ExpertEscalatedQueue(expertId).CountAsync();
+
+        var approvedThisMonth = await _unitOfWork.Context.ExpertReviews
+            .AsNoTracking()
+            .CountAsync(r =>
+                r.ExpertId == expertId &&
+                (r.Action == "Approved" || r.Action == "Approve") &&
+                r.CreatedAt >= thisMonthStart);
 
         var studentsInExpertClasses = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -48,9 +59,9 @@ public class ExpertDashboardService : IExpertDashboardService
 
         return new ExpertDashboardStatsDto
         {
-            TotalCases = cases.Count(c => c.IsActive == true),
-            TotalReviews = reviews.Count,
-            PendingReviews = escalatedAnswers,
+            TotalCases = totalCases,
+            TotalReviews = totalReviews,
+            PendingReviews = pendingReviews,
             ApprovedThisMonth = approvedThisMonth,
             StudentInteractions = studentsInExpertClasses
         };
@@ -58,21 +69,14 @@ public class ExpertDashboardService : IExpertDashboardService
 
     public async Task<IReadOnlyList<ExpertDashboardPendingReviewDto>> GetPendingReviewsAsync(Guid expertId)
     {
-        var escalated = await _unitOfWork.Context.CaseAnswers
-            .AsNoTracking()
+        var escalated = await ExpertEscalatedQueue(expertId)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Student)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Case)
                     .ThenInclude(mc => mc!.Category)
             .Include(a => a.ExpertReviews)
-            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
-            .Where(a =>
-                _unitOfWork.Context.ClassEnrollments.Any(e =>
-                    e.StudentId == a.Question.StudentId &&
-                    e.Class.ExpertId == expertId) ||
-                a.ExpertReviews.Any(r => r.ExpertId == expertId))
-            .OrderByDescending(a => a.EscalatedAt)
+            .OrderByDescending(a => a.EscalatedAt ?? a.Question.CreatedAt)
             .Take(5)
             .ToListAsync();
 
@@ -95,39 +99,40 @@ public class ExpertDashboardService : IExpertDashboardService
 
     public async Task<IReadOnlyList<ExpertDashboardRecentCaseDto>> GetRecentCasesAsync(Guid expertId)
     {
-        var cases = await _unitOfWork.Context.MedicalCases
+        return await _unitOfWork.Context.MedicalCases
             .AsNoTracking()
-            .Include(c => c.CreatedByExpert)
-            .Include(c => c.Category)
-            .Include(c => c.ClassCases)
-                .ThenInclude(cc => cc.Class)
-            .Include(c => c.CaseViewLogs)
             .Where(c =>
                 c.ClassCases.Any(cc => cc.Class.ExpertId == expertId) ||
                 c.CreatedByExpertId == expertId)
             .OrderByDescending(c => c.CreatedAt)
             .Take(4)
+            .Select(c => new ExpertDashboardRecentCaseDto
+            {
+                Id = c.Id,
+                Title = c.Title ?? "Untitled Case",
+                BoneLocation = c.CaseTags
+                    .Where(ct => ct.Tag != null &&
+                        (ct.Tag.Type == "Location" || ct.Tag.Type == "BoneLocation"))
+                    .Select(ct => ct.Tag!.Name)
+                    .FirstOrDefault() ?? ExpertMedicalCaseDisplayHelper.DefaultBoneLocation,
+                LesionType = c.Category != null ? c.Category.Name : ExpertMedicalCaseDisplayHelper.DefaultCategory,
+                Difficulty = c.Difficulty ?? ExpertMedicalCaseDisplayHelper.DefaultDifficulty,
+                Status = c.IsApproved == true
+                    ? "approved"
+                    : (c.IsActive == true ? "pending" : "draft"),
+                AddedBy = c.CreatedByExpert != null ? c.CreatedByExpert.FullName : "Unknown",
+                AddedDate = c.CreatedAt ?? DateTime.UtcNow,
+                ViewCount = c.CaseViewLogs.Count(),
+                UsageCount = 0
+            })
             .ToListAsync();
-
-        return cases.Select(c => new ExpertDashboardRecentCaseDto
-        {
-            Id = c.Id,
-            Title = c.Title ?? "Untitled Case",
-            BoneLocation = "Unknown",
-            LesionType = c.Category?.Name ?? "General",
-            Difficulty = c.Difficulty ?? "basic",
-            Status = c.IsApproved == true? "approved": (c.IsActive == true ? "pending" : "draft"),
-            AddedBy = c.CreatedByExpert?.FullName ?? "Unknown",
-            AddedDate = c.CreatedAt ?? DateTime.UtcNow,
-            ViewCount = c.CaseViewLogs?.Count ?? 0,
-            UsageCount = 0
-        }).ToList();
     }
 
     public async Task<ExpertDashboardActivityDto> GetActivityAsync(Guid expertId)
     {
         var now = DateTime.UtcNow;
-        var startOfWeek = now.AddDays(-(int)now.DayOfWeek);
+        var todayUtc = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
+        var startOfWeek = todayUtc.AddDays(-(int)todayUtc.DayOfWeek);
 
         var reviews = await _unitOfWork.Context.ExpertReviews
             .AsNoTracking()

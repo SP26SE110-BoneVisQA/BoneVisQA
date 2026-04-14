@@ -4,6 +4,7 @@ namespace BoneVisQA.Services.Interfaces.Expert;
 
 public interface IExpertReviewService
 {
+    Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId);
     Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId);
     Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid answerId, ResolveEscalatedAnswerRequestDto request);
     Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request);

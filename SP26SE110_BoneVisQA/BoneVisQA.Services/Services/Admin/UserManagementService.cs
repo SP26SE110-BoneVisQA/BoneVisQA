@@ -32,7 +32,7 @@ namespace BoneVisQA.Services.Services.Admin
         {
           "Student",
           "Admin",
-          "Pending",
+          "Guest",
           "Expert",
           "Lecturer",
         };
@@ -65,39 +65,51 @@ namespace BoneVisQA.Services.Services.Admin
         {
             if (!_validRoles.Contains(role)) throw new ArgumentException("Role not found");
 
-            var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
-                q.Include(u => u.UserRoles)
-                 .ThenInclude(ur => ur.Role)
-            );
-
-            var result = users
+            var result = await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
                 .Where(u => u.UserRoles.Any(r => r.Role.Name == role))
-                .Select(MapUser)
-                .ToList();
-
-            return result;
-        }
-
-        public async Task<List<UserManagementDTO>> GetAllUsersAsync()
-        {
-
-            var users = await _unitOfWork.UserRepository.GetAllAsync(q =>
-                q.Include(u => u.UserRoles)
-                 .ThenInclude(ur => ur.Role)
-            );
-
-            return users.Select(u => new UserManagementDTO 
-            {
+                .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(u => u.Id)
+                .Select(u => new UserManagementDTO
+                {
                     Id = u.Id,
                     FullName = u.FullName,
-                    Email = u.Email ?? "",
+                    Email = u.Email ?? string.Empty,
                     SchoolCohort = u.SchoolCohort,
                     LastLogin = u.LastLogin,
                     Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
                     IsActive = u.IsActive,
                     CreatedAt = u.CreatedAt,
                     UpdatedAt = u.UpdatedAt
-            }).ToList();
+                })
+                .ToListAsync();
+
+            return result;
+        }
+
+        public async Task<List<UserManagementDTO>> GetAllUsersAsync()
+        {
+            return await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(u => u.Id)
+                .Select(u => new UserManagementDTO
+                {
+                    Id = u.Id,
+                    FullName = u.FullName,
+                    Email = u.Email ?? string.Empty,
+                    SchoolCohort = u.SchoolCohort,
+                    LastLogin = u.LastLogin,
+                    Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
+                    IsActive = u.IsActive,
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                })
+                .ToListAsync();
         }
 
         public async Task<PagedUsersResultDto> GetUsersPagedAsync(int page, int pageSize)
@@ -308,14 +320,14 @@ namespace BoneVisQA.Services.Services.Admin
             var user = await GetUserWithRolesAsync(userId)
                 ?? throw new KeyNotFoundException("User not found");
 
-            var pendingRole = await _unitOfWork.RoleRepository
-                .FirstOrDefaultAsync(r => r.Name == "Pending")
-                ?? throw new Exception("Pending role not found");
+            var guestRole = await _unitOfWork.RoleRepository
+                .FirstOrDefaultAsync(r => r.Name == "Guest")
+                ?? throw new Exception("Guest role not found");
 
-            var hasPending = await _unitOfWork.UserRoleRepository
-                .ExistsAsync(x => x.UserId == userId && x.RoleId == pendingRole.Id);
-            if (hasPending)
-                throw new InvalidOperationException("User already has Pending role.");
+            var hasGuest = await _unitOfWork.UserRoleRepository
+                .ExistsAsync(x => x.UserId == userId && x.RoleId == guestRole.Id);
+            if (hasGuest)
+                throw new InvalidOperationException("User already has Guest role.");
 
             // Xóa tất cả role hiện tại
             var userRoles = await _unitOfWork.UserRoleRepository
@@ -326,7 +338,7 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
             {
                 UserId = userId,
-                RoleId = pendingRole.Id
+                RoleId = guestRole.Id
             });
 
             await _unitOfWork.SaveAsync();
@@ -336,7 +348,7 @@ namespace BoneVisQA.Services.Services.Admin
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
-                Roles = new List<string> { "Pending" },
+                Roles = new List<string> { "Guest" },
                 SchoolCohort = user.SchoolCohort,
                 LastLogin = user.LastLogin,
                 IsActive = user.IsActive,
@@ -451,152 +463,6 @@ namespace BoneVisQA.Services.Services.Admin
             return true;
         }
 
-        // ── Class management ─────────────────────────────────────────────────────
-
-        public async Task<List<UserClassInfo>> GetUserClassesAsync(Guid userId)
-        {
-            var user = await GetUserWithRolesAsync(userId);
-            if (user == null) return new List<UserClassInfo>();
-
-            var result = new List<UserClassInfo>();
-
-            // Giảng viên → AcademicClass where LecturerId = userId
-            var lecturerClasses = await _unitOfWork.Context.AcademicClasses
-                .Where(c => c.LecturerId == userId)
-                .ToListAsync();
-            result.AddRange(lecturerClasses.Select(c => new UserClassInfo
-            {
-                Id = c.Id,
-                ClassName = c.ClassName,
-                RelationType = "Lecturer",
-                EnrolledAt = null
-            }));
-
-            // Sinh viên → ClassEnrollment where StudentId = userId
-            var enrollments = await _unitOfWork.Context.ClassEnrollments
-                .Include(e => e.Class)
-                .Where(e => e.StudentId == userId)
-                .ToListAsync();
-            result.AddRange(enrollments.Select(e => new UserClassInfo
-            {
-                Id = e.ClassId,
-                ClassName = e.Class?.ClassName ?? e.ClassName ?? "Unknown",
-                RelationType = "Student",
-                EnrolledAt = e.EnrolledAt
-            }));
-
-            return result;
-        }
-
-        public async Task<List<AvailableClassDto>> GetAvailableClassesAsync()
-        {
-            var classes = await _unitOfWork.Context.AcademicClasses
-                .Include(c => c.Lecturer)
-                .Include(c => c.ClassEnrollments)
-                .ToListAsync();
-
-            return classes.Select(c => new AvailableClassDto
-            {
-                Id = c.Id,
-                ClassName = c.ClassName,
-                LecturerName = c.Lecturer?.FullName,
-                StudentCount = c.ClassEnrollments.Count
-            }).ToList();
-        }
-
-        public async Task<UserClassInfo?> AssignUserToClassAsync(Guid userId, Guid classId)
-        {
-            var user = await GetUserWithRolesAsync(userId);
-            if (user == null) return null;
-
-            var ac = await _unitOfWork.Context.AcademicClasses
-                .FirstOrDefaultAsync(c => c.Id == classId);
-            if (ac == null) return null;
-
-            var isStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
-            var isLecturer = user.UserRoles.Any(r => r.Role.Name == "Lecturer");
-
-            if (isLecturer)
-            {
-                ac.LecturerId = userId;
-                await _unitOfWork.SaveAsync();
-                _logger.LogInformation("[AssignUserToClassAsync] Lecturer {UserId} assigned to class {ClassId}.", userId, classId);
-                return new UserClassInfo
-                {
-                    Id = ac.Id,
-                    ClassName = ac.ClassName,
-                    RelationType = "Lecturer",
-                    EnrolledAt = null
-                };
-            }
-
-            if (isStudent)
-            {
-                var existing = await _unitOfWork.Context.ClassEnrollments
-                    .FirstOrDefaultAsync(e => e.StudentId == userId && e.ClassId == classId);
-                if (existing != null) return new UserClassInfo
-                {
-                    Id = existing.ClassId,
-                    ClassName = existing.Class?.ClassName ?? existing.ClassName ?? ac.ClassName,
-                    RelationType = "Student",
-                    EnrolledAt = existing.EnrolledAt
-                };
-
-                var enrollment = new ClassEnrollment
-                {
-                    StudentId = userId,
-                    ClassId = classId,
-                    ClassName = ac.ClassName,
-                    EnrolledAt = DateTime.UtcNow
-                };
-                await _unitOfWork.Context.ClassEnrollments.AddAsync(enrollment);
-                await _unitOfWork.SaveAsync();
-                _logger.LogInformation("[AssignUserToClassAsync] Student {UserId} enrolled in class {ClassId}.", userId, classId);
-                return new UserClassInfo
-                {
-                    Id = ac.Id,
-                    ClassName = ac.ClassName,
-                    RelationType = "Student",
-                    EnrolledAt = enrollment.EnrolledAt
-                };
-            }
-
-            return null;
-        }
-
-        public async Task<bool> RemoveUserFromClassAsync(Guid userId, Guid classId)
-        {
-            var user = await GetUserWithRolesAsync(userId);
-            if (user == null) return false;
-
-            var isLecturer = user.UserRoles.Any(r => r.Role.Name == "Lecturer");
-            var isStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
-
-            if (isLecturer)
-            {
-                var ac = await _unitOfWork.Context.AcademicClasses
-                    .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == userId);
-                if (ac == null) return false;
-                ac.LecturerId = null;
-                await _unitOfWork.SaveAsync();
-                _logger.LogInformation("[RemoveUserFromClassAsync] Lecturer {UserId} removed from class {ClassId}.", userId, classId);
-                return true;
-            }
-
-            if (isStudent)
-            {
-                var enrollment = await _unitOfWork.Context.ClassEnrollments
-                    .FirstOrDefaultAsync(e => e.StudentId == userId && e.ClassId == classId);
-                if (enrollment == null) return false;
-                _unitOfWork.Context.ClassEnrollments.Remove(enrollment);
-                await _unitOfWork.SaveAsync();
-                _logger.LogInformation("[RemoveUserFromClassAsync] Student {UserId} removed from class {ClassId}.", userId, classId);
-                return true;
-            }
-
-            return false;
-        }
-
         // ── Medical Student Verification ─────────────────────────────────────────
 
         public async Task<List<PendingVerificationDto>> GetPendingVerificationsAsync()
@@ -604,7 +470,7 @@ namespace BoneVisQA.Services.Services.Admin
             var pendingUsers = await _unitOfWork.UserRepository.GetAllAsync(q =>
                 q.Include(u => u.UserRoles)
                  .ThenInclude(ur => ur.Role)
-                .Where(u => u.VerificationStatus == "Pending" && u.IsMedicalStudent)
+                .Where(u => u.VerificationStatus == "Pending")
             );
 
             return pendingUsers.Select(u => new PendingVerificationDto
@@ -613,7 +479,6 @@ namespace BoneVisQA.Services.Services.Admin
                 FullName = u.FullName,
                 Email = u.Email,
                 SchoolCohort = u.SchoolCohort,
-                IsMedicalStudent = u.IsMedicalStudent,
                 MedicalSchool = u.MedicalSchool,
                 MedicalStudentId = u.MedicalStudentId,
                 VerificationStatus = u.VerificationStatus,
@@ -636,25 +501,47 @@ namespace BoneVisQA.Services.Services.Admin
             {
                 user.IsActive = true;
 
-                // Tự động gán role Student — xóa Pending, thêm Student
-                var studentRole = await _unitOfWork.RoleRepository
+                // Explicitly resolve role ids from roles table (DB-first contract).
+                var studentRole = await _unitOfWork.Context.Roles
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.Name == "Student")
                     ?? throw new InvalidOperationException("Role 'Student' not found in database.");
 
-                var currentRoles = await _unitOfWork.UserRoleRepository
-                    .FindAsync(ur => ur.UserId == userId);
-                foreach (var ur in currentRoles)
-                    await _unitOfWork.UserRoleRepository.RemoveAsync(ur);
+                var guestRole = await _unitOfWork.Context.Roles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.Name == "Guest");
 
-                await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
+                var currentUserRoles = await _unitOfWork.Context.UserRoles
+                    .Where(ur => ur.UserId == userId)
+                    .ToListAsync();
+
+                // Replace any Guest roles with Student.
+                if (guestRole != null)
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    RoleId = studentRole.Id,
-                    AssignedAt = DateTime.UtcNow
-                });
+                    var guestAssignments = currentUserRoles
+                        .Where(ur => ur.RoleId == guestRole.Id)
+                        .ToList();
+                    foreach (var assignment in guestAssignments)
+                    {
+                        await _unitOfWork.UserRoleRepository.RemoveAsync(assignment);
+                    }
+                }
 
-                _logger.LogInformation("[ApproveMedicalVerificationAsync] Auto-assigned Student role to {UserId}.", userId);
+                var hasStudentRole = currentUserRoles.Any(ur => ur.RoleId == studentRole.Id);
+                if (!hasStudentRole)
+                {
+                    await _unitOfWork.UserRoleRepository.AddAsync(new UserRole
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        RoleId = studentRole.Id,
+                        AssignedAt = DateTime.UtcNow
+                    });
+                }
+
+                _logger.LogInformation(
+                    "[ApproveMedicalVerificationAsync] Verified user {UserId}; Guest role replaced and Student role ensured.",
+                    userId);
             }
 
             await _unitOfWork.UserRepository.UpdateAsync(user);

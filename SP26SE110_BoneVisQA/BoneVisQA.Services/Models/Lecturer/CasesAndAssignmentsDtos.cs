@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
@@ -58,6 +59,11 @@ public class ApproveCaseRequestDto
 public class LectStudentQuestionDto
 {
     public Guid Id { get; set; }
+
+    /// <summary>Latest <c>case_answers.id</c> for this question (escalation / reviews).</summary>
+    [JsonPropertyName("answerId")]
+    public Guid? AnswerId { get; set; }
+
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;
@@ -89,6 +95,8 @@ public class AssignQuizSessionRequestDto
     public int? PassingScore { get; set; }
     public bool ShuffleQuestions { get; set; }
     public bool AllowRetake { get; set; }
+    public bool AllowLate { get; set; }
+    public bool ShowResultsAfterSubmission { get; set; } = true;
 }
 
 /// <summary>Yêu cầu bật retake cho một attempt cụ thể của sinh viên.</summary>
@@ -127,6 +135,8 @@ public class ClassQuizSessionDto
     public DateTime? CreatedAt { get; set; }
     public bool ShuffleQuestions { get; set; }
     public bool AllowRetake { get; set; }
+    public bool AllowLate { get; set; }
+    public bool ShowResultsAfterSubmission { get; set; }
     public DateTime? RetakeResetAt { get; set; }
 }
 
@@ -214,4 +224,79 @@ public class UpdateAnswerDto
     public Guid AnswerId { get; set; }
     public string? StudentAnswer { get; set; }
     public bool? IsCorrect { get; set; }
+}
+
+// ── Assignment CRUD DTOs ───────────────────────────────────────────────────────
+
+/// <summary>Chi tiết đầy đủ của một assignment (case hoặc quiz).</summary>
+public class AssignmentDetailDto
+{
+    public Guid Id { get; set; }
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public string? ClassCode { get; set; }
+    /// <summary>"case" hoặc "quiz"</summary>
+    public string Type { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Instructions { get; set; }
+    public DateTime? DueDate { get; set; }
+    public DateTime? OpenDate { get; set; }
+    public bool IsMandatory { get; set; }
+    public DateTime? AssignedAt { get; set; }
+    public int TotalStudents { get; set; }
+    public int SubmittedCount { get; set; }
+    public int GradedCount { get; set; }
+    public int? MaxScore { get; set; }
+    public int? PassingScore { get; set; }
+    public int? TimeLimitMinutes { get; set; }
+    public bool AllowLate { get; set; }
+    public bool AllowRetake { get; set; }
+    public bool ShowResultsAfterSubmission { get; set; }
+    public double? AvgScore { get; set; }
+    public DateTime? CreatedAt { get; set; }
+}
+
+/// <summary>Yêu cầu cập nhật thông tin assignment.</summary>
+public class UpdateAssignmentRequestDto
+{
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string? Instructions { get; set; }
+    public DateTime? DueDate { get; set; }
+    public DateTime? OpenDate { get; set; }
+    public bool? IsMandatory { get; set; }
+    public int? MaxScore { get; set; }
+    public int? PassingScore { get; set; }
+    public int? TimeLimitMinutes { get; set; }
+    public bool? AllowLate { get; set; }
+    public bool? AllowRetake { get; set; }
+    public bool? ShowResultsAfterSubmission { get; set; }
+    /// <summary>Gửi email thông báo cập nhật cho sinh viên.</summary>
+    public bool SendEmailUpdate { get; set; } = true;
+}
+
+/// <summary>Thông tin submission của một sinh viên.</summary>
+public class AssignmentSubmissionDto
+{
+    public Guid StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+    public string? StudentCode { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public double? Score { get; set; }
+    /// <summary>"graded", "pending", "not-submitted"</summary>
+    public string Status { get; set; } = "not-submitted";
+}
+
+/// <summary>Cập nhật điểm cho một submission.</summary>
+public class UpdateSubmissionScoreDto
+{
+    public Guid StudentId { get; set; }
+    public double? Score { get; set; }
+}
+
+/// <summary>Yêu cầu cập nhật điểm cho nhiều submissions.</summary>
+public class UpdateSubmissionsRequestDto
+{
+    public List<UpdateSubmissionScoreDto> Submissions { get; set; } = new();
 }

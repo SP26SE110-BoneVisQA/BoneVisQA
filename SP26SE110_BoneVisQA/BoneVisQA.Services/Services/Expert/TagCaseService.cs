@@ -2,6 +2,7 @@
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +18,31 @@ namespace BoneVisQA.Services.Services.Expert
         public TagCaseService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
+        }
+        public async Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.TagRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var tags = await query
+                .OrderBy(x => x.Name)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetTagDTO
+                {
+                    Id = x.Id,
+                    Name = x.Name
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetTagDTO>
+            {
+                Items = tags,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
         }
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {

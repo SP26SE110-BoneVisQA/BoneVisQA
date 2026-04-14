@@ -41,6 +41,14 @@ public partial class ClassQuizSession
     [Column("allow_retake")]
     public bool AllowRetake { get; set; } = false;
 
+    /// <summary>Cho phép sinh viên nộp sau ngày hết hạn.</summary>
+    [Column("allow_late")]
+    public bool AllowLate { get; set; } = false;
+
+    /// <summary>Hiển thị kết quả (đáp án đúng) cho sinh viên sau khi nộp bài.</summary>
+    [Column("show_results_after_submission")]
+    public bool ShowResultsAfterSubmission { get; set; } = true;
+
     /// <summary>Đánh dấu lecturer đã bật retake cho attempt cụ thể — reset khi student nộp lại.</summary>
     [Column("retake_reset_at")]
     public DateTime? RetakeResetAt { get; set; }

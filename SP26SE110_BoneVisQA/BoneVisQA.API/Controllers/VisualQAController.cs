@@ -1,4 +1,3 @@
-using System.Text.Json;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
@@ -16,13 +15,8 @@ public class VisualQAFileUploadRequest
     public string QuestionText { get; set; } = string.Empty;
     public IFormFile? CustomImage { get; set; }
 
-    /// <summary>
-    /// JSON array of points: <c>[{"x":0.12,"y":0.34},...]</c> (same contract as <see cref="VisualQARequestDto.CustomPolygon"/>).
-    /// </summary>
-    [DefaultValue(null)]
-    public string? CustomPolygonJson { get; set; }
-
-    /// <summary>Legacy bounding box JSON <c>{"x","y","w","h"}</c> when no polygon is sent.</summary>
+    /// <summary>Normalized bounding box JSON <c>{"x","y","width","height"}</c> (0–1). FE field name <c>customPolygon</c> (legacy).</summary>
+    [FromForm(Name = "customPolygon")]
     [DefaultValue(null)]
     public string? Coordinates { get; set; }
 }
@@ -30,9 +24,10 @@ public class VisualQAFileUploadRequest
 [ApiController]
 [Route("api/student/visual-qa")]
 [Tags("Student - Visual QA")]
-[Authorize]
+[Authorize(Roles = "Student")]
 public class VisualQAController : ControllerBase
 {
+    private const long MaxVisualImageBytes = 5 * 1024 * 1024;
     private readonly IStudentService _studentService;
     private readonly IVisualQaAiService _visualQaAiService;
     private readonly ISupabaseStorageService _storageService;
@@ -51,8 +46,8 @@ public class VisualQAController : ControllerBase
     }
 
     [HttpPost("ask")]
-    [RequestSizeLimit(52428800)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+    [RequestSizeLimit(MaxVisualImageBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxVisualImageBytes)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<VisualQAResponseDto>> Ask([FromForm] VisualQAFileUploadRequest formRequest, CancellationToken cancellationToken)
     {
@@ -65,8 +60,16 @@ public class VisualQAController : ControllerBase
 
         if (formRequest.CustomImage == null || formRequest.CustomImage.Length == 0)
             return BadRequest(new { message = "File không được để trống." });
-        if (formRequest.CustomImage.Length > 52428800)
-            return BadRequest(new { message = "File quá lớn. Dung lượng tối đa là 50MB." });
+        if (formRequest.CustomImage.Length > MaxVisualImageBytes)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "Ảnh vượt quá giới hạn 5MB.",
+                Instance = HttpContext.Request.Path
+            });
+        }
 
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
         var extension = Path.GetExtension(formRequest.CustomImage.FileName).ToLowerInvariant();
@@ -77,47 +80,32 @@ public class VisualQAController : ControllerBase
         var imageUrl = await _storageService.UploadFileAsync(
             formRequest.CustomImage,
             "student_uploads",
-            $"images/{studentId}");
-
-        List<PointDto>? polygon = null;
-        if (!string.IsNullOrWhiteSpace(formRequest.CustomPolygonJson))
-        {
-            try
-            {
-                polygon = JsonSerializer.Deserialize<List<PointDto>>(formRequest.CustomPolygonJson);
-            }
-            catch
-            {
-                return BadRequest(new { message = "CustomPolygonJson must be a valid JSON array of {x,y} points." });
-            }
-
-            if (polygon is { Count: > 0 } && polygon.Count < 3)
-                return BadRequest(new { message = "Polygon requires at least 3 points." });
-        }
+            $"images/{studentId}",
+            cancellationToken);
 
         var request = new VisualQARequestDto
         {
             QuestionText = formRequest.QuestionText,
             ImageUrl = imageUrl,
-            CustomPolygon = polygon,
             Coordinates = formRequest.Coordinates,
             CaseId = null,
             AnnotationId = null
         };
 
-        StudentQuestionDto question;
+        Guid sessionId;
         try
         {
-            question = await _studentService.CreateVisualQAQuestionAsync(studentId, request);
+            sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, request);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
         var response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+        response.SessionId = sessionId;
         try
         {
-            await _studentService.SaveVisualQAAnswerAsync(question.Id, response);
+            await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
         }
         catch (InvalidOperationException ex)
         {
@@ -143,19 +131,20 @@ public class VisualQAController : ControllerBase
             return BadRequest(new { message = "Chỉ hỗ trợ phân tích hình ảnh được lưu trữ trên hệ thống." });
         }
 
-        StudentQuestionDto question;
+        Guid sessionId;
         try
         {
-            question = await _studentService.CreateVisualQAQuestionAsync(studentId, request);
+            sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, request);
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
         var response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+        response.SessionId = sessionId;
         try
         {
-            await _studentService.SaveVisualQAAnswerAsync(question.Id, response);
+            await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
         }
         catch (InvalidOperationException ex)
         {

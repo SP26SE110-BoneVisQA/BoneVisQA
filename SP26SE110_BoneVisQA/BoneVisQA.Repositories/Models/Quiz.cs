@@ -38,13 +38,16 @@ public partial class Quiz
     public string? Topic { get; set; }
 
     [Column("is_ai_generated")]
-    public bool IsAiGenerated { get; set; }
+    public bool IsAiGenerated { get; set; } = false;
 
     [Column("difficulty")]
     public string? Difficulty { get; set; }
 
     [Column("classification")]
     public string? Classification { get; set; }
+
+    [Column("is_verified_curriculum")]
+    public bool IsVerifiedCurriculum { get; set; } = false;
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }

@@ -7,7 +7,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/users")]
-[Tags("Admin - Users")]
+[Tags("Admin - Users Management")]
 [Authorize(Roles = "Admin")]
 public class AdminUsersController : ControllerBase
 {
@@ -30,6 +30,7 @@ public class AdminUsersController : ControllerBase
             {
                 Message = "Get users successfully.",
                 Result = paged.Items,
+                Items = paged.Items,
                 TotalCount = paged.TotalCount,
                 Page = paged.Page,
                 PageSize = paged.PageSize
@@ -40,19 +41,26 @@ public class AdminUsersController : ControllerBase
         return Ok(new
         {
             Message = "Get all users successfully.",
-            Result = users
+            Result = users,
+            Items = users,
+            TotalCount = users.Count,
+            Page = 1,
+            PageSize = users.Count
         });
     }
 
 
     [HttpGet("roles/{role}")]
+    [HttpGet("/api/Admin/role/{role}")]
     public async Task<IActionResult> GetUsersByRole(string role)
     {
         var users = await _userManagementService.GetUserByRoleAsync(role);
         return Ok(new
         {
-            Message = "Get Users by role successfully.",
-            users
+            Message = "Get users by role successfully.",
+            Result = users,
+            Items = users,
+            TotalCount = users.Count
         });
     }
 
@@ -130,25 +138,14 @@ public class AdminUsersController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(new { message = "Invalid request data.", errors = ModelState });
 
-        try
-        {
-            var result = await _userManagementService.CreateUserAsync(request);
-            return result == null
-                ? BadRequest(new { message = "Failed to create user." })
-                : CreatedAtAction(nameof(GetAllUsers), new { }, new
-                {
-                    Message = "User created successfully.",
-                    Result = result
-                });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _userManagementService.CreateUserAsync(request);
+        return result == null
+            ? BadRequest(new { message = "Failed to create user." })
+            : CreatedAtAction(nameof(GetAllUsers), new { }, new
+            {
+                Message = "User created successfully.",
+                Result = result
+            });
     }
 
     /// PUT /api/admin/users/{id}  –  Update user FullName / SchoolCohort
@@ -173,48 +170,7 @@ public class AdminUsersController : ControllerBase
             return NotFound(new { message = "Không tìm thấy người dùng." });
 
         return Ok(new { Message = "User permanently deleted." });
-    }
-
-    // ── Class management ────────────────────────────────────────────────────────
-
-    /// GET /api/admin/users/{userId}/classes  –  Lấy danh sách lớp của user
-    [HttpGet("{userId:guid}/classes")]
-    public async Task<IActionResult> GetUserClasses(Guid userId)
-    {
-        var classes = await _userManagementService.GetUserClassesAsync(userId);
-        return Ok(new { Message = "Class list retrieved successfully.", Result = classes });
-    }
-
-    /// GET /api/admin/users/classes  –  Lấy tất cả lớp có sẵn
-    [HttpGet("classes")]
-    public async Task<IActionResult> GetAvailableClasses()
-    {
-        var classes = await _userManagementService.GetAvailableClassesAsync();
-        return Ok(new { Message = "Class list retrieved successfully.", Result = classes });
-    }
-
-    /// POST /api/admin/users/{userId}/classes  –  Gán user vào một lớp
-    [HttpPost("{userId:guid}/classes")]
-    public async Task<IActionResult> AssignUserToClass(Guid userId, [FromBody] AssignUserToClassRequestDto request)
-    {
-        if (!ModelState.IsValid)
-            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
-
-        var result = await _userManagementService.AssignUserToClassAsync(userId, request.ClassId);
-        return result == null
-            ? BadRequest(new { message = "Cannot assign user to class. Check the role or class." })
-            : Ok(new { Message = "User assigned to class.", Result = result });
-    }
-
-    /// DELETE /api/admin/users/{userId}/classes/{classId}  –  Xóa user khỏi một lớp
-    [HttpDelete("{userId:guid}/classes/{classId:guid}")]
-    public async Task<IActionResult> RemoveUserFromClass(Guid userId, Guid classId)
-    {
-        var removed = await _userManagementService.RemoveUserFromClassAsync(userId, classId);
-        return !removed
-            ? NotFound(new { message = "User-class link not found." })
-            : Ok(new { Message = "User removed from class." });
-    }
+    }  
 
     // ── Medical Student Verification ─────────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 
 namespace BoneVisQA.Services.Models.Expert;
 
@@ -6,7 +7,9 @@ public class ResolveEscalatedAnswerRequestDto
 {
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+
+    /// <summary>FE may send a JSON string or a string array; stored as text on <c>case_answers</c>.</summary>
+    public JsonElement? DifferentialDiagnoses { get; set; }
     public string? KeyImagingFindings { get; set; }
     public string? ReflectiveQuestions { get; set; }
     public string? ReviewNote { get; set; }
@@ -48,6 +51,12 @@ public class ExpertEscalatedAnswerDto
     public string ClassName { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }
     public List<ExpertCitationDto> Citations { get; set; } = new();
+
+    /// <summary>Resolved study image (Visual QA upload or first case image).</summary>
+    public string? ImageUrl { get; set; }
+
+    /// <summary>Normalized ROI JSON on <c>student_questions.custom_coordinates</c>.</summary>
+    public string? CustomCoordinates { get; set; }
 }
 
 // Expert Dashboard DTOs

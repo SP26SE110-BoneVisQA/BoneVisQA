@@ -50,9 +50,6 @@ public partial class MedicalCase
     [Column("key_findings")]
     public string? KeyFindings { get; set; }
 
-    [Column("reflective_questions")]
-    public string? ReflectiveQuestions { get; set; }
-
     [InverseProperty("Case")]
     public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
 
@@ -82,4 +79,7 @@ public partial class MedicalCase
 
     [InverseProperty("Case")]
     public virtual ICollection<StudentQuestion> StudentQuestions { get; set; } = new List<StudentQuestion>();
+
+    [InverseProperty("Case")]
+    public virtual ICollection<VisualQASession> VisualQASessions { get; set; } = new List<VisualQASession>();
 }

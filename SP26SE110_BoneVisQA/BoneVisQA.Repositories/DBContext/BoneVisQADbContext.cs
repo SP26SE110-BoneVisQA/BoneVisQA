@@ -60,6 +60,8 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<QuizQuestion> QuizQuestions { get; set; }
 
+    public virtual DbSet<QAMessage> QaMessages { get; set; }
+
     public virtual DbSet<Role> Roles { get; set; }
 
     public virtual DbSet<StudentQuestion> StudentQuestions { get; set; }
@@ -69,6 +71,8 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<UserRole> UserRoles { get; set; }
+
+    public virtual DbSet<VisualQASession> VisualQaSessions { get; set; }
 
     public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
@@ -243,6 +247,8 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ShuffleQuestions).HasDefaultValue(false);
+            entity.Property(e => e.AllowRetake).HasDefaultValue(false);
 
             entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizSessions)
                 .HasForeignKey(d => d.ClassId)
@@ -258,11 +264,16 @@ public partial class BoneVisQADbContext : DbContext
         modelBuilder.Entity<Document>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("documents_pkey");
+            entity.HasIndex(e => e.ContentHash)
+                .IsUnique()
+                .HasFilter("\"content_hash\" IS NOT NULL")
+                .HasDatabaseName("ux_documents_content_hash");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsOutdated).HasDefaultValue(false);
             entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.IndexingProgress).HasDefaultValue(0);
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -300,6 +311,10 @@ public partial class BoneVisQADbContext : DbContext
                 .HasOperators("vector_cosine_ops");
 
             entity.HasOne(d => d.Doc).WithMany(p => p.DocumentChunks).HasConstraintName("document_chunks_doc_id_fkey");
+
+            entity.HasOne(d => d.FlaggedByExpert).WithMany(p => p.FlaggedDocumentChunks)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("document_chunks_flagged_by_expert_id_fkey");
         });
 
         modelBuilder.Entity<ExpertReview>(entity =>
@@ -394,6 +409,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("quizzes_pkey");
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsAiGenerated).HasDefaultValue(false);
 
             entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedQuizzes)
                 .HasForeignKey(d => d.CreatedByExpertId)
@@ -429,6 +445,19 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("quiz_questions_case_id_fkey");
 
             entity.HasOne(d => d.Quiz).WithMany(p => p.QuizQuestions).HasConstraintName("quiz_questions_quiz_id_fkey");
+        });
+
+        modelBuilder.Entity<QAMessage>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("qa_messages_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Role).HasMaxLength(20);
+
+            entity.HasOne(d => d.Session).WithMany(p => p.Messages)
+                .HasForeignKey(d => d.SessionId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("qa_messages_session_id_fkey");
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -484,6 +513,12 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Verifier)
+                .WithMany(p => p.UsersVerifiedByThisUser)
+                .HasForeignKey(d => d.VerifiedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("users_verified_by_fkey");
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -496,6 +531,30 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Role).WithMany(p => p.UserRoles).HasConstraintName("user_roles_role_id_fkey");
 
             entity.HasOne(d => d.User).WithMany(p => p.UserRoles).HasConstraintName("user_roles_user_id_fkey");
+        });
+
+        modelBuilder.Entity<VisualQASession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("visual_qa_sessions_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Status).HasMaxLength(40);
+
+            entity.HasOne(d => d.Student).WithMany(p => p.VisualQASessions)
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("visual_qa_sessions_student_id_fkey");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.VisualQASessions)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("visual_qa_sessions_case_id_fkey");
+
+            entity.HasOne(d => d.Image).WithMany(p => p.VisualQASessions)
+                .HasForeignKey(d => d.ImageId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("visual_qa_sessions_image_id_fkey");
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>

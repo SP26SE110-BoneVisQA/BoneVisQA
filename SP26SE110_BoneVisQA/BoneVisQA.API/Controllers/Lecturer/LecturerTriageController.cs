@@ -20,7 +20,9 @@ public class LecturerTriageController : ControllerBase
         _lecturerTriageService = lecturerTriageService;
     }
 
+    /// <summary>Same as <c>PUT /api/lecturer/reviews/{answerId}/escalate</c>; kept for older clients.</summary>
     [HttpPost("{answerId:guid}/escalate")]
+    [HttpPut("{answerId:guid}/escalate")]
     [ProducesResponseType(typeof(EscalatedAnswerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

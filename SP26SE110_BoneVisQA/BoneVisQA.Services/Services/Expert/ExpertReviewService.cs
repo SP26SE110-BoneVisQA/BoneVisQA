@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Text.Json;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
@@ -15,6 +17,20 @@ public class ExpertReviewService : IExpertReviewService
     private readonly INotificationService _notificationService;
     private readonly IRagExpertAnswerIndexingSignal _ragExpertAnswerIndexingSignal;
 
+    /// <summary>
+    /// Lecturer triage must have escalated; student must be enrolled in a class where this expert is assigned.
+    /// </summary>
+    private static IQueryable<CaseAnswer> QueryExpertScopedEscalatedQueue(IUnitOfWork uow, Guid expertId) =>
+        uow.Context.CaseAnswers
+            .AsNoTracking()
+            .Where(a =>
+                a.Status == CaseAnswerStatuses.EscalatedToExpert ||
+                a.Status == CaseAnswerStatuses.Escalated)
+            .Where(a =>
+                uow.Context.ClassEnrollments.Any(e =>
+                    e.StudentId == a.Question.StudentId &&
+                    e.Class!.ExpertId == expertId));
+
     public ExpertReviewService(
         IUnitOfWork unitOfWork,
         INotificationService notificationService,
@@ -27,61 +43,67 @@ public class ExpertReviewService : IExpertReviewService
 
     public async Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId)
     {
-        var query = _unitOfWork.Context.CaseAnswers
-            .AsNoTracking()
+        // Materialize answers first so Include(... ThenInclude Chunk.Doc) is not dropped by a final Select projection (avoids N+1 on documents).
+        var answers = await QueryExpertScopedEscalatedQueue(_unitOfWork, expertId)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Student)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Case)
+                    .ThenInclude(c => c!.MedicalImages)
             .Include(a => a.ExpertReviews)
             .Include(a => a.Citations)
                 .ThenInclude(c => c.Chunk)
                     .ThenInclude(ch => ch.Doc)
-            .Where(a => a.Status == CaseAnswerStatuses.EscalatedToExpert || a.Status == CaseAnswerStatuses.Escalated)
-            .Where(a =>
-                _unitOfWork.Context.ClassEnrollments.Any(e =>
-                    e.StudentId == a.Question.StudentId &&
-                    e.Class.ExpertId == expertId) ||
-                a.ExpertReviews.Any(r => r.ExpertId == expertId))
-            .Select(a => new
-            {
-                Answer = a,
-                Enrollment = _unitOfWork.Context.ClassEnrollments
-                    .Include(e => e.Class)
-                    .Where(e => e.StudentId == a.Question.StudentId && e.Class.ExpertId == expertId)
-                    .OrderByDescending(e => e.EnrolledAt)
-                    .FirstOrDefault(),
-                Review = a.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId)
-            });
+            .OrderByDescending(a => a.EscalatedAt ?? a.Question.CreatedAt)
+            .ToListAsync();
 
-        var rows = await query.ToListAsync();
+        var studentIds = answers.Select(a => a.Question.StudentId).Distinct().ToList();
+        var enrollmentRows = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+            .Where(e => studentIds.Contains(e.StudentId) && e.Class != null && e.Class.ExpertId == expertId)
+            .OrderByDescending(e => e.EnrolledAt)
+            .ToListAsync();
 
-        return rows.Select(x => new ExpertEscalatedAnswerDto
+        var enrollmentByStudent = enrollmentRows
+            .GroupBy(e => e.StudentId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return answers.Select(a =>
         {
-            AnswerId = x.Answer.Id,
-            QuestionId = x.Answer.QuestionId,
-            StudentId = x.Answer.Question.StudentId,
-            StudentName = x.Answer.Question.Student?.FullName ?? string.Empty,
-            StudentEmail = x.Answer.Question.Student?.Email ?? string.Empty,
-            CaseId = x.Answer.Question.CaseId,
-            CaseTitle = x.Answer.Question.Case?.Title ?? string.Empty,
-            QuestionText = x.Answer.Question.QuestionText,
-            CurrentAnswerText = x.Answer.AnswerText,
-            StructuredDiagnosis = x.Answer.StructuredDiagnosis,
-            DifferentialDiagnoses = x.Answer.DifferentialDiagnoses,
-            KeyImagingFindings = x.Answer.KeyImagingFindings,
-            ReflectiveQuestions = x.Answer.ReflectiveQuestions,
-            Status = x.Answer.Status,
-            EscalatedById = x.Answer.EscalatedById,
-            EscalatedAt = x.Answer.EscalatedAt,
-            AiConfidenceScore = x.Answer.AiConfidenceScore,
-            ClassId = x.Enrollment?.ClassId,
-            ClassName = x.Enrollment?.Class?.ClassName ?? string.Empty,
-            ReviewNote = x.Review?.ReviewNote,
-            Citations = MapCitations(x.Answer.Citations)
+            enrollmentByStudent.TryGetValue(a.Question.StudentId, out var enrollment);
+            var review = a.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+            return new ExpertEscalatedAnswerDto
+            {
+                AnswerId = a.Id,
+                QuestionId = a.QuestionId,
+                StudentId = a.Question.StudentId,
+                StudentName = a.Question.Student?.FullName ?? string.Empty,
+                StudentEmail = a.Question.Student?.Email ?? string.Empty,
+                CaseId = a.Question.CaseId,
+                CaseTitle = a.Question.Case?.Title ?? string.Empty,
+                QuestionText = a.Question.QuestionText,
+                CurrentAnswerText = a.AnswerText,
+                StructuredDiagnosis = a.StructuredDiagnosis,
+                DifferentialDiagnoses = a.DifferentialDiagnoses,
+                KeyImagingFindings = a.KeyImagingFindings,
+                ReflectiveQuestions = a.ReflectiveQuestions,
+                Status = a.Status,
+                EscalatedById = a.EscalatedById,
+                EscalatedAt = a.EscalatedAt,
+                AiConfidenceScore = a.AiConfidenceScore,
+                ClassId = enrollment?.ClassId,
+                ClassName = enrollment?.Class?.ClassName ?? string.Empty,
+                ReviewNote = review?.ReviewNote,
+                Citations = MapCitations(a.Citations),
+                ImageUrl = ResolveQuestionImageUrl(a.Question),
+                CustomCoordinates = a.Question.CustomCoordinates
+            };
         }).ToList();
     }
 
+    public Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId)
+        => GetEscalatedAnswersAsync(expertId);
     public async Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid answerId, ResolveEscalatedAnswerRequestDto request)
     {
         var answer = await _unitOfWork.Context.CaseAnswers
@@ -89,6 +111,7 @@ public class ExpertReviewService : IExpertReviewService
                 .ThenInclude(q => q.Student)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Case)
+                    .ThenInclude(c => c!.MedicalImages)
             .Include(a => a.ExpertReviews)
             .Include(a => a.Citations)
                 .ThenInclude(c => c.Chunk)
@@ -103,15 +126,19 @@ public class ExpertReviewService : IExpertReviewService
                 e.Class.ExpertId == expertId);
 
         var existingReview = answer.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
-        if (enrollment == null && existingReview == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền xử lý câu trả lời này.");
+
+        if (string.Equals(answer.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.OrdinalIgnoreCase))
+            throw new ConflictException("Câu trả lời này đã được xử lý trước đó.");
+
+        if (enrollment == null)
+            throw new InvalidOperationException("Chuyên gia không có quyền xử lý câu trả lời này (sinh viên không thuộc lớp do bạn phụ trách).");
 
         if (!CaseAnswerStatuses.IsEscalatedToExpert(answer.Status))
-            throw new ConflictException("Câu trả lời này đã được xử lý trước đó.");
+            throw new ConflictException("Chỉ câu trả lời đã được giảng viên chuyển lên chuyên gia mới được xử lý tại đây.");
 
         answer.AnswerText = request.AnswerText;
         answer.StructuredDiagnosis = request.StructuredDiagnosis;
-        answer.DifferentialDiagnoses = request.DifferentialDiagnoses;
+        answer.DifferentialDiagnoses = NormalizeDifferentialDiagnosesForStorage(request.DifferentialDiagnoses);
         answer.KeyImagingFindings = request.KeyImagingFindings;
         answer.ReflectiveQuestions = request.ReflectiveQuestions;
         answer.ReviewedById = expertId;
@@ -172,7 +199,9 @@ public class ExpertReviewService : IExpertReviewService
             ClassId = enrollment?.ClassId,
             ClassName = enrollment?.Class?.ClassName ?? string.Empty,
             ReviewNote = existingReview.ReviewNote,
-            Citations = MapCitations(answer.Citations)
+            Citations = MapCitations(answer.Citations),
+            ImageUrl = ResolveQuestionImageUrl(answer.Question),
+            CustomCoordinates = answer.Question.CustomCoordinates
         };
     }
 
@@ -181,25 +210,20 @@ public class ExpertReviewService : IExpertReviewService
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new InvalidOperationException("Lý do flag chunk là bắt buộc.");
 
-        var chunk = await _unitOfWork.Context.DocumentChunks
-            .FirstOrDefaultAsync(ch => ch.Id == chunkId)
+        var chunk = await _unitOfWork.Context.DocumentChunks.FirstOrDefaultAsync(ch => ch.Id == chunkId)
             ?? throw new KeyNotFoundException("Không tìm thấy document chunk.");
 
         var canReviewChunk = await _unitOfWork.Context.Citations
             .Where(c => c.ChunkId == chunkId)
             .AnyAsync(c =>
-                (c.Answer.Status == CaseAnswerStatuses.EscalatedToExpert
-                 || c.Answer.Status == CaseAnswerStatuses.Escalated
-                 || c.Answer.Status == CaseAnswerStatuses.Approved
-                 || c.Answer.Status == CaseAnswerStatuses.Revised
-                 || c.Answer.Status == CaseAnswerStatuses.ExpertApproved) &&
-                (_unitOfWork.Context.ClassEnrollments.Any(e =>
+                (c.Answer.Status == CaseAnswerStatuses.EscalatedToExpert ||
+                 c.Answer.Status == CaseAnswerStatuses.Escalated) &&
+                _unitOfWork.Context.ClassEnrollments.Any(e =>
                     e.StudentId == c.Answer.Question.StudentId &&
-                    e.Class.ExpertId == expertId) ||
-                 c.Answer.ExpertReviews.Any(r => r.ExpertId == expertId)));
+                    e.Class!.ExpertId == expertId));
 
-        //if (!canReviewChunk)
-        //    throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+        if (!canReviewChunk)
+            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
 
         if (!chunk.IsFlagged)
         {
@@ -207,6 +231,48 @@ public class ExpertReviewService : IExpertReviewService
             await _unitOfWork.DocumentChunkRepository.UpdateAsync(chunk);
             await _unitOfWork.SaveAsync();
         }
+    }
+
+    private static string? NormalizeDifferentialDiagnosesForStorage(JsonElement? value)
+    {
+        if (value == null)
+            return null;
+
+        var el = value.Value;
+        return el.ValueKind switch
+        {
+            JsonValueKind.Undefined or JsonValueKind.Null => null,
+            JsonValueKind.String => string.IsNullOrWhiteSpace(el.GetString()) ? null : el.GetString(),
+            JsonValueKind.Array =>
+                string.Join(
+                    "\n",
+                    el.EnumerateArray()
+                        .Select(x =>
+                            x.ValueKind == JsonValueKind.String ? (x.GetString() ?? string.Empty) : x.ToString())
+                        .Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } joined
+                    ? joined
+                    : null,
+            _ => el.ToString()
+        };
+    }
+
+    private static string? ResolveQuestionImageUrl(StudentQuestion? question)
+    {
+        if (question == null)
+            return null;
+        if (!string.IsNullOrWhiteSpace(question.CustomImageUrl))
+            return question.CustomImageUrl.Trim();
+
+        var images = question.Case?.MedicalImages;
+        if (images == null || images.Count == 0)
+            return null;
+
+        var url = images
+            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(m => m.Id)
+            .Select(m => m.ImageUrl)
+            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+        return string.IsNullOrWhiteSpace(url) ? null : url.Trim();
     }
 
     private static List<ExpertCitationDto> MapCitations(IEnumerable<Citation> citations)

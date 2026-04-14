@@ -20,7 +20,19 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
-        public async Task<PagedResult<GetQuizDTO>> GetQuizDTO(int pageIndex, int pageSize)
+
+        private static DateTime? ToUtc(DateTime? dt)
+        {
+            if (!dt.HasValue) return null;
+            return dt.Value.Kind switch
+            {
+                DateTimeKind.Utc => dt.Value,
+                DateTimeKind.Local => dt.Value.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime()
+            };
+        }
+
+        public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
         {
             var query = await _unitOfWork.QuizRepository.GetAllAsync();
 
@@ -65,9 +77,9 @@ namespace BoneVisQA.Services.Services.Expert
 
                 Topic = request.Topic,
 
-                OpenTime = request.OpenTime.HasValue? DateTime.SpecifyKind(request.OpenTime.Value, DateTimeKind.Utc): null,
+                OpenTime = ToUtc(request.OpenTime),
 
-                CloseTime = request.CloseTime.HasValue? DateTime.SpecifyKind(request.CloseTime.Value, DateTimeKind.Utc): null,
+                CloseTime = ToUtc(request.CloseTime),
 
                 TimeLimit = request.TimeLimit,
                 PassingScore = request.PassingScore,
@@ -125,13 +137,8 @@ namespace BoneVisQA.Services.Services.Expert
 
             quiz.Topic = update.Topic;
 
-            quiz.OpenTime = update.OpenTime.HasValue
-                ? DateTime.SpecifyKind(update.OpenTime.Value, DateTimeKind.Utc)
-                : null;
-
-            quiz.CloseTime = update.CloseTime.HasValue
-                ? DateTime.SpecifyKind(update.CloseTime.Value, DateTimeKind.Utc)
-                : null;
+            quiz.OpenTime = ToUtc(update.OpenTime);
+            quiz.CloseTime = ToUtc(update.CloseTime);
 
             quiz.TimeLimit = update.TimeLimit;
 
@@ -391,8 +398,8 @@ namespace BoneVisQA.Services.Services.Expert
             if (existing != null)
                 throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
 
-            var openTime = dto.OpenTime.HasValue ? DateTime.SpecifyKind(dto.OpenTime.Value, DateTimeKind.Utc) : quiz.OpenTime;
-            var closeTime = dto.CloseTime.HasValue ? DateTime.SpecifyKind(dto.CloseTime.Value, DateTimeKind.Utc) : quiz.CloseTime;
+            var openTime = ToUtc(dto.OpenTime) ?? quiz.OpenTime;
+            var closeTime = ToUtc(dto.CloseTime) ?? quiz.CloseTime;
 
             var classQuiz = new ClassQuizSession
             {

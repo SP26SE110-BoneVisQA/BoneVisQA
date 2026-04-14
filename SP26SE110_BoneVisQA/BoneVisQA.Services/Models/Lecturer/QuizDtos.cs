@@ -16,6 +16,8 @@ public class QuizDto
 
     public bool IsAiGenerated { get; set; }
 
+    public bool IsVerifiedCurriculum { get; set; }
+
     public string? Difficulty { get; set; }
 
     public string? Classification { get; set; }
@@ -228,6 +230,9 @@ public class CreateQuizRequestDto
 
     /// <summary>Phân loại: Resident Year 1, Resident Year 2, Advanced Diagnostics, Continuing Med Ed</summary>
     public string? Classification { get; set; }
+
+    /// <summary>Quiz được align với verified curriculum/standard radiology board learning objectives</summary>
+    public bool IsVerifiedCurriculum { get; set; } = false;
 
     public DateTime? OpenTime { get; set; }
     public DateTime? CloseTime { get; set; }

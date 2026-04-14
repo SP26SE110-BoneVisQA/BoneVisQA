@@ -4,5 +4,5 @@ namespace BoneVisQA.Services.Interfaces;
 
 public interface ILecturerTriageService
 {
-    Task<EscalatedAnswerDto> EscalateAnswerAsync(Guid lecturerId, Guid answerId, EscalateAnswerRequestDto? request);
+    Task<EscalatedAnswerDto> EscalateAnswerAsync(Guid lecturerId, Guid sessionId, EscalateAnswerRequestDto? request);
 }

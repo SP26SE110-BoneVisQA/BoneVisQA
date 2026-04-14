@@ -48,7 +48,7 @@ public class AuthService : IAuthService
         }
 
         var role = await _unitOfWork.RoleRepository
-            .FindByCondition(r => r.Name == "Pending")
+            .FindByCondition(r => r.Name == "Guest")
             .FirstOrDefaultAsync();
 
         if (role == null)
@@ -56,7 +56,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Role mặc định 'Pending' chưa được cấu hình trong hệ thống."
+                Message = "Role mặc định 'Guest' chưa được cấu hình trong hệ thống."
             };
         }
 
@@ -69,10 +69,9 @@ public class AuthService : IAuthService
             Password = HashPassword(request.Password),
             SchoolCohort = request.SchoolCohort,
             IsActive = false,
-            IsMedicalStudent = request.IsMedicalStudent,
             MedicalSchool = request.MedicalSchool,
             MedicalStudentId = request.MedicalStudentId,
-            VerificationStatus = request.IsMedicalStudent ? "Pending" : null,
+            VerificationStatus = "Pending",
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -139,8 +138,8 @@ public class AuthService : IAuthService
             };
         }
 
-        var isPending = user.UserRoles.Any(ur => ur.Role.Name == "Pending");
-        if (isPending)
+        var isGuest = user.UserRoles.Any(ur => ur.Role.Name == "Guest");
+        if (isGuest)
         {
             return new AuthResultDto
             {
@@ -373,16 +372,16 @@ public class AuthService : IAuthService
             };
         }
 
-        var pendingRole = await _unitOfWork.RoleRepository
-            .FindByCondition(r => r.Name == "Pending")
+        var guestRole = await _unitOfWork.RoleRepository
+            .FindByCondition(r => r.Name == "Guest")
             .FirstOrDefaultAsync();
 
-        if (pendingRole == null)
+        if (guestRole == null)
         {
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Role mặc định 'Pending' chưa được cấu hình trong hệ thống."
+                Message = "Role mặc định 'Guest' chưa được cấu hình trong hệ thống."
             };
         }
 
@@ -406,7 +405,7 @@ public class AuthService : IAuthService
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            RoleId = pendingRole.Id,
+            RoleId = guestRole.Id,
             AssignedAt = now
         };
 
@@ -480,16 +479,16 @@ public class AuthService : IAuthService
             }
             else
             {
-                var pendingRole = await _unitOfWork.RoleRepository
-                    .FindByCondition(r => r.Name == "Pending")
+                var guestRole = await _unitOfWork.RoleRepository
+                    .FindByCondition(r => r.Name == "Guest")
                     .FirstOrDefaultAsync();
 
-                if (pendingRole == null)
+                if (guestRole == null)
                 {
                     return new AuthResultDto
                     {
                         Success = false,
-                        Message = "Role 'Pending' chưa được cấu hình trong hệ thống."
+                        Message = "Role 'Guest' chưa được cấu hình trong hệ thống."
                     };
                 }
 
@@ -513,7 +512,7 @@ public class AuthService : IAuthService
                 {
                     Id = Guid.NewGuid(),
                     UserId = user.Id,
-                    RoleId = pendingRole.Id,
+                    RoleId = guestRole.Id,
                     AssignedAt = now
                 };
 
@@ -549,8 +548,8 @@ public class AuthService : IAuthService
             };
         }
 
-        var isPending = user.UserRoles.Any(ur => ur.Role.Name == "Pending");
-        if (isPending)
+        var isGuest = user.UserRoles.Any(ur => ur.Role.Name == "Guest");
+        if (isGuest)
         {
             return new AuthResultDto
             {
@@ -594,7 +593,6 @@ public class AuthService : IAuthService
             };
         }
 
-        user.IsMedicalStudent = true;
         user.MedicalSchool = request.MedicalSchool;
         user.MedicalStudentId = request.MedicalStudentId;
         user.VerificationStatus = "Pending";

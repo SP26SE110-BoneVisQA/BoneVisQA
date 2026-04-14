@@ -770,10 +770,6 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("text")
                         .HasColumnName("key_findings");
 
-                    b.Property<string>("ReflectiveQuestions")
-                        .HasColumnType("text")
-                        .HasColumnName("reflective_questions");
-
                     b.Property<string>("SuggestedDiagnosis")
                         .HasColumnType("text")
                         .HasColumnName("suggested_diagnosis");

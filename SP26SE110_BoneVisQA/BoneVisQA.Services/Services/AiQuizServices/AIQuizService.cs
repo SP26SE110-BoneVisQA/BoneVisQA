@@ -360,6 +360,20 @@ public class AIQuizService : IAIQuizService
 
                 foreach (var q in questionsArr.EnumerateArray())
                 {
+                    // Lấy imageUrl từ case tương ứng theo thứ tự (mỗi case gán cho questionsPerCase câu)
+                    string? imageUrl = null;
+                    Guid? caseId = null;
+                    string? caseTitle = null;
+                    if (cases.Count > 0)
+                    {
+                        var questionsPerCase = questionsArr.GetArrayLength() / Math.Max(cases.Count, 1);
+                        var caseIndex = Math.Min((questions.Count) / Math.Max(questionsPerCase, 1), cases.Count - 1);
+                        var questionCase = cases[caseIndex];
+                        imageUrl = questionCase.ImageUrl;
+                        caseId = questionCase.CaseId;
+                        caseTitle = questionCase.CaseTitle;
+                    }
+
                     var question = new AIQuizQuestionDto
                     {
                         QuestionText = GetStringProperty(q, "questionText"),
@@ -369,8 +383,9 @@ public class AIQuizService : IAIQuizService
                         OptionD = GetStringProperty(q, "optionD"),
                         CorrectAnswer = GetStringProperty(q, "correctAnswer"),
                         Type = "MultipleChoice",
-                        CaseId = cases.FirstOrDefault()?.CaseId,
-                        CaseTitle = cases.FirstOrDefault()?.CaseTitle
+                        CaseId = caseId,
+                        CaseTitle = caseTitle,
+                        ImageUrl = imageUrl
                     };
 
                     if (!string.IsNullOrWhiteSpace(question.QuestionText))
@@ -405,14 +420,18 @@ public class AIQuizService : IAIQuizService
     {
         var questions = ParseAIQuizResponse(responseText, cases);
 
-        // Gán caseId cho từng câu hỏi dựa trên thứ tự
-        var questionsPerCase = questions.Count / cases.Count;
-        for (int i = 0; i < questions.Count; i++)
+        // Gán caseId và imageUrl cho từng câu hỏi dựa trên thứ tự (mỗi case gán questionsPerCase câu hỏi)
+        if (cases.Count > 0 && questions.Count > 0)
         {
-            var caseIndex = Math.Min(i / Math.Max(questionsPerCase, 1), cases.Count - 1);
-            var questionCase = cases[caseIndex];
-            questions[i].CaseId = questionCase.CaseId;
-            questions[i].CaseTitle = questionCase.CaseTitle;
+            var questionsPerCase = questions.Count / cases.Count;
+            for (int i = 0; i < questions.Count; i++)
+            {
+                var caseIndex = Math.Min(i / Math.Max(questionsPerCase, 1), cases.Count - 1);
+                var questionCase = cases[caseIndex];
+                questions[i].CaseId = questionCase.CaseId;
+                questions[i].CaseTitle = questionCase.CaseTitle;
+                questions[i].ImageUrl = questionCase.ImageUrl;
+            }
         }
 
         return questions;

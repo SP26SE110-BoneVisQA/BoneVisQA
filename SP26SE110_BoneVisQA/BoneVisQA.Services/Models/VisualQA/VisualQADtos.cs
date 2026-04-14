@@ -1,15 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace BoneVisQA.Services.Models.VisualQA;
-
-/// <summary>Single vertex for polygon lesion annotations (normalized, percent, or pixel — see API contract).</summary>
-public class PointDto
-{
-    public double X { get; set; }
-    public double Y { get; set; }
-}
 
 public class VisualQARequestDto
 {
@@ -20,13 +12,8 @@ public class VisualQARequestDto
     public string? ImageUrl { get; set; }
 
     /// <summary>
-    /// Lesion outline as a closed polygon (≥3 points). Preferred over <see cref="Coordinates"/>.
-    /// Persisted as JSON in <c>student_questions.custom_coordinates</c>.
-    /// </summary>
-    public List<PointDto>? CustomPolygon { get; set; }
-
-    /// <summary>
-    /// Legacy rectangular ROI: JSON <c>{"x","y","w","h"}</c>. Used only when <see cref="CustomPolygon"/> is null/empty.
+    /// Normalized bounding box ROI (0–1): JSON <c>{"x":0.1,"y":0.2,"width":0.3,"height":0.4}</c> (also accepts <c>w</c>/<c>h</c>).
+    /// Persisted in <c>student_questions.custom_coordinates</c>.
     /// </summary>
     [DefaultValue(null)]
     public string? Coordinates { get; set; }
@@ -38,12 +25,18 @@ public class VisualQARequestDto
 
     /// <summary>
     /// Optional Annotation ID. Provide for inquiries on existing cases
-    /// (polygon/box will be fetched from DB). Leave null for NEW personal uploads.
+    /// (bounding box will be fetched from DB). Leave null for NEW personal uploads.
     /// </summary>
     public Guid? AnnotationId { get; set; }
 
     /// <summary>Optional language hint (e.g. vi, en). Defaults to Vietnamese when null or empty.</summary>
     public string? Language { get; set; }
+
+    /// <summary>Optional existing visual QA session id. If null, backend creates/finds by context.</summary>
+    public Guid? SessionId { get; set; }
+
+    /// <summary>Optional image id for disambiguating image inside a medical case.</summary>
+    public Guid? ImageId { get; set; }
 }
 
 public class CitationItemDto
@@ -62,9 +55,10 @@ public class CitationItemDto
 
 public class VisualQAResponseDto
 {
+    public Guid? SessionId { get; set; }
     public string? AnswerText { get; set; }
     public string? SuggestedDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     /// <summary>Key imaging signs to focus on (SEPS).</summary>
     public string? KeyImagingFindings { get; set; }
     /// <summary>Reflective questions for student self-assessment (SEPS).</summary>

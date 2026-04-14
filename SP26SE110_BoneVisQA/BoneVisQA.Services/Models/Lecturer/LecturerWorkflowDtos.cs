@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
 /// <summary>Row returned by GET /api/lecturer/triage for the QA Triage workbench.</summary>
 public class LecturerTriageRowDto
 {
+    /// <summary>Primary key of this triage row’s <c>case_answers</c> record (required; use for escalate).</summary>
+    [JsonPropertyName("answerId")]
     public Guid AnswerId { get; set; }
+
     public Guid QuestionId { get; set; }
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
@@ -14,7 +19,11 @@ public class LecturerTriageRowDto
     public string ClassName { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
+    /// <summary>X-ray / study image: Visual QA upload (<c>CustomImageUrl</c>) or first <c>MedicalImage</c> on the case.</summary>
     public string? ThumbnailUrl { get; set; }
+    /// <summary>Resolved study image: personal upload or first case image (explicit for FE binding).</summary>
+    [JsonPropertyName("imageUrl")]
+    public string? ImageUrl { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public string? AnswerText { get; set; }
     public string Status { get; set; } = "Pending";
@@ -36,14 +45,20 @@ public class LectStudentQuestionDetailDto
     public string? CaseTitle { get; set; }
     public string? CaseDescription { get; set; }
     public string? CaseThumbnailUrl { get; set; }
+    /// <summary>Same resolved image as <see cref="CaseThumbnailUrl"/> (<c>imageUrl</c> for clients).</summary>
+    public string? ImageUrl { get; set; }
     public string? CaseDifficulty { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public string? Language { get; set; }
     public DateTime? CreatedAt { get; set; }
+
+    /// <summary>Latest AI / workflow <c>case_answers.id</c> for this question (escalate target).</summary>
+    [JsonPropertyName("answerId")]
     public Guid? AnswerId { get; set; }
     public string? AnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
+    public string? KeyImagingFindings { get; set; }
     public string? AnswerStatus { get; set; }
     public double? AiConfidenceScore { get; set; }
     public Guid? ReviewedById { get; set; }
@@ -52,13 +67,23 @@ public class LectStudentQuestionDetailDto
     public bool IsEscalated { get; set; }
     public string? EscalatedByName { get; set; }
     public DateTime? EscalatedAt { get; set; }
+    public List<LectQAMessageDto> Messages { get; set; } = new();
+}
+
+public class LectQAMessageDto
+{
+    public Guid Id { get; set; }
+    public string Role { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string? Coordinates { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class RespondToQuestionRequestDto
 {
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public bool Approve { get; set; } = false;
 }
 
@@ -67,7 +92,7 @@ public class LecturerAnswerDto
     public Guid AnswerId { get; set; }
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public string Status { get; set; } = "Pending";
     public DateTime UpdatedAt { get; set; }
 }
@@ -104,7 +129,7 @@ public class EscalatedAnswerDto
     public string QuestionText { get; set; } = string.Empty;
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
-    public string? DifferentialDiagnoses { get; set; }
+    public List<string>? DifferentialDiagnoses { get; set; }
     public string Status { get; set; } = string.Empty;
     public Guid? EscalatedById { get; set; }
     public DateTime? EscalatedAt { get; set; }

@@ -18,11 +18,14 @@ public class EmailService : IEmailService
     private readonly string _smtpPassword;
     private readonly string _fromEmail;
     private readonly string _fromName;
+    private readonly string _appUrl;
 
     public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
     {
         _configuration = configuration;
         _logger = logger;
+
+        _appUrl = _configuration["App:FrontendUrl"] ?? _configuration["App:BaseUrl"] ?? "https://localhost:3000";
 
         var smtpHost = _configuration["Email:SmtpHost"];
         var smtpPort = _configuration["Email:SmtpPort"];
@@ -1072,6 +1075,119 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SendAssignmentEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    public async Task<bool> SendAssignmentUpdateEmailAsync(
+        string toEmail,
+        string studentName,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        DateTime? dueDate,
+        string? dueDateDisplay)
+    {
+        _logger.LogInformation("[SendAssignmentUpdateEmailAsync] Sending assignment update email to {ToEmail} - {Title}", toEmail, assignmentTitle);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendAssignmentUpdateEmailAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        var dueDateText = dueDate.HasValue
+            ? $"Hạn nộp: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : "Không có hạn nộp cụ thể";
+
+        var subject = $"[BoneVisQA] Cập nhật bài tập: {assignmentTitle} ({assignmentType})";
+        var body = $@"
+<!DOCTYPE html>
+<html lang='vi'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>{subject}</title>
+</head>
+<body style='margin:0;padding:0;background:#f4f4f4;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='background:#f4f4f4;padding:30px 0;'>
+        <tr>
+            <td align='center'>
+                <table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);'>
+                    <tr>
+                        <td style='background:linear-gradient(135deg,#e74c3c,#c0392b);padding:30px 40px;text-align:center;'>
+                            <h1 style='color:#ffffff;margin:0;font-size:24px;'>🔔 Cập Nhật Bài Tập</h1>
+                            <p style='color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;'>Thông tin bài tập đã được thay đổi</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style='padding:35px 40px;'>
+                            <p style='margin:0 0 20px;font-size:16px;color:#333;'>
+                                Xin chào <strong>{studentName}</strong>,
+                            </p>
+                            <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
+                                Giảng viên đã <strong style='color:#e74c3c;'>cập nhật thông tin</strong> bài tập dưới đây trong lớp <strong>{className}</strong>. Vui lòng kiểm tra lại.
+                            </p>
+                            <div style='background:#f8f9fa;border-left:4px solid #e74c3c;padding:20px;border-radius:0 8px 8px 0;margin:0 0 25px;'>
+                                <h2 style='margin:0 0 12px;font-size:18px;color:#2c3e50;'>{assignmentTitle}</h2>
+                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Loại:</strong> {assignmentType}</p>
+                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Lớp:</strong> {className}</p>
+                                <p style='margin:4px 0;font-size:13px;color:#555;'>{dueDateText}</p>
+                            </div>
+                            <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
+                                Đăng nhập BoneVisQA để xem chi tiết và làm bài tập.
+                            </p>
+                            <table cellpadding='0' cellspacing='0'>
+                                <tr>
+                                    <td style='background:linear-gradient(135deg,#e74c3c,#c0392b);border-radius:8px;'>
+                                        <a href='{_appUrl}' target='_blank' style='display:inline-block;padding:14px 35px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:8px;'>
+                                            Mở BoneVisQA →
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style='background:#f8f9fa;padding:20px 40px;border-top:1px solid #eee;'>
+                            <p style='margin:0;font-size:12px;color:#aaa;text-align:center;'>
+                                Email này được gửi tự động từ BoneVisQA — Radiology Education Platform.<br>
+                                Vui lòng không trả lời trực tiếp email này.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+
+        try
+        {
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendAssignmentUpdateEmailAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendAssignmentUpdateEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
             return false;
         }
     }
