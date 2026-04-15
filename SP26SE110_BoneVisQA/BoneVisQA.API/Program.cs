@@ -110,7 +110,7 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization. Nhập token sau 'Bearer '",
+        Description = "JWT Authorization. Enter token after 'Bearer '",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
@@ -132,7 +132,7 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    // Bỏ yêu cầu Bearer cho các endpoint Auth (register, login, forgot-password, reset-password)
+    // Skip Bearer requirement for Auth endpoints (register, login, forgot-password, reset-password)
     c.OperationFilter<SwaggerAuthFilter>();
 });
 
@@ -256,13 +256,14 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
     // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
     client.Timeout = TimeSpan.FromMinutes(60);
 });
-builder.Services.AddHttpClient(GeminiEmbeddingService.HttpClientName, client =>
+builder.Services.AddHttpClient(HuggingFaceEmbeddingService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 
 builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
+builder.Services.Configure<HuggingFaceSettings>(builder.Configuration.GetSection(HuggingFaceSettings.SectionName));
 builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
@@ -271,8 +272,9 @@ builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
+builder.Services.AddSingleton<IIndexingExecutionGate, IndexingExecutionGate>();
 builder.Services.AddScoped<IGeminiService, GeminiService>();
-builder.Services.AddScoped<IEmbeddingService, GeminiEmbeddingService>();
+builder.Services.AddScoped<IEmbeddingService, HuggingFaceEmbeddingService>();
 builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
 builder.Services.AddScoped<IMedicalCaseIndexingProcessor, MedicalCaseIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
@@ -280,6 +282,7 @@ builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<IRagExpertAnswerIndexingSignal, NoOpRagExpertAnswerIndexingSignal>();
+builder.Services.AddScoped<IDocumentIndexingProgressNotifier, SignalRDocumentIndexingProgressNotifier>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
@@ -318,6 +321,7 @@ builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
+builder.Services.AddHostedService<StartupReindexingHostedService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();
 builder.Services.AddHostedService<MedicalCaseIndexingBackgroundService>();
 
@@ -345,7 +349,7 @@ app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 
-// Đảm bảo thư mục uploads tồn tại trước khi sử dụng PhysicalFileProvider
+// Ensure uploads directory exists before using PhysicalFileProvider
 var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
 if (!Directory.Exists(uploadsPath))
 {
@@ -360,8 +364,8 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads"
 });
 
-// Trang đặt lại mật khẩu (Backend phục vụ, không cần Frontend)
-// Token lấy từ URL: /reset-password?token=XXX (KHÔNG phải JWT từ login!)
+// Password reset page (served by Backend, no Frontend required)
+// Token is taken from URL: /reset-password?token=XXX (NOT JWT from login!)
 app.MapGet("/reset-password", (HttpContext ctx) =>
 {
     var token = ctx.Request.Query["token"].ToString();
@@ -371,7 +375,7 @@ app.MapGet("/reset-password", (HttpContext ctx) =>
     }
     var tokenEscaped = token.Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
     var html = @"<!DOCTYPE html>
-<html><head><meta charset=""utf-8""><title>Đặt lại mật khẩu - BoneVisQA</title>
+<html><head><meta charset=""utf-8""><title>Reset Password - BoneVisQA</title>
 <style>body{font-family:Arial;max-width:420px;margin:50px auto;padding:20px}
 input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box}
 .pw-wrap{position:relative;margin:8px 0}
@@ -381,30 +385,30 @@ button{background:#3498db;color:white;padding:12px;border:none;width:100%;cursor
 .error{color:red}.success{color:green}
 .token-hint{font-size:11px;color:#888;margin:5px 0}
 </style></head><body>
-<h1>Đặt lại mật khẩu</h1>
-<p class=""token-hint"">Token: lấy từ link trong email (phần sau ?token=)</p>
+<h1>Reset Password</h1>
+<p class=""token-hint"">Token: get it from the email link (part after ?token=)</p>
 <div id=""msg""></div>
 <form id=""form"">
 <input type=""hidden"" name=""token"" value=""" + tokenEscaped + @""">
 <div class=""pw-wrap"">
-<input type=""password"" id=""p1"" name=""newPassword"" placeholder=""Mật khẩu mới (ít nhất 6 ký tự)"" required minlength=""6"">
-<span onclick=""tgl(1)"">Hiện</span>
+<input type=""password"" id=""p1"" name=""newPassword"" placeholder=""New password (at least 6 characters)"" required minlength=""6"">
+<span onclick=""tgl(1)"">Show</span>
 </div>
 <div class=""pw-wrap"">
-<input type=""password"" id=""p2"" name=""confirmPassword"" placeholder=""Xác nhận mật khẩu"" required>
-<span onclick=""tgl(2)"">Hiện</span>
+<input type=""password"" id=""p2"" name=""confirmPassword"" placeholder=""Confirm password"" required>
+<span onclick=""tgl(2)"">Show</span>
 </div>
-<button type=""submit"">Đặt lại mật khẩu</button>
+<button type=""submit"">Reset Password</button>
 </form>
 <script>
-function tgl(n){var e=document.getElementById('p'+n),b=e.nextElementSibling;e.type=e.type==='password'?'text':'password';b.textContent=b.textContent==='Hiện'?'Ẩn':'Hiện';}
+function tgl(n){var e=document.getElementById('p'+n),b=e.nextElementSibling;e.type=e.type==='password'?'text':'password';b.textContent=b.textContent==='Show'?'Hide':'Show';}
 document.getElementById('form').onsubmit=async function(ev){ev.preventDefault();
 var p1=ev.target.newPassword.value,p2=ev.target.confirmPassword.value;
-if(p1!==p2){document.getElementById('msg').innerHTML='<p class=error>Mật khẩu không khớp</p>';return;}
-document.getElementById('msg').innerHTML='<p>Đang xử lý...</p>';
+if(p1!==p2){document.getElementById('msg').innerHTML='<p class=error>Passwords do not match</p>';return;}
+document.getElementById('msg').innerHTML='<p>Processing...</p>';
 var res=await fetch('/api/auths/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:ev.target.token.value,newPassword:p1})});
 var data=await res.json();
-document.getElementById('msg').innerHTML=data.success?'<p class=success>'+data.message+'</p><p><a href=/swagger>Đăng nhập tại đây</a></p>':'<p class=error>'+data.message+'</p><p class=token-hint>Kiểm tra: token phải từ link email (?token=xxx), KHÔNG dùng JWT từ login.</p>';
+document.getElementById('msg').innerHTML=data.success?'<p class=success>'+data.message+'</p><p><a href=/swagger>Sign in here</a></p>':'<p class=error>'+data.message+'</p><p class=token-hint>Check: token must come from the email link (?token=xxx), DO NOT use JWT from login.</p>';
 };
 </script></body></html>";
     return Results.Content(html, "text/html; charset=utf-8");
