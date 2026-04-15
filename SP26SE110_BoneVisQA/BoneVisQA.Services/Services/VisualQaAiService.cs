@@ -29,7 +29,7 @@ public class VisualQaAiService : IVisualQaAiService
         "Hệ thống AI đang quá tải. Vui lòng thử lại sau.";
 
     private const int RagChunkFetch = 12;
-    private const int RagMaxCasesToEmbed = 40;
+    private const int RagCaseFetch = 12;
     private const int RagTopMerged = 8;
 
     private readonly BoneVisQADbContext _dbContext;
@@ -179,6 +179,7 @@ public class VisualQaAiService : IVisualQaAiService
             }
             else
             {
+                response.Citations = FilterCitationsAgainstContext(response.Citations, citationsFromRag);
                 var metaByChunkId = citationsFromRag
                     .Where(c => c.MedicalCaseId == null && c.ChunkId != Guid.Empty)
                     .ToDictionary(c => c.ChunkId, c => c);
@@ -209,6 +210,26 @@ public class VisualQaAiService : IVisualQaAiService
         return response;
     }
 
+    private static List<CitationItemDto> FilterCitationsAgainstContext(
+        IReadOnlyCollection<CitationItemDto> modelCitations,
+        IReadOnlyCollection<CitationItemDto> retrievedContextCitations)
+    {
+        var allowedChunkIds = retrievedContextCitations
+            .Where(c => c.MedicalCaseId == null && c.ChunkId != Guid.Empty)
+            .Select(c => c.ChunkId)
+            .ToHashSet();
+        var allowedCaseIds = retrievedContextCitations
+            .Where(c => c.MedicalCaseId.HasValue)
+            .Select(c => c.MedicalCaseId!.Value)
+            .ToHashSet();
+
+        return modelCitations
+            .Where(c =>
+                (c.MedicalCaseId.HasValue && allowedCaseIds.Contains(c.MedicalCaseId.Value)) ||
+                (!c.MedicalCaseId.HasValue && c.ChunkId != Guid.Empty && allowedChunkIds.Contains(c.ChunkId)))
+            .ToList();
+    }
+
     private async Task<(List<RagContextItem> Items, List<CitationItemDto> Citations)> BuildDualSourceRagAsync(
         float[] queryEmbedding,
         Vector queryVector,
@@ -232,49 +253,24 @@ public class VisualQaAiService : IVisualQaAiService
                 null))
             .ToList();
 
-        var caseRows = await _dbContext.MedicalCases
+        var topCases = await _dbContext.MedicalCases
             .AsNoTracking()
             .Where(mc => mc.IsApproved == true && mc.IsActive == true)
+            .Where(mc => mc.Embedding != null)
+            .Where(mc => mc.IndexingStatus == DocumentIndexingStatuses.Completed)
             .Where(mc => caseCategoryId == null || mc.CategoryId == caseCategoryId)
             .Where(mc => excludeCaseId == null || mc.Id != excludeCaseId.Value)
-            .OrderByDescending(mc => mc.UpdatedAt)
-            .Take(RagMaxCasesToEmbed)
+            .OrderBy(mc => mc.Embedding!.CosineDistance(queryVector))
+            .Take(RagCaseFetch)
             .ToListAsync(cancellationToken);
 
-        var caseItems = new List<RagContextItem>();
-        using var semaphore = new SemaphoreSlim(8);
-        try
-        {
-            var tasks = caseRows.Select(async mc =>
-            {
-                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
-                {
-                    var text = BuildMedicalCaseRagText(mc);
-                    if (string.IsNullOrWhiteSpace(text))
-                        return null;
-
-                    var emb = await _embeddingService.EmbedTextAsync(text, cancellationToken).ConfigureAwait(false);
-                    var sim = CalculateCosineSimilarity(queryEmbedding, emb);
-                    return new RagContextItem(sim, null, mc);
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }).ToList();
-
-            foreach (var t in tasks)
-            {
-                var item = await t.ConfigureAwait(false);
-                if (item != null)
-                    caseItems.Add(item);
-            }
-        }
-        catch
-        {
-            throw new InvalidOperationException(AiOverloadVietnameseMessage);
-        }
+        var caseItems = topCases
+            .Where(mc => mc.Embedding != null)
+            .Select(mc => new RagContextItem(
+                CalculateCosineSimilarity(queryEmbedding, mc.Embedding!.ToArray()),
+                null,
+                mc))
+            .ToList();
 
         var merged = chunkItems
             .Concat(caseItems)
@@ -309,13 +305,7 @@ public class VisualQaAiService : IVisualQaAiService
         return (merged, citations);
     }
 
-    private static string BuildMedicalCaseRagText(MedicalCase mc)
-    {
-        var desc = mc.Description?.Trim() ?? string.Empty;
-        var dx = mc.SuggestedDiagnosis?.Trim() ?? string.Empty;
-        var title = mc.Title?.Trim() ?? string.Empty;
-        return $"{title}\n{desc}\n{dx}".Trim();
-    }
+    private static string BuildMedicalCaseRagText(MedicalCase mc) => MedicalCaseIndexingProcessor.BuildIndexingText(mc);
 
     /// <summary>
     /// Enriches the text used for vector retrieval so ROI and image-backed questions bias toward relevant chunks (SEPS Image + RAG).
@@ -453,14 +443,14 @@ public class VisualQaAiService : IVisualQaAiService
                 if (item.Chunk != null)
                 {
                     var chunk = item.Chunk;
-                    sb.Append("(source: document_chunk, chunkId: ").Append(chunk.Id).Append(", similarity≈")
+                    sb.Append("(cite as [Doc:").Append(chunk.Id).Append("] in your answer; source: document_chunk, similarity≈")
                         .Append(item.Similarity.ToString("0.###")).Append(") ");
                     sb.AppendLine(chunk.Content ?? string.Empty);
                 }
                 else if (item.Case != null)
                 {
                     var mc = item.Case;
-                    sb.Append("(source: medical_case, caseId: ").Append(mc.Id).Append(", similarity≈")
+                    sb.Append("(cite as [Case:").Append(mc.Id).Append("] in your answer; source: medical_case, similarity≈")
                         .Append(item.Similarity.ToString("0.###")).Append(") ");
                     sb.AppendLine(BuildMedicalCaseRagText(mc));
                 }
@@ -490,15 +480,21 @@ public class VisualQaAiService : IVisualQaAiService
 
         sb.AppendLine();
         sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for optional fields when refusing or when not applicable):");
-        sb.AppendLine(@"
-{
-  ""answerText"": ""Your full educational answer here."",
-  ""suggestedDiagnosis"": ""Primary suggested diagnosis or null."",
-  ""differentialDiagnoses"": ""Other differential diagnoses or null."",
-  ""keyImagingFindings"": ""Key imaging signs to focus on, or null."",
-  ""reflectiveQuestions"": ""1-3 reflective questions for the student, or null.""
-}
-");
+        sb.AppendLine(
+            """
+            {
+              "answerText": "Full educational answer in Vietnamese. When you use a retrieved document chunk or medical case, insert inline markers exactly as [Doc:CHUNK_UUID] or [Case:CASE_UUID] matching the Context lines above.",
+              "suggestedDiagnosis": "Primary suggested diagnosis or null.",
+              "differentialDiagnoses": "Other differentials or null (string or list per schema).",
+              "keyImagingFindings": "Key imaging signs or null.",
+              "reflectiveQuestions": "1-3 reflective questions for the student (string), or null.",
+              "citations": [
+                { "kind": "Doc", "id": "00000000-0000-0000-0000-000000000000" },
+                { "kind": "Case", "id": "00000000-0000-0000-0000-000000000000" }
+              ]
+            }
+            """);
+        sb.AppendLine("The \"citations\" array must list every [Doc:...] and [Case:...] marker you relied on (kind is Doc or Case; id is the UUID). Use an empty array [] when no library sources were used.");
 
         return sb.ToString();
     }

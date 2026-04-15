@@ -6,18 +6,18 @@ using Microsoft.EntityFrameworkCore;
 namespace BoneVisQA.API.Services;
 
 /// <summary>
-/// Polls for documents with <c>indexing_status = Pending</c>, claims one row with <c>FOR UPDATE SKIP LOCKED</c>, and runs the RAG indexing pipeline.
+/// Polls <c>medical_cases</c> with <c>indexing_status = Pending</c>, claims a row with <c>FOR UPDATE SKIP LOCKED</c>, and writes <c>embedding</c>.
 /// </summary>
-public sealed class DocumentIndexingBackgroundService : BackgroundService
+public sealed class MedicalCaseIndexingBackgroundService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim WorkerGate = new(1, 1);
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<DocumentIndexingBackgroundService> _logger;
+    private readonly ILogger<MedicalCaseIndexingBackgroundService> _logger;
 
-    public DocumentIndexingBackgroundService(
+    public MedicalCaseIndexingBackgroundService(
         IServiceScopeFactory scopeFactory,
-        ILogger<DocumentIndexingBackgroundService> logger)
+        ILogger<MedicalCaseIndexingBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -29,7 +29,7 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
         {
             try
             {
-                await TryProcessOnePendingDocumentAsync(stoppingToken);
+                await TryProcessOnePendingCaseAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -37,7 +37,7 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[DocumentIndexing] Unexpected error in indexing loop.");
+                _logger.LogError(ex, "[MedicalCaseIndexing] Unexpected error in indexing loop.");
             }
 
             try
@@ -51,7 +51,7 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
         }
     }
 
-    private async Task TryProcessOnePendingDocumentAsync(CancellationToken stoppingToken)
+    private async Task TryProcessOnePendingCaseAsync(CancellationToken stoppingToken)
     {
         await WorkerGate.WaitAsync(stoppingToken);
         try
@@ -60,12 +60,14 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await using var transaction = await unitOfWork.Context.Database.BeginTransactionAsync(stoppingToken);
-        var locked = await unitOfWork.Context.Documents
+        var locked = await unitOfWork.Context.MedicalCases
             .FromSqlRaw(
                 """
-                SELECT * FROM documents
+                SELECT * FROM medical_cases
                 WHERE indexing_status = 'Pending'
-                ORDER BY created_at ASC NULLS LAST
+                  AND is_approved IS TRUE
+                  AND is_active IS TRUE
+                ORDER BY updated_at ASC NULLS LAST
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
                 """)
@@ -77,17 +79,17 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
             return;
         }
 
-        var doc = locked[0];
-        var docId = doc.Id;
-        doc.IndexingStatus = DocumentIndexingStatuses.Processing;
+        var mc = locked[0];
+        var caseId = mc.Id;
+        mc.IndexingStatus = DocumentIndexingStatuses.Processing;
         await unitOfWork.Context.SaveChangesAsync(stoppingToken);
         await transaction.CommitAsync(stoppingToken);
 
         await using var workScope = _scopeFactory.CreateAsyncScope();
-        var processor = workScope.ServiceProvider.GetRequiredService<IDocumentIndexingProcessor>();
+        var processor = workScope.ServiceProvider.GetRequiredService<IMedicalCaseIndexingProcessor>();
         try
         {
-            await processor.ProcessDocumentAsync(docId, stoppingToken);
+            await processor.ProcessMedicalCaseAsync(caseId, stoppingToken);
         }
         catch (OperationCanceledException)
         {
@@ -95,8 +97,8 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DocumentIndexing] Processor failed for document {DocumentId}.", docId);
-            await MarkFailedAsync(docId, workScope.ServiceProvider, stoppingToken);
+            _logger.LogError(ex, "[MedicalCaseIndexing] Processor failed for case {CaseId}.", caseId);
+            await MarkFailedAsync(caseId, workScope.ServiceProvider, stoppingToken);
         }
         }
         finally
@@ -105,23 +107,21 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
         }
     }
 
-    private async Task MarkFailedAsync(Guid documentId, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    private async Task MarkFailedAsync(Guid medicalCaseId, IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         try
         {
             var uow = serviceProvider.GetRequiredService<IUnitOfWork>();
-            var doc = await uow.DocumentRepository.GetByIdAsync(documentId);
-            if (doc != null)
+            var mc = await uow.Context.MedicalCases.FirstOrDefaultAsync(x => x.Id == medicalCaseId, cancellationToken);
+            if (mc != null)
             {
-                doc.IndexingStatus = DocumentIndexingStatuses.Failed;
-                doc.IndexingProgress = 100;
-                await uow.DocumentRepository.UpdateAsync(doc);
+                mc.IndexingStatus = DocumentIndexingStatuses.Failed;
                 await uow.SaveAsync();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DocumentIndexing] Could not set Failed for document {DocumentId}.", documentId);
+            _logger.LogError(ex, "[MedicalCaseIndexing] Could not set Failed for case {CaseId}.", medicalCaseId);
         }
     }
 }
