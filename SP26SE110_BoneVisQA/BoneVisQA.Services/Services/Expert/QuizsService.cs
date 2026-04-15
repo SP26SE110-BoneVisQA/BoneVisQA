@@ -131,7 +131,7 @@ namespace BoneVisQA.Services.Services.Expert
                 .GetByIdAsync(update.Id);
 
             if (quiz == null)
-                throw new KeyNotFoundException("Quiz không tồn tại.");
+                throw new KeyNotFoundException("Quiz does not exist.");
 
             quiz.Title = update.Title;
 
@@ -187,7 +187,7 @@ namespace BoneVisQA.Services.Services.Expert
                 .GetByIdAsync(quizId);
 
             if (quiz == null)
-                throw new KeyNotFoundException("Không tìm thấy quiz.");
+                throw new KeyNotFoundException("Quiz not found.");
 
             var questions = await _unitOfWork.QuizQuestionRepository
                 .FindAsync(q => q.QuizId == quizId);
@@ -229,14 +229,14 @@ namespace BoneVisQA.Services.Services.Expert
         public async Task<CreateQuizQuestionResponseDTO> CreateQuizQuestionAsync(Guid quizId, CreateQuizQuestionRequestDTO request)
         {
             var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-                ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+                ?? throw new KeyNotFoundException("Quiz not found.");
 
             MedicalCase? medicalCase = null;
             if (request.CaseId.HasValue)
             {
                 medicalCase = await _unitOfWork.MedicalCaseRepository
                     .GetByIdAsync(request.CaseId.Value)
-                    ?? throw new KeyNotFoundException("Không tìm thấy medical case.");
+                    ?? throw new KeyNotFoundException("Medical case not found.");
             }
 
             var question = new QuizQuestion
@@ -277,19 +277,19 @@ namespace BoneVisQA.Services.Services.Expert
                 .GetByIdAsync(update.QuestionId);
 
             if (question == null)
-                throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+                throw new KeyNotFoundException("Question not found.");
 
             var quiz = await _unitOfWork.QuizRepository
                 .GetByIdAsync(update.QuizId);
 
             if (quiz == null)
-                throw new KeyNotFoundException("Không tìm thấy quiz.");
+                throw new KeyNotFoundException("Quiz not found.");
 
             var medicalCase = await _unitOfWork.MedicalCaseRepository
                 .GetByIdAsync(update.CaseId);
 
             if (medicalCase == null)
-                throw new KeyNotFoundException("Không tìm thấy medical case.");
+                throw new KeyNotFoundException("Medical case not found.");
 
             question.QuizId = update.QuizId;
             question.CaseId = update.CaseId;
@@ -386,17 +386,17 @@ namespace BoneVisQA.Services.Services.Expert
         {
             var academicClass = await _unitOfWork.AcademicClassRepository
                 .GetByIdAsync(dto.ClassId)
-                ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+                ?? throw new KeyNotFoundException("Class not found.");
 
             var quiz = await _unitOfWork.QuizRepository
                 .GetByIdAsync(dto.QuizId)
-                ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+                ?? throw new KeyNotFoundException("Quiz not found.");
 
             var existing = await _unitOfWork.ClassQuizSessionRepository
                 .FirstOrDefaultAsync(cq => cq.ClassId == dto.ClassId && cq.QuizId == dto.QuizId);
 
             if (existing != null)
-                throw new InvalidOperationException("Quiz đã được gán cho lớp này rồi.");
+                throw new InvalidOperationException("This quiz has already been assigned to this class.");
 
             var openTime = ToUtc(dto.OpenTime) ?? quiz.OpenTime;
             var closeTime = ToUtc(dto.CloseTime) ?? quiz.CloseTime;
@@ -477,17 +477,17 @@ namespace BoneVisQA.Services.Services.Expert
         {
             var attempt = await _unitOfWork.QuizAttemptRepository
                 .GetByIdAsync(attemptId)
-                ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+                ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
             var quiz = await _unitOfWork.QuizRepository
                 .GetByIdAsync(attempt.QuizId)
-                ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+                ?? throw new KeyNotFoundException("Quiz not found.");
 
             var questions = await _unitOfWork.QuizQuestionRepository
                 .FindAsync(q => q.QuizId == attempt.QuizId);
 
             if (!questions.Any())
-                throw new InvalidOperationException("Quiz chưa có câu hỏi.");
+                throw new InvalidOperationException("This quiz has no questions yet.");
 
             var studentAnswers = await _unitOfWork.StudentQuizAnswerRepository
                 .FindAsync(a => a.AttemptId == attemptId);

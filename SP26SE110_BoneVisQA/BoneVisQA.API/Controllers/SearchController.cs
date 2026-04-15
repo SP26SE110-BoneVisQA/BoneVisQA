@@ -33,7 +33,7 @@ public class SearchController : ControllerBase
 
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var roles = User.FindAll(ClaimTypes.Role)
             .Select(c => c.Value)

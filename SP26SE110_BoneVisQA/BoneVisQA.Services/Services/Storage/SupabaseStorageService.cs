@@ -110,6 +110,26 @@ public class SupabaseStorageService : ISupabaseStorageService
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<bool> MoveFileAsync(
+        string bucket,
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken = default)
+    {
+        var moveUrl = $"{_supabaseUrl}/storage/v1/object/move";
+        using var request = new HttpRequestMessage(HttpMethod.Post, moveUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        request.Content = JsonContent.Create(new Dictionary<string, object?>
+        {
+            ["bucketId"] = bucket,
+            ["sourceKey"] = sourcePath.Trim().Replace('\\', '/').TrimStart('/'),
+            ["destinationKey"] = destinationPath.Trim().Replace('\\', '/').TrimStart('/')
+        });
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
     public async Task<IReadOnlyList<string>> ListObjectPathsAsync(
         string bucket,
         string prefix,

@@ -9,51 +9,90 @@ namespace BoneVisQA.Services.Services;
 
 public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
 {
+    private const int EmbeddingBatchSize = 100;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IIndexingExecutionGate _indexingExecutionGate;
     private readonly ILogger<MedicalCaseIndexingProcessor> _logger;
 
     public MedicalCaseIndexingProcessor(
         IUnitOfWork unitOfWork,
         IEmbeddingService embeddingService,
+        IIndexingExecutionGate indexingExecutionGate,
         ILogger<MedicalCaseIndexingProcessor> logger)
     {
         _unitOfWork = unitOfWork;
         _embeddingService = embeddingService;
+        _indexingExecutionGate = indexingExecutionGate;
         _logger = logger;
     }
 
     public async Task ProcessMedicalCaseAsync(Guid medicalCaseId, CancellationToken cancellationToken = default)
     {
-        var mc = await _unitOfWork.Context.MedicalCases
-            .FirstOrDefaultAsync(x => x.Id == medicalCaseId, cancellationToken)
-            ?? throw new InvalidOperationException($"Medical case {medicalCaseId} not found.");
-
-        var text = BuildIndexingText(mc);
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            _logger.LogWarning("[MedicalCaseIndexing] Empty text for case {CaseId}; marking Failed.", medicalCaseId);
-            mc.IndexingStatus = DocumentIndexingStatuses.Failed;
-            await _unitOfWork.SaveAsync();
-            return;
-        }
-
-        float[] embedding;
+        await using var queueLease = await _indexingExecutionGate.AcquireAsync(cancellationToken);
+        MedicalCase? mc = null;
+        var completed = false;
         try
         {
-            embedding = await _embeddingService.EmbedTextAsync(text, cancellationToken);
+            mc = await _unitOfWork.Context.MedicalCases
+                .FirstOrDefaultAsync(x => x.Id == medicalCaseId, cancellationToken)
+                ?? throw new InvalidOperationException($"Medical case {medicalCaseId} not found.");
+
+            var text = BuildIndexingText(mc);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                _logger.LogWarning("[MedicalCaseIndexing] Empty text for case {CaseId}; marking Failed.", medicalCaseId);
+                return;
+            }
+
+            var estimatedRequests = (int)Math.Ceiling(1d / EmbeddingBatchSize);
+            _logger.LogInformation(
+                "[Queue] Starting indexing for MedicalCase {Id}. Estimated requests: {Count}",
+                medicalCaseId,
+                estimatedRequests);
+
+            var embeddings = await _embeddingService.BatchEmbedContentsAsync(new[] { text }, cancellationToken);
+            if (embeddings.Count == 0)
+                throw new InvalidOperationException("Batch embedding returned no vectors for medical case.");
+
+            mc.Embedding = new Vector(embeddings[0]);
+            mc.IndexingStatus = DocumentIndexingStatuses.Completed;
+            await _unitOfWork.SaveAsync();
+            completed = true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("[MedicalCaseIndexing] Processing cancelled for case {CaseId}.", medicalCaseId);
+            throw;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[MedicalCaseIndexing] Embedding API failed for case {CaseId}.", medicalCaseId);
-            mc.IndexingStatus = DocumentIndexingStatuses.Failed;
-            await _unitOfWork.SaveAsync();
-            return;
         }
+        finally
+        {
+            if (!completed)
+            {
+                try
+                {
+                    if (mc == null)
+                    {
+                        mc = await _unitOfWork.Context.MedicalCases
+                            .FirstOrDefaultAsync(x => x.Id == medicalCaseId, CancellationToken.None);
+                    }
 
-        mc.Embedding = new Vector(embedding);
-        mc.IndexingStatus = DocumentIndexingStatuses.Completed;
-        await _unitOfWork.SaveAsync();
+                    if (mc != null)
+                    {
+                        mc.IndexingStatus = DocumentIndexingStatuses.Failed;
+                        await _unitOfWork.SaveAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[MedicalCaseIndexing] Could not set Failed for case {CaseId}.", medicalCaseId);
+                }
+            }
+        }
     }
 
     /// <summary>Matches RAG retrieval text: title, description, suggested diagnosis, key findings.</summary>

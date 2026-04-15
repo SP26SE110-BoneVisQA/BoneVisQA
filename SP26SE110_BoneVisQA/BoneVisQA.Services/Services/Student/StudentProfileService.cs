@@ -21,7 +21,7 @@ public class StudentProfileService : IStudentProfileService
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            ?? throw new KeyNotFoundException("User not found.");
 
         return Map(user);
     }
@@ -32,7 +32,7 @@ public class StudentProfileService : IStudentProfileService
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            ?? throw new KeyNotFoundException("User not found.");
 
         user.FullName = request.FullName.Trim();
         user.SchoolCohort = string.IsNullOrWhiteSpace(request.SchoolCohort) ? null : request.SchoolCohort.Trim();

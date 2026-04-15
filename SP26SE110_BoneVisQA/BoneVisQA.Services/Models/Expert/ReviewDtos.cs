@@ -47,6 +47,8 @@ public class ExpertCitationDto
     public string? SourceText { get; set; }
     public string? ReferenceUrl { get; set; }
     public int? PageNumber { get; set; }
+    public int? StartPage { get; set; }
+    public int? EndPage { get; set; }
 }
 
 public class ExpertEscalatedAnswerDto

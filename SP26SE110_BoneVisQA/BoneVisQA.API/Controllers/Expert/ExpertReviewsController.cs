@@ -32,7 +32,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertReviewService.GetCaseAnswersAsync(expertId.Value);
         return Ok(result);
@@ -45,7 +45,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertReviewService.GetEscalatedAnswersAsync(expertId.Value);
         return Ok(result);
@@ -64,7 +64,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -95,7 +95,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -122,7 +122,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -135,7 +135,7 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message.Contains("bắt buộc", StringComparison.OrdinalIgnoreCase)
+            return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
                 ? BadRequest(new { message = ex.Message })
                 : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
@@ -151,7 +151,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
@@ -167,7 +167,7 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message.Contains("Chỉ có thể", StringComparison.OrdinalIgnoreCase)
+            return ex.Message.Contains("Only", StringComparison.OrdinalIgnoreCase)
                 ? BadRequest(new { message = ex.Message })
                 : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
@@ -186,7 +186,7 @@ public class ExpertReviewsController : ControllerBase
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -199,7 +199,7 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message.Contains("bắt buộc", StringComparison.OrdinalIgnoreCase)
+            return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
                 ? BadRequest(new { message = ex.Message })
                 : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }

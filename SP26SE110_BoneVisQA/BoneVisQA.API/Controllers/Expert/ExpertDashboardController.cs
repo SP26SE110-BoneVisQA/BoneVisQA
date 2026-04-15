@@ -25,7 +25,7 @@ public class ExpertDashboardController : ControllerBase
     {
         var expertId = GetUserId();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertDashboardService.GetDashboardStatsAsync(expertId.Value);
         return Ok(result);
@@ -36,7 +36,7 @@ public class ExpertDashboardController : ControllerBase
     {
         var expertId = GetUserId();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertDashboardService.GetPendingReviewsAsync(expertId.Value);
         return Ok(result);
@@ -47,7 +47,7 @@ public class ExpertDashboardController : ControllerBase
     {
         var expertId = GetUserId();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertDashboardService.GetRecentCasesAsync(expertId.Value);
         return Ok(result);
@@ -58,7 +58,7 @@ public class ExpertDashboardController : ControllerBase
     {
         var expertId = GetUserId();
         if (expertId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _expertDashboardService.GetActivityAsync(expertId.Value);
         return Ok(result);

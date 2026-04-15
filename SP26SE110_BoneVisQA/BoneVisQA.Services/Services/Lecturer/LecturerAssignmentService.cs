@@ -50,7 +50,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ToList();
 
         if (caseIds.Count == 0)
-            throw new InvalidOperationException("caseIds phải chứa ít nhất một phần tử hợp lệ.");
+            throw new InvalidOperationException("caseIds must contain at least one valid item.");
 
         var medicalCases = await _unitOfWork.Context.MedicalCases
             .Where(c => caseIds.Contains(c.Id))
@@ -59,7 +59,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         _logger.LogInformation("[AssignCases] Step2 LoadMedicalCases done in {Elapsed}s, found={Count}", elapsed2, medicalCases.Count);
 
         if (medicalCases.Count != caseIds.Count)
-            throw new KeyNotFoundException("Một hoặc nhiều case không tồn tại.");
+            throw new KeyNotFoundException("One or more cases were not found.");
 
         var existingAssignments = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
@@ -127,13 +127,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var academicClass = await EnsureLecturerOwnsClassAsync(lecturerId, classId);
 
         if (request.QuizId == Guid.Empty)
-            throw new InvalidOperationException("quizId là bắt buộc.");
+            throw new InvalidOperationException("quizId is required.");
 
         if (request.OpenTime.HasValue && request.CloseTime.HasValue && request.OpenTime > request.CloseTime)
-            throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
+            throw new InvalidOperationException("openTime must be earlier than or equal to closeTime.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(x => x.ClassId == classId && x.QuizId == request.QuizId);
@@ -197,19 +197,19 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 .ThenInclude(q => q!.ClassQuizSessions)
                     .ThenInclude(cqs => cqs.Class)
             .FirstOrDefaultAsync(a => a.Id == attemptId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         var classSession = attempt.Quiz?.ClassQuizSessions?.FirstOrDefault();
         if (classSession == null)
-            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+            throw new InvalidOperationException("This quiz is not assigned through a class.");
 
         // Kiểm tra lecturer sở hữu lớp
         var academicClass = classSession.Class;
         if (academicClass == null || academicClass.LecturerId != lecturerId)
-            throw new UnauthorizedAccessException("Bạn không có quyền thực hiện thao tác này.");
+            throw new UnauthorizedAccessException("You do not have permission to perform this action.");
 
         if (!attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Sinh viên chưa nộp bài. Không cần bật retake.");
+            throw new InvalidOperationException("The student has not submitted yet. Retake does not need to be enabled.");
 
         // Xóa đáp án cũ
         var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
@@ -238,7 +238,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phân công quiz cho lớp này.");
+            ?? throw new KeyNotFoundException("Quiz assignment for this class was not found.");
 
         var completedAttempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId && a.CompletedAt.HasValue)
@@ -281,7 +281,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentEmail] Loaded {Count} recipients for class {ClassId} — firing background send", items.Count, classId);
@@ -368,7 +368,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentUpdateEmail] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
@@ -437,7 +437,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     {
         return await _unitOfWork.Context.AcademicClasses
             .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == lecturerId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học thuộc quyền giảng viên.");
+            ?? throw new KeyNotFoundException("No class under this lecturer was found.");
     }
 
     // ── Quiz Review Methods ───────────────────────────────────────────────────────
@@ -470,7 +470,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             AttemptId = a.Id,
             StudentId = a.StudentId,
-            StudentName = a.Student.FullName ?? "Sinh viên",
+            StudentName = a.Student.FullName ?? "Student",
             StudentEmail = a.Student.Email ?? "",
             Score = a.Score,
             StartedAt = a.StartedAt,
@@ -495,10 +495,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
@@ -510,7 +510,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             QuizId = attempt.QuizId,
             QuizTitle = quiz.Title,
             StudentId = attempt.StudentId,
-            StudentName = attempt.Student.FullName ?? "Sinh viên",
+            StudentName = attempt.Student.FullName ?? "Student",
             Score = attempt.Score,
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
@@ -545,7 +545,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
         // Cập nhật điểm nếu có
         if (request.Score.HasValue)
@@ -581,7 +581,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
         if (session == null)
-            throw new KeyNotFoundException("Quiz này chưa được gắn cho lớp học.");
+            throw new KeyNotFoundException("This quiz has not been assigned to a class.");
     }
 
     private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
@@ -597,7 +597,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     /// <summary>Lấy chi tiết một assignment (case hoặc quiz) theo ID.</summary>
     public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
     {
-        // Thử tìm trong ClassCases (case assignment)
+        // Try finding in ClassCases (case assignment)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -633,7 +633,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             };
         }
 
-        // Thử tìm trong ClassQuizSessions (quiz assignment)
+        // Try finding in ClassQuizSessions (quiz assignment)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Class)
@@ -641,7 +641,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         var quizTotalStudents = await _unitOfWork.Context.ClassEnrollments
             .CountAsync(e => e.ClassId == quizSession.ClassId);
@@ -684,10 +684,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         };
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
     {
-        // Thử cập nhật ClassCase
+        // Try updating ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .Include(cc => cc.Class)
             .Include(cc => cc.Case)
@@ -707,22 +707,22 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 await QueueAssignmentUpdateEmailsAsync(
                     classCase.ClassId,
                     classCase.Class.ClassName,
-                    classCase.Case.Title ?? "Bài tập ca lâm sàng",
-                    "Ca Lâm Sàng",
+                    classCase.Case.Title ?? "Clinical case assignment",
+                    "Clinical Case",
                     classCase.DueDate);
             }
 
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
-        // Thử cập nhật ClassQuizSession
+        // Try updating ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .Include(cqs => cqs.Class)
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         if (request.DueDate.HasValue)
             quizSession.CloseTime = ToUtc(request.DueDate);
@@ -754,10 +754,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return await GetAssignmentByIdAsync(assignmentId);
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     public async Task DeleteAssignmentAsync(Guid assignmentId)
     {
-        // Thử xóa ClassCase
+        // Try deleting ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
 
@@ -768,21 +768,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             return;
         }
 
-        // Thử xóa ClassQuizSession
+        // Try deleting ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         _unitOfWork.Context.ClassQuizSessions.Remove(quizSession);
         await _unitOfWork.SaveAsync();
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get submission list for an assignment.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
     {
-        // Thử lấy submissions từ ClassCases (case)
+        // Try getting submissions from ClassCases (case)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -812,12 +812,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }).ToList();
         }
 
-        // Lấy submissions từ ClassQuizSessions (quiz)
+        // Get submissions from ClassQuizSessions (quiz)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var quizEnrollments = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -843,7 +843,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }).ToList();
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(
         Guid assignmentId, UpdateSubmissionsRequestDto request)
     {
@@ -851,7 +851,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts

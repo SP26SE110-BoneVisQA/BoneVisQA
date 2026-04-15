@@ -24,7 +24,7 @@ public class LecturerDashboardController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerDashboardService.GetDashboardStatsAsync(lecturerId.Value);
         return Ok(result);
@@ -40,7 +40,7 @@ public class LecturerDashboardController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerDashboardService.GetAnalyticsAsync(lecturerId.Value);
         return Ok(result);

@@ -50,13 +50,22 @@ public class StudentRepository : IStudentRepository
             query = query.Where(c => c.Difficulty == filter.Difficulty);
         }
 
-        if (!string.IsNullOrEmpty(filter.Location) || !string.IsNullOrEmpty(filter.LessonType))
+        var lesionType = filter.LesionType ?? filter.LessonType;
+        if (!string.IsNullOrEmpty(filter.Location) || !string.IsNullOrEmpty(lesionType))
         {
-            var tagTypes = new List<string>();
-            if (!string.IsNullOrEmpty(filter.Location)) tagTypes.Add(filter.Location);
-            if (!string.IsNullOrEmpty(filter.LessonType)) tagTypes.Add(filter.LessonType);
+            if (!string.IsNullOrEmpty(filter.Location))
+            {
+                query = query.Where(c => c.CaseTags.Any(ct =>
+                    ct.Tag.Type == "Location" &&
+                    ct.Tag.Name == filter.Location));
+            }
 
-            query = query.Where(c => c.CaseTags.Any(ct => tagTypes.Contains(ct.Tag.Type)));
+            if (!string.IsNullOrEmpty(lesionType))
+            {
+                query = query.Where(c => c.CaseTags.Any(ct =>
+                    (ct.Tag.Type == "Lesion Type" || ct.Tag.Type == "Lesion") &&
+                    ct.Tag.Name == lesionType));
+            }
         }
 
         return await query.OrderByDescending(c => c.CreatedAt).ToListAsync();

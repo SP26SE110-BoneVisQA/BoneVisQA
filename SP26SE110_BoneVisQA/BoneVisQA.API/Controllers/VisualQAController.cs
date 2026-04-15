@@ -14,7 +14,7 @@ namespace BoneVisQA.API.Controllers;
 
 public class VisualQAFileUploadRequest
 {
-    [DefaultValue("Nguyên nhân gây ra thoái hóa khớp là gì?")]
+    [DefaultValue("What causes osteoarthritis?")]
     public string QuestionText { get; set; } = string.Empty;
     public IFormFile? CustomImage { get; set; }
 
@@ -82,14 +82,14 @@ public class VisualQAController : ControllerBase
         var isFollowUpTurn = formRequest.SessionId.HasValue && formRequest.SessionId.Value != Guid.Empty;
 
         if (!isFollowUpTurn && (formRequest.CustomImage == null || formRequest.CustomImage.Length == 0))
-            return BadRequest(new { message = "File không được để trống." });
+            return BadRequest(new { message = "File must not be empty." });
         if (formRequest.CustomImage != null && formRequest.CustomImage.Length > MaxVisualImageBytes)
         {
             return BadRequest(new ProblemDetails
             {
                 Title = "Invalid request",
                 Status = StatusCodes.Status400BadRequest,
-                Detail = "Ảnh vượt quá giới hạn 5MB.",
+                Detail = "Image exceeds the 5MB limit.",
                 Instance = HttpContext.Request.Path
             });
         }
@@ -152,7 +152,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "SESSION_EXPIRED",
-                    message = "Phiên hỏi đáp đã hết hạn do không có hoạt động trong 24 giờ."
+                    message = "The Q&A session expired due to 24 hours of inactivity."
                 });
             }
 
@@ -161,7 +161,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "SESSION_READ_ONLY",
-                    message = "Phiên hỏi đáp này chỉ được xem, không thể tiếp tục thảo luận."
+                    message = "This Q&A session is view-only and cannot be continued."
                 });
             }
 
@@ -170,7 +170,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "TURN_LIMIT_EXCEEDED",
-                    message = "Phiên chat đã đạt giới hạn 3 câu hỏi."
+                    message = "This chat session has reached the 3-question limit."
                 });
             }
 
@@ -208,13 +208,13 @@ public class VisualQAController : ControllerBase
                 return StatusCode(StatusCodes.Status500InternalServerError, new
                 {
                     errorCode = "INTERNAL_SERVER_ERROR",
-                    message = "Hệ thống gặp sự cố khi xử lý dữ liệu. Đã hủy file tạm thời, vui lòng thử lại."
+                    message = "The system encountered an error while processing data. Temporary file cleanup completed; please try again."
                 });
             }
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message == "Hệ thống AI đang quá tải. Vui lòng thử lại sau."
+            return ex.Message == "The AI system is overloaded. Please try again later."
                 ? StatusCode(StatusCodes.Status503ServiceUnavailable, new
                 {
                     errorCode = "AI_SERVICE_UNAVAILABLE",
@@ -261,7 +261,7 @@ public class VisualQAController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.ImageUrl)
             && !IsSupabaseHostedImageUrl(request.ImageUrl, _configuration["Supabase:Url"]))
         {
-            return BadRequest(new { message = "Chỉ hỗ trợ phân tích hình ảnh được lưu trữ trên hệ thống." });
+            return BadRequest(new { message = "Only analysis of images stored in the system is supported." });
         }
 
         Guid sessionId;
@@ -288,7 +288,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "SESSION_EXPIRED",
-                    message = "Phiên hỏi đáp đã hết hạn do không có hoạt động trong 24 giờ."
+                    message = "The Q&A session expired due to 24 hours of inactivity."
                 });
             }
 
@@ -297,7 +297,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "SESSION_READ_ONLY",
-                    message = "Phiên hỏi đáp này chỉ được xem, không thể tiếp tục thảo luận."
+                    message = "This Q&A session is view-only and cannot be continued."
                 });
             }
 
@@ -306,7 +306,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "TURN_LIMIT_EXCEEDED",
-                    message = "Phiên chat đã đạt giới hạn 3 câu hỏi."
+                    message = "This chat session has reached the 3-question limit."
                 });
             }
 
@@ -364,7 +364,7 @@ public class VisualQAController : ControllerBase
                 return BadRequest(new
                 {
                     errorCode = "SESSION_EXPIRED",
-                    message = "Phiên hỏi đáp đã hết hạn do không có hoạt động trong 24 giờ."
+                    message = "The Q&A session expired due to 24 hours of inactivity."
                 });
             }
 

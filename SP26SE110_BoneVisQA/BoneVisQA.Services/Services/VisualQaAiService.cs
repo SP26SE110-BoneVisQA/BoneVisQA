@@ -18,15 +18,15 @@ public class VisualQaAiService : IVisualQaAiService
     private const double MinimumRelevantSimilarity = 0.72d;
     private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
     private const string InvalidBoneXrayUserMessage =
-        "Hệ thống phát hiện đây không phải là ảnh X-quang xương người hoặc ảnh không hợp lệ. Vui lòng tải lên đúng hình ảnh X-quang y tế để được hỗ trợ phân tích.";
+        "The system detected that this is not a valid human bone X-ray image. Please upload a proper medical X-ray image for analysis support.";
     private const string RagGeneralKnowledgeDisclaimer =
-        "(Lưu ý: Phân tích này dựa trên kiến thức AI tổng quát vì không tìm thấy tài liệu tham chiếu trực tiếp trong thư viện của hệ thống).";
+        "(Note: This analysis is based on general AI knowledge because no direct reference documents were found in the system library).";
     private const string TemporaryVectorSearchUnavailableAnswer =
         "Vector search is temporarily unavailable due to high network demand. Please try again later.";
     private const string TemporaryAiGenerationUnavailableAnswer =
         "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
     private const string AiOverloadVietnameseMessage =
-        "Hệ thống AI đang quá tải. Vui lòng thử lại sau.";
+        "The AI system is overloaded. Please try again later.";
 
     private const int RagChunkFetch = 12;
     private const int RagCaseFetch = 12;
@@ -194,12 +194,16 @@ public class VisualQaAiService : IVisualQaAiService
                         citation.SourceText = metaCase.SourceText;
                         citation.ReferenceUrl = metaCase.ReferenceUrl;
                         citation.PageNumber = metaCase.PageNumber;
+                        citation.StartPage = metaCase.StartPage;
+                        citation.EndPage = metaCase.EndPage;
                     }
                     else if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
                     {
                         citation.SourceText = meta.SourceText;
                         citation.ReferenceUrl = meta.ReferenceUrl;
                         citation.PageNumber = meta.PageNumber;
+                        citation.StartPage = meta.StartPage;
+                        citation.EndPage = meta.EndPage;
                     }
                 }
             }
@@ -287,7 +291,9 @@ public class VisualQaAiService : IVisualQaAiService
                     ChunkId = r.Chunk.Id,
                     MedicalCaseId = null,
                     ReferenceUrl = BuildCitationUrl(r.Chunk.Doc?.FilePath, r.Chunk.ChunkOrder),
-                    PageNumber = r.Chunk.ChunkOrder + 1,
+                    PageNumber = r.Chunk.StartPage > 0 ? r.Chunk.StartPage : r.Chunk.ChunkOrder + 1,
+                    StartPage = r.Chunk.StartPage > 0 ? r.Chunk.StartPage : r.Chunk.ChunkOrder + 1,
+                    EndPage = r.Chunk.EndPage > 0 ? r.Chunk.EndPage : r.Chunk.ChunkOrder + 1,
                     SourceText = r.Chunk.Content
                 };
             }
@@ -298,6 +304,8 @@ public class VisualQaAiService : IVisualQaAiService
                 MedicalCaseId = r.Case!.Id,
                 ReferenceUrl = null,
                 PageNumber = null,
+                StartPage = null,
+                EndPage = null,
                 SourceText = BuildMedicalCaseRagText(r.Case)
             };
         }).ToList();
@@ -317,7 +325,7 @@ public class VisualQaAiService : IVisualQaAiService
         {
             var boxHint = TryFormatBboxRagHint(request);
             var roiLine =
-                "[Ngữ cảnh truy vấn RAG: có vùng ROI (hình chữ nhật chuẩn hóa) trên ảnh; ưu tiên tài liệu liên quan chẩn đoán hình ảnh cơ xương khớp tại vùng được đánh dấu.]";
+                "[RAG query context: there is an ROI region (normalized rectangle) on the image; prioritize documents related to musculoskeletal imaging diagnosis at the marked area.]";
             return string.IsNullOrEmpty(boxHint)
                 ? $"{q}\n\n{roiLine}"
                 : $"{q}\n\n{roiLine}\n{boxHint}";
@@ -325,7 +333,7 @@ public class VisualQaAiService : IVisualQaAiService
 
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
         {
-            return $"{q}\n\n[Ngữ cảnh truy vấn RAG: câu hỏi kèm hình ảnh y khoa.]";
+            return $"{q}\n\n[RAG query context: question includes a medical image.]";
         }
 
         return q;
@@ -361,8 +369,8 @@ public class VisualQaAiService : IVisualQaAiService
         if (string.IsNullOrWhiteSpace(answerText))
             return false;
 
-        return answerText.Contains("không phải dữ liệu y khoa hợp lệ", StringComparison.OrdinalIgnoreCase)
-               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase);
+        return answerText.Contains("not valid medical data", StringComparison.OrdinalIgnoreCase)
+               || answerText.Contains("not related to the medical domain", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildGeminiPrompt(
@@ -385,22 +393,22 @@ public class VisualQaAiService : IVisualQaAiService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .DefaultIfEmpty("N/A");
 
-            sb.AppendLine("Bạn là một Gia sư Y khoa (Medical Tutor).");
-            sb.AppendLine("Dưới đây là thông tin TỔNG QUAN của ca bệnh này:");
-            sb.AppendLine($"- Độ khó: {(string.IsNullOrWhiteSpace(predefinedCase.Difficulty) ? "N/A" : predefinedCase.Difficulty)}");
-            sb.AppendLine($"- Nhãn: {string.Join(", ", tagText)}");
+            sb.AppendLine("You are a Medical Tutor.");
+            sb.AppendLine("Below is the OVERVIEW information for this case:");
+            sb.AppendLine($"- Difficulty: {(string.IsNullOrWhiteSpace(predefinedCase.Difficulty) ? "N/A" : predefinedCase.Difficulty)}");
+            sb.AppendLine($"- Tags: {string.Join(", ", tagText)}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.Description))
                 sb.AppendLine($"- Description: {predefinedCase.Description}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.SuggestedDiagnosis))
-                sb.AppendLine($"- Chẩn đoán: {predefinedCase.SuggestedDiagnosis}");
+                sb.AppendLine($"- Diagnosis: {predefinedCase.SuggestedDiagnosis}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.KeyFindings))
-                sb.AppendLine($"- Dấu hiệu chính: {predefinedCase.KeyFindings}");
+                sb.AppendLine($"- Key findings: {predefinedCase.KeyFindings}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.ReflectiveQuestions))
-                sb.AppendLine($"- Câu hỏi phản tư: {predefinedCase.ReflectiveQuestions}");
-            sb.AppendLine("LƯU Ý QUAN TRỌNG TỐI CAO: KHÔNG ĐƯỢC trả lời thẳng đáp án (Diagnosis) ngay lập tức cho sinh viên.");
-            sb.AppendLine("Hãy dùng phương pháp Socratic, đặt câu hỏi ngược lại dựa trên 'ReflectiveQuestions' và 'KeyFindings' để dẫn dắt sinh viên tự suy nghĩ.");
-            sb.AppendLine($"Lượt hiện tại của sinh viên trong phiên này: {currentTurnNumber}.");
-            sb.AppendLine("Chỉ đưa ra đáp án chốt khi sinh viên đã hỏi đến lượt thứ 3 hoặc bế tắc.");
+                sb.AppendLine($"- Reflective questions: {predefinedCase.ReflectiveQuestions}");
+            sb.AppendLine("CRITICAL NOTE: DO NOT provide the diagnosis directly to the student immediately.");
+            sb.AppendLine("Use the Socratic method; ask guiding questions based on 'ReflectiveQuestions' and 'KeyFindings' to lead the student to think independently.");
+            sb.AppendLine($"Current student turn in this session: {currentTurnNumber}.");
+            sb.AppendLine("Only provide the final answer when the student reaches turn 3 or gets stuck.");
             sb.AppendLine();
         }
 
@@ -431,7 +439,7 @@ public class VisualQaAiService : IVisualQaAiService
 
         if (ragItems.Count > 0)
         {
-            sb.AppendLine("Dữ liệu tham khảo (Context) dưới đây có thể không liên quan. Nếu thấy không liên quan đến câu hỏi, hãy bỏ qua nó.");
+            sb.AppendLine("The reference context below may be irrelevant. If it is unrelated to the question, ignore it.");
             sb.AppendLine();
             sb.AppendLine("## Retrieved reference context (documents + medical case library; use only to support your answer):");
             sb.AppendLine();
@@ -476,7 +484,7 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine();
 
         // Hard requirement: Vietnamese only, inserted immediately before JSON requirement.
-        sb.AppendLine("Bạn bắt buộc phải suy luận, giải thích và trả lời hoàn toàn bằng Tiếng Việt (Vietnamese) theo đúng chuẩn Y khoa.");
+        sb.AppendLine("You must reason, explain, and respond entirely in professional medical Vietnamese.");
 
         sb.AppendLine();
         sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for optional fields when refusing or when not applicable):");

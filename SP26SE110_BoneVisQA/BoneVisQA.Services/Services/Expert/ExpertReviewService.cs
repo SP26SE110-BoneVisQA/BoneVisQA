@@ -116,7 +116,7 @@ public class ExpertReviewService : IExpertReviewService
     public async Task<ExpertEscalatedAnswerDto> RespondToSessionAsync(Guid expertId, Guid sessionId, string content)
     {
         if (string.IsNullOrWhiteSpace(content))
-            throw new InvalidOperationException("Nội dung phản hồi của chuyên gia là bắt buộc.");
+            throw new InvalidOperationException("Expert feedback content is required.");
 
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Student)
@@ -128,7 +128,7 @@ public class ExpertReviewService : IExpertReviewService
                     .ThenInclude(c => c.Chunk)
                         .ThenInclude(ch => ch.Doc)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            ?? throw new KeyNotFoundException("Q&A session not found.");
 
         var enrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -137,7 +137,7 @@ public class ExpertReviewService : IExpertReviewService
                 e.Class.ExpertId == expertId);
 
         if (enrollment == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền phản hồi phiên hỏi đáp này.");
+            throw new InvalidOperationException("The expert does not have permission to respond to this Q&A session.");
 
         var now = DateTime.UtcNow;
         var expertMessage = new QAMessage
@@ -195,7 +195,7 @@ public class ExpertReviewService : IExpertReviewService
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            ?? throw new KeyNotFoundException("Q&A session not found.");
 
         var enrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -204,7 +204,7 @@ public class ExpertReviewService : IExpertReviewService
                 e.Class.ExpertId == expertId);
 
         if (enrollment == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền duyệt phiên hỏi đáp này.");
+            throw new InvalidOperationException("The expert does not have permission to approve this Q&A session.");
 
         session.Status = "ExpertApproved";
         session.ExpertId = expertId;
@@ -215,18 +215,18 @@ public class ExpertReviewService : IExpertReviewService
     public async Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Description))
-            throw new InvalidOperationException("Description là bắt buộc.");
+            throw new InvalidOperationException("Description is required.");
         if (string.IsNullOrWhiteSpace(request.SuggestedDiagnosis))
-            throw new InvalidOperationException("SuggestedDiagnosis là bắt buộc.");
+            throw new InvalidOperationException("SuggestedDiagnosis is required.");
         if (string.IsNullOrWhiteSpace(request.KeyFindings))
-            throw new InvalidOperationException("KeyFindings là bắt buộc.");
+            throw new InvalidOperationException("KeyFindings is required.");
         if (string.IsNullOrWhiteSpace(request.ReflectiveQuestions))
-            throw new InvalidOperationException("ReflectiveQuestions là bắt buộc.");
+            throw new InvalidOperationException("ReflectiveQuestions is required.");
 
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            ?? throw new KeyNotFoundException("Q&A session not found.");
 
         var enrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -235,16 +235,16 @@ public class ExpertReviewService : IExpertReviewService
                 e.Class.ExpertId == expertId);
 
         if (enrollment == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền đưa phiên hỏi đáp này vào thư viện.");
+            throw new InvalidOperationException("The expert does not have permission to move this Q&A session to the library.");
 
         if (!string.Equals(session.Status, "ExpertApproved", StringComparison.Ordinal))
-            throw new InvalidOperationException("Chỉ có thể đưa vào thư viện khi phiên đã được chuyên gia duyệt.");
+            throw new InvalidOperationException("This session can be moved to the library only after expert approval.");
 
         if (session.PromotedCaseId.HasValue)
-            throw new InvalidOperationException("Ca này đã được đưa vào thư viện.");
+            throw new InvalidOperationException("This case has already been added to the library.");
 
         if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
-            throw new InvalidOperationException("Chỉ có thể đưa ảnh tự tải lên vào thư viện.");
+            throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
 
         var now = DateTime.UtcNow;
 
@@ -254,7 +254,7 @@ public class ExpertReviewService : IExpertReviewService
             var newCase = new MedicalCase
             {
                 Id = Guid.NewGuid(),
-                Title = "Ca lâm sàng từ Cộng đồng",
+                Title = "Clinical case from the community",
                 Description = request.Description.Trim(),
                 SuggestedDiagnosis = request.SuggestedDiagnosis.Trim(),
                 KeyFindings = request.KeyFindings.Trim(),
@@ -330,7 +330,7 @@ public class ExpertReviewService : IExpertReviewService
                         .ThenInclude(ch => ch.Doc)
             .Include(s => s.ExpertReviews)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp cần xử lý.");
+            ?? throw new KeyNotFoundException("The Q&A session to process was not found.");
 
         var enrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -341,13 +341,13 @@ public class ExpertReviewService : IExpertReviewService
         var existingReview = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
 
         if (string.Equals(session.Status, "ExpertApproved", StringComparison.OrdinalIgnoreCase))
-            throw new ConflictException("Phiên hỏi đáp này đã được xử lý trước đó.");
+            throw new ConflictException("This Q&A session has already been processed.");
 
         if (enrollment == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền xử lý phiên hỏi đáp này (sinh viên không thuộc lớp do bạn phụ trách).");
+            throw new InvalidOperationException("The expert does not have permission to process this Q&A session (the student is not in a class you manage).");
 
         if (!string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
-            throw new ConflictException("Chỉ phiên đã được giảng viên chuyển lên chuyên gia mới được xử lý tại đây.");
+            throw new ConflictException("Only sessions escalated by lecturers can be processed here.");
 
         var now = DateTime.UtcNow;
         var assistantMessage = session.Messages
@@ -406,8 +406,8 @@ public class ExpertReviewService : IExpertReviewService
 
         await _notificationService.SendNotificationToUserAsync(
             session.StudentId,
-            "Chuyên gia đã xử lý câu hỏi của bạn",
-            "Câu trả lời đã được chuyên gia duyệt. Bạn có thể xem lại trong lịch sử câu hỏi.",
+            "An expert has processed your question",
+            "Your answer has been approved by an expert. You can review it in your question history.",
             "expert_review",
             $"/student/cases/history");
 
@@ -456,10 +456,10 @@ public class ExpertReviewService : IExpertReviewService
     public async Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new InvalidOperationException("Lý do flag chunk là bắt buộc.");
+            throw new InvalidOperationException("Chunk flag reason is required.");
 
         var chunk = await _unitOfWork.Context.DocumentChunks.FirstOrDefaultAsync(ch => ch.Id == chunkId)
-            ?? throw new KeyNotFoundException("Không tìm thấy document chunk.");
+            ?? throw new KeyNotFoundException("Document chunk not found.");
 
         var canReviewChunk = await _unitOfWork.Context.Citations
             .Where(c => c.ChunkId == chunkId)
@@ -472,7 +472,7 @@ public class ExpertReviewService : IExpertReviewService
                     e.Class!.ExpertId == expertId));
 
         if (!canReviewChunk)
-            throw new InvalidOperationException("Chuyên gia không có quyền flag chunk này.");
+            throw new InvalidOperationException("The expert does not have permission to flag this chunk.");
 
         if (!chunk.IsFlagged)
         {
@@ -535,7 +535,9 @@ public class ExpertReviewService : IExpertReviewService
                 ChunkId = c.ChunkId,
                 SourceText = c.Chunk?.Content,
                 ReferenceUrl = BuildCitationUrl(c.Chunk?.Doc?.FilePath),
-                PageNumber = c.Chunk == null ? null : c.Chunk.ChunkOrder + 1
+                PageNumber = c.Chunk == null ? null : (c.Chunk.StartPage > 0 ? c.Chunk.StartPage : c.Chunk.ChunkOrder + 1),
+                StartPage = c.Chunk?.StartPage,
+                EndPage = c.Chunk?.EndPage
             })
             .ToList();
     }

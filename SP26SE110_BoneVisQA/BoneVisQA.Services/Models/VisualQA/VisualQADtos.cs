@@ -6,7 +6,7 @@ namespace BoneVisQA.Services.Models.VisualQA;
 
 public class VisualQARequestDto
 {
-    [DefaultValue("Vùng khoanh đỏ trên ảnh có dấu hiệu gãy xương không?")]
+    [DefaultValue("Does the highlighted red region in the image show signs of a fracture?")]
     public string QuestionText { get; set; } = string.Empty;
 
     [DefaultValue(null)]
@@ -55,6 +55,8 @@ public class CitationItemDto
     /// Best-effort page hint derived from `document_chunks.chunk_order` when true page metadata is unavailable.
     /// </summary>
     public int? PageNumber { get; set; }
+    public int? StartPage { get; set; }
+    public int? EndPage { get; set; }
     public string? SourceText { get; set; }
 }
 

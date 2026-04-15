@@ -69,7 +69,7 @@ public class AuthsController : ControllerBase
             return BadRequest(new AuthResultDto
             {
                 Success = false,
-                Message = "Email là bắt buộc."
+                Message = "Email is required."
             });
         }
 
@@ -78,7 +78,7 @@ public class AuthsController : ControllerBase
     }
 
     /// <summary>
-    /// Đặt lại mật khẩu. Token lấy từ link trong email (sau khi gọi forgot-password).
+    /// Reset Password. Token lấy từ link trong email (sau khi gọi forgot-password).
     /// Ví dụ link: http://localhost:5046/reset-password?token=XXX → token là phần XXX
     /// </summary>
     [HttpPost("reset-password")]
@@ -89,7 +89,7 @@ public class AuthsController : ControllerBase
             return BadRequest(new AuthResultDto
             {
                 Success = false,
-                Message = "Token là bắt buộc."
+                Message = "Token is required."
             });
         }
 
@@ -98,7 +98,7 @@ public class AuthsController : ControllerBase
             return BadRequest(new AuthResultDto
             {
                 Success = false,
-                Message = "Mật khẩu mới là bắt buộc."
+                Message = "New password is required."
             });
         }
 
@@ -171,7 +171,7 @@ public class AuthsController : ControllerBase
             return Unauthorized(new AuthResultDto
             {
                 Success = false,
-                Message = "Không xác định được người dùng."
+                Message = "Unable to identify the user."
             });
         }
 

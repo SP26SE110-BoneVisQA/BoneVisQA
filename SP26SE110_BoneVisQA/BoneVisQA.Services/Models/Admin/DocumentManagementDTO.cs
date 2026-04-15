@@ -34,7 +34,7 @@ namespace BoneVisQA.Services.Models.Admin
         public DateTime? CreatedAt { get; set; }
         public string? IndexingStatus { get; set; }
         public Guid? CategoryId { get; set; }
-        public string? CategoryName { get; set; }
+        public string? Category { get; set; }
         public List<string> TagNames { get; set; } = new();
     }
 

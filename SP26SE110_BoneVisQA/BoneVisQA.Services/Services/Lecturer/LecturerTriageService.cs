@@ -24,7 +24,7 @@ public class LecturerTriageService : ILecturerTriageService
             .Include(s => s.Case)
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp cần chuyển tuyến.");
+            ?? throw new KeyNotFoundException("The Q&A session to escalate was not found.");
 
         var classEnrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -33,13 +33,13 @@ public class LecturerTriageService : ILecturerTriageService
                 e.Class.LecturerId == lecturerId);
 
         if (classEnrollment == null)
-            throw new InvalidOperationException("Giảng viên không có quyền chuyển tuyến câu trả lời này.");
+            throw new InvalidOperationException("The lecturer does not have permission to escalate this answer.");
 
         if (!classEnrollment.Class.ExpertId.HasValue)
-            throw new InvalidOperationException("Lớp hiện chưa được gán chuyên gia để tiếp nhận escalation.");
+            throw new InvalidOperationException("This class has not been assigned an expert for escalation yet.");
 
         if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
-            throw new ConflictException("Phiên hỏi đáp này đã được chuyển tuyến trước đó.");
+            throw new ConflictException("This Q&A session has already been escalated.");
 
         session.Status = "EscalatedToExpert";
         session.ExpertId = classEnrollment.Class.ExpertId.Value;
@@ -82,12 +82,12 @@ public class LecturerTriageService : ILecturerTriageService
     public async Task RejectAnswerAsync(Guid lecturerId, Guid sessionId, string reason)
     {
         if (string.IsNullOrWhiteSpace(reason))
-            throw new InvalidOperationException("Lý do từ chối là bắt buộc.");
+            throw new InvalidOperationException("Rejection reason is required.");
 
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp cần từ chối.");
+            ?? throw new KeyNotFoundException("The Q&A session to reject was not found.");
 
         var classEnrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
@@ -96,7 +96,7 @@ public class LecturerTriageService : ILecturerTriageService
                 e.Class.LecturerId == lecturerId);
 
         if (classEnrollment == null)
-            throw new InvalidOperationException("Giảng viên không có quyền từ chối phiên hỏi đáp này.");
+            throw new InvalidOperationException("The lecturer does not have permission to reject this Q&A session.");
 
         session.Status = "Rejected";
         session.LecturerId = lecturerId;

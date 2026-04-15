@@ -99,7 +99,7 @@ public class StudentLearningService : IStudentLearningService
             return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting);
         }
 
-        throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
+        throw new KeyNotFoundException("No suitable practice quiz found.");
     }
 
     /// <summary>
@@ -183,13 +183,13 @@ public class StudentLearningService : IStudentLearningService
             .Include(a => a.Quiz)
             .Include(a => a.StudentQuizAnswers)
             .FirstOrDefaultAsync(a => a.Id == request.AttemptId && a.StudentId == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         if (attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Quiz này đã được nộp.");
+            throw new InvalidOperationException("This quiz has already been submitted.");
 
         if (attempt.Quiz == null)
-            throw new KeyNotFoundException("Không tìm thấy quiz.");
+            throw new KeyNotFoundException("Quiz not found.");
 
         // Quiz AI tự tạo không gắn ClassQuizSession — chỉ kiểm tra cửa sổ nộp cho quiz lớp.
         if (!attempt.Quiz.IsAiGenerated)
@@ -208,18 +208,18 @@ public class StudentLearningService : IStudentLearningService
                     classIds.Contains(cqs.ClassId));
 
             if (session == null)
-                throw new InvalidOperationException("Quiz không được gán qua lớp học.");
+                throw new InvalidOperationException("This quiz is not assigned through a class.");
 
             // Kiểm tra quiz đã đóng chưa
             var effectiveCloseTime = session.CloseTime ?? session.Quiz?.CloseTime;
             if (effectiveCloseTime.HasValue && effectiveCloseTime.Value < utcNow)
-                throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
+                throw new InvalidOperationException("The quiz is closed. Submission is not allowed.");
         }
 
         var quiz = await _unitOfWork.Context.Quizzes
             .Include(q => q.QuizQuestions)
             .FirstOrDefaultAsync(q => q.Id == attempt.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var questionMap = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
         var incomingAnswers = request.Answers
@@ -230,7 +230,7 @@ public class StudentLearningService : IStudentLearningService
         foreach (var answer in incomingAnswers)
         {
             if (!questionMap.TryGetValue(answer.QuestionId, out var question))
-                throw new InvalidOperationException("Phát hiện câu trả lời không thuộc quiz này.");
+                throw new InvalidOperationException("An answer not belonging to this quiz was detected.");
 
             var existing = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == answer.QuestionId);
             var isCorrect = QuizAnswerMatchesCorrect(question.CorrectAnswer, answer.StudentAnswer);
@@ -305,7 +305,7 @@ public class StudentLearningService : IStudentLearningService
         string? difficulty)
     {
         if (!generated.Success || generated.Questions.Count == 0)
-            throw new InvalidOperationException("Không có câu hỏi để lưu.");
+            throw new InvalidOperationException("There are no questions to save.");
 
         // 1. Tạo Quiz record
         var quiz = new BoneVisQA.Repositories.Models.Quiz

@@ -30,7 +30,7 @@ public class LecturerMonitoringController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {

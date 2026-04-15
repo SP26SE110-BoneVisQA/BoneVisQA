@@ -65,7 +65,7 @@ namespace BoneVisQA.API.Controllers.Expert
 
             var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!Guid.TryParse(expertIdStr, out var expertId) || expertId == Guid.Empty)
-                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
 
             var created = await _medicalcaseService.CreateMedicalCaseWithImagesJsonAsync(body, expertId, cancellationToken);
             return Ok(new

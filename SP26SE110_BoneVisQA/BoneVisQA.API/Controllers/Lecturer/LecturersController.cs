@@ -50,11 +50,11 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetClassByIdAsync(lecturerId.Value, classId);
         if (result == null)
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền truy cập lớp học này." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "You do not have permission to access this class." });
         return Ok(result);
     }
 
@@ -63,7 +63,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetClassesForLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -76,7 +76,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         IReadOnlyList<StudentEnrollmentDto> result;
         try
@@ -96,7 +96,7 @@ public class LecturersController : ControllerBase
     // {
     //     var lecturerId = GetLecturerId();
     //     if (lecturerId == null)
-    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //         return Unauthorized(new { message = "Token does not contain a valid user id." });
     //
     //     IReadOnlyList<StudentEnrollmentDto> result;
     //     try
@@ -116,7 +116,7 @@ public class LecturersController : ControllerBase
     // public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
     // {
     //     if (file == null || file.Length == 0)
-    //         return BadRequest(new { message = "File không được để trống." });
+    //         return BadRequest(new { message = "File must not be empty." });
     //
     //     var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
     //     if (extension != ".xlsx" && extension != ".xls")
@@ -132,7 +132,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.CreateAnnouncementAsync(lecturerId.Value, classId, request);
         return Ok(result);
@@ -172,7 +172,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -238,7 +238,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -268,7 +268,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizByIdAsync(quizId);
         if (result == null)
-            return NotFound(new { message = "Quiz không tồn tại." });
+            return NotFound(new { message = "Quiz does not exist." });
         return Ok(result);
     }
 
@@ -306,7 +306,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizQuestionByIdAsync(questionId);
         if (result == null)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return Ok(result);
     }
 
@@ -335,7 +335,7 @@ public class LecturersController : ControllerBase
     {
         var deleted = await _lecturerService.DeleteQuizQuestionAsync(questionId);
         if (!deleted)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return NoContent();
     }
 
@@ -344,11 +344,11 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var deleted = await _lecturerService.DeleteQuizAsync(quizId);
         if (!deleted)
-            return NotFound(new { message = "Quiz không tồn tại." });
+            return NotFound(new { message = "Quiz does not exist." });
         return NoContent();
     }
 
@@ -357,7 +357,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -384,7 +384,7 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<AIQuizGenerationResultDto>> GenerateQuiz([FromBody] AIAutoGenerateQuizRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         var result = await _aiQuizService.GenerateQuizQuestionsAsync(
             request.Topic,
@@ -417,10 +417,10 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> CreateQuizFromAI([FromBody] AIAutoGenerateQuizRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
-            return BadRequest(new { message = "Title là bắt buộc." });
+            return BadRequest(new { message = "Title is required." });
 
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         try
         {
@@ -499,7 +499,7 @@ public class LecturersController : ControllerBase
     {
         var updated = await _lecturerService.ApproveCaseAsync(caseId, request);
         if (!updated)
-            return NotFound(new { message = "Case không tồn tại." });
+            return NotFound(new { message = "Case not found." });
         return NoContent();
     }
 
@@ -507,7 +507,7 @@ public class LecturersController : ControllerBase
 
     #region Assignment CRUD
 
-    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    /// <summary>Get assignment details by ID.</summary>
     [HttpGet("assignments/{assignmentId:guid}")]
     public async Task<ActionResult<AssignmentDetailDto>> GetAssignmentById(Guid assignmentId)
     {
@@ -522,7 +522,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     [HttpPut("assignments/{assignmentId:guid}")]
     public async Task<ActionResult<AssignmentDetailDto>> UpdateAssignment(Guid assignmentId, [FromBody] UpdateAssignmentRequestDto request)
     {
@@ -537,7 +537,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     [HttpDelete("assignments/{assignmentId:guid}")]
     public async Task<IActionResult> DeleteAssignment(Guid assignmentId)
     {
@@ -552,7 +552,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get submission list for an assignment.</summary>
     [HttpGet("assignments/{assignmentId:guid}/submissions")]
     public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> GetAssignmentSubmissions(Guid assignmentId)
     {
@@ -567,7 +567,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     [HttpPut("assignments/{assignmentId:guid}/submissions")]
     public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> UpdateAssignmentSubmissions(
         Guid assignmentId, [FromBody] UpdateSubmissionsRequestDto request)
@@ -607,7 +607,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuestionDetailAsync(classId, questionId);
         if (result == null)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return Ok(result);
     }
 

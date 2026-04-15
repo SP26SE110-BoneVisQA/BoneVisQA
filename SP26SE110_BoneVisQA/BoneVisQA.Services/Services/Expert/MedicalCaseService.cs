@@ -42,7 +42,7 @@ namespace BoneVisQA.Services.Services.Expert
             var extension = Path.GetExtension(file.FileName);
             var originalName = Path.GetFileNameWithoutExtension(file.FileName);
 
-            // Rút ngắn tên nếu quá dài
+            // Shorten name if too long
             if (originalName.Length > 50)
                 originalName = originalName.Substring(0, 50);
 
@@ -321,7 +321,7 @@ namespace BoneVisQA.Services.Services.Expert
             _unitOfWork.MedicalCaseRepository.Update(medicalCase);
             await _unitOfWork.SaveAsync();
 
-            // lấy thêm dữ liệu liên quan
+            // load related data
             var expert = await _unitOfWork.UserRepository
                 .GetByIdAsync(medicalCase.CreatedByExpertId ?? Guid.Empty);
 
@@ -358,11 +358,11 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
-        // Thêm image cho case
+        // Add image for case
         public async Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.CaseId)
-                ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+                ?? throw new KeyNotFoundException("Medical case not found.");
 
             var imageUrl = await SaveImageAsync(dto.Image);
 
@@ -388,11 +388,11 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        // Thêm annotation cho image
+        // Add annotation for image
         public async Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto)
         {
             var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(dto.ImageId)
-                ?? throw new KeyNotFoundException("Không tìm thấy ảnh.");
+                ?? throw new KeyNotFoundException("Image not found.");
 
             var annotation = new CaseAnnotation
             {

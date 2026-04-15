@@ -88,6 +88,7 @@ public class StudentService : IStudentService
             CategoryId = filter.CategoryId,
             Difficulty = filter.Difficulty,
             Location = filter.Location,
+            LesionType = filter.LesionType ?? filter.LessonType,
             LessonType = filter.LessonType
         };
         var filteredCases = await _studentRepository.GetFilteredCasesAsync(repoFilter);
@@ -119,6 +120,7 @@ public class StudentService : IStudentService
             CategoryId = filter.CategoryId,
             Difficulty = filter.Difficulty,
             Location = filter.Location,
+            LesionType = filter.LesionType ?? filter.LessonType,
             LessonType = filter.LessonType
         };
         var cases = await _studentRepository.GetFilteredCasesAsync(repoFilter);
@@ -431,7 +433,7 @@ public class StudentService : IStudentService
             }
 
             throw new InvalidOperationException(
-                "Không thể lưu hội thoại Visual QA vào cơ sở dữ liệu. Vui lòng thử lại sau.",
+                "Unable to save Visual QA conversation to the database. Please try again later.",
                 ex);
         }
     }
@@ -442,7 +444,7 @@ public class StudentService : IStudentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId);
         if (session == null)
-            throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            throw new KeyNotFoundException("Q&A session not found.");
 
         var hasInstructorMessage = await _unitOfWork.Context.QaMessages
             .AsNoTracking()
@@ -470,7 +472,7 @@ public class StudentService : IStudentService
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            ?? throw new KeyNotFoundException("Q&A session not found.");
 
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
         var inactiveTime = DateTime.UtcNow - lastActivity;
@@ -479,6 +481,55 @@ public class StudentService : IStudentService
 
         session.Status = "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
+    }
+
+    public async Task<CaseCatalogFiltersDto> GetCaseCatalogFiltersAsync(CancellationToken cancellationToken = default)
+    {
+        var locationTypes = new[] { "Location", "BoneLocation" };
+        var lesionTypes = new[] { "Lesion Type", "Lesion" };
+
+        var locations = await _unitOfWork.Context.Tags
+            .AsNoTracking()
+            .Where(t => locationTypes.Contains(t.Type))
+            .Select(t => t.Name.Trim())
+            .Where(n => n.Length > 0)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        var lesions = await _unitOfWork.Context.Tags
+            .AsNoTracking()
+            .Where(t => lesionTypes.Contains(t.Type))
+            .Select(t => t.Name.Trim())
+            .Where(n => n.Length > 0)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        return new CaseCatalogFiltersDto
+        {
+            Locations = locations,
+            LesionTypes = lesions,
+            Difficulties = new[] { "Easy", "Medium", "Hard" }
+        };
+    }
+
+    public async Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default)
+    {
+        var answer = await _unitOfWork.Context.CaseAnswers
+            .Include(a => a.Question)
+            .FirstOrDefaultAsync(a => a.Id == answerId, cancellationToken)
+            ?? throw new KeyNotFoundException("Case answer not found.");
+
+        if (answer.Question.StudentId != studentId)
+            throw new InvalidOperationException("You can only request support for your own answer.");
+
+        answer.Status = CaseAnswerStatuses.RequiresLecturerReview;
+        answer.ReviewedAt = null;
+        answer.ReviewedById = null;
+        answer.EscalatedAt = null;
+        answer.EscalatedById = null;
         await _unitOfWork.SaveAsync();
     }
 
@@ -699,23 +750,23 @@ public class StudentService : IStudentService
 
     public async Task<QuizSessionDto> StartQuizAsync(Guid studentId, Guid quizId)
     {
-        // Tự động nộp các quiz đã hết hạn trước khi bắt đầu quiz mới
+        // Auto-submit expired quizzes before starting a new quiz
         await _studentLearningService.AutoCloseExpiredAttemptsAsync();
 
         var quiz = await _studentRepository.GetQuizWithQuestionsAsync(quizId);
         if (quiz == null)
         {
-            throw new InvalidOperationException("Quiz không tồn tại.");
+            throw new InvalidOperationException("Quiz does not exist.");
         }
 
         var utcNow = DateTime.UtcNow;
         if (!await _studentRepository.IsStudentEligibleForAssignedQuizAsync(studentId, quizId, utcNow))
         {
             throw new InvalidOperationException(
-                "Bạn chưa được gán quiz này qua lớp đã đăng ký, hoặc quiz không nằm trong thời gian mở.");
+                "You are not assigned this quiz through an enrolled class, or the quiz is outside its availability window.");
         }
 
-        // Lấy session để kiểm tra allow_retake TRƯỚC khi xử lý retake
+        // Fetch session to check allow_retake BEFORE processing retake
         var classIds = await _unitOfWork.Context.ClassEnrollments
             .Where(e => e.StudentId == studentId)
             .Select(e => e.ClassId)
@@ -728,20 +779,20 @@ public class StudentService : IStudentService
                 cqs.QuizId == quizId &&
                 classIds.Contains(cqs.ClassId));
 
-        // Kiểm tra thời gian mở — trả lỗi rõ ràng
+        // Check availability window and return clear error
         var effectiveOpenTime = classSession?.OpenTime ?? quiz.OpenTime;
         var effectiveCloseTime = classSession?.CloseTime ?? quiz.CloseTime;
 
         if (effectiveOpenTime.HasValue && effectiveOpenTime.Value > utcNow)
         {
             throw new InvalidOperationException(
-                $"Quiz chưa mở. Thời gian mở: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (giờ Việt Nam).");
+                $"Quiz is not open yet. Open time: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (Vietnam time).");
         }
 
         if (effectiveCloseTime.HasValue && effectiveCloseTime.Value <= utcNow)
         {
             throw new InvalidOperationException(
-                "Quiz đã đóng. Không thể bắt đầu hoặc tiếp tục làm bài.");
+                "Quiz is closed. You cannot start or continue this attempt.");
         }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
@@ -751,7 +802,7 @@ public class StudentService : IStudentService
         {
             if (existingAttempt.CompletedAt.HasValue)
             {
-                // Kiểm tra có được retake không: global flag HOẶC lecturer đã reset riêng
+                // Check retake eligibility: global flag OR lecturer-specific reset
                 var globalRetake = classSession?.AllowRetake ?? false;
                 var lecturerRetake = classSession?.RetakeResetAt > existingAttempt.CompletedAt;
                 if (!globalRetake && !lecturerRetake)
@@ -760,7 +811,7 @@ public class StudentService : IStudentService
                         "You have already submitted this quiz. Your lecturer will enable retake when needed.");
                 }
 
-                // Được retake: xóa đáp án cũ và reset
+                // Retake allowed: clear previous answers and reset
                 var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
                     .Where(a => a.AttemptId == existingAttempt.Id)
                     .ToListAsync();
@@ -848,15 +899,15 @@ public class StudentService : IStudentService
     {
         var attempt = await _unitOfWork.QuizAttemptRepository
             .FirstOrDefaultAsync(a => a.Id == submit.AttemptId && a.StudentId == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         var question = await _unitOfWork.QuizQuestionRepository
             .GetByIdAsync(submit.QuestionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+            ?? throw new KeyNotFoundException("Question not found.");
 
         var quiz = await _unitOfWork.QuizRepository
             .GetByIdAsync(attempt.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var utcNow = DateTime.UtcNow;
 
@@ -874,13 +925,13 @@ public class StudentService : IStudentService
                 ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         if (session == null)
-            throw new InvalidOperationException("Quiz đã hết thời gian làm bài.");
+            throw new InvalidOperationException("Quiz attempt time has expired.");
 
         var existing = await _unitOfWork.StudentQuizAnswerRepository
             .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId
                                    && a.QuestionId == submit.QuestionId);
         if (existing != null)
-            throw new InvalidOperationException("Câu hỏi này đã được trả lời.");
+            throw new InvalidOperationException("This question has already been answered.");
 
         bool isCorrect = string.Equals(
             submit.StudentAnswer?.Trim(),
@@ -934,7 +985,7 @@ public class StudentService : IStudentService
     //        if (quiz == null)
     //        {
     //            await _unitOfWork.RollbackTransactionAsync();
-    //            throw new InvalidOperationException("Quiz không tồn tại.");
+    //            throw new InvalidOperationException("Quiz does not exist.");
     //        }
 
     //        var questionDict = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
@@ -1036,7 +1087,7 @@ public class StudentService : IStudentService
         };
     }
 
-    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// Return the list of classes the student has enrolled in.
     public async Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId)
     {
         var enrollments = await _unitOfWork.Context.ClassEnrollments
@@ -1053,7 +1104,7 @@ public class StudentService : IStudentService
             .Select(e => e.Class!.Id)
             .ToList();
 
-        // Lấy số lượng announcements, quizzes, cases cho mỗi lớp
+        // Get the number of announcements, quizzes, and cases for each class
         var announcementCounts = await _unitOfWork.Context.Announcements
             .Where(a => classIds.Contains(a.ClassId))
             .GroupBy(a => a.ClassId)
@@ -1117,7 +1168,7 @@ public class StudentService : IStudentService
             .ToListAsync();
 
         // Student attempts — chỉ dùng để gắn trạng thái hoàn thành / điểm; danh sách quiz phải lấy theo lớp (ClassQuizSessions),
-        // không chỉ những quiz đã có attempt (sinh viên chưa làm vẫn phải thấy bài được gán).
+        // not only quizzes with attempts (students must still see assigned quizzes they have not started).
         var quizAttempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.StudentId == studentId && classQuizIds.Contains(a.QuizId))
@@ -1224,12 +1275,12 @@ public class StudentService : IStudentService
         var student = await _unitOfWork.Context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy sinh viên.");
+            ?? throw new KeyNotFoundException("Student not found.");
 
         var quiz = await _unitOfWork.Context.Quizzes
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.Id == quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var classSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
@@ -1239,9 +1290,9 @@ public class StudentService : IStudentService
             .ToListAsync();
 
         if (classSession.Count == 0)
-            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+            throw new InvalidOperationException("This quiz is not assigned through a class.");
 
-        // Gửi notification + email cho lecturer của mỗi lớp
+        // Send notification and email to each class lecturer
         foreach (var session in classSession)
         {
             var academicClass = session.Class!;
@@ -1258,7 +1309,7 @@ public class StudentService : IStudentService
                 $"/lecturer/quizzes/{quizId}/results"
             );
 
-            // Email (nền — không chặn nếu thất bại)
+            // Email (background, non-blocking on failure)
             try
             {
                 var lecturer = await _unitOfWork.Context.Users

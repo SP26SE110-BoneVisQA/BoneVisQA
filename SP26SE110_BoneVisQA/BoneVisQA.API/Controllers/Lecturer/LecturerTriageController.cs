@@ -32,7 +32,7 @@ public class LecturerTriageController : ControllerBase
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -63,7 +63,7 @@ public class LecturerTriageController : ControllerBase
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -76,7 +76,7 @@ public class LecturerTriageController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message.Contains("bắt buộc", StringComparison.OrdinalIgnoreCase)
+            return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
                 ? BadRequest(new { message = ex.Message })
                 : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }

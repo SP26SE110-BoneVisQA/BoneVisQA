@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
@@ -152,10 +152,10 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<AssignClassDTO> AssignClassAsync(AssignClassDTO dto)
         {
             if (!dto.LecturerId.HasValue && !dto.ExpertId.HasValue && !dto.StudentId.HasValue && !dto.RemoveExpert)
-                throw new InvalidOperationException("Cần ít nhất một thao tác: gán LecturerId, ExpertId, StudentId (enroll), hoặc RemoveExpert.");
+                throw new InvalidOperationException("At least one action is required: assign LecturerId, ExpertId, StudentId (enroll), or RemoveExpert.");
 
             if (dto.RemoveExpert && dto.ExpertId.HasValue)
-                throw new InvalidOperationException("Không thể vừa RemoveExpert vừa gán ExpertId.");
+                throw new InvalidOperationException("Cannot set RemoveExpert and ExpertId at the same time.");
 
             var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId)
                 ?? throw new InvalidOperationException("Class not found");
@@ -233,10 +233,10 @@ namespace BoneVisQA.Services.Services.Admin
         public async Task<AssignClassDTO> UpdateAssignClassAsync(AssignClassDTO dto)
         {
             if (!dto.LecturerId.HasValue && !dto.ExpertId.HasValue && !dto.RemoveExpert && !dto.StudentId.HasValue)
-                throw new InvalidOperationException("Cần ít nhất một trường: StudentId (cập nhật enrollment), LecturerId, ExpertId, hoặc RemoveExpert.");
+                throw new InvalidOperationException("At least one field is required: StudentId (update enrollment), LecturerId, ExpertId, or RemoveExpert.");
 
             if (dto.RemoveExpert && dto.ExpertId.HasValue)
-                throw new InvalidOperationException("Không thể vừa RemoveExpert vừa gán ExpertId.");
+                throw new InvalidOperationException("Cannot set RemoveExpert and ExpertId at the same time.");
 
             var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(dto.ClassId)
                 ?? throw new InvalidOperationException("Class not found");
