@@ -369,6 +369,11 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.IsApproved).HasDefaultValue(false);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
 
+            entity.Property(e => e.Embedding).HasColumnType("vector(768)");
+            entity.HasIndex(e => e.Embedding)
+                .HasMethod("hnsw")
+                .HasOperators("vector_cosine_ops");
+
             entity.HasOne(d => d.Category).WithMany(p => p.MedicalCases)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("medical_cases_category_id_fkey");

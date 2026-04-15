@@ -782,6 +782,20 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("text")
                         .HasColumnName("key_findings");
 
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(768)")
+                        .HasColumnName("embedding");
+
+                    b.Property<string>("IndexingStatus")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("indexing_status")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("ReflectiveQuestions")
+                        .HasColumnType("text")
+                        .HasColumnName("reflective_questions");
+
                     b.Property<string>("SuggestedDiagnosis")
                         .HasColumnType("text")
                         .HasColumnName("suggested_diagnosis");
@@ -797,6 +811,12 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("version")
+                        .HasDefaultValue(1);
+
                     b.HasKey("Id")
                         .HasName("medical_cases_pkey");
 
@@ -805,6 +825,11 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("CreatedByExpertId");
+
+                    b.HasIndex("Embedding");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.ToTable("medical_cases");
                 });
