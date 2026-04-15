@@ -804,20 +804,29 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            // Verify quiz exists and is from Expert
+            // ============================================
+            // BƯỚC 1: Lấy quiz từ Expert Library để kiểm tra
+            // Filter theo quizId để lấy đúng quiz
+            // ============================================
             var quiz = await _quizService.GetExpertQuizzesForLecturerAsync(
-                pageIndex: 1, pageSize: 1);
+                pageIndex: 1,
+                pageSize: 1000, // Tăng pageSize để đảm bảo lấy đủ quiz
+                topic: null,
+                difficulty: null,
+                classification: null);
             
             var expertQuiz = quiz.Items.FirstOrDefault(q => q.Id == quizId);
             if (expertQuiz == null)
-                return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+                return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert hoặc quiz này không phải do Expert tạo." });
 
-            // Convert to AssignQuizRequestDTO
+            // ============================================
+            // BƯỚC 2: Gán quiz vào lớp
+            // ============================================
             var assignRequest = new AssignQuizRequestDTO
             {
                 ClassId = classId,
                 QuizId = quizId,
-                AssignedExpertId = null,
+                AssignedExpertId = null, // Không cần thiết vì Expert quiz đã được verify ở trên
                 OpenTime = request?.OpenTime,
                 CloseTime = request?.CloseTime,
                 PassingScore = request?.PassingScore,
@@ -841,6 +850,10 @@ public class LecturersController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return Conflict(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = "Đã xảy ra lỗi: " + ex.Message });
         }
     }
 
