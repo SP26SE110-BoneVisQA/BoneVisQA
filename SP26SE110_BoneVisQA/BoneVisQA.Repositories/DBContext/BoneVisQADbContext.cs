@@ -41,6 +41,7 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<Document> Documents { get; set; }
 
     public virtual DbSet<DocumentChunk> DocumentChunks { get; set; }
+    public virtual DbSet<PendingDocumentChunk> PendingDocumentChunks { get; set; }
 
     public virtual DbSet<DocumentTag> DocumentTags { get; set; }
 
@@ -323,6 +324,13 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.FlaggedByExpert).WithMany(p => p.FlaggedDocumentChunks)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("document_chunks_flagged_by_expert_id_fkey");
+        });
+
+        modelBuilder.Entity<PendingDocumentChunk>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pending_document_chunks_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.Embedding).HasColumnType("vector(768)");
         });
 
         modelBuilder.Entity<ExpertReview>(entity =>

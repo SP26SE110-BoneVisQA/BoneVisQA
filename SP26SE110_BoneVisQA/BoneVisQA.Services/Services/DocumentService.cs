@@ -69,6 +69,7 @@ public class DocumentService : IDocumentService
                 IsOutdated = false,
                 CreatedAt = DateTime.UtcNow,
                 TotalPages = 0,
+                TotalChunks = 0,
                 CurrentPageIndexing = 0
             };
 
@@ -121,7 +122,7 @@ public class DocumentService : IDocumentService
                     }
                 }
 
-                throw new InvalidOperationException("Tài liệu có cùng nội dung (hash) đã tồn tại trong hệ thống.");
+                throw new InvalidOperationException("A document with identical content hash already exists.");
             }
 
             throw;
@@ -146,7 +147,7 @@ public class DocumentService : IDocumentService
     }
 
     /// <summary>
-    /// Replaces the file when the SHA-256 hash changes: uploads new blob, removes old vectors, bumps version, queues re-indexing.
+    /// Replaces the file when the SHA-256 hash changes: uploads new blob, removes old vectors, and queues re-indexing.
     /// </summary>
     public async Task<DocumentDto> UpdateDocumentFileAsync(
         Guid id,
@@ -154,87 +155,67 @@ public class DocumentService : IDocumentService
         DocumentUploadDto metadata,
         CancellationToken cancellationToken = default)
     {
+        return await UpdateDocumentVersionAsync(id, file, cancellationToken);
+    }
+
+    public async Task<DocumentDto> UpdateDocumentVersionAsync(
+        Guid id,
+        IFormFile file,
+        CancellationToken cancellationToken = default)
+    {
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id)
-                       ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
+                       ?? throw new KeyNotFoundException("Document not found.");
+
+        if (string.Equals(document.IndexingStatus, DocumentIndexingStatuses.Processing, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(document.IndexingStatus, DocumentIndexingStatuses.Pending, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(document.IndexingStatus, DocumentIndexingStatuses.Reindexing, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(document.IndexingStatus, "Indexing", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The document is currently being processed. Please wait until the current operation finishes.");
+        }
 
         var newHash = await ComputeSha256HashAsync(file, cancellationToken);
-        var oldPath = document.FilePath;
 
         if (string.Equals(document.ContentHash, newHash, StringComparison.OrdinalIgnoreCase))
         {
-            await using var tx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
-            if (!string.IsNullOrWhiteSpace(metadata.Title))
-                document.Title = metadata.Title.Trim();
-            if (metadata.CategoryId.HasValue)
-                document.CategoryId = metadata.CategoryId;
-
-            await SyncDocumentTagsAsync(document.Id, metadata.TagIds, cancellationToken);
-            await _unitOfWork.DocumentRepository.UpdateAsync(document);
-            await _unitOfWork.SaveAsync();
-            await tx.CommitAsync(cancellationToken);
-            return MapToDto(document);
+            throw new InvalidOperationException("The uploaded document is identical to the current version. No changes detected.");
         }
 
-        await using (var clearTx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken))
-        {
-            var chunks = await _unitOfWork.DocumentChunkRepository.FindAsync(c => c.DocId == id);
-            if (chunks.Count > 0)
-                await _unitOfWork.DocumentChunkRepository.RemoveRangeAsync(chunks);
-
-            document.Version += 1;
-            document.IndexingStatus = DocumentIndexingStatuses.Pending;
-            document.IndexingProgress = 0;
-            document.TotalPages = 0;
-            document.CurrentPageIndexing = 0;
-            document.IsOutdated = false;
-            if (!string.IsNullOrWhiteSpace(metadata.Title))
-                document.Title = metadata.Title.Trim();
-            if (metadata.CategoryId.HasValue)
-                document.CategoryId = metadata.CategoryId;
-
-            await SyncDocumentTagsAsync(document.Id, metadata.TagIds, cancellationToken);
-            await _unitOfWork.DocumentRepository.UpdateAsync(document);
-            await _unitOfWork.SaveAsync();
-            await clearTx.CommitAsync(cancellationToken);
-        }
-
-        string? newUrl = null;
+        string? pendingUrl = null;
+        var ext = Path.GetExtension(file.FileName);
+        if (string.IsNullOrWhiteSpace(ext))
+            ext = ".pdf";
+        var objectPath = $"documents/{id}_pending_{Guid.NewGuid():N}{ext}";
         try
         {
-            var ext = Path.GetExtension(file.FileName);
-            if (string.IsNullOrWhiteSpace(ext))
-                ext = ".pdf";
-            var objectPath = $"documents/{id}_v{document.Version}{ext}";
-            newUrl = await _storageService.UploadFileToPathAsync(file, "knowledge_base", objectPath, cancellationToken);
-
-            await using var pathTx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
-            document.FilePath = newUrl;
-            document.ContentHash = newHash;
-            await _unitOfWork.DocumentRepository.UpdateAsync(document);
-            await _unitOfWork.SaveAsync();
-            await pathTx.CommitAsync(cancellationToken);
-
-            SetProgress(document.Id, 0, "Queued for re-indexing...");
-
-            if (!string.IsNullOrEmpty(oldPath)
-                && !string.Equals(NormalizeStorageUrl(oldPath), NormalizeStorageUrl(newUrl), StringComparison.OrdinalIgnoreCase)
-                && TryExtractSupabaseFilePointer(oldPath, out var ob, out var op))
+            pendingUrl = await _storageService.UploadFileToPathAsync(file, "knowledge_base", objectPath, cancellationToken);
+            await using var tx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                try
-                {
-                    await _storageService.DeleteFileAsync(ob, op, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not delete previous document file from storage.");
-                }
+                document.IndexingStatus = DocumentIndexingStatuses.Reindexing;
+                document.IndexingProgress = 0;
+                document.CurrentPageIndexing = 0;
+                document.IsOutdated = false;
+                document.PendingReindexPath = pendingUrl;
+                document.PendingReindexHash = newHash;
+
+                await _unitOfWork.DocumentRepository.UpdateAsync(document);
+                await _unitOfWork.SaveAsync();
+                await tx.CommitAsync(cancellationToken);
             }
+            catch
+            {
+                await tx.RollbackAsync(cancellationToken);
+                throw;
+            }
+
+            SetProgress(document.Id, 0, "Queued for atomic re-indexing...");
 
             return MapToDto(document);
         }
         catch
         {
-            if (!string.IsNullOrEmpty(newUrl) && TryExtractSupabaseFilePointer(newUrl, out var nb, out var np))
+            if (!string.IsNullOrEmpty(pendingUrl) && TryExtractSupabaseFilePointer(pendingUrl, out var nb, out var np))
             {
                 try
                 {
@@ -250,38 +231,12 @@ public class DocumentService : IDocumentService
         }
     }
 
-    private static string? NormalizeStorageUrl(string url) => url?.Trim().TrimEnd('/');
-
-    private async Task SyncDocumentTagsAsync(Guid documentId, List<Guid>? tagIds, CancellationToken cancellationToken)
-    {
-        if (tagIds == null)
-            return;
-
-        var existing = await _unitOfWork.DocumentTagRepository.FindAsync(dt => dt.DocumentId == documentId);
-        var wanted = tagIds.Where(x => x != Guid.Empty).Distinct().ToHashSet();
-
-        var toRemove = existing.Where(dt => !wanted.Contains(dt.TagId)).ToList();
-        if (toRemove.Count > 0)
-            await _unitOfWork.DocumentTagRepository.RemoveRangeAsync(toRemove);
-
-        var have = existing.Select(e => e.TagId).ToHashSet();
-        var toAdd = wanted
-            .Where(id => !have.Contains(id))
-            .Select(id => new DocumentTag
-            {
-                DocumentId = documentId,
-                TagId = id,
-                CreatedAt = DateTime.UtcNow
-            }).ToList();
-        if (toAdd.Count > 0)
-            await _unitOfWork.DocumentTagRepository.AddRangeAsync(toAdd);
-
-        await _unitOfWork.SaveAsync();
-    }
-
     public async Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync()
     {
-        var documents = await _unitOfWork.DocumentRepository.GetAllAsync();
+        var documents = await _unitOfWork.Context.Documents
+            .AsNoTracking()
+            .Include(d => d.Category)
+            .ToListAsync();
         return documents
             .OrderByDescending(d => d.CreatedAt ?? DateTime.MinValue)
             .Select(MapToDto);
@@ -291,6 +246,7 @@ public class DocumentService : IDocumentService
     {
         var document = await _unitOfWork.Context.Documents
             .AsNoTracking()
+            .Include(d => d.Category)
             .FirstOrDefaultAsync(d => d.Id == id);
         return document == null ? null : MapToDto(document);
     }
@@ -338,36 +294,9 @@ public class DocumentService : IDocumentService
         return true;
     }
 
-    public async Task<bool> TriggerReindexAsync(Guid id)
+    public Task<bool> TriggerReindexAsync(Guid id)
     {
-        var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
-        if (document == null || string.IsNullOrEmpty(document.FilePath)) return false;
-
-        await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync();
-        try
-        {
-            var chunks = await _unitOfWork.DocumentChunkRepository.FindAsync(c => c.DocId == id);
-            if (chunks.Count > 0)
-                await _unitOfWork.DocumentChunkRepository.RemoveRangeAsync(chunks);
-
-            document.IndexingStatus = DocumentIndexingStatuses.Pending;
-            document.IndexingProgress = 0;
-            document.TotalPages = 0;
-            document.CurrentPageIndexing = 0;
-            document.Version += 1;
-            document.IsOutdated = false;
-            await _unitOfWork.DocumentRepository.UpdateAsync(document);
-            await _unitOfWork.SaveAsync();
-            await transaction.CommitAsync();
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
-
-        SetProgress(document.Id, 0, "Queued for re-indexing...");
-        return true;
+        throw new InvalidOperationException("Re-indexing requires a new file upload. Use the update-version endpoint.");
     }
 
     public async Task UpdateIndexingStatusAsync(Guid id, string status)
@@ -415,10 +344,45 @@ public class DocumentService : IDocumentService
                 ? "Completed."
                 : string.Equals(normalizedStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
                     ? "Failed."
+                    : string.Equals(normalizedStatus, DocumentIndexingStatuses.Reindexing, StringComparison.OrdinalIgnoreCase)
+                        ? "Queued for zero-downtime re-indexing..."
                     : string.Equals(normalizedStatus, DocumentIndexingStatuses.Pending, StringComparison.OrdinalIgnoreCase)
                         ? "Queued for indexing..."
-                        : "Indexing..."
+                        : "Indexing...",
+            TotalPages = document.TotalPages,
+            TotalChunks = document.TotalChunks,
+            CurrentPageIndexing = document.CurrentPageIndexing
         };
+    }
+
+    public async Task<IReadOnlyList<DocumentChunkCitationFrequencyDto>> GetChunkCitationFrequencyAsync(
+        Guid? documentId = null,
+        int top = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var safeTop = Math.Clamp(top, 1, 500);
+        var query = _unitOfWork.Context.Citations
+            .AsNoTracking()
+            .Join(
+                _unitOfWork.Context.DocumentChunks.AsNoTracking(),
+                c => c.ChunkId,
+                ch => ch.Id,
+                (c, ch) => new { ch.DocId, c.ChunkId });
+
+        if (documentId.HasValue)
+            query = query.Where(x => x.DocId == documentId.Value);
+
+        return await query
+            .GroupBy(x => new { x.DocId, x.ChunkId })
+            .Select(g => new DocumentChunkCitationFrequencyDto
+            {
+                DocumentId = g.Key.DocId,
+                ChunkId = g.Key.ChunkId,
+                RetrievalCount = g.Count()
+            })
+            .OrderByDescending(x => x.RetrievalCount)
+            .Take(safeTop)
+            .ToListAsync(cancellationToken);
     }
 
     private static DocumentDto MapToDto(Document doc) => new()
@@ -427,6 +391,7 @@ public class DocumentService : IDocumentService
         Title = doc.Title,
         FilePath = doc.FilePath,
         CategoryId = doc.CategoryId,
+        Category = doc.Category?.Name,
         IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
         IndexingProgress = doc.IndexingProgress,
         ContentHash = doc.ContentHash,
@@ -434,6 +399,7 @@ public class DocumentService : IDocumentService
         IsOutdated = doc.IsOutdated,
         CreatedAt = doc.CreatedAt,
         TotalPages = doc.TotalPages,
+        TotalChunks = doc.TotalChunks,
         CurrentPageIndexing = doc.CurrentPageIndexing
     };
 
@@ -454,6 +420,8 @@ public class DocumentService : IDocumentService
             return DocumentIndexingStatuses.Failed;
         if (string.Equals(status, DocumentIndexingStatuses.Pending, StringComparison.OrdinalIgnoreCase))
             return DocumentIndexingStatuses.Pending;
+        if (string.Equals(status, DocumentIndexingStatuses.Reindexing, StringComparison.OrdinalIgnoreCase))
+            return DocumentIndexingStatuses.Reindexing;
         if (string.Equals(status, DocumentIndexingStatuses.Processing, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(status, "In Progress", StringComparison.OrdinalIgnoreCase))
             return DocumentIndexingStatuses.Processing;
