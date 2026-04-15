@@ -243,7 +243,7 @@ public class VisualQAController : ControllerBase
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
             return Unauthorized(new { message = "Invalid token." });
 
-        var items = await _studentService.GetVisualQaHistoryAsync(studentId, limit, offset);
+        var items = await _studentService.GetVisualQaHistoryAsync(studentId, limit, offset, cancellationToken);
         return Ok(items);
     }
 

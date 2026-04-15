@@ -3,6 +3,7 @@ using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces;
@@ -30,7 +31,11 @@ public interface IStudentService
     Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId);
 
     /// <summary>Visual QA sessions for the student, newest first.</summary>
-    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(Guid studentId, int limit = 20, int offset = 0);
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 

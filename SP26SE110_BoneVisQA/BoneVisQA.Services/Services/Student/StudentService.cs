@@ -26,12 +26,14 @@ public class StudentService : IStudentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<StudentService> _logger;
     private readonly IStudentLearningService _studentLearningService;
+    private readonly ISupabaseStorageService _storageService;
 
     public StudentService(
         IStudentRepository studentRepository,
         IUnitOfWork unitOfWork,
         ILogger<StudentService> logger,
         IStudentLearningService studentLearningService,
+        ISupabaseStorageService storageService,
         INotificationService notificationService,
         IEmailService emailService)
     {
@@ -39,6 +41,7 @@ public class StudentService : IStudentService
         _unitOfWork = unitOfWork;
         _logger = logger;
         _studentLearningService = studentLearningService;
+        _storageService = storageService;
         _notificationService = notificationService;
         _emailService = emailService;
     }
@@ -515,7 +518,11 @@ public class StudentService : IStudentService
         return normalized.Count == 0 ? null : JsonSerializer.Serialize(normalized);
     }
 
-    public async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(Guid studentId, int limit = 20, int offset = 0)
+    public async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 100);
         offset = Math.Max(offset, 0);
@@ -527,11 +534,11 @@ public class StudentService : IStudentService
             .Where(s => s.StudentId == studentId)
             .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
 
-        var totalCount = await baseQuery.CountAsync();
+        var totalCount = await baseQuery.CountAsync(cancellationToken);
         var sessions = await baseQuery
             .Skip(offset)
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var list = new List<VisualQaSessionHistoryItemDto>(sessions.Count);
         foreach (var s in sessions)
@@ -556,7 +563,8 @@ public class StudentService : IStudentService
                 CaseId = s.CaseId,
                 Status = s.Status,
                 UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
-                QuestionSnippet = snippet
+                QuestionSnippet = snippet,
+                ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(s.CustomImageUrl, cancellationToken)
             });
         }
 
@@ -565,6 +573,29 @@ public class StudentService : IStudentService
             TotalCount = totalCount,
             Items = list
         };
+    }
+
+    private async Task<string?> ResolveStudentVisibleVisualQaImageUrlAsync(string? rawImagePathOrUrl, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(rawImagePathOrUrl))
+            return null;
+
+        var value = rawImagePathOrUrl.Trim();
+
+        // Public objects can be returned directly.
+        if (value.Contains("/storage/v1/object/public/", StringComparison.OrdinalIgnoreCase))
+            return value;
+
+        // For private object URLs/paths, return short-lived signed URL.
+        if (value.Contains("/storage/v1/object/", StringComparison.OrdinalIgnoreCase) ||
+            !Uri.IsWellFormedUriString(value, UriKind.Absolute))
+        {
+            var signed = await _storageService.CreateSignedUrlAsync(value, duration: 3600, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(signed))
+                return signed;
+        }
+
+        return value;
     }
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)

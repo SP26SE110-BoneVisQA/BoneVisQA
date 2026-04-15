@@ -88,6 +88,7 @@ public class VisualQaSessionHistoryItemDto
     public Guid? CaseId { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime? UpdatedAt { get; set; }
+    public string? ImageUrl { get; set; }
     /// <summary>First user question in the session (truncated for list views).</summary>
     public string? QuestionSnippet { get; set; }
 }

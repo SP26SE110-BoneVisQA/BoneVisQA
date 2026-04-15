@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -106,5 +108,138 @@ public class SupabaseStorageService : ISupabaseStorageService
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<IReadOnlyList<string>> ListObjectPathsAsync(
+        string bucket,
+        string prefix,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPrefix = prefix.Trim().Replace('\\', '/').TrimStart('/');
+        var listUrl = $"{_supabaseUrl}/storage/v1/object/list/{bucket.Trim()}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, listUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        request.Content = JsonContent.Create(new Dictionary<string, object?>
+        {
+            ["prefix"] = normalizedPrefix,
+            ["limit"] = 1000,
+            ["offset"] = 0
+        });
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return Array.Empty<string>();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            return Array.Empty<string>();
+
+        var list = new List<string>();
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object)
+                continue;
+            if (!el.TryGetProperty("name", out var nameEl))
+                continue;
+            var name = nameEl.GetString();
+            if (string.IsNullOrEmpty(name))
+                continue;
+            list.Add(name.Replace('\\', '/'));
+        }
+
+        return list;
+    }
+
+    public async Task<string?> CreateSignedUrlAsync(
+        string path,
+        int duration = 3600,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        if (!TryExtractBucketAndPath(path, out var bucket, out var objectPath))
+            return null;
+
+        var signUrl = $"{_supabaseUrl}/storage/v1/object/sign/{bucket}/{objectPath}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, signUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        request.Content = JsonContent.Create(new Dictionary<string, object?>
+        {
+            ["expiresIn"] = Math.Max(60, duration)
+        });
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (!doc.RootElement.TryGetProperty("signedURL", out var signedEl))
+            return null;
+
+        var signed = signedEl.GetString();
+        if (string.IsNullOrWhiteSpace(signed))
+            return null;
+
+        if (signed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            signed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return signed;
+
+        var normalized = signed.TrimStart('/');
+        return $"{_supabaseUrl.TrimEnd('/')}/{normalized}";
+    }
+
+    private static bool TryExtractBucketAndPath(string raw, out string bucket, out string objectPath)
+    {
+        bucket = "student_uploads";
+        objectPath = string.Empty;
+
+        var value = raw.Trim();
+        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+                return false;
+
+            const string publicMarker = "/storage/v1/object/public/";
+            const string objectMarker = "/storage/v1/object/";
+            var path = uri.AbsolutePath;
+            var idx = path.IndexOf(publicMarker, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+                path = path[(idx + publicMarker.Length)..];
+            else
+            {
+                idx = path.IndexOf(objectMarker, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0)
+                    return false;
+                path = path[(idx + objectMarker.Length)..];
+            }
+
+            var slash = path.IndexOf('/');
+            if (slash <= 0 || slash >= path.Length - 1)
+                return false;
+            bucket = path[..slash];
+            objectPath = path[(slash + 1)..];
+            return true;
+        }
+
+        var normalized = value.Replace('\\', '/').TrimStart('/');
+        var firstSlash = normalized.IndexOf('/');
+        if (firstSlash > 0)
+        {
+            var firstPart = normalized[..firstSlash];
+            if (!firstPart.Contains('.'))
+            {
+                bucket = firstPart;
+                objectPath = normalized[(firstSlash + 1)..];
+                return !string.IsNullOrWhiteSpace(objectPath);
+            }
+        }
+
+        objectPath = normalized;
+        return !string.IsNullOrWhiteSpace(objectPath);
     }
 }
