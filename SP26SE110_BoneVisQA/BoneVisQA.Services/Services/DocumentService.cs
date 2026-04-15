@@ -45,7 +45,8 @@ public class DocumentService : IDocumentService
         var ext = Path.GetExtension(file.FileName);
         if (string.IsNullOrWhiteSpace(ext))
             ext = ".pdf";
-        var objectPath = $"documents/{documentId}{ext}";
+        const int initialVersion = 1;
+        var objectPath = $"documents/{documentId}_v{initialVersion}{ext}";
         var fileUrl = await _storageService.UploadFileToPathAsync(
             file,
             "knowledge_base",
@@ -64,7 +65,7 @@ public class DocumentService : IDocumentService
                 IndexingStatus = DocumentIndexingStatuses.Pending,
                 IndexingProgress = 0,
                 ContentHash = contentHash,
-                Version = 1,
+                Version = initialVersion,
                 IsOutdated = false,
                 CreatedAt = DateTime.UtcNow,
                 TotalPages = 0,
@@ -203,7 +204,7 @@ public class DocumentService : IDocumentService
             var ext = Path.GetExtension(file.FileName);
             if (string.IsNullOrWhiteSpace(ext))
                 ext = ".pdf";
-            var objectPath = $"documents/{id}{ext}";
+            var objectPath = $"documents/{id}_v{document.Version}{ext}";
             newUrl = await _storageService.UploadFileToPathAsync(file, "knowledge_base", objectPath, cancellationToken);
 
             await using var pathTx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
@@ -303,20 +304,35 @@ public class DocumentService : IDocumentService
         if (chunks.Count > 0)
             await _unitOfWork.DocumentChunkRepository.RemoveRangeAsync(chunks);
 
-        var filePath = document.FilePath;
+        var extGuess = Path.GetExtension(document.FilePath ?? "");
+        if (string.IsNullOrWhiteSpace(extGuess))
+            extGuess = ".pdf";
+
         await _unitOfWork.DocumentRepository.DeleteAsync(id);
         await _unitOfWork.SaveAsync();
 
-        if (!string.IsNullOrEmpty(filePath) && TryExtractSupabaseFilePointer(filePath, out var bucket, out var filePathRel))
+        const string bucket = "knowledge_base";
+        try
         {
-            try
+            var versioned = await _storageService.ListObjectPathsAsync(bucket, $"documents/{id}_", CancellationToken.None);
+            foreach (var path in versioned)
             {
-                await _storageService.DeleteFileAsync(bucket, filePathRel);
+                try
+                {
+                    await _storageService.DeleteFileAsync(bucket, path, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Storage delete failed for document {DocumentId} path {Path}.", id, path);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Storage delete failed for document {DocumentId}; DB row removed.", id);
-            }
+
+            var legacyPath = $"documents/{id}{extGuess}";
+            await _storageService.DeleteFileAsync(bucket, legacyPath, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Storage delete failed for document {DocumentId}; DB row removed.", id);
         }
 
         return true;

@@ -26,9 +26,9 @@ public class GeminiService : IGeminiService
     private static string BuildSystemPrompt(bool ragContextAdequate)
     {
         var ragPolicy = ragContextAdequate
-            ? "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
-              "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions là null.\n"
-            : "Thư viện tài liệu (Context RAG) có thể không có hoặc không đủ liên quan. TRONG TRƯỜNG HỢP NÀY, bạn VẪN PHẢI trả lời bằng kiến thức y khoa tổng quát về cơ xương khớp (ưu tiên phân tích hình ảnh nếu có). Có thể điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions khi phù hợp. Ở cuối answerText, LUÔN thêm đúng câu: (Lưu ý: Phân tích này dựa trên kiến thức AI tổng quát vì không tìm thấy tài liệu tham chiếu trực tiếp trong thư viện của hệ thống).\n" +
+            ? "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions, citations.\n" +
+              "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions, citations ([]) là null hoặc rỗng.\n"
+            : "Thư viện tài liệu (Context RAG) có thể không có hoặc không đủ liên quan. TRONG TRƯỜNG HỢP NÀY, bạn VẪN PHẢI trả lời bằng kiến thức y khoa tổng quát về cơ xương khớp (ưu tiên phân tích hình ảnh nếu có). Có thể điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions khi phù hợp; citations thường là []. Ở cuối answerText, LUÔN thêm đúng câu: (Lưu ý: Phân tích này dựa trên kiến thức AI tổng quát vì không tìm thấy tài liệu tham chiếu trực tiếp trong thư viện của hệ thống).\n" +
               "KHÔNG trả answerText chỉ là câu từ chối chung khi câu hỏi vẫn thuộc y khoa cơ xương khớp — hãy giải thích học thuật trước, rồi mới có thể thêm lưu ý thiếu tài liệu như trên.\n";
 
         return
@@ -37,22 +37,23 @@ public class GeminiService : IGeminiService
             "BẮT BUỘC PHÂN TÍCH CÂU HỎI VÀ HÌNH ẢNH (TỪ CHỐI TUYỆT ĐỐI):\n" +
             "Nếu câu hỏi KHÔNG liên quan đến y khoa cơ xương khớp, sức khỏe hoặc chẩn đoán hình ảnh cơ xương khớp (ví dụ: hỏi giá xăng, thời tiết, chính trị, code lập trình...), BẮT BUỘC phải trả lời chính xác bằng câu này: 'Câu hỏi của bạn không liên quan đến lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn hợp lệ.'\n" +
             "Tuyệt đối không được trả lời là 'Cơ sở dữ liệu không có thông tin'.\n" +
-            "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null, BỎ QUA MỌI YÊU CẦU KHÁC và KHÔNG được trả citations.\n" +
+            "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null, citations thành [] hoặc null, BỎ QUA MỌI YÊU CẦU KHÁC.\n" +
             "\n" +
             "BẮT BUỘC KIỂM TRA HÌNH ẢNH (NẾU CÓ):\n" +
-            "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null. KHÔNG được trả citations. Bỏ qua mọi yêu cầu khác.\n" +
+            "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null và citations thành []. Bỏ qua mọi yêu cầu khác.\n" +
             "\n" +
-            "You MUST output a JSON object with EXACTLY these keys: 'answerText', 'suggestedDiagnosis', 'keyFindings' (array), 'differentialDiagnoses' (array), 'reflectiveQuestions'. DO NOT leave them null if evidence exists in the image or context.\n" +
+            "You MUST output a JSON object with EXACTLY these keys: 'answerText', 'suggestedDiagnosis', 'keyFindings' (array) OR 'keyImagingFindings' (string), 'differentialDiagnoses' (array or string), 'reflectiveQuestions' (string or array), 'citations' (array of objects { \"kind\": \"Doc\"|\"Case\", \"id\": \"uuid\" }).\n" +
+            "Trong answerText, khi trích thư viện hãy chèn đúng định dạng [Doc:UUID] cho chunk tài liệu và [Case:UUID] cho ca bệnh, khớp với mảng citations.\n" +
             "\n" +
             "Bắt đầu câu trả lời ngay lập tức. KHÔNG chào hỏi. KHÔNG giới thiệu.\n" +
-            "KHÔNG trả lời nằm ngoài các trường JSON: answerText, suggestedDiagnosis, keyFindings, differentialDiagnoses, reflectiveQuestions.\n" +
+            "KHÔNG trả lời nằm ngoài các trường JSON đã liệt kê (và keyImagingFindings nếu dùng thay keyFindings).\n" +
             "You must return a raw JSON object without any markdown wrapping like ```json.\n" +
             "Khi trả lời hợp lệ về chuyên ngành, trả lời bằng tiếng Việt chuyên ngành y khoa chuẩn xác.\n" +
             "\n" +
             ragPolicy +
             "\n" +
             "CHỈ TRẢ VỀ DUY NHẤT 1 ĐỐI TƯỢNG JSON và không chèn thêm bất kỳ nội dung nào khác.\n" +
-            "Không thêm các trường phụ như citationChunkIds vào bên trong answerText.\n" +
+            "Không nhét citationChunkIds hay raw JSON thừa vào bên trong answerText.\n" +
             "KHÔNG được tự tạo hay ước lượng trường độ tin cậy / aiConfidenceScore trong JSON — hệ thống sẽ gán điểm dựa trên toán học RAG.";
     }
 
@@ -489,7 +490,8 @@ public class GeminiService : IGeminiService
             ? ReadStringOrJoinedArray(rq)
             : null;
 
-        if (ShouldNullifyDiagnosisFields(answerText))
+        var nullifyDiagnosis = ShouldNullifyDiagnosisFields(answerText);
+        if (nullifyDiagnosis)
         {
             suggestedDiagnosis = null;
             differentialDiagnoses = null;
@@ -498,7 +500,46 @@ public class GeminiService : IGeminiService
         }
 
         var citations = new List<CitationItemDto>();
-        if (result.TryGetProperty("citationChunkIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
+        if (!nullifyDiagnosis && result.TryGetProperty("citations", out var citationsEl))
+        {
+            if (citationsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in citationsEl.EnumerateArray())
+                {
+                    if (el.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    var kind = el.TryGetProperty("kind", out var k)
+                        ? k.GetString()
+                        : el.TryGetProperty("sourceType", out var st)
+                            ? st.GetString()
+                            : null;
+                    var idStr = el.TryGetProperty("id", out var idp) ? idp.GetString() : null;
+                    if (!Guid.TryParse(idStr, out var gid))
+                        continue;
+
+                    if (string.Equals(kind, "Doc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        citations.Add(new CitationItemDto
+                        {
+                            ChunkId = gid,
+                            MedicalCaseId = null,
+                            SourceText = null
+                        });
+                    }
+                    else if (string.Equals(kind, "Case", StringComparison.OrdinalIgnoreCase))
+                    {
+                        citations.Add(new CitationItemDto
+                        {
+                            ChunkId = Guid.Empty,
+                            MedicalCaseId = gid,
+                            SourceText = null
+                        });
+                    }
+                }
+            }
+        }
+        else if (!nullifyDiagnosis && result.TryGetProperty("citationChunkIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
         {
             foreach (var el in ids.EnumerateArray())
             {

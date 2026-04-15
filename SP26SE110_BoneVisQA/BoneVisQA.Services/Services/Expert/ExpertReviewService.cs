@@ -7,6 +7,7 @@ using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BoneVisQA.Services.Services.Expert;
@@ -263,7 +264,9 @@ public class ExpertReviewService : IExpertReviewService
                 IsActive = true,
                 CreatedByExpertId = expertId,
                 CreatedAt = now,
-                UpdatedAt = now
+                UpdatedAt = now,
+                IndexingStatus = DocumentIndexingStatuses.Pending,
+                Version = 1
             };
 
             await _unitOfWork.Context.MedicalCases.AddAsync(newCase);
