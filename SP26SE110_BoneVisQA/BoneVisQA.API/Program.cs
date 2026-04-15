@@ -274,6 +274,7 @@ builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
 builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IEmbeddingService, GeminiEmbeddingService>();
 builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
+builder.Services.AddScoped<IMedicalCaseIndexingProcessor, MedicalCaseIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
@@ -318,6 +319,7 @@ builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();
+builder.Services.AddHostedService<MedicalCaseIndexingBackgroundService>();
 
 var app = builder.Build();
 
