@@ -1,8 +1,10 @@
 using BoneVisQA.Repositories.DBContext;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
 using System.Text;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
@@ -11,16 +13,24 @@ namespace BoneVisQA.Services.Services;
 
 public class VisualQaAiService : IVisualQaAiService
 {
+    private sealed record RagContextItem(double Similarity, DocumentChunk? Chunk, MedicalCase? Case);
+
     private const double MinimumRelevantSimilarity = 0.72d;
-    private const string InvalidMedicalImageAnswer = "Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.";
-    private const string MissingMedicalKnowledgeAnswer =
-        "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
+    private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
+    private const string InvalidBoneXrayUserMessage =
+        "Hệ thống phát hiện đây không phải là ảnh X-quang xương người hoặc ảnh không hợp lệ. Vui lòng tải lên đúng hình ảnh X-quang y tế để được hỗ trợ phân tích.";
+    private const string RagGeneralKnowledgeDisclaimer =
+        "(Lưu ý: Phân tích này dựa trên kiến thức AI tổng quát vì không tìm thấy tài liệu tham chiếu trực tiếp trong thư viện của hệ thống).";
     private const string TemporaryVectorSearchUnavailableAnswer =
         "Vector search is temporarily unavailable due to high network demand. Please try again later.";
     private const string TemporaryAiGenerationUnavailableAnswer =
         "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
     private const string AiOverloadVietnameseMessage =
         "Hệ thống AI đang quá tải. Vui lòng thử lại sau.";
+
+    private const int RagChunkFetch = 12;
+    private const int RagMaxCasesToEmbed = 40;
+    private const int RagTopMerged = 8;
 
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
@@ -60,17 +70,7 @@ public class VisualQaAiService : IVisualQaAiService
         }
         catch
         {
-            return new VisualQAResponseDto
-            {
-                AnswerText = AiOverloadVietnameseMessage,
-                SuggestedDiagnosis = null,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = AiOverloadVietnameseMessage,
-                Citations = new List<CitationItemDto>()
-            };
+            throw new InvalidOperationException(AiOverloadVietnameseMessage);
         }
         var queryEmbedding = embedding;
         var queryVector = new Vector(queryEmbedding);
@@ -85,52 +85,42 @@ public class VisualQaAiService : IVisualQaAiService
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        // Filter RAG context to the same document category as the provided CaseId (if available).
-        // Place WHERE before ORDERBY(CosineDistance) to improve performance and accuracy.
-        var topChunks = await _dbContext.DocumentChunks
-            .AsNoTracking()
-            .Include(c => c.Doc)
-            .Where(c => c.Embedding != null && (caseCategoryId == null || c.Doc.CategoryId == caseCategoryId))
-            .OrderBy(c => c.Embedding!.CosineDistance(queryVector))
-            .Take(5)
-            .ToListAsync(cancellationToken);
+        Guid? excludeCaseId = null;
+        if (request.CaseId.HasValue && request.CaseId.Value != Guid.Empty)
+            excludeCaseId = request.CaseId.Value;
 
-        // Guardrail: if retrieved context is not semantically close enough, do not call Gemini.
-        // Similarity is computed purely in C# to avoid EF/Pgvector client-side evaluation.
-        var citationsFromChunks = topChunks
-            .Where(c => c.Embedding != null)
-            .Select(c => new CitationItemDto
-            {
-                ChunkId = c.Id,
-                ReferenceUrl = BuildCitationUrl(c.Doc.FilePath, c.ChunkOrder),
-                PageNumber = c.ChunkOrder + 1,
-                SourceText = c.Content
-            })
-            .ToList();
+        var (ragItems, citationsFromRag) = await BuildDualSourceRagAsync(
+            queryEmbedding,
+            queryVector,
+            caseCategoryId,
+            excludeCaseId,
+            cancellationToken);
 
-        var maxSimilarity = topChunks.Count > 0
-            ? topChunks
-                .Where(c => c.Embedding != null)
-                .Select(c => CalculateCosineSimilarity(queryEmbedding, c.Embedding!.ToArray()))
-                .DefaultIfEmpty(0d)
-                .Max()
+        var similarities = ragItems.Select(r => r.Similarity).ToList();
+
+        var maxSimilarity = similarities.Count > 0
+            ? similarities.Max()
             : 0d;
 
-        if (maxSimilarity < MinimumRelevantSimilarity)
+        var calculatedScore = similarities.Count > 0
+            ? similarities.Average()
+            : 0.5d;
+
+        var ragContextAdequate = similarities.Count > 0 && maxSimilarity >= MinimumRelevantSimilarity;
+
+        MedicalCase? predefinedCase = null;
+        if (request.CaseId.HasValue && request.CaseId.Value != Guid.Empty)
         {
-            return new VisualQAResponseDto
-            {
-                AnswerText = MissingMedicalKnowledgeAnswer,
-                SuggestedDiagnosis = null,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = maxSimilarity,
-                Citations = new List<CitationItemDto>()
-            };
+            predefinedCase = await _dbContext.MedicalCases
+                .AsNoTracking()
+                .Include(mc => mc.CaseTags)
+                    .ThenInclude(ct => ct.Tag)
+                .FirstOrDefaultAsync(mc => mc.Id == request.CaseId.Value, cancellationToken);
         }
 
-        var prompt = BuildGeminiPrompt(request, topChunks);
+        var (conversationHistory, existingUserTurns) = await BuildConversationHistoryAsync(request.SessionId, cancellationToken);
+        var currentTurnNumber = existingUserTurns + 1;
+        var prompt = BuildGeminiPrompt(request, ragItems, ragContextAdequate, predefinedCase, currentTurnNumber);
 
         // GeminiService expects "imageUrl" input, but we pass Base64 for our inlineData workflow.
         VisualQAResponseDto response;
@@ -139,22 +129,34 @@ public class VisualQaAiService : IVisualQaAiService
             response = await _geminiService.GenerateMedicalAnswerAsync(
                 prompt,
                 imageB64 ?? string.Empty,
+                conversationHistory,
+                ragContextAdequate,
                 cancellationToken);
         }
         catch
         {
-            // Do not attach RAG similarity here: generation failed and the answer must stay on the triage queue.
+            // Do not persist user/assistant messages when generation fails.
+            throw new InvalidOperationException(AiOverloadVietnameseMessage);
+        }
+
+        if (IsInvalidImageNotXrayResponse(response.AnswerText))
+        {
             return new VisualQAResponseDto
             {
-                AnswerText = AiOverloadVietnameseMessage,
+                AnswerText = InvalidBoneXrayUserMessage,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = AiOverloadVietnameseMessage,
+                AiConfidenceScore = calculatedScore,
                 Citations = new List<CitationItemDto>()
             };
+        }
+
+        if (!ragContextAdequate && !string.IsNullOrWhiteSpace(response.AnswerText)
+            && !response.AnswerText.Contains(RagGeneralKnowledgeDisclaimer, StringComparison.Ordinal))
+        {
+            response.AnswerText = response.AnswerText.TrimEnd() + "\n\n" + RagGeneralKnowledgeDisclaimer;
         }
 
         var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
@@ -173,14 +175,26 @@ public class VisualQaAiService : IVisualQaAiService
             // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
             if (response.Citations == null || response.Citations.Count == 0)
             {
-                response.Citations = citationsFromChunks;
+                response.Citations = citationsFromRag;
             }
             else
             {
-                var metaByChunkId = citationsFromChunks.ToDictionary(c => c.ChunkId, c => c);
+                var metaByChunkId = citationsFromRag
+                    .Where(c => c.MedicalCaseId == null && c.ChunkId != Guid.Empty)
+                    .ToDictionary(c => c.ChunkId, c => c);
+                var metaByCaseId = citationsFromRag
+                    .Where(c => c.MedicalCaseId != null)
+                    .ToDictionary(c => c.MedicalCaseId!.Value, c => c);
                 foreach (var citation in response.Citations)
                 {
-                    if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
+                    if (citation.MedicalCaseId.HasValue
+                        && metaByCaseId.TryGetValue(citation.MedicalCaseId.Value, out var metaCase))
+                    {
+                        citation.SourceText = metaCase.SourceText;
+                        citation.ReferenceUrl = metaCase.ReferenceUrl;
+                        citation.PageNumber = metaCase.PageNumber;
+                    }
+                    else if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
                     {
                         citation.SourceText = meta.SourceText;
                         citation.ReferenceUrl = meta.ReferenceUrl;
@@ -190,9 +204,117 @@ public class VisualQaAiService : IVisualQaAiService
             }
         }
 
-        response.AiConfidenceScore = maxSimilarity;
+        response.AiConfidenceScore = calculatedScore;
 
         return response;
+    }
+
+    private async Task<(List<RagContextItem> Items, List<CitationItemDto> Citations)> BuildDualSourceRagAsync(
+        float[] queryEmbedding,
+        Vector queryVector,
+        Guid? caseCategoryId,
+        Guid? excludeCaseId,
+        CancellationToken cancellationToken)
+    {
+        var topChunks = await _dbContext.DocumentChunks
+            .AsNoTracking()
+            .Include(c => c.Doc)
+            .Where(c => c.Embedding != null && (caseCategoryId == null || c.Doc.CategoryId == caseCategoryId))
+            .OrderBy(c => c.Embedding!.CosineDistance(queryVector))
+            .Take(RagChunkFetch)
+            .ToListAsync(cancellationToken);
+
+        var chunkItems = topChunks
+            .Where(c => c.Embedding != null)
+            .Select(c => new RagContextItem(
+                CalculateCosineSimilarity(queryEmbedding, c.Embedding!.ToArray()),
+                c,
+                null))
+            .ToList();
+
+        var caseRows = await _dbContext.MedicalCases
+            .AsNoTracking()
+            .Where(mc => mc.IsApproved == true && mc.IsActive == true)
+            .Where(mc => caseCategoryId == null || mc.CategoryId == caseCategoryId)
+            .Where(mc => excludeCaseId == null || mc.Id != excludeCaseId.Value)
+            .OrderByDescending(mc => mc.UpdatedAt)
+            .Take(RagMaxCasesToEmbed)
+            .ToListAsync(cancellationToken);
+
+        var caseItems = new List<RagContextItem>();
+        using var semaphore = new SemaphoreSlim(8);
+        try
+        {
+            var tasks = caseRows.Select(async mc =>
+            {
+                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var text = BuildMedicalCaseRagText(mc);
+                    if (string.IsNullOrWhiteSpace(text))
+                        return null;
+
+                    var emb = await _embeddingService.EmbedTextAsync(text, cancellationToken).ConfigureAwait(false);
+                    var sim = CalculateCosineSimilarity(queryEmbedding, emb);
+                    return new RagContextItem(sim, null, mc);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToList();
+
+            foreach (var t in tasks)
+            {
+                var item = await t.ConfigureAwait(false);
+                if (item != null)
+                    caseItems.Add(item);
+            }
+        }
+        catch
+        {
+            throw new InvalidOperationException(AiOverloadVietnameseMessage);
+        }
+
+        var merged = chunkItems
+            .Concat(caseItems)
+            .OrderByDescending(x => x.Similarity)
+            .Take(RagTopMerged)
+            .ToList();
+
+        var citations = merged.Select(r =>
+        {
+            if (r.Chunk != null)
+            {
+                return new CitationItemDto
+                {
+                    ChunkId = r.Chunk.Id,
+                    MedicalCaseId = null,
+                    ReferenceUrl = BuildCitationUrl(r.Chunk.Doc?.FilePath, r.Chunk.ChunkOrder),
+                    PageNumber = r.Chunk.ChunkOrder + 1,
+                    SourceText = r.Chunk.Content
+                };
+            }
+
+            return new CitationItemDto
+            {
+                ChunkId = Guid.Empty,
+                MedicalCaseId = r.Case!.Id,
+                ReferenceUrl = null,
+                PageNumber = null,
+                SourceText = BuildMedicalCaseRagText(r.Case)
+            };
+        }).ToList();
+
+        return (merged, citations);
+    }
+
+    private static string BuildMedicalCaseRagText(MedicalCase mc)
+    {
+        var desc = mc.Description?.Trim() ?? string.Empty;
+        var dx = mc.SuggestedDiagnosis?.Trim() ?? string.Empty;
+        var title = mc.Title?.Trim() ?? string.Empty;
+        return $"{title}\n{desc}\n{dx}".Trim();
     }
 
     /// <summary>
@@ -235,24 +357,62 @@ public class VisualQaAiService : IVisualQaAiService
         return $"[ROI bounding box [ymin, xmin, ymax, xmax] = [{ymin}, {xmin}, {ymax}, {xmax}] on 0–1000 scale.]";
     }
 
+    private static bool IsInvalidImageNotXrayResponse(string? answerText)
+    {
+        if (string.IsNullOrWhiteSpace(answerText))
+            return false;
+        var t = answerText.Trim();
+        return string.Equals(t, InvalidImageNotXrayToken, StringComparison.Ordinal)
+               || t.Contains(InvalidImageNotXrayToken, StringComparison.Ordinal);
+    }
+
     private static bool IsNonMedicalRefusalAnswer(string? answerText)
     {
         if (string.IsNullOrWhiteSpace(answerText))
             return false;
 
         return answerText.Contains("không phải dữ liệu y khoa hợp lệ", StringComparison.OrdinalIgnoreCase)
-               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase)
-               || answerText.Contains("INVALID_IMAGE_NOT_XRAY", StringComparison.Ordinal);
+               || answerText.Contains("không liên quan đến lĩnh vực y khoa", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildGeminiPrompt(
         VisualQARequestDto request,
-        IReadOnlyList<Repositories.Models.DocumentChunk> chunks)
+        IReadOnlyList<RagContextItem> ragItems,
+        bool ragContextAdequate,
+        MedicalCase? predefinedCase,
+        int currentTurnNumber)
     {
         var sb = new StringBuilder();
 
         sb.AppendLine("You are an Expert Radiologist assisting medical students.");
         sb.AppendLine();
+
+        if (predefinedCase != null)
+        {
+            var tagText = predefinedCase.CaseTags
+                .Where(ct => ct.Tag != null && !string.IsNullOrWhiteSpace(ct.Tag.Name))
+                .Select(ct => ct.Tag.Name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .DefaultIfEmpty("N/A");
+
+            sb.AppendLine("Bạn là một Gia sư Y khoa (Medical Tutor).");
+            sb.AppendLine("Dưới đây là thông tin TỔNG QUAN của ca bệnh này:");
+            sb.AppendLine($"- Độ khó: {(string.IsNullOrWhiteSpace(predefinedCase.Difficulty) ? "N/A" : predefinedCase.Difficulty)}");
+            sb.AppendLine($"- Nhãn: {string.Join(", ", tagText)}");
+            if (!string.IsNullOrWhiteSpace(predefinedCase.Description))
+                sb.AppendLine($"- Description: {predefinedCase.Description}");
+            if (!string.IsNullOrWhiteSpace(predefinedCase.SuggestedDiagnosis))
+                sb.AppendLine($"- Chẩn đoán: {predefinedCase.SuggestedDiagnosis}");
+            if (!string.IsNullOrWhiteSpace(predefinedCase.KeyFindings))
+                sb.AppendLine($"- Dấu hiệu chính: {predefinedCase.KeyFindings}");
+            if (!string.IsNullOrWhiteSpace(predefinedCase.ReflectiveQuestions))
+                sb.AppendLine($"- Câu hỏi phản tư: {predefinedCase.ReflectiveQuestions}");
+            sb.AppendLine("LƯU Ý QUAN TRỌNG TỐI CAO: KHÔNG ĐƯỢC trả lời thẳng đáp án (Diagnosis) ngay lập tức cho sinh viên.");
+            sb.AppendLine("Hãy dùng phương pháp Socratic, đặt câu hỏi ngược lại dựa trên 'ReflectiveQuestions' và 'KeyFindings' để dẫn dắt sinh viên tự suy nghĩ.");
+            sb.AppendLine($"Lượt hiện tại của sinh viên trong phiên này: {currentTurnNumber}.");
+            sb.AppendLine("Chỉ đưa ra đáp án chốt khi sinh viên đã hỏi đến lượt thứ 3 hoặc bế tắc.");
+            sb.AppendLine();
+        }
 
         var hasImage = !string.IsNullOrWhiteSpace(request.ImageUrl);
         if (hasImage)
@@ -279,22 +439,46 @@ public class VisualQaAiService : IVisualQaAiService
         }
         sb.AppendLine();
 
-        if (chunks.Count > 0)
+        if (ragItems.Count > 0)
         {
             sb.AppendLine("Dữ liệu tham khảo (Context) dưới đây có thể không liên quan. Nếu thấy không liên quan đến câu hỏi, hãy bỏ qua nó.");
             sb.AppendLine();
-            sb.AppendLine("## Retrieved reference context (use only to support your answer):");
+            sb.AppendLine("## Retrieved reference context (documents + medical case library; use only to support your answer):");
             sb.AppendLine();
 
-            for (var i = 0; i < chunks.Count; i++)
+            for (var i = 0; i < ragItems.Count; i++)
             {
-                var chunk = chunks[i];
-                // Include both [n] ordering and stable chunkId so citationChunkIds can reference retrieved ids.
+                var item = ragItems[i];
                 sb.Append('[').Append(i + 1).Append("] ");
-                sb.Append("(chunkId: ").Append(chunk.Id).Append(") ");
-                sb.AppendLine(chunk.Content ?? string.Empty);
+                if (item.Chunk != null)
+                {
+                    var chunk = item.Chunk;
+                    sb.Append("(source: document_chunk, chunkId: ").Append(chunk.Id).Append(", similarity≈")
+                        .Append(item.Similarity.ToString("0.###")).Append(") ");
+                    sb.AppendLine(chunk.Content ?? string.Empty);
+                }
+                else if (item.Case != null)
+                {
+                    var mc = item.Case;
+                    sb.Append("(source: medical_case, caseId: ").Append(mc.Id).Append(", similarity≈")
+                        .Append(item.Similarity.ToString("0.###")).Append(") ");
+                    sb.AppendLine(BuildMedicalCaseRagText(mc));
+                }
+
                 sb.AppendLine();
             }
+        }
+        else
+        {
+            sb.AppendLine("## Retrieved reference context");
+            sb.AppendLine("No relevant document chunks or medical cases were retrieved from the system library for this query.");
+            sb.AppendLine();
+        }
+
+        if (!ragContextAdequate)
+        {
+            sb.AppendLine("Note: Retrieved reference similarity is below the system's relevance threshold or chunks are missing. Follow the system instructions for general-knowledge mode.");
+            sb.AppendLine();
         }
 
         sb.AppendLine("## User question");
@@ -317,6 +501,41 @@ public class VisualQaAiService : IVisualQaAiService
 ");
 
         return sb.ToString();
+    }
+
+    private async Task<(string? history, int userTurns)> BuildConversationHistoryAsync(Guid? sessionId, CancellationToken cancellationToken)
+    {
+        if (!sessionId.HasValue || sessionId.Value == Guid.Empty)
+            return (null, 0);
+
+        var messages = await _dbContext.QaMessages
+            .AsNoTracking()
+            .Where(m => m.SessionId == sessionId.Value)
+            .Where(m => m.Role != "Lecturer" && m.Role != "Expert")
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .Select(m => new { m.Role, m.Content })
+            .ToListAsync(cancellationToken);
+
+        if (messages.Count == 0)
+            return (null, 0);
+
+        var userTurns = messages.Count(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Previous Conversation:");
+        foreach (var msg in messages)
+        {
+            var role = string.Equals(msg.Role, "Assistant", StringComparison.OrdinalIgnoreCase)
+                ? "Assistant"
+                : "User";
+            var content = (msg.Content ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(content))
+                continue;
+            sb.Append(role).Append(": ").AppendLine(content);
+        }
+
+        return (sb.Length == 0 ? null : sb.ToString().Trim(), userTurns);
     }
 
     private static double CalculateCosineSimilarity(float[] v1, float[] v2)

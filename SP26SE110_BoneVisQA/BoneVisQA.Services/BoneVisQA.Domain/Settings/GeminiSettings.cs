@@ -23,6 +23,9 @@ public class GeminiSettings
     /// <summary>Google Generative Language API base URL; set in <c>Gemini:BaseUrl</c>.</summary>
     public string BaseUrl { get; set; } = string.Empty;
 
+    /// <summary>Embedding model id for <c>:embedContent</c> (default <c>text-embedding-004</c>).</summary>
+    public string EmbeddingModelId { get; set; } = "text-embedding-004";
+
     /// <summary>Ordered, non-empty model ids: <see cref="Models"/> first, else <see cref="ModelId"/>.</summary>
     public IReadOnlyList<string> GetResolvedModelIds()
     {
