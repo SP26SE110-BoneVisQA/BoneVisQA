@@ -6,7 +6,12 @@ namespace BoneVisQA.Services.Interfaces;
 public interface IEmbeddingService
 {
     /// <summary>
-    /// Returns a 768-length float array (Google Gemini <c>text-embedding-004</c>).
+    /// Returns a 768-length embedding vector.
     /// </summary>
     Task<float[]> EmbedTextAsync(string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Batch embedding API. Returns one 768-length vector per input text in the same order.
+    /// </summary>
+    Task<IReadOnlyList<float[]>> BatchEmbedContentsAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default);
 }

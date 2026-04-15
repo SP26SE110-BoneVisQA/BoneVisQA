@@ -23,6 +23,12 @@ public partial class DocumentChunk
     [Column("chunk_order")]
     public int ChunkOrder { get; set; }
 
+    [Column("start_page")]
+    public int StartPage { get; set; }
+
+    [Column("end_page")]
+    public int EndPage { get; set; }
+
     [Column("embedding", TypeName = "vector(768)")]
     public Pgvector.Vector? Embedding { get; set; }
 

@@ -19,6 +19,13 @@ public partial class Document
     [Column("file_path")]
     public string? FilePath { get; set; }
 
+    [Column("pending_reindex_path")]
+    public string? PendingReindexPath { get; set; }
+
+    [Column("pending_reindex_hash")]
+    [StringLength(64)]
+    public string? PendingReindexHash { get; set; }
+
     [Column("category_id")]
     public Guid? CategoryId { get; set; }
 
@@ -43,6 +50,9 @@ public partial class Document
 
     [Column("total_pages")]
     public int TotalPages { get; set; }
+
+    [Column("total_chunks")]
+    public int TotalChunks { get; set; }
 
     [Column("current_page_indexing")]
     public int CurrentPageIndexing { get; set; }

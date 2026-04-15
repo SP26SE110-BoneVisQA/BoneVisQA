@@ -12,12 +12,20 @@ public class DocumentUploadDto
     public List<Guid> TagIds { get; set; } = new();
 }
 
+public class DocumentChunkCitationFrequencyDto
+{
+    public Guid ChunkId { get; set; }
+    public Guid DocumentId { get; set; }
+    public int RetrievalCount { get; set; }
+}
+
 public class DocumentDto
 {
     public Guid Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? FilePath { get; set; }
     public Guid? CategoryId { get; set; }
+    public string? Category { get; set; }
     public string IndexingStatus { get; set; } = "Pending";
     public int IndexingProgress { get; set; }
     public string? ContentHash { get; set; }
@@ -25,6 +33,7 @@ public class DocumentDto
     public bool IsOutdated { get; set; }
     public DateTime? CreatedAt { get; set; }
     public int TotalPages { get; set; }
+    public int TotalChunks { get; set; }
     public int CurrentPageIndexing { get; set; }
 }
 
@@ -33,6 +42,9 @@ public class DocumentIngestionStatusDto
     public string Status { get; set; } = "Processing";
     public int ProgressPercentage { get; set; }
     public string CurrentOperation { get; set; } = string.Empty;
+    public int TotalPages { get; set; }
+    public int TotalChunks { get; set; }
+    public int CurrentPageIndexing { get; set; }
 }
 
 /// <summary>One row from a batch admin document upload.</summary>
@@ -66,11 +78,19 @@ public interface IDocumentService
         IFormFile file,
         DocumentUploadDto metadata,
         CancellationToken cancellationToken = default);
+    Task<DocumentDto> UpdateDocumentVersionAsync(
+        Guid id,
+        IFormFile file,
+        CancellationToken cancellationToken = default);
     Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync();
     Task<DocumentDto?> GetDocumentByIdAsync(Guid id);
     Task<bool> DeleteDocumentAsync(Guid id);
     Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
     Task<DocumentIngestionStatusDto?> GetIngestionStatusAsync(Guid id);
+    Task<IReadOnlyList<DocumentChunkCitationFrequencyDto>> GetChunkCitationFrequencyAsync(
+        Guid? documentId = null,
+        int top = 100,
+        CancellationToken cancellationToken = default);
     string MapStatusForApi(string? rawStatus);
 }

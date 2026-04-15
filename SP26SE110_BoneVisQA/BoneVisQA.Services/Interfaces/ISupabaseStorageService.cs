@@ -21,6 +21,12 @@ public interface ISupabaseStorageService
 
     Task<bool> DeleteFileAsync(string bucket, string filePath, CancellationToken cancellationToken = default);
 
+    Task<bool> MoveFileAsync(
+        string bucket,
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Lists object paths under <paramref name="prefix"/> (Storage REST list API).</summary>
     Task<IReadOnlyList<string>> ListObjectPathsAsync(
         string bucket,

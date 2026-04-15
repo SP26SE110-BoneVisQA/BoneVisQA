@@ -11,6 +11,7 @@ namespace BoneVisQA.Services.Interfaces;
 public interface IStudentService
 {
     Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null);
+    Task<CaseCatalogFiltersDto> GetCaseCatalogFiltersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId);
 
     Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter);
@@ -29,6 +30,7 @@ public interface IStudentService
     Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
 
     Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId);
+    Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default);
 
     /// <summary>Visual QA sessions for the student, newest first.</summary>
     Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(
@@ -52,7 +54,7 @@ public interface IStudentService
     Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDto submit);
 
     /// <summary>
-    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// Return the list of classes the student has enrolled in.
     /// </summary>
     Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId);
 
@@ -62,12 +64,12 @@ public interface IStudentService
     Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId);
 
     /// <summary>
-    /// Sinh viên tự rời lớp (xóa ClassEnrollment của chính mình).
+    /// Student tự rời lớp (xóa ClassEnrollment của chính mình).
     /// </summary>
     Task LeaveEnrolledClassAsync(Guid studentId, Guid classId);
 
     /// <summary>
-    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer của lớp gán quiz.
+    /// Student gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer của lớp gán quiz.
     /// </summary>
     Task RequestRetakeAsync(Guid studentId, Guid quizId);
 }
