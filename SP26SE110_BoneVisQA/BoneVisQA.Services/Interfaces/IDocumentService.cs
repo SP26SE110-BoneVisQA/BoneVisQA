@@ -24,6 +24,8 @@ public class DocumentDto
     public int Version { get; set; }
     public bool IsOutdated { get; set; }
     public DateTime? CreatedAt { get; set; }
+    public int TotalPages { get; set; }
+    public int CurrentPageIndexing { get; set; }
 }
 
 public class DocumentIngestionStatusDto
@@ -53,12 +55,14 @@ public interface IDocumentProcessingService
 
 public interface IDocumentService
 {
-    /// <summary>
-    /// Downloads the file from storage and runs RAG ingestion. Intended for use inside a new DI scope (e.g. background <c>Task.Run</c>), not from the HTTP request scope.
-    /// </summary>
-    Task IngestDocumentInBackgroundAsync(Guid documentId, string fileUrl);
-
     Task<DocumentDto> UploadDocumentAsync(
+        IFormFile file,
+        DocumentUploadDto metadata,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Uploads a new PDF for an existing document when content hash changes; clears vectors and sets status to Pending.</summary>
+    Task<DocumentDto> UpdateDocumentFileAsync(
+        Guid id,
         IFormFile file,
         DocumentUploadDto metadata,
         CancellationToken cancellationToken = default);

@@ -58,9 +58,16 @@ namespace BoneVisQA.Services.Services.Admin
 
         private static string NormalizeApiStatus(string? status)
         {
-            return string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase)
-                ? "Completed"
-                : "Failed";
+            if (string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase))
+                return "Completed";
+            if (string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase))
+                return "Failed";
+            if (string.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase))
+                return "Pending";
+            if (string.Equals(status, "Processing", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "In Progress", StringComparison.OrdinalIgnoreCase))
+                return "Processing";
+            return "Failed";
         }
         // ── UpdateTagsAsync: sync toàn bộ tags ──────────────
         public async Task<DocumentDTO> UpdateTagsAsync(Guid documentId, List<Guid> tagIds)

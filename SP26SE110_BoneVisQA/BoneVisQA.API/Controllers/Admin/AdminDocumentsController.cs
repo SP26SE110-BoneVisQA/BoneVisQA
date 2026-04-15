@@ -13,7 +13,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 [Tags("Admin - Documents")]
 public class AdminDocumentsController : ControllerBase
 {
-    private const long MaxDocumentUploadBytes = 100 * 1024 * 1024;
+    private const long MaxDocumentUploadBytes = 50 * 1024 * 1024;
     private readonly IDocumentManagementService _documentManagementService;
     private readonly IDocumentQualityService _documentQualityService;
     private readonly IDocumentService _documentService;
@@ -158,7 +158,7 @@ public class AdminDocumentsController : ControllerBase
                 {
                     Title = "Invalid request",
                     Status = StatusCodes.Status400BadRequest,
-                    Detail = $"File '{file.FileName}' vượt quá giới hạn 100MB.",
+                    Detail = $"File '{file.FileName}' vượt quá giới hạn 50MB.",
                     Instance = HttpContext.Request.Path
                 });
             }
@@ -224,12 +224,60 @@ public class AdminDocumentsController : ControllerBase
         return success ? NoContent() : NotFound(new { message = "Document not found." });
     }
 
+    /// <summary>
+    /// Upload a new PDF for an existing document. If the SHA-256 content hash changes, old vectors are removed and the document is queued for re-indexing.
+    /// </summary>
+    [HttpPut("{id:guid}/file")]
+    [RequestSizeLimit(MaxDocumentUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxDocumentUploadBytes)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(DocumentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateDocumentFile(Guid id, [FromForm] DocumentFileUpdateRequest request, CancellationToken cancellationToken)
+    {
+        if (request.File == null || request.File.Length == 0)
+            return BadRequest(new { message = "A PDF file is required." });
+
+        if (request.File.Length > MaxDocumentUploadBytes)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "File vượt quá giới hạn 50MB.",
+                Instance = HttpContext.Request.Path
+            });
+        }
+
+        var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
+        if (extension != ".pdf")
+            return BadRequest(new { message = $"Only PDF files are allowed ({request.File.FileName})." });
+
+        var metadata = new DocumentUploadDto
+        {
+            Title = request.Title ?? string.Empty,
+            CategoryId = request.CategoryId,
+            TagIds = request.TagIds ?? new List<Guid>()
+        };
+
+        try
+        {
+            var document = await _documentService.UpdateDocumentFileAsync(id, request.File, metadata, cancellationToken);
+            return Ok(new { message = "Document updated.", document });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Document not found." });
+        }
+    }
+
     [HttpPost("{id:guid}/reindex")]
     public async Task<IActionResult> Reindex(Guid id)
     {
         var success = await _documentService.TriggerReindexAsync(id);
         return success
-            ? Ok(new { message = "Reindexing started." })
+            ? Ok(new { message = "Reindexing queued (same file)." })
             : NotFound(new { message = "Document not found or has no file path." });
     }
 
@@ -268,4 +316,13 @@ public class DocumentUploadRequest
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
     public List<Guid> TagIds { get; set; } = new();
+}
+
+/// <summary>Multipart body for <c>PUT /api/admin/documents/{id}/file</c>.</summary>
+public class DocumentFileUpdateRequest
+{
+    public IFormFile File { get; set; } = null!;
+    public string? Title { get; set; }
+    public Guid? CategoryId { get; set; }
+    public List<Guid>? TagIds { get; set; }
 }
