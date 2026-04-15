@@ -347,7 +347,7 @@ public class StudentService : IStudentService
             CaseId = request.CaseId,
             ImageId = request.ImageId,
             CustomImageUrl = imageUrlToSave,
-            Status = "PendingLecturerReview",
+            Status = "Active",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -392,6 +392,22 @@ public class StudentService : IStudentService
         {
             await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync();
             await _unitOfWork.Context.QaMessages.AddRangeAsync(userMessage, assistantMessage);
+            if (response.Citations != null && response.Citations.Count > 0)
+            {
+                var citationRows = response.Citations
+                    .Where(c => c.ChunkId != Guid.Empty)
+                    .Select(c => new Citation
+                    {
+                        Id = Guid.NewGuid(),
+                        MessageId = assistantMessage.Id,
+                        ChunkId = c.ChunkId,
+                        SimilarityScore = response.AiConfidenceScore ?? 0d
+                    })
+                    .ToList();
+
+                if (citationRows.Count > 0)
+                    await _unitOfWork.Context.Citations.AddRangeAsync(citationRows);
+            }
             session.UpdatedAt = DateTime.UtcNow;
             await _unitOfWork.SaveAsync();
             await transaction.CommitAsync();
@@ -415,6 +431,52 @@ public class StudentService : IStudentService
                 "Không thể lưu hội thoại Visual QA vào cơ sở dữ liệu. Vui lòng thử lại sau.",
                 ex);
         }
+    }
+
+    public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId);
+        if (session == null)
+            throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+
+        var hasInstructorMessage = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .AnyAsync(m =>
+                m.SessionId == sessionId &&
+                (m.Role == "Expert" || m.Role == "Lecturer"));
+        if (!string.Equals(session.Status, "Active", StringComparison.Ordinal) || hasInstructorMessage)
+            throw new InvalidOperationException("SESSION_READ_ONLY");
+
+        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
+        var inactiveTime = DateTime.UtcNow - lastActivity;
+        if (inactiveTime.TotalHours >= 24)
+            throw new InvalidOperationException("SESSION_EXPIRED");
+
+        var userTurnCount = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Where(m => m.SessionId == sessionId && m.Role == "User")
+            .CountAsync();
+
+        if (userTurnCount >= maxUserQuestions)
+            throw new InvalidOperationException("TURN_LIMIT_EXCEEDED");
+    }
+
+    public async Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+
+        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
+        var inactiveTime = DateTime.UtcNow - lastActivity;
+        if (inactiveTime.TotalHours >= 24)
+            throw new InvalidOperationException("SESSION_EXPIRED");
+
+        session.Status = "PendingExpertReview";
+        session.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
     }
 
     private static string NormalizeLanguage(string? language)
@@ -451,6 +513,58 @@ public class StudentService : IStudentService
             .ToList();
 
         return normalized.Count == 0 ? null : JsonSerializer.Serialize(normalized);
+    }
+
+    public async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(Guid studentId, int limit = 20, int offset = 0)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        offset = Math.Max(offset, 0);
+        const int snippetMax = 240;
+        var baseQuery = _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(s => s.Messages)
+            .Where(s => s.StudentId == studentId)
+            .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
+
+        var totalCount = await baseQuery.CountAsync();
+        var sessions = await baseQuery
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync();
+
+        var list = new List<VisualQaSessionHistoryItemDto>(sessions.Count);
+        foreach (var s in sessions)
+        {
+            var firstUser = s.Messages
+                .Where(m => m.Role == "User")
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id)
+                .FirstOrDefault();
+            var raw = firstUser?.Content?.Trim() ?? string.Empty;
+            string? snippet = null;
+            if (raw.Length > 0)
+            {
+                snippet = raw.Length <= snippetMax
+                    ? raw
+                    : raw[..snippetMax].TrimEnd() + "…";
+            }
+
+            list.Add(new VisualQaSessionHistoryItemDto
+            {
+                SessionId = s.Id,
+                CaseId = s.CaseId,
+                Status = s.Status,
+                UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
+                QuestionSnippet = snippet
+            });
+        }
+
+        return new PagedResultDto<VisualQaSessionHistoryItemDto>
+        {
+            TotalCount = totalCount,
+            Items = list
+        };
     }
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)

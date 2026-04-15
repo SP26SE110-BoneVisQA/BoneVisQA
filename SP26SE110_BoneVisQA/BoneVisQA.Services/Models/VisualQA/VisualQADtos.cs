@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.VisualQA;
 
@@ -42,6 +43,10 @@ public class VisualQARequestDto
 public class CitationItemDto
 {
     public Guid ChunkId { get; set; }
+
+    /// <summary>Set when the citation comes from <c>medical_cases</c> RAG (not a document chunk).</summary>
+    public Guid? MedicalCaseId { get; set; }
+
     /// <summary>
     /// Public URL to the underlying document file stored in Supabase.
     /// </summary>
@@ -74,4 +79,24 @@ public class VisualQAResponseDto
     public string? ErrorMessage { get; set; }
 
     public List<CitationItemDto> Citations { get; set; } = new();
+}
+
+/// <summary>Summary row for Visual QA session history (student).</summary>
+public class VisualQaSessionHistoryItemDto
+{
+    public Guid SessionId { get; set; }
+    public Guid? CaseId { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? UpdatedAt { get; set; }
+    /// <summary>First user question in the session (truncated for list views).</summary>
+    public string? QuestionSnippet { get; set; }
+}
+
+public class PagedResultDto<T>
+{
+    [JsonPropertyName("totalCount")]
+    public int TotalCount { get; set; }
+
+    [JsonPropertyName("items")]
+    public IReadOnlyList<T> Items { get; set; } = Array.Empty<T>();
 }

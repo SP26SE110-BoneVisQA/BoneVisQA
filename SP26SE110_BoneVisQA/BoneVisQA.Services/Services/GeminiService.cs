@@ -21,28 +21,40 @@ public class GeminiService : IGeminiService
         "Xin lỗi, dựa trên cơ sở dữ liệu y khoa cơ xương khớp của chúng tôi, tôi không tìm thấy thông tin đủ tin cậy để trả lời câu hỏi chuyên sâu này của bạn.";
     private const string NoContextAnswer =
         "Dữ liệu y khoa hiện có không chứa thông tin để trả lời câu hỏi này.";
-    private const string SystemPrompt =
-        "STEP 1: Analyze if the provided image is a Human Bone X-Ray. If it is NOT (e.g., it is a CT scan, MRI, an animal, or a random object), YOU MUST refuse to answer medical questions and output EXACTLY this string: 'INVALID_IMAGE_NOT_XRAY'. Stop processing further.\n" +
-        "\n" +
-        // STRICT: non-medical image/question requests must be refused with no citations.
-        "BẮT BUỘC PHÂN TÍCH CÂU HỎI VÀ HÌNH ẢNH (TỪ CHỐI TUYỆT ĐỐI):\n" +
-        "Nếu câu hỏi KHÔNG liên quan đến y khoa cơ xương khớp, sức khỏe hoặc chẩn đoán hình ảnh cơ xương khớp (ví dụ: hỏi giá xăng, thời tiết, chính trị, code lập trình...), BẮT BUỘC phải trả lời chính xác bằng câu này: 'Câu hỏi của bạn không liên quan đến lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn hợp lệ.'\n" +
-        "Tuyệt đối không được trả lời là 'Cơ sở dữ liệu không có thông tin'.\n" +
-        "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null, BỎ QUA MỌI YÊU CẦU KHÁC và KHÔNG được trả citations.\n" +
-        "\n" +
-        "BẮT BUỘC KIỂM TRA HÌNH ẢNH (NẾU CÓ):\n" +
-        "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null. KHÔNG được trả citations. Bỏ qua mọi yêu cầu khác.\n" +
-        "\n" +
-        "Bắt đầu câu trả lời ngay lập tức. KHÔNG chào hỏi. KHÔNG giới thiệu.\n" +
-        "KHÔNG trả lời nằm ngoài các trường JSON: answerText, suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
-        "You must return a raw JSON object without any markdown wrapping like ```json.\n" +
-        "Khi trả lời hợp lệ về chuyên ngành, trả lời bằng tiếng Việt chuyên ngành y khoa chuẩn xác.\n" +
-        "\n" +
-        "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
-        "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions là null.\n" +
-        "\n" +
-        "CHỈ TRẢ VỀ DUY NHẤT 1 ĐỐI TƯỢNG JSON và không chèn thêm bất kỳ nội dung nào khác.\n" +
-        "Không thêm các trường phụ như citationChunkIds vào bên trong answerText.";
+
+    /// <param name="ragContextAdequate">False when vector retrieval found no/weak chunks — model may use general knowledge and must append the disclaimer (see implementation).</param>
+    private static string BuildSystemPrompt(bool ragContextAdequate)
+    {
+        var ragPolicy = ragContextAdequate
+            ? "Chỉ khi hình (nếu có) là dữ liệu y khoa hợp lệ, câu hỏi thuộc y khoa xương khớp và Context đủ: mới được điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions.\n" +
+              "Luôn ưu tiên Context RAG. Nếu Context không đủ, hãy trả answerText đúng: '" + NoContextAnswer + "' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions là null.\n"
+            : "Thư viện tài liệu (Context RAG) có thể không có hoặc không đủ liên quan. TRONG TRƯỜNG HỢP NÀY, bạn VẪN PHẢI trả lời bằng kiến thức y khoa tổng quát về cơ xương khớp (ưu tiên phân tích hình ảnh nếu có). Có thể điền suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions khi phù hợp. Ở cuối answerText, LUÔN thêm đúng câu: (Lưu ý: Phân tích này dựa trên kiến thức AI tổng quát vì không tìm thấy tài liệu tham chiếu trực tiếp trong thư viện của hệ thống).\n" +
+              "KHÔNG trả answerText chỉ là câu từ chối chung khi câu hỏi vẫn thuộc y khoa cơ xương khớp — hãy giải thích học thuật trước, rồi mới có thể thêm lưu ý thiếu tài liệu như trên.\n";
+
+        return
+            "STEP 1: Analyze if the provided image is a Human Bone X-Ray. If it is NOT (e.g., it is a CT scan, MRI, an animal, or a random object), YOU MUST refuse to answer medical questions and output EXACTLY this string: 'INVALID_IMAGE_NOT_XRAY'. Stop processing further.\n" +
+            "\n" +
+            "BẮT BUỘC PHÂN TÍCH CÂU HỎI VÀ HÌNH ẢNH (TỪ CHỐI TUYỆT ĐỐI):\n" +
+            "Nếu câu hỏi KHÔNG liên quan đến y khoa cơ xương khớp, sức khỏe hoặc chẩn đoán hình ảnh cơ xương khớp (ví dụ: hỏi giá xăng, thời tiết, chính trị, code lập trình...), BẮT BUỘC phải trả lời chính xác bằng câu này: 'Câu hỏi của bạn không liên quan đến lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn hợp lệ.'\n" +
+            "Tuyệt đối không được trả lời là 'Cơ sở dữ liệu không có thông tin'.\n" +
+            "Trong trường hợp từ chối theo quy tắc này: đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null, BỎ QUA MỌI YÊU CẦU KHÁC và KHÔNG được trả citations.\n" +
+            "\n" +
+            "BẮT BUỘC KIỂM TRA HÌNH ẢNH (NẾU CÓ):\n" +
+            "1. Nếu hình ảnh được cung cấp KHÔNG phải là hình ảnh y khoa liên quan đến cơ xương khớp (ví dụ: ảnh phong cảnh, động vật, con người bình thường, đồ vật, ảnh không thuộc lĩnh vực cơ xương khớp...), BẠN PHẢI TỪ CHỐI bằng cách đặt `answerText` là 'Hình ảnh cung cấp không phải là dữ liệu y khoa hợp lệ.' và đặt suggestedDiagnosis, differentialDiagnoses, keyImagingFindings, reflectiveQuestions thành null. KHÔNG được trả citations. Bỏ qua mọi yêu cầu khác.\n" +
+            "\n" +
+            "You MUST output a JSON object with EXACTLY these keys: 'answerText', 'suggestedDiagnosis', 'keyFindings' (array), 'differentialDiagnoses' (array), 'reflectiveQuestions'. DO NOT leave them null if evidence exists in the image or context.\n" +
+            "\n" +
+            "Bắt đầu câu trả lời ngay lập tức. KHÔNG chào hỏi. KHÔNG giới thiệu.\n" +
+            "KHÔNG trả lời nằm ngoài các trường JSON: answerText, suggestedDiagnosis, keyFindings, differentialDiagnoses, reflectiveQuestions.\n" +
+            "You must return a raw JSON object without any markdown wrapping like ```json.\n" +
+            "Khi trả lời hợp lệ về chuyên ngành, trả lời bằng tiếng Việt chuyên ngành y khoa chuẩn xác.\n" +
+            "\n" +
+            ragPolicy +
+            "\n" +
+            "CHỈ TRẢ VỀ DUY NHẤT 1 ĐỐI TƯỢNG JSON và không chèn thêm bất kỳ nội dung nào khác.\n" +
+            "Không thêm các trường phụ như citationChunkIds vào bên trong answerText.\n" +
+            "KHÔNG được tự tạo hay ước lượng trường độ tin cậy / aiConfidenceScore trong JSON — hệ thống sẽ gán điểm dựa trên toán học RAG.";
+    }
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly GeminiSettings _settings;
@@ -61,6 +73,8 @@ public class GeminiService : IGeminiService
     public async Task<VisualQAResponseDto> GenerateMedicalAnswerAsync(
         string prompt,
         string imageUrl,
+        string? conversationHistory = null,
+        bool ragContextAdequate = true,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -157,7 +171,7 @@ public class GeminiService : IGeminiService
 
             try
             {
-                var payload = BuildVisionPayload(prompt, base64Image, mimeType ?? MimeTypeJpeg);
+                var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate);
 
                 using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 req.Content = new StringContent(
@@ -254,16 +268,24 @@ public class GeminiService : IGeminiService
             $"All configured Gemini models failed ({modelIds.Count} model(s)). Summary: {string.Join(" | ", failureSummaries)}");
     }
 
-    private static Dictionary<string, object> BuildVisionPayload(string prompt, string? base64Image, string mimeType)
+    private static Dictionary<string, object> BuildVisionPayload(
+        string prompt,
+        string? conversationHistory,
+        string? base64Image,
+        string mimeType,
+        bool ragContextAdequate)
     {
         // Required Gemini multimodal structure for v1:
         // { "contents": [ { "parts": [ { "text": "..." }, { "inlineData": { "mimeType": "image/jpeg", "data": "..." } } ] } ] }
-        // For prompt persona enforcement in v1, we inline the SystemPrompt into the text portion.
+        // For prompt persona enforcement in v1, we inline the system prompt into the text portion.
+        var systemPrompt = BuildSystemPrompt(ragContextAdequate);
         var parts = new List<object>
         {
             new Dictionary<string, object>
             {
-                ["text"] = $"{SystemPrompt}\n\n{prompt}"
+                ["text"] = string.IsNullOrWhiteSpace(conversationHistory)
+                    ? $"{systemPrompt}\n\n{prompt}"
+                    : $"{systemPrompt}\n\nPrevious Conversation Context:\n{conversationHistory}\n\n{prompt}"
             }
         };
 
@@ -447,7 +469,8 @@ public class GeminiService : IGeminiService
             };
         }
 
-        using var parsed = JsonDocument.Parse(text);
+        var sanitizedText = SanitizeJsonCandidateText(text);
+        using var parsed = JsonDocument.Parse(sanitizedText);
         var result = parsed.RootElement;
 
         var answerText = result.TryGetProperty("answerText", out var a) ? a.GetString() : null;
@@ -457,9 +480,11 @@ public class GeminiService : IGeminiService
         var differentialDiagnoses = result.TryGetProperty("differentialDiagnoses", out var d)
             ? ReadStringList(d)
             : null;
-        var keyImagingFindings = result.TryGetProperty("keyImagingFindings", out var kfi)
-            ? ReadStringOrJoinedArray(kfi)
-            : null;
+        string? keyImagingFindings = null;
+        if (result.TryGetProperty("keyFindings", out var kf))
+            keyImagingFindings = ReadStringOrJoinedArray(kf);
+        else if (result.TryGetProperty("keyImagingFindings", out var kfi))
+            keyImagingFindings = ReadStringOrJoinedArray(kfi);
         var reflectiveQuestions = result.TryGetProperty("reflectiveQuestions", out var rq)
             ? ReadStringOrJoinedArray(rq)
             : null;
@@ -629,6 +654,24 @@ public class GeminiService : IGeminiService
         }
 
         return string.Empty;
+    }
+
+    private static string SanitizeJsonCandidateText(string rawData)
+    {
+        if (string.IsNullOrWhiteSpace(rawData))
+            return string.Empty;
+
+        var cleaned = rawData
+            .Replace("```json", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("```", string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        var start = cleaned.IndexOf('{');
+        var end = cleaned.LastIndexOf('}');
+        if (start >= 0 && end > start)
+            cleaned = cleaned.Substring(start, end - start + 1);
+
+        return cleaned.Trim();
     }
 
     private static bool IsTransient(System.Net.HttpStatusCode statusCode)

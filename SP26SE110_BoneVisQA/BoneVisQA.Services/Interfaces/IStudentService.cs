@@ -25,6 +25,12 @@ public interface IStudentService
     Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
     Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
+    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
+
+    Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId);
+
+    /// <summary>Visual QA sessions for the student, newest first.</summary>
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(Guid studentId, int limit = 20, int offset = 0);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 
