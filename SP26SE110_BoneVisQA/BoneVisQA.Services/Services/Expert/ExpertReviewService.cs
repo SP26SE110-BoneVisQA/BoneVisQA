@@ -18,18 +18,17 @@ public class ExpertReviewService : IExpertReviewService
     private readonly IRagExpertAnswerIndexingSignal _ragExpertAnswerIndexingSignal;
 
     /// <summary>
-    /// Lecturer triage must have escalated; student must be enrolled in a class where this expert is assigned.
+    /// Expert queue sourced from Visual QA sessions escalated by lecturer.
     /// </summary>
-    private static IQueryable<CaseAnswer> QueryExpertScopedEscalatedQueue(IUnitOfWork uow, Guid expertId) =>
-        uow.Context.CaseAnswers
+    private static IQueryable<VisualQASession> QueryExpertScopedEscalatedQueue(IUnitOfWork uow, Guid expertId) =>
+        uow.Context.VisualQaSessions
             .AsNoTracking()
-            .Where(a =>
-                a.Status == CaseAnswerStatuses.EscalatedToExpert ||
-                a.Status == CaseAnswerStatuses.Escalated)
-            .Where(a =>
+            .Where(s => s.Status == "EscalatedToExpert")
+            .Where(s =>
                 uow.Context.ClassEnrollments.Any(e =>
-                    e.StudentId == a.Question.StudentId &&
-                    e.Class!.ExpertId == expertId));
+                    e.StudentId == s.StudentId &&
+                    e.Class != null &&
+                    e.Class.ExpertId == expertId));
 
     public ExpertReviewService(
         IUnitOfWork unitOfWork,
@@ -43,21 +42,21 @@ public class ExpertReviewService : IExpertReviewService
 
     public async Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId)
     {
-        // Materialize answers first so Include(... ThenInclude Chunk.Doc) is not dropped by a final Select projection (avoids N+1 on documents).
-        var answers = await QueryExpertScopedEscalatedQueue(_unitOfWork, expertId)
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Student)
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Case)
-                    .ThenInclude(c => c!.MedicalImages)
-            .Include(a => a.ExpertReviews)
-            .Include(a => a.Citations)
-                .ThenInclude(c => c.Chunk)
-                    .ThenInclude(ch => ch.Doc)
-            .OrderByDescending(a => a.EscalatedAt ?? a.Question.CreatedAt)
+        var sessions = await QueryExpertScopedEscalatedQueue(_unitOfWork, expertId)
+            .AsSplitQuery()
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+                .ThenInclude(m => m.Citations)
+                    .ThenInclude(c => c.Chunk)
+                        .ThenInclude(ch => ch.Doc)
+            .Include(s => s.ExpertReviews)
+            .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt)
             .ToListAsync();
 
-        var studentIds = answers.Select(a => a.Question.StudentId).Distinct().ToList();
+        var studentIds = sessions.Select(s => s.StudentId).Distinct().ToList();
         var enrollmentRows = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .Include(e => e.Class)
@@ -69,81 +68,313 @@ public class ExpertReviewService : IExpertReviewService
             .GroupBy(e => e.StudentId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        return answers.Select(a =>
+        return sessions.Select(s =>
         {
-            enrollmentByStudent.TryGetValue(a.Question.StudentId, out var enrollment);
-            var review = a.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+            enrollmentByStudent.TryGetValue(s.StudentId, out var enrollment);
+            var review = s.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+            var orderedMessages = s.Messages
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id)
+                .ToList();
+            var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
+            var latestAssistant = orderedMessages.LastOrDefault(m => m.Role == "Assistant");
+
             return new ExpertEscalatedAnswerDto
             {
-                AnswerId = a.Id,
-                QuestionId = a.QuestionId,
-                StudentId = a.Question.StudentId,
-                StudentName = a.Question.Student?.FullName ?? string.Empty,
-                StudentEmail = a.Question.Student?.Email ?? string.Empty,
-                CaseId = a.Question.CaseId,
-                CaseTitle = a.Question.Case?.Title ?? string.Empty,
-                QuestionText = a.Question.QuestionText,
-                CurrentAnswerText = a.AnswerText,
-                StructuredDiagnosis = a.StructuredDiagnosis,
-                DifferentialDiagnoses = a.DifferentialDiagnoses,
-                KeyImagingFindings = a.KeyImagingFindings,
-                ReflectiveQuestions = a.ReflectiveQuestions,
-                Status = a.Status,
-                EscalatedById = a.EscalatedById,
-                EscalatedAt = a.EscalatedAt,
-                AiConfidenceScore = a.AiConfidenceScore,
+                AnswerId = s.Id,
+                QuestionId = userMessage?.Id ?? Guid.Empty,
+                StudentId = s.StudentId,
+                StudentName = s.Student?.FullName ?? string.Empty,
+                StudentEmail = s.Student?.Email ?? string.Empty,
+                CaseId = s.CaseId,
+                CaseTitle = s.Case?.Title ?? string.Empty,
+                QuestionText = userMessage?.Content ?? string.Empty,
+                CurrentAnswerText = latestAssistant?.Content,
+                StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
+                DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses,
+                KeyImagingFindings = latestAssistant?.KeyImagingFindings,
+                ReflectiveQuestions = latestAssistant?.ReflectiveQuestions,
+                Status = s.Status,
+                EscalatedById = s.LecturerId,
+                EscalatedAt = s.UpdatedAt ?? s.CreatedAt,
+                AiConfidenceScore = latestAssistant?.AiConfidenceScore,
                 ClassId = enrollment?.ClassId,
                 ClassName = enrollment?.Class?.ClassName ?? string.Empty,
                 ReviewNote = review?.ReviewNote,
-                Citations = MapCitations(a.Citations),
-                ImageUrl = ResolveQuestionImageUrl(a.Question),
-                CustomCoordinates = a.Question.CustomCoordinates
+                PromotedCaseId = s.PromotedCaseId,
+                Citations = MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
+                ImageUrl = ResolveSessionImageUrl(s),
+                CustomCoordinates = userMessage?.Coordinates
             };
         }).ToList();
     }
 
     public Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId)
         => GetEscalatedAnswersAsync(expertId);
-    public async Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid answerId, ResolveEscalatedAnswerRequestDto request)
+
+    public async Task<ExpertEscalatedAnswerDto> RespondToSessionAsync(Guid expertId, Guid sessionId, string content)
     {
-        var answer = await _unitOfWork.Context.CaseAnswers
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Student)
-            .Include(a => a.Question)
-                .ThenInclude(q => q.Case)
-                    .ThenInclude(c => c!.MedicalImages)
-            .Include(a => a.ExpertReviews)
-            .Include(a => a.Citations)
-                .ThenInclude(c => c.Chunk)
-                    .ThenInclude(ch => ch.Doc)
-            .FirstOrDefaultAsync(a => a.Id == answerId)
-            ?? throw new KeyNotFoundException("Không tìm thấy câu trả lời cần xử lý.");
+        if (string.IsNullOrWhiteSpace(content))
+            throw new InvalidOperationException("Nội dung phản hồi của chuyên gia là bắt buộc.");
+
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+                .ThenInclude(m => m.Citations)
+                    .ThenInclude(c => c.Chunk)
+                        .ThenInclude(ch => ch.Doc)
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
 
         var enrollment = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
             .FirstOrDefaultAsync(e =>
-                e.StudentId == answer.Question.StudentId &&
+                e.StudentId == session.StudentId &&
                 e.Class.ExpertId == expertId);
 
-        var existingReview = answer.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+        if (enrollment == null)
+            throw new InvalidOperationException("Chuyên gia không có quyền phản hồi phiên hỏi đáp này.");
 
-        if (string.Equals(answer.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.OrdinalIgnoreCase))
-            throw new ConflictException("Câu trả lời này đã được xử lý trước đó.");
+        var now = DateTime.UtcNow;
+        var expertMessage = new QAMessage
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Expert",
+            Content = content.Trim(),
+            CreatedAt = now
+        };
+
+        await _unitOfWork.Context.QaMessages.AddAsync(expertMessage);
+        session.Status = "Active";
+        session.ExpertId = expertId;
+        session.UpdatedAt = now;
+        await _unitOfWork.SaveAsync();
+
+        var orderedMessages = session.Messages
+            .Append(expertMessage)
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
+
+        return new ExpertEscalatedAnswerDto
+        {
+            AnswerId = session.Id,
+            QuestionId = userMessage?.Id ?? Guid.Empty,
+            StudentId = session.StudentId,
+            StudentName = session.Student?.FullName ?? string.Empty,
+            StudentEmail = session.Student?.Email ?? string.Empty,
+            CaseId = session.CaseId,
+            CaseTitle = session.Case?.Title ?? string.Empty,
+            QuestionText = userMessage?.Content ?? string.Empty,
+            CurrentAnswerText = expertMessage.Content,
+            StructuredDiagnosis = null,
+            DifferentialDiagnoses = null,
+            KeyImagingFindings = null,
+            ReflectiveQuestions = null,
+            Status = session.Status,
+            EscalatedById = session.LecturerId,
+            EscalatedAt = session.UpdatedAt,
+            AiConfidenceScore = null,
+            ClassId = enrollment?.ClassId,
+            ClassName = enrollment?.Class?.ClassName ?? string.Empty,
+            ReviewNote = null,
+            PromotedCaseId = session.PromotedCaseId,
+            Citations = new List<ExpertCitationDto>(),
+            ImageUrl = ResolveSessionImageUrl(session),
+            CustomCoordinates = userMessage?.Coordinates
+        };
+    }
+
+    public async Task ApproveSessionAsync(Guid expertId, Guid sessionId)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync(e =>
+                e.StudentId == session.StudentId &&
+                e.Class.ExpertId == expertId);
 
         if (enrollment == null)
-            throw new InvalidOperationException("Chuyên gia không có quyền xử lý câu trả lời này (sinh viên không thuộc lớp do bạn phụ trách).");
+            throw new InvalidOperationException("Chuyên gia không có quyền duyệt phiên hỏi đáp này.");
 
-        if (!CaseAnswerStatuses.IsEscalatedToExpert(answer.Status))
-            throw new ConflictException("Chỉ câu trả lời đã được giảng viên chuyển lên chuyên gia mới được xử lý tại đây.");
+        session.Status = "ExpertApproved";
+        session.ExpertId = expertId;
+        session.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
+    }
 
-        answer.AnswerText = request.AnswerText;
-        answer.StructuredDiagnosis = request.StructuredDiagnosis;
-        answer.DifferentialDiagnoses = NormalizeDifferentialDiagnosesForStorage(request.DifferentialDiagnoses);
-        answer.KeyImagingFindings = request.KeyImagingFindings;
-        answer.ReflectiveQuestions = request.ReflectiveQuestions;
-        answer.ReviewedById = expertId;
-        answer.ReviewedAt = DateTime.UtcNow;
-        answer.Status = CaseAnswerStatuses.ExpertApproved;
+    public async Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Description))
+            throw new InvalidOperationException("Description là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.SuggestedDiagnosis))
+            throw new InvalidOperationException("SuggestedDiagnosis là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.KeyFindings))
+            throw new InvalidOperationException("KeyFindings là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.ReflectiveQuestions))
+            throw new InvalidOperationException("ReflectiveQuestions là bắt buộc.");
+
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Messages)
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync(e =>
+                e.StudentId == session.StudentId &&
+                e.Class.ExpertId == expertId);
+
+        if (enrollment == null)
+            throw new InvalidOperationException("Chuyên gia không có quyền đưa phiên hỏi đáp này vào thư viện.");
+
+        if (!string.Equals(session.Status, "ExpertApproved", StringComparison.Ordinal))
+            throw new InvalidOperationException("Chỉ có thể đưa vào thư viện khi phiên đã được chuyên gia duyệt.");
+
+        if (session.PromotedCaseId.HasValue)
+            throw new InvalidOperationException("Ca này đã được đưa vào thư viện.");
+
+        if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
+            throw new InvalidOperationException("Chỉ có thể đưa ảnh tự tải lên vào thư viện.");
+
+        var now = DateTime.UtcNow;
+
+        await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync();
+        try
+        {
+            var newCase = new MedicalCase
+            {
+                Id = Guid.NewGuid(),
+                Title = "Ca lâm sàng từ Cộng đồng",
+                Description = request.Description.Trim(),
+                SuggestedDiagnosis = request.SuggestedDiagnosis.Trim(),
+                KeyFindings = request.KeyFindings.Trim(),
+                ReflectiveQuestions = request.ReflectiveQuestions.Trim(),
+                Difficulty = "Medium",
+                IsApproved = true,
+                IsActive = true,
+                CreatedByExpertId = expertId,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await _unitOfWork.Context.MedicalCases.AddAsync(newCase);
+
+            var image = new MedicalImage
+            {
+                Id = Guid.NewGuid(),
+                CaseId = newCase.Id,
+                ImageUrl = session.CustomImageUrl.Trim(),
+                Modality = "Other",
+                CreatedAt = now
+            };
+            await _unitOfWork.Context.MedicalImages.AddAsync(image);
+
+            var tag = await _unitOfWork.Context.Tags
+                .FirstOrDefaultAsync(t => t.Name == "Student Q&A");
+            if (tag == null)
+            {
+                tag = new Tag
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Student Q&A",
+                    Type = "Source",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                await _unitOfWork.Context.Tags.AddAsync(tag);
+            }
+
+            var caseTag = new CaseTag
+            {
+                CaseId = newCase.Id,
+                TagId = tag.Id,
+                CreatedAt = now
+            };
+            await _unitOfWork.Context.CaseTags.AddAsync(caseTag);
+
+            session.PromotedCaseId = newCase.Id;
+            await _unitOfWork.SaveAsync();
+            await transaction.CommitAsync();
+
+            return newCase.Id;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid sessionId, ResolveEscalatedAnswerRequestDto request)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+                .ThenInclude(m => m.Citations)
+                    .ThenInclude(c => c.Chunk)
+                        .ThenInclude(ch => ch.Doc)
+            .Include(s => s.ExpertReviews)
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp cần xử lý.");
+
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync(e =>
+                e.StudentId == session.StudentId &&
+                e.Class.ExpertId == expertId);
+
+        var existingReview = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+
+        if (string.Equals(session.Status, "ExpertApproved", StringComparison.OrdinalIgnoreCase))
+            throw new ConflictException("Phiên hỏi đáp này đã được xử lý trước đó.");
+
+        if (enrollment == null)
+            throw new InvalidOperationException("Chuyên gia không có quyền xử lý phiên hỏi đáp này (sinh viên không thuộc lớp do bạn phụ trách).");
+
+        if (!string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
+            throw new ConflictException("Chỉ phiên đã được giảng viên chuyển lên chuyên gia mới được xử lý tại đây.");
+
+        var now = DateTime.UtcNow;
+        var assistantMessage = session.Messages
+            .Where(m => m.Role == "Assistant")
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
+
+        if (assistantMessage == null)
+        {
+            assistantMessage = new QAMessage
+            {
+                Id = Guid.NewGuid(),
+                SessionId = session.Id,
+                Role = "Assistant",
+                CreatedAt = now
+            };
+            await _unitOfWork.Context.QaMessages.AddAsync(assistantMessage);
+        }
+
+        assistantMessage.Content = request.AnswerText;
+        assistantMessage.SuggestedDiagnosis = request.StructuredDiagnosis;
+        assistantMessage.DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses);
+        assistantMessage.KeyImagingFindings = request.KeyImagingFindings;
+        assistantMessage.ReflectiveQuestions = request.ReflectiveQuestions;
+        assistantMessage.CreatedAt = now;
+
+        session.Status = "ExpertApproved";
+        session.ExpertId = expertId;
+        session.UpdatedAt = now;
 
         if (existingReview == null)
         {
@@ -151,57 +382,71 @@ public class ExpertReviewService : IExpertReviewService
             {
                 Id = Guid.NewGuid(),
                 ExpertId = expertId,
-                AnswerId = answer.Id,
+                AnswerId = null,
+                SessionId = session.Id,
                 ReviewNote = request.ReviewNote,
                 Action = "Approve",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = now
             };
             await _unitOfWork.ExpertReviewRepository.AddAsync(existingReview);
         }
         else
         {
+            existingReview.AnswerId = null;
+            existingReview.SessionId = session.Id;
             existingReview.ReviewNote = request.ReviewNote;
             existingReview.Action = "Approve";
             await _unitOfWork.ExpertReviewRepository.UpdateAsync(existingReview);
         }
 
-        await _unitOfWork.CaseAnswerRepository.UpdateAsync(answer);
         await _unitOfWork.SaveAsync();
 
         await _notificationService.SendNotificationToUserAsync(
-            answer.Question.StudentId,
+            session.StudentId,
             "Chuyên gia đã xử lý câu hỏi của bạn",
             "Câu trả lời đã được chuyên gia duyệt. Bạn có thể xem lại trong lịch sử câu hỏi.",
             "expert_review",
             $"/student/cases/history");
 
-        await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(answer.Id);
+        await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(session.Id);
+
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
+        var latestAssistant = orderedMessages
+            .Where(m => m.Role == "Assistant")
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
 
         return new ExpertEscalatedAnswerDto
         {
-            AnswerId = answer.Id,
-            QuestionId = answer.QuestionId,
-            StudentId = answer.Question.StudentId,
-            StudentName = answer.Question.Student?.FullName ?? string.Empty,
-            StudentEmail = answer.Question.Student?.Email ?? string.Empty,
-            CaseId = answer.Question.CaseId,
-            CaseTitle = answer.Question.Case?.Title ?? string.Empty,
-            QuestionText = answer.Question.QuestionText,
-            CurrentAnswerText = answer.AnswerText,
-            StructuredDiagnosis = answer.StructuredDiagnosis,
-            DifferentialDiagnoses = answer.DifferentialDiagnoses,
-            KeyImagingFindings = answer.KeyImagingFindings,
-            ReflectiveQuestions = answer.ReflectiveQuestions,
-            Status = answer.Status,
-            EscalatedById = answer.EscalatedById,
-            EscalatedAt = answer.EscalatedAt,
-            AiConfidenceScore = answer.AiConfidenceScore,
+            AnswerId = session.Id,
+            QuestionId = userMessage?.Id ?? Guid.Empty,
+            StudentId = session.StudentId,
+            StudentName = session.Student?.FullName ?? string.Empty,
+            StudentEmail = session.Student?.Email ?? string.Empty,
+            CaseId = session.CaseId,
+            CaseTitle = session.Case?.Title ?? string.Empty,
+            QuestionText = userMessage?.Content ?? string.Empty,
+            CurrentAnswerText = latestAssistant?.Content,
+            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
+            DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses,
+            KeyImagingFindings = latestAssistant?.KeyImagingFindings,
+            ReflectiveQuestions = latestAssistant?.ReflectiveQuestions,
+            Status = session.Status,
+            EscalatedById = session.LecturerId,
+            EscalatedAt = session.UpdatedAt,
+            AiConfidenceScore = latestAssistant?.AiConfidenceScore,
             ClassId = enrollment?.ClassId,
             ClassName = enrollment?.Class?.ClassName ?? string.Empty,
             ReviewNote = existingReview.ReviewNote,
-            Citations = MapCitations(answer.Citations),
-            ImageUrl = ResolveQuestionImageUrl(answer.Question),
-            CustomCoordinates = answer.Question.CustomCoordinates
+            PromotedCaseId = session.PromotedCaseId,
+            Citations = MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
+            ImageUrl = ResolveSessionImageUrl(session),
+            CustomCoordinates = userMessage?.Coordinates
         };
     }
 
@@ -216,10 +461,11 @@ public class ExpertReviewService : IExpertReviewService
         var canReviewChunk = await _unitOfWork.Context.Citations
             .Where(c => c.ChunkId == chunkId)
             .AnyAsync(c =>
-                (c.Answer.Status == CaseAnswerStatuses.EscalatedToExpert ||
-                 c.Answer.Status == CaseAnswerStatuses.Escalated) &&
+                c.Message != null &&
+                c.Message.Session != null &&
+                c.Message.Session.Status == "EscalatedToExpert" &&
                 _unitOfWork.Context.ClassEnrollments.Any(e =>
-                    e.StudentId == c.Answer.Question.StudentId &&
+                    e.StudentId == c.Message.Session.StudentId &&
                     e.Class!.ExpertId == expertId));
 
         if (!canReviewChunk)
@@ -233,7 +479,7 @@ public class ExpertReviewService : IExpertReviewService
         }
     }
 
-    private static string? NormalizeDifferentialDiagnosesForStorage(JsonElement? value)
+    private static string? SerializeJsonArray(JsonElement? value)
     {
         if (value == null)
             return null;
@@ -244,26 +490,28 @@ public class ExpertReviewService : IExpertReviewService
             JsonValueKind.Undefined or JsonValueKind.Null => null,
             JsonValueKind.String => string.IsNullOrWhiteSpace(el.GetString()) ? null : el.GetString(),
             JsonValueKind.Array =>
-                string.Join(
-                    "\n",
+                JsonSerializer.Serialize(
                     el.EnumerateArray()
-                        .Select(x =>
-                            x.ValueKind == JsonValueKind.String ? (x.GetString() ?? string.Empty) : x.ToString())
-                        .Where(s => !string.IsNullOrWhiteSpace(s))) is { Length: > 0 } joined
+                        .Select(x => x.ValueKind == JsonValueKind.String ? (x.GetString() ?? string.Empty) : x.ToString())
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToList()) is { Length: > 2 } joined
                     ? joined
                     : null,
             _ => el.ToString()
         };
     }
 
-    private static string? ResolveQuestionImageUrl(StudentQuestion? question)
+    private static string? ResolveSessionImageUrl(VisualQASession? session)
     {
-        if (question == null)
+        if (session == null)
             return null;
-        if (!string.IsNullOrWhiteSpace(question.CustomImageUrl))
-            return question.CustomImageUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(session.CustomImageUrl))
+            return session.CustomImageUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(session.Image?.ImageUrl))
+            return session.Image.ImageUrl.Trim();
 
-        var images = question.Case?.MedicalImages;
+        var images = session.Case?.MedicalImages;
         if (images == null || images.Count == 0)
             return null;
 

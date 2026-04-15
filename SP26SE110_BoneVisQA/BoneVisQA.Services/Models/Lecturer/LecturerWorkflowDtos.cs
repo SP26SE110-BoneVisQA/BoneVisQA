@@ -117,6 +117,11 @@ public class EscalateAnswerRequestDto
     public string? ReviewNote { get; set; }
 }
 
+public class RejectAnswerRequestDto
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class EscalatedAnswerDto
 {
     public Guid AnswerId { get; set; }

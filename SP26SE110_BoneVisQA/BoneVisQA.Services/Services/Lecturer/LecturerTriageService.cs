@@ -79,6 +79,42 @@ public class LecturerTriageService : ILecturerTriageService
         };
     }
 
+    public async Task RejectAnswerAsync(Guid lecturerId, Guid sessionId, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("Lý do từ chối là bắt buộc.");
+
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Messages)
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp cần từ chối.");
+
+        var classEnrollment = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync(e =>
+                e.StudentId == session.StudentId &&
+                e.Class.LecturerId == lecturerId);
+
+        if (classEnrollment == null)
+            throw new InvalidOperationException("Giảng viên không có quyền từ chối phiên hỏi đáp này.");
+
+        session.Status = "Rejected";
+        session.LecturerId = lecturerId;
+        session.UpdatedAt = DateTime.UtcNow;
+
+        var rejectionMessage = new QAMessage
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Lecturer",
+            Content = reason.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.Context.QaMessages.AddAsync(rejectionMessage);
+        await _unitOfWork.SaveAsync();
+    }
+
     private static List<string>? DeserializeJsonArray(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))

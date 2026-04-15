@@ -973,7 +973,7 @@ public class LecturerService : ILecturerService
             .Include(s => s.Image)
             .Include(s => s.Messages)
             .Where(s => studentIds.Contains(s.StudentId))
-            .Where(s => s.Status == "PendingLecturerReview" || s.Status == "EscalatedToExpert")
+            .Where(s => s.Status == "PendingExpertReview" || s.Status == "EscalatedToExpert")
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
 
@@ -1120,7 +1120,7 @@ public class LecturerService : ILecturerService
         answer.DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses);
         answer.CreatedAt = DateTime.UtcNow;
 
-        session.Status = request.Approve ? "LecturerApproved" : "PendingLecturerReview";
+        session.Status = request.Approve ? "LecturerApproved" : "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveAsync();

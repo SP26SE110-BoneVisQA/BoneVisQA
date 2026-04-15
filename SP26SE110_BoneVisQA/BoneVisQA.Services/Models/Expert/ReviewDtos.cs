@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
 namespace BoneVisQA.Services.Models.Expert;
@@ -18,6 +19,26 @@ public class ResolveEscalatedAnswerRequestDto
 public class FlagChunkRequestDto
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class ExpertRespondRequestDto
+{
+    public string Content { get; set; } = string.Empty;
+}
+
+public class PromoteToLibraryRequestDto
+{
+    [Required]
+    public string KeyFindings { get; set; } = string.Empty;
+
+    [Required]
+    public string ReflectiveQuestions { get; set; } = string.Empty;
+
+    [Required]
+    public string SuggestedDiagnosis { get; set; } = string.Empty;
+
+    [Required]
+    public string Description { get; set; } = string.Empty;
 }
 
 public class ExpertCitationDto
@@ -50,6 +71,7 @@ public class ExpertEscalatedAnswerDto
     public Guid? ClassId { get; set; }
     public string ClassName { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }
+    public Guid? PromotedCaseId { get; set; }
     public List<ExpertCitationDto> Citations { get; set; } = new();
 
     /// <summary>Resolved study image (Visual QA upload or first case image).</summary>
