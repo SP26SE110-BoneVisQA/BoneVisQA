@@ -41,6 +41,12 @@ public partial class Document
     [StringLength(64)]
     public string? ContentHash { get; set; }
 
+    [Column("total_pages")]
+    public int TotalPages { get; set; }
+
+    [Column("current_page_indexing")]
+    public int CurrentPageIndexing { get; set; }
+
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
     public virtual Category? Category { get; set; }

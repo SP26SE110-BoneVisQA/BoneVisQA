@@ -195,7 +195,13 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
 
-            entity.HasOne(d => d.Answer).WithMany(p => p.Citations).HasConstraintName("citations_answer_id_fkey");
+            entity.HasOne(d => d.Answer).WithMany(p => p.Citations)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("citations_answer_id_fkey");
+
+            entity.HasOne(d => d.Message).WithMany(p => p.Citations)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("citations_message_id_fkey");
 
             entity.HasOne(d => d.Chunk).WithMany(p => p.Citations).HasConstraintName("citations_chunk_id_fkey");
         });
@@ -274,6 +280,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.IsOutdated).HasDefaultValue(false);
             entity.Property(e => e.Version).HasDefaultValue(1);
             entity.Property(e => e.IndexingProgress).HasDefaultValue(0);
+            entity.Property(e => e.TotalPages).HasDefaultValue(0);
+            entity.Property(e => e.CurrentPageIndexing).HasDefaultValue(0);
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -324,9 +332,15 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
 
-            entity.HasOne(d => d.Answer).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_answer_id_fkey");
+            entity.HasOne(d => d.Answer).WithMany(p => p.ExpertReviews)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("expert_reviews_answer_id_fkey");
 
             entity.HasOne(d => d.Expert).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_expert_id_fkey");
+
+            entity.HasOne(d => d.Session).WithMany(p => p.ExpertReviews)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("expert_reviews_session_id_fkey");
         });
 
         modelBuilder.Entity<LearningStatistic>(entity =>

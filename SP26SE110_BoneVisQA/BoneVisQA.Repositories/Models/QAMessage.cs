@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,9 @@ public partial class QAMessage
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [InverseProperty("Message")]
+    public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 
     [ForeignKey("SessionId")]
     [InverseProperty("Messages")]

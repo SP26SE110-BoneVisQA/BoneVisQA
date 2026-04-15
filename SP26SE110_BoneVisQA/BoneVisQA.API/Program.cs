@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using BoneVisQA.API;
 using BoneVisQA.API.ExceptionHandling;
 using BoneVisQA.API.Hubs;
@@ -28,6 +29,7 @@ using BoneVisQA.Services.Services.Student;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -136,6 +138,28 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IUserIdProvider, JwtUserIdProvider>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AiInteractionLimit", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var partitionKey = !string.IsNullOrWhiteSpace(userId)
+            ? $"user:{userId}"
+            : $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 2,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+});
 
 static string BuildSupabaseConnectionString(IConfiguration configuration)
 {
@@ -232,7 +256,7 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
     // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
     client.Timeout = TimeSpan.FromMinutes(60);
 });
-builder.Services.AddHttpClient(EmbeddingService.HttpClientName, client =>
+builder.Services.AddHttpClient(GeminiEmbeddingService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
@@ -248,7 +272,8 @@ builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
     client.Timeout = TimeSpan.FromMinutes(2);
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 builder.Services.AddScoped<IGeminiService, GeminiService>();
-builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
+builder.Services.AddScoped<IEmbeddingService, GeminiEmbeddingService>();
+builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
@@ -291,6 +316,8 @@ builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddHostedService<OrphanSessionCleanupService>();
+builder.Services.AddHostedService<DocumentIndexingBackgroundService>();
 
 var app = builder.Build();
 
@@ -312,6 +339,7 @@ app.UseSwaggerUI();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 
