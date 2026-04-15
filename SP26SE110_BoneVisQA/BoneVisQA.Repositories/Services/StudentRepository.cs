@@ -161,15 +161,16 @@ public class StudentRepository : IStudentRepository
         if (classIds.Count == 0)
             return new List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>();
 
+        // QUAN TRỌNG: Quiz luôn hiển thị cho student nếu:
+        // 1. Student đã enroll vào lớp có quiz
+        // 2. Không kiểm tra OpenTime/CloseTime ở đây vì việc kiểm tra này đã làm ở StartQuiz
+        // 3. Nếu Quiz được gán (ClassQuizSession tồn tại) -> Student phải thấy
         return await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .Include(cqs => cqs.Class)
             .Where(cqs => classIds.Contains(cqs.ClassId))
-            .Where(cqs =>
-                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
-                && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
-                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) > utcNow))
+            // BỎ filter OpenTime/CloseTime ở đây - chỉ kiểm tra khi student bắt đầu làm quiz
             .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
             {
                 QuizId = cqs.QuizId,
