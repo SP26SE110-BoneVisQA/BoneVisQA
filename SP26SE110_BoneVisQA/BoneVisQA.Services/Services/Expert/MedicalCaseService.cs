@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -180,6 +181,8 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
+                IndexingStatus = DocumentIndexingStatuses.Pending,
+                Version = 1
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
@@ -291,6 +294,12 @@ namespace BoneVisQA.Services.Services.Expert
             if (medicalCase == null)
                 return null;
 
+            var contentChanged =
+                !string.Equals(medicalCase.Title, request.Title, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.Description, request.Description, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.SuggestedDiagnosis, request.SuggestedDiagnosis, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.KeyFindings, request.KeyFindings, StringComparison.Ordinal);
+
             // Update fields
             medicalCase.Title = request.Title;
             medicalCase.Description = request.Description;
@@ -302,6 +311,12 @@ namespace BoneVisQA.Services.Services.Expert
             medicalCase.KeyFindings = request.KeyFindings;
             medicalCase.CreatedByExpertId = request.CreatedByExpertId;
             medicalCase.UpdatedAt = DateTime.UtcNow;
+            if (contentChanged)
+            {
+                // Trigger background re-indexing whenever embedding source text changes.
+                medicalCase.IndexingStatus = DocumentIndexingStatuses.Pending;
+                medicalCase.Version += 1;
+            }
 
             _unitOfWork.MedicalCaseRepository.Update(medicalCase);
             await _unitOfWork.SaveAsync();
