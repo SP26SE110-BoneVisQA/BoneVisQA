@@ -64,7 +64,7 @@ public sealed class DocumentIndexingBackgroundService : BackgroundService
             .FromSqlRaw(
                 """
                 SELECT * FROM documents
-                WHERE indexing_status = 'Pending'
+                WHERE indexing_status IN ('Pending', 'Reindexing')
                 ORDER BY created_at ASC NULLS LAST
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
