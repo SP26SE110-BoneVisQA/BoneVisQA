@@ -102,3 +102,4 @@ dataset.rar
 
 # Never ignore launch profiles (URLs, env for local run) — explicit allow.
 !**/Properties/launchSettings.json
+_build_*/
