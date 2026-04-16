@@ -38,6 +38,14 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         _notificationService = notificationService;
     }
 
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
+    }
+
     public async Task<IReadOnlyList<ClassCaseAssignmentDto>> AssignCasesAsync(Guid lecturerId, Guid classId, AssignCasesRequestDto request)
     {
         var t0 = DateTime.UtcNow;
@@ -140,11 +148,19 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         if (request.QuizId == Guid.Empty)
             throw new InvalidOperationException("quizId là bắt buộc.");
 
-        if (request.OpenTime.HasValue && request.CloseTime.HasValue && request.OpenTime > request.CloseTime)
-            throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
-
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        // Validate thời gian mở quiz phải >= thời gian mở của Expert
+        if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
+            throw new InvalidOperationException($"Thời gian mở quiz ({request.OpenTime.Value:dd/MM/yyyy HH:mm}) không được sớm hơn thời gian mở của Expert ({quiz.OpenTime.Value:dd/MM/yyyy HH:mm}).");
+
+        // Validate thời gian đóng quiz phải <= thời gian đóng của Expert
+        if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
+            throw new InvalidOperationException($"Thời gian đóng quiz ({request.CloseTime.Value:dd/MM/yyyy HH:mm}) không được muộn hơn thời gian đóng của Expert ({quiz.CloseTime.Value:dd/MM/yyyy HH:mm}).");
+
+        if (request.OpenTime.HasValue && request.CloseTime.HasValue && request.OpenTime > request.CloseTime)
+            throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(x => x.ClassId == classId && x.QuizId == request.QuizId);
@@ -618,7 +634,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             Score = attempt.Score,
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
-            PassingScore = session?.PassingScore,
+            PassingScore = NormalizePassingScore(session?.PassingScore, quiz.IsAiGenerated),
             Questions = attempt.StudentQuizAnswers
                 .OrderBy(sa => sa.Question.QuestionText)
                 .Select(sa => new QuestionWithAnswerDto
@@ -827,6 +843,14 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         if (quizSession == null)
             throw new KeyNotFoundException("Không tìm thấy assignment.");
+
+        // Validate thời gian mở quiz phải >= thời gian mở của Expert
+        if (request.OpenDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.OpenTime.HasValue && request.OpenDate.Value < quizSession.Quiz.OpenTime.Value)
+            throw new InvalidOperationException($"Thời gian mở quiz ({request.OpenDate.Value:dd/MM/yyyy HH:mm}) không được sớm hơn thời gian mở của Expert ({quizSession.Quiz.OpenTime.Value:dd/MM/yyyy HH:mm}).");
+
+        // Validate thời gian đóng quiz phải <= thời gian đóng của Expert
+        if (request.DueDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.CloseTime.HasValue && request.DueDate.Value > quizSession.Quiz.CloseTime.Value)
+            throw new InvalidOperationException($"Thời gian đóng quiz ({request.DueDate.Value:dd/MM/yyyy HH:mm}) không được muộn hơn thời gian đóng của Expert ({quizSession.Quiz.CloseTime.Value:dd/MM/yyyy HH:mm}).");
 
         if (request.DueDate.HasValue)
             quizSession.CloseTime = ToUtc(request.DueDate);

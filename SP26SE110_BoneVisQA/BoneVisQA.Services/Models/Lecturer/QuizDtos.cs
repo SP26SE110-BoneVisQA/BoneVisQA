@@ -75,6 +75,8 @@ public class ClassQuizDto
     public DateTime? OpenTime { get; set; }
     public DateTime? CloseTime { get; set; }
     public int QuestionCount { get; set; }
+    /// <summary>True nếu quiz này từ Expert Library (CreatedByExpertId != null)</summary>
+    public bool IsFromExpertLibrary { get; set; }
 }
 
 // CreateQuizQuestionDto - For creating questions (with individual options)

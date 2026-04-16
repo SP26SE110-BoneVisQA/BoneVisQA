@@ -446,5 +446,163 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
+
+        #region Expert Quiz Library - Expert xem và assign quiz từ thư viện
+
+        /// <summary>
+        /// Expert xem thư viện quiz từ tất cả Experts (bao gồm quiz của các Expert khác).
+        /// Dùng để chọn quiz để assign vào lớp học.
+        /// </summary>
+        [HttpGet("library/quizzes")]
+        public async Task<ActionResult<PagedResult<ExpertQuizForLecturerDto>>> GetExpertQuizLibrary(
+            [FromQuery] int pageIndex = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? topic = null,
+            [FromQuery] string? difficulty = null,
+            [FromQuery] string? classification = null)
+        {
+            if (pageIndex < 1) pageIndex = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 50) pageSize = 50;
+
+            var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+                pageIndex, pageSize, topic, difficulty, classification);
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Xem chi tiết một quiz trong thư viện Expert.
+        /// </summary>
+        [HttpGet("library/quizzes/{quizId:guid}")]
+        public async Task<ActionResult<ExpertQuizForLecturerDto>> GetExpertQuizFromLibrary(Guid quizId)
+        {
+            try
+            {
+                var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+                    pageIndex: 1,
+                    pageSize: 1,
+                    topic: null,
+                    difficulty: null,
+                    classification: null);
+
+                var quiz = result.Items.FirstOrDefault(q => q.Id == quizId);
+                if (quiz == null)
+                    return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+                return Ok(quiz);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Xem trước câu hỏi của quiz trong thư viện Expert.
+        /// </summary>
+        [HttpGet("library/quizzes/{quizId:guid}/questions")]
+        public async Task<IActionResult> GetExpertQuizQuestionsFromLibrary(Guid quizId)
+        {
+            try
+            {
+                var result = await _quizService.GetExpertQuizQuestionsAsync(quizId);
+                return Ok(new
+                {
+                    message = "Lấy câu hỏi thành công",
+                    quizId = quizId,
+                    questionCount = result.Count,
+                    questions = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Expert gán quiz từ thư viện vào lớp học của mình.
+        /// Hệ thống tự động gán TẤT CẢ câu hỏi trong quiz đó vào lớp.
+        /// </summary>
+        [HttpPost("classes/{classId:guid}/library-quizzes/{quizId:guid}")]
+        public async Task<IActionResult> AssignExpertQuizFromLibraryToClass(
+            Guid classId,
+            Guid quizId,
+            [FromBody] AssignExpertQuizRequestDto? request = null)
+        {
+            try
+            {
+                // Verify quiz exists in library
+                var quiz = await _quizService.GetExpertQuizzesForLecturerAsync(
+                    pageIndex: 1, pageSize: 1);
+
+                var expertQuiz = quiz.Items.FirstOrDefault(q => q.Id == quizId);
+                if (expertQuiz == null)
+                    return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+                // Convert to AssignQuizRequestDTO
+                var assignRequest = new AssignQuizRequestDTO
+                {
+                    ClassId = classId,
+                    QuizId = quizId,
+                    AssignedExpertId = null,
+                    OpenTime = request?.OpenTime,
+                    CloseTime = request?.CloseTime,
+                    PassingScore = request?.PassingScore,
+                    TimeLimitMinutes = request?.TimeLimitMinutes
+                };
+
+                var result = await _quizService.AssignQuizToClassAsync(assignRequest);
+
+                return Ok(new
+                {
+                    message = $"Đã gán quiz '{expertQuiz.Title}' vào lớp thành công.",
+                    result = result,
+                    questionCount = expertQuiz.QuestionCount,
+                    note = "Quiz này có " + expertQuiz.QuestionCount + " câu hỏi. Tất cả câu hỏi đã được gán cho lớp."
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Kiểm tra xem một quiz đã được gán vào lớp nào chưa.
+        /// Dùng để hiển thị warning cho Expert khi edit quiz.
+        /// </summary>
+        [HttpGet("quizzes/{quizId:guid}/assignment-status")]
+        public async Task<IActionResult> GetQuizAssignmentStatus(Guid quizId)
+        {
+            try
+            {
+                var (isAssigned, count) = await _quizService.IsQuizAssignedAsync(quizId);
+
+                return Ok(new
+                {
+                    isAssigned = isAssigned,
+                    assignedClassCount = count,
+                    message = isAssigned
+                        ? $"Quiz này đã được gán vào {count} lớp. Thay đổi timeLimit/score sẽ KHÔNG ảnh hưởng đến các lớp đã gán."
+                        : "Quiz chưa được gán vào lớp nào."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        #endregion
     }
 }

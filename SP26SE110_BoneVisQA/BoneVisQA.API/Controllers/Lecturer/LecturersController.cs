@@ -377,6 +377,24 @@ public class LecturersController : ControllerBase
             return Conflict(new { message = ex.Message });
         }
     }
+
+    [HttpDelete("classes/{classId:guid}/quizzes/{quizId:guid}")]
+    public async Task<IActionResult> RemoveQuizFromClass(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _lecturerService.RemoveQuizFromClassAsync(classId, quizId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
     #endregion
 
     #region AI Quiz Management

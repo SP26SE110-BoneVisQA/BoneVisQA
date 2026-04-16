@@ -42,6 +42,14 @@ public class LecturerService : ILecturerService
         };
     }
 
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
+    }
+
     private async Task EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
     {
         var ownsClass = await _unitOfWork.AcademicClassRepository
@@ -444,7 +452,7 @@ public class LecturerService : ILecturerService
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
-            PassingScore = request.PassingScore,
+            PassingScore = request.PassingScore, // Lecturer quiz dùng thang 100 trực tiếp
             CreatedAt = now
         };
 
@@ -481,7 +489,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt
         };
     }
@@ -492,7 +500,14 @@ public class LecturerService : ILecturerService
         if (quiz == null)
             return false;
 
-        // Remove from all class assignments first
+        // ============================================================
+        // IMPORTANT: KHONG xoa Quiz goc - vi quiz co the do Expert tao
+        // Quiz goc can duoc giu nguyen trong Expert Library
+        // Chi xoa lien ket voi lop (ClassQuizSession) va lich su lam bai
+        // ============================================================
+
+        // 1. Remove from all class assignments (ClassQuizSession)
+        //    Chi xoa lien ket, KHONG xoa quiz goc
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
             .Where(cqs => cqs.QuizId == quizId)
             .ToListAsync();
@@ -500,15 +515,7 @@ public class LecturerService : ILecturerService
         foreach (var session in classSessions)
             _unitOfWork.Context.ClassQuizSessions.Remove(session);
 
-        // Remove all questions
-        var questions = await _unitOfWork.Context.QuizQuestions
-            .Where(q => q.QuizId == quizId)
-            .ToListAsync();
-
-        foreach (var question in questions)
-            _unitOfWork.Context.QuizQuestions.Remove(question);
-
-        // Remove quiz attempts
+        // 2. Remove quiz attempts (lich su lam bai - co the xoa de giai phong du lieu)
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId)
             .ToListAsync();
@@ -516,11 +523,30 @@ public class LecturerService : ILecturerService
         foreach (var attempt in attempts)
             _unitOfWork.Context.QuizAttempts.Remove(attempt);
 
-        // Remove the quiz
-        _unitOfWork.Context.Quizzes.Remove(quiz);
+        // 3. BO QUA: Khong xoa QuizQuestions
+        //    Vi quiz co the la cua Expert, cau hoi do Expert tao va quan ly
+        //    Neu xoa cau hoi se lam mat du lieu trong Expert Library
+
+        // 4. BO QUA: Khong xoa Quiz goc
+        //    Quiz goc (dat biet la quiz cua Expert) phai duoc giu lai
+        //    vi no con duoc su dung trong Expert Quiz Library
+        // _unitOfWork.Context.Quizzes.Remove(quiz);  // DA COMMENT - KHONG XOA
+
         await _unitOfWork.SaveAsync();
 
         return true;
+    }
+
+    public async Task RemoveQuizFromClassAsync(Guid classId, Guid quizId)
+    {
+        var classQuizSession = await _unitOfWork.ClassQuizSessionRepository
+            .FirstOrDefaultAsync(cqs => cqs.ClassId == classId && cqs.QuizId == quizId);
+
+        if (classQuizSession == null)
+            throw new KeyNotFoundException("Quiz is not assigned to this class.");
+
+        await _unitOfWork.ClassQuizSessionRepository.DeleteAsync(classQuizSession.Id);
+        await _unitOfWork.SaveAsync();
     }
 
     public async Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
@@ -1566,7 +1592,8 @@ public class LecturerService : ILecturerService
                 AssignedAt = cq.CreatedAt,
                 OpenTime = cq.Quiz?.OpenTime,
                 CloseTime = cq.Quiz?.CloseTime,
-                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId)
+                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId),
+                IsFromExpertLibrary = cq.Quiz != null && cq.Quiz.CreatedByExpertId.HasValue
             })
             .ToList();
 
@@ -1583,7 +1610,8 @@ public class LecturerService : ILecturerService
                 AssignedAt = quiz.CreatedAt,
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
-                QuestionCount = questionCounts.GetValueOrDefault(quiz.Id)
+                QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
+                IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue
             });
         }
 
@@ -1637,7 +1665,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt
         };
     }
@@ -1675,7 +1703,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt
         };
     }
@@ -1765,7 +1793,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimitMinutes = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = DateTime.UtcNow
         };
 

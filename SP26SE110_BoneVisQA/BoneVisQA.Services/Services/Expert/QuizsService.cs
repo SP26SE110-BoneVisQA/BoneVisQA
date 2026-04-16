@@ -32,9 +32,20 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
+        /// <summary>
+        /// Passing score luôn ở thang 100 (0-100). Identity function.
+        /// </summary>
+        private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+        {
+            return passingScore;
+        }
+
         public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
         {
-            var query = await _unitOfWork.QuizRepository.GetAllAsync();
+            var query = _unitOfWork.QuizRepository.GetAllAsync().Result.AsQueryable();
+
+            // Chỉ lấy quiz do Expert tạo (IsAiGenerated = false), không lấy quiz do AI tạo
+            query = query.Where(q => !q.IsAiGenerated);
 
             var totalCount = query.Count();
 
@@ -50,7 +61,8 @@ namespace BoneVisQA.Services.Services.Expert
                     OpenTime = q.OpenTime,
                     CloseTime = q.CloseTime,
                     TimeLimit = q.TimeLimit,
-                    PassingScore = q.PassingScore,
+                    //  PassingScore = q.PassingScore,
+                    PassingScore = NormalizePassingScore(q.PassingScore, q.IsAiGenerated),
                     IsAiGenerated = q.IsAiGenerated,
                     Difficulty = q.Difficulty,
                     Classification = q.Classification,
@@ -82,7 +94,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CloseTime = ToUtc(request.CloseTime),
 
                 TimeLimit = request.TimeLimit,
-                PassingScore = request.PassingScore,
+                PassingScore = NormalizePassingScore(request.PassingScore, false),
 
                 IsAiGenerated = false,
 
@@ -142,7 +154,7 @@ namespace BoneVisQA.Services.Services.Expert
 
             quiz.TimeLimit = update.TimeLimit;
 
-            quiz.PassingScore = update.PassingScore;
+            quiz.PassingScore = NormalizePassingScore(update.PassingScore, false);
 
             quiz.Difficulty = update.Difficulty;
 
@@ -159,7 +171,7 @@ namespace BoneVisQA.Services.Services.Expert
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
                 TimeLimit = quiz.TimeLimit,
-                PassingScore = quiz.PassingScore,
+                PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
                 Difficulty = quiz.Difficulty,
                 Classification = quiz.Classification,
                 CreatedAt = quiz.CreatedAt
@@ -173,11 +185,36 @@ namespace BoneVisQA.Services.Services.Expert
             if (quiz == null)
                 return false;
 
-            await _unitOfWork.QuizRepository.RemoveAsync(quiz);
+            // Nếu là quiz do Expert tạo, kiểm tra xem còn được gán vào lớp nào không
+            if (quiz.CreatedByExpertId.HasValue)
+            {
+                var assignedCount = await _unitOfWork.ClassQuizSessionRepository
+                    .GetQueryable()
+                    .Where(cq => cq.QuizId == quizId)
+                    .CountAsync();
 
+                if (assignedCount > 0)
+                    throw new InvalidOperationException("Cannot delete Expert Library quiz. You can only remove it from your classes.");
+
+                // Đã gỡ hết khỏi các lớp → cho phép xóa
+            }
+
+            await _unitOfWork.QuizRepository.RemoveAsync(quiz);
             await _unitOfWork.SaveAsync();
 
             return true;
+        }
+
+        public async Task RemoveQuizFromClassAsync(Guid classId, Guid quizId)
+        {
+            var classQuizSession = await _unitOfWork.ClassQuizSessionRepository
+                .FirstOrDefaultAsync(cqs => cqs.ClassId == classId && cqs.QuizId == quizId);
+
+            if (classQuizSession == null)
+                throw new KeyNotFoundException("Quiz is not assigned to this class.");
+
+            await _unitOfWork.ClassQuizSessionRepository.DeleteAsync(classQuizSession.Id);
+            await _unitOfWork.SaveAsync();
         }
 
         //================================================================================================================
@@ -365,7 +402,8 @@ namespace BoneVisQA.Services.Services.Expert
     int pageSize)
         {
             var query = _unitOfWork.ClassQuizSessionRepository
-                .GetQueryable();
+                .GetQueryable()
+                .Include(x => x.Quiz);
 
             var totalCount = await query.CountAsync();
 
@@ -373,27 +411,28 @@ namespace BoneVisQA.Services.Services.Expert
                 .OrderByDescending(x => x.CreatedAt)
                 .Skip((pageIndex - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new ClassQuizSessionDTO
-                {
-                    ClassId = x.ClassId,
-                    ClassName = x.Class.ClassName,
-
-                    QuizId = x.QuizId,
-                    QuizName = x.Quiz.Title,
-
-                    AssignedAt = x.CreatedAt,
-
-                    OpenTime = x.OpenTime,
-                    CloseTime = x.CloseTime,
-
-                    PassingScore = x.PassingScore,
-                    TimeLimitMinutes = x.TimeLimitMinutes
-                })
                 .ToListAsync();
+
+            var result = sessions.Select(x => new ClassQuizSessionDTO
+            {
+                ClassId = x.ClassId,
+                ClassName = x.Class.ClassName,
+
+                QuizId = x.QuizId,
+                QuizName = x.Quiz.Title,
+
+                AssignedAt = x.CreatedAt,
+
+                OpenTime = x.OpenTime,
+                CloseTime = x.CloseTime,
+
+                PassingScore = NormalizePassingScore(x.PassingScore, x.Quiz?.IsAiGenerated ?? true),
+                TimeLimitMinutes = x.TimeLimitMinutes
+            }).ToList();
 
             return new PagedResult<ClassQuizSessionDTO>
             {
-                Items = sessions,
+                Items = result,
                 TotalCount = totalCount,
                 PageIndex = pageIndex,
                 PageSize = pageSize
@@ -512,9 +551,11 @@ namespace BoneVisQA.Services.Services.Expert
             int totalQuestions = questions.Count;
             int correctAnswers = studentAnswers.Count(a => a.IsCorrect == true);
 
-            float score = (float)Math.Round((double)correctAnswers / totalQuestions * 10, 1);
+            // Tính điểm thang 100
+            float score = (float)Math.Round((double)correctAnswers / totalQuestions * 100, 1);
 
-            bool isPassed = score >= quiz.PassingScore;
+            int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
+            bool isPassed = normalizedPassingScore.HasValue && score >= normalizedPassingScore.Value;
 
             attempt.Score = score;
             attempt.CompletedAt = DateTime.UtcNow;
@@ -530,7 +571,7 @@ namespace BoneVisQA.Services.Services.Expert
                 TotalQuestions = totalQuestions,
                 CorrectAnswers = correctAnswers,
                 Score = score,
-                PassingScore = quiz.PassingScore,
+                PassingScore = normalizedPassingScore,
                 IsPassed = isPassed,
                 CompletedAt = attempt.CompletedAt
             };
@@ -667,8 +708,8 @@ namespace BoneVisQA.Services.Services.Expert
                     OpenTime = q.OpenTime,
                     CloseTime = q.CloseTime,
                     TimeLimit = q.TimeLimit,
-                    PassingScore = q.PassingScore,
-                    IsAiGenerated = q.IsAiGenerated,
+                PassingScore = NormalizePassingScore(q.PassingScore, q.IsAiGenerated),
+                IsAiGenerated = q.IsAiGenerated,
                     Difficulty = q.Difficulty,
                     Classification = q.Classification,
                     CreatedAt = q.CreatedAt,
@@ -759,6 +800,28 @@ namespace BoneVisQA.Services.Services.Expert
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Kiểm tra xem quiz đã được gán vào lớp nào chưa.
+        /// 
+        /// MỤC ĐÍCH:
+        /// - Dùng để hiển thị warning cho Expert khi họ muốn edit quiz
+        /// - Nếu quiz đã được assign, Expert sẽ thấy thông báo về các lớp đã gán
+        /// - Expert vẫn có thể edit (vì họ là owner), nhưng sẽ biết impact
+        /// 
+        /// TRẢ VỀ:
+        /// - IsAssigned: true nếu quiz đã được gán vào ít nhất 1 lớp
+        /// - AssignedClassCount: số lượng lớp đã gán
+        /// </summary>
+        public async Task<(bool IsAssigned, int AssignedClassCount)> IsQuizAssignedAsync(Guid quizId)
+        {
+            var count = await _unitOfWork.ClassQuizSessionRepository
+                .GetQueryable()
+                .Where(cq => cq.QuizId == quizId)
+                .CountAsync();
+
+            return (count > 0, count);
         }
     }
 }

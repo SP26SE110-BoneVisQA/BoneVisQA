@@ -46,6 +46,14 @@ public class StudentService : IStudentService
     private readonly INotificationService _notificationService;
     private readonly IEmailService _emailService;
 
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
+    }
+
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
     {
         var classIds = await _unitOfWork.Context.ClassEnrollments

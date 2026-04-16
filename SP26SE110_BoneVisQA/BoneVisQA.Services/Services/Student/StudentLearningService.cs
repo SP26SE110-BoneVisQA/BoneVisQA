@@ -18,6 +18,14 @@ public class StudentLearningService : IStudentLearningService
         _unitOfWork = unitOfWork;
     }
 
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
+    }
+
     public async Task<QuizSessionDto> GetPracticeQuizAsync(Guid studentId, string? topic)
     {
         var utcNow = DateTime.UtcNow;
@@ -277,13 +285,16 @@ public class StudentLearningService : IStudentLearningService
         await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
         await _unitOfWork.SaveAsync();
 
+        // Chuẩn hóa PassingScore về thang 100 trước khi so sánh
+        int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
+
         return new QuizResultDto
         {
             AttemptId = attempt.Id,
             QuizId = quiz.Id,
             Score = score,
-            PassingScore = quiz.PassingScore,
-            Passed = !quiz.PassingScore.HasValue || score >= quiz.PassingScore.Value,
+            PassingScore = normalizedPassingScore,
+            Passed = !normalizedPassingScore.HasValue || score >= normalizedPassingScore.Value,
             TotalQuestions = totalQuestions,
             CorrectAnswers = correctAnswers
         };
@@ -412,9 +423,10 @@ public class StudentLearningService : IStudentLearningService
                 StartedAt = attempt.StartedAt,
                 CompletedAt = attempt.CompletedAt,
                 Score = attempt.Score,
-                PassingScore = attempt.Quiz?.PassingScore,
+                PassingScore = NormalizePassingScore(attempt.Quiz?.PassingScore, attempt.Quiz?.IsAiGenerated ?? false),
                 Passed = attempt.Score.HasValue && attempt.Quiz != null
-                    ? !attempt.Quiz.PassingScore.HasValue || attempt.Score >= attempt.Quiz.PassingScore.Value
+                    ? (NormalizePassingScore(attempt.Quiz.PassingScore, attempt.Quiz.IsAiGenerated) is { } normalized
+                        && attempt.Score >= normalized)
                     : false,
                 TotalQuestions = await _unitOfWork.Context.QuizQuestions.CountAsync(q => q.QuizId == attempt.QuizId),
                 CorrectAnswers = correctCount,
@@ -728,8 +740,9 @@ public class StudentLearningService : IStudentLearningService
         var score = total == 0 ? 0.0 : (double)correctCount * 100 / total;
 
         var quizForPass = attempt.Quiz;
-        var passed = quizForPass == null || !quizForPass.PassingScore.HasValue
-            || score >= quizForPass.PassingScore.Value;
+        var normalizedPassingScore = NormalizePassingScore(quizForPass?.PassingScore, quizForPass?.IsAiGenerated ?? false);
+        var passed = quizForPass == null || !normalizedPassingScore.HasValue
+            || score >= normalizedPassingScore.Value;
 
         return new QuizAttemptReviewDto
         {

@@ -16,6 +16,8 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update);
         Task<bool> DeleteQuizAsync(Guid quizId);
 
+        Task RemoveQuizFromClassAsync(Guid classId, Guid quizId);
+
 
         //=====================================================   QUESTION  ==========================================================
         Task<List<GetQuizQuestionDTO>> GetQuizQuestionDTO(Guid quizId);
@@ -43,5 +45,6 @@ namespace BoneVisQA.Services.Interfaces.Expert
             string? classification = null);
 
         Task<List<ExpertQuizQuestionDto>> GetExpertQuizQuestionsAsync(Guid quizId);
+        Task<(bool IsAssigned, int AssignedClassCount)> IsQuizAssignedAsync(Guid quizId);
     }
 }
