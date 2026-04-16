@@ -369,6 +369,19 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(s => s.Id == sessionId)
             ?? throw new InvalidOperationException("Visual QA session not found.");
 
+        var normalizedClientRequestId = NormalizeClientRequestId(request.ClientRequestId);
+        if (!string.IsNullOrWhiteSpace(normalizedClientRequestId))
+        {
+            var alreadyPersisted = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .AnyAsync(m =>
+                    m.SessionId == sessionId &&
+                    m.Role == "Assistant" &&
+                    m.ClientRequestId == normalizedClientRequestId);
+            if (alreadyPersisted)
+                return;
+        }
+
         var userMessage = new QAMessage
         {
             Id = Guid.NewGuid(),
@@ -376,6 +389,7 @@ public class StudentService : IStudentService
             Role = "User",
             Content = request.QuestionText,
             Coordinates = TryParseCoordinatesJson(request.Coordinates),
+            ClientRequestId = normalizedClientRequestId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -385,6 +399,8 @@ public class StudentService : IStudentService
             SessionId = sessionId,
             Role = "Assistant",
             Content = response.AnswerText ?? string.Empty,
+            ClientRequestId = normalizedClientRequestId,
+            CitationsJson = VisualQaCitationMetadataBuilder.SerializeMany(response.Citations),
             SuggestedDiagnosis = response.SuggestedDiagnosis,
             DifferentialDiagnoses = SerializeJsonArray(response.DifferentialDiagnoses),
             KeyImagingFindings = response.KeyImagingFindings,
@@ -392,6 +408,7 @@ public class StudentService : IStudentService
             AiConfidenceScore = response.AiConfidenceScore,
             CreatedAt = DateTime.UtcNow
         };
+        response.TurnId = assistantMessage.Id.ToString();
 
         try
         {
@@ -421,6 +438,16 @@ public class StudentService : IStudentService
         {
             if (ex.InnerException is PostgresException pg)
             {
+                if (pg.SqlState == PostgresErrorCodes.UniqueViolation
+                    && string.Equals(pg.ConstraintName, "ux_qa_messages_session_client_request_role", StringComparison.Ordinal))
+                {
+                    _logger.LogInformation(
+                        "SaveVisualQAMessagesAsync: duplicate client request ignored for session {SessionId} and clientRequestId {ClientRequestId}.",
+                        sessionId,
+                        normalizedClientRequestId);
+                    return;
+                }
+
                 _logger.LogError(
                     ex,
                     "SaveVisualQAMessagesAsync: database update failed (SQL state {SqlState}) for session {SessionId}.",
@@ -436,6 +463,131 @@ public class StudentService : IStudentService
                 "Unable to save Visual QA conversation to the database. Please try again later.",
                 ex);
         }
+    }
+
+    public async Task<VisualQAResponseDto?> GetExistingVisualQaResponseAsync(
+        Guid studentId,
+        Guid sessionId,
+        string clientRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedClientRequestId = NormalizeClientRequestId(clientRequestId);
+        if (string.IsNullOrWhiteSpace(normalizedClientRequestId))
+            return null;
+
+        var sessionExists = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
+        if (!sessionExists)
+            return null;
+
+        var assistantMessage = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Include(m => m.Citations)
+                .ThenInclude(c => c.Chunk)
+                    .ThenInclude(ch => ch.Doc)
+            .Where(m => m.SessionId == sessionId && m.Role == "Assistant" && m.ClientRequestId == normalizedClientRequestId)
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (assistantMessage == null)
+            return null;
+
+        return new VisualQAResponseDto
+        {
+            SessionId = sessionId,
+            TurnId = assistantMessage.Id.ToString(),
+            AnswerText = assistantMessage.Content,
+            SuggestedDiagnosis = assistantMessage.SuggestedDiagnosis ?? assistantMessage.Content,
+            DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage.DifferentialDiagnoses).ToList(),
+            KeyImagingFindings = assistantMessage.KeyImagingFindings,
+            ReflectiveQuestions = assistantMessage.ReflectiveQuestions,
+            AiConfidenceScore = assistantMessage.AiConfidenceScore,
+            ErrorMessage = null,
+            ResponseKind = DetermineResponseKind(assistantMessage),
+            ClientRequestId = normalizedClientRequestId,
+            Citations = ResolveMessageCitations(assistantMessage).ToList()
+        };
+    }
+
+    public async Task<VisualQARequestDto> HydrateVisualQaFollowUpContextAsync(
+        Guid studentId,
+        Guid sessionId,
+        VisualQARequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .Include(s => s.Image)
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken)
+            ?? throw new KeyNotFoundException("Q&A session not found.");
+
+        if (string.IsNullOrWhiteSpace(request.ImageUrl))
+            request.ImageUrl = session.CustomImageUrl ?? session.Image?.ImageUrl;
+
+        if (string.IsNullOrWhiteSpace(request.Coordinates))
+        {
+            var latestQuestionCoordinates = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .Where(m => m.SessionId == sessionId && m.Role == "User" && m.Coordinates != null)
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Select(m => m.Coordinates)
+                .FirstOrDefaultAsync(cancellationToken);
+            request.Coordinates = latestQuestionCoordinates;
+        }
+
+        if (!request.ImageId.HasValue)
+            request.ImageId = session.ImageId;
+        if (!request.CaseId.HasValue)
+            request.CaseId = session.CaseId;
+
+        return request;
+    }
+
+    public async Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
+        Guid studentId,
+        Guid sessionId,
+        int maxUserQuestions = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
+        if (session == null)
+            throw new KeyNotFoundException("Q&A session not found.");
+
+        var userTurnCount = await CountBillableUserTurnsAsync(sessionId, cancellationToken);
+        var hasInstructorMessage = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .AnyAsync(m =>
+                m.SessionId == sessionId &&
+                (m.Role == "Expert" || m.Role == "Lecturer"),
+                cancellationToken);
+
+        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
+        var isExpired = DateTime.UtcNow - lastActivity >= TimeSpan.FromHours(24);
+        var isInactiveStatus = !string.Equals(session.Status, "Active", StringComparison.Ordinal);
+        var turnLimitExceeded = userTurnCount >= maxUserQuestions;
+        var isReadOnly = isInactiveStatus || hasInstructorMessage || isExpired;
+
+        var reason = turnLimitExceeded
+            ? "TURN_LIMIT_EXCEEDED"
+            : isExpired
+                ? "SESSION_EXPIRED"
+                : isReadOnly
+                    ? "SESSION_READ_ONLY"
+                    : null;
+
+        return new VisualQaCapabilitiesDto
+        {
+            TurnsUsed = userTurnCount,
+            TurnLimit = maxUserQuestions,
+            IsReadOnly = isReadOnly,
+            CanAskNext = !isReadOnly && !turnLimitExceeded,
+            Reason = reason
+        };
     }
 
     public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
@@ -459,18 +611,16 @@ public class StudentService : IStudentService
         if (inactiveTime.TotalHours >= 24)
             throw new InvalidOperationException("SESSION_EXPIRED");
 
-        var userTurnCount = await _unitOfWork.Context.QaMessages
-            .AsNoTracking()
-            .Where(m => m.SessionId == sessionId && m.Role == "User")
-            .CountAsync();
+        var userTurnCount = await CountBillableUserTurnsAsync(sessionId);
 
         if (userTurnCount >= maxUserQuestions)
             throw new InvalidOperationException("TURN_LIMIT_EXCEEDED");
     }
 
-    public async Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId)
+    public async Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
+            .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId)
             ?? throw new KeyNotFoundException("Q&A session not found.");
 
@@ -479,6 +629,17 @@ public class StudentService : IStudentService
         if (inactiveTime.TotalHours >= 24)
             throw new InvalidOperationException("SESSION_EXPIRED");
 
+        var targetAssistantMessage = assistantMessageId.HasValue
+            ? session.Messages.FirstOrDefault(m => m.Id == assistantMessageId.Value && m.Role == "Assistant")
+            : session.Messages
+                .Where(m => m.Role == "Assistant")
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .FirstOrDefault();
+        if (targetAssistantMessage == null)
+            throw new KeyNotFoundException("Assistant turn not found for review request.");
+
+        session.RequestedReviewMessageId = targetAssistantMessage.Id;
         session.Status = "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
@@ -518,7 +679,11 @@ public class StudentService : IStudentService
     public async Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default)
     {
         var answer = await _unitOfWork.Context.CaseAnswers
-            .Include(a => a.Question)
+            .Include(a => a.Question!)
+                .ThenInclude(q => q.Case)
+            .Include(a => a.Question!)
+                .ThenInclude(q => q.Annotation!)
+                .ThenInclude(an => an!.Image)
             .FirstOrDefaultAsync(a => a.Id == answerId, cancellationToken)
             ?? throw new KeyNotFoundException("Case answer not found.");
 
@@ -531,6 +696,42 @@ public class StudentService : IStudentService
         answer.EscalatedAt = null;
         answer.EscalatedById = null;
         await _unitOfWork.SaveAsync();
+
+        var enrollments = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+            .Where(e => e.StudentId == studentId && e.Class != null && e.Class.LecturerId != null)
+            .ToListAsync(cancellationToken);
+
+        var q = answer.Question;
+        var snippet = q.QuestionText.Trim();
+        if (snippet.Length > 200)
+            snippet = snippet[..200].TrimEnd() + "…";
+
+        foreach (var e in enrollments)
+        {
+            var lecturerId = e.Class!.LecturerId!.Value;
+            var title = "Student requested lecturer review";
+            var body =
+                $"Case: {q.Case?.Title ?? "N/A"}\n" +
+                $"Question: {snippet}\n" +
+                (string.IsNullOrWhiteSpace(answer.StructuredDiagnosis)
+                    ? string.Empty
+                    : $"Suggested diagnosis (AI): {answer.StructuredDiagnosis}\n") +
+                (string.IsNullOrWhiteSpace(answer.KeyImagingFindings)
+                    ? string.Empty
+                    : $"Key imaging findings: {answer.KeyImagingFindings}\n") +
+                (q.Annotation != null
+                    ? $"Annotation: {q.Annotation.Label}\n"
+                    : string.Empty);
+
+            await _notificationService.SendNotificationToUserAsync(
+                lecturerId,
+                title,
+                body.Trim(),
+                "case_qa_triage",
+                $"/lecturer/triage?classId={e.ClassId}");
+        }
     }
 
     private static string NormalizeLanguage(string? language)
@@ -574,6 +775,28 @@ public class StudentService : IStudentService
         int limit = 20,
         int offset = 0,
         CancellationToken cancellationToken = default)
+        => await GetVisualQaHistoryInternalAsync(studentId, limit, offset, cancellationToken, hasCaseSession: null);
+
+    public async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaPersonalHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+        => await GetVisualQaHistoryInternalAsync(studentId, limit, offset, cancellationToken, hasCaseSession: false);
+
+    public async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaCaseHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+        => await GetVisualQaHistoryInternalAsync(studentId, limit, offset, cancellationToken, hasCaseSession: true);
+
+    private async Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryInternalAsync(
+        Guid studentId,
+        int limit,
+        int offset,
+        CancellationToken cancellationToken,
+        bool? hasCaseSession)
     {
         limit = Math.Clamp(limit, 1, 100);
         offset = Math.Max(offset, 0);
@@ -582,11 +805,17 @@ public class StudentService : IStudentService
             .AsNoTracking()
             .AsSplitQuery()
             .Include(s => s.Messages)
-            .Where(s => s.StudentId == studentId)
-            .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
+            .Where(s => s.StudentId == studentId);
 
-        var totalCount = await baseQuery.CountAsync(cancellationToken);
-        var sessions = await baseQuery
+        if (hasCaseSession.HasValue)
+            baseQuery = hasCaseSession.Value
+                ? baseQuery.Where(s => s.CaseId != null)
+                : baseQuery.Where(s => s.CaseId == null);
+
+        var orderedQuery = baseQuery.OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
+
+        var totalCount = await orderedQuery.CountAsync(cancellationToken);
+        var sessions = await orderedQuery
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -615,7 +844,9 @@ public class StudentService : IStudentService
                 Status = s.Status,
                 UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
                 QuestionSnippet = snippet,
-                ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(s.CustomImageUrl, cancellationToken)
+                ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(s.CustomImageUrl, cancellationToken),
+                ReviewState = MapReviewState(s.Status),
+                LastResponderRole = ResolveLastResponderRole(s.Messages)
             });
         }
 
@@ -623,6 +854,89 @@ public class StudentService : IStudentService
         {
             TotalCount = totalCount,
             Items = list
+        };
+    }
+
+    public async Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
+        Guid studentId,
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
+        if (session == null)
+            return null;
+
+        var messages = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Include(m => m.Citations)
+                .ThenInclude(c => c.Chunk)
+                    .ThenInclude(ch => ch.Doc)
+            .Where(m => m.SessionId == sessionId)
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToListAsync(cancellationToken);
+
+        var turns = new List<VisualQaTurnDto>();
+        QAMessage? pendingUser = null;
+        var reviewState = MapReviewState(session.Status);
+
+        foreach (var message in messages)
+        {
+            if (string.Equals(message.Role, "User", StringComparison.OrdinalIgnoreCase))
+            {
+                if (pendingUser != null)
+                    turns.Add(MapTurn(sessionId, pendingUser, null, reviewState, session.RequestedReviewMessageId));
+                pendingUser = message;
+                continue;
+            }
+
+            if (string.Equals(message.Role, "Assistant", StringComparison.OrdinalIgnoreCase))
+            {
+                if (pendingUser != null)
+                {
+                    turns.Add(MapTurn(sessionId, pendingUser, message, reviewState, session.RequestedReviewMessageId));
+                    pendingUser = null;
+                }
+                else
+                {
+                    turns.Add(MapStandaloneAssistantTurn(sessionId, message, reviewState, session.RequestedReviewMessageId));
+                }
+                continue;
+            }
+
+            if (pendingUser != null)
+            {
+                turns.Add(MapTurn(sessionId, pendingUser, null, reviewState, session.RequestedReviewMessageId));
+                pendingUser = null;
+            }
+
+            if (string.Equals(message.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(message.Role, "Expert", StringComparison.OrdinalIgnoreCase))
+            {
+                turns.Add(MapReviewUpdateTurn(sessionId, message, reviewState));
+            }
+        }
+
+        if (pendingUser != null)
+            turns.Add(MapTurn(sessionId, pendingUser, null, reviewState, session.RequestedReviewMessageId));
+
+        var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+        var blockingNotice = BuildBlockingNotice(capabilities.Reason);
+        if (!string.IsNullOrWhiteSpace(blockingNotice))
+        {
+            turns.Add(BuildSystemNoticeTurn(sessionId, blockingNotice, capabilities.Reason));
+        }
+
+        return new VisualQaThreadDto
+        {
+            SessionId = sessionId,
+            Turns = turns,
+            Capabilities = capabilities,
+            ReviewState = reviewState,
+            LastResponderRole = ResolveLastResponderRole(messages, capabilities.Reason),
+            BlockingNotice = blockingNotice
         };
     }
 
@@ -647,6 +961,284 @@ public class StudentService : IStudentService
         }
 
         return value;
+    }
+
+    private static VisualQaTurnDto MapTurn(
+        Guid sessionId,
+        QAMessage userMessage,
+        QAMessage? assistantMessage,
+        string? reviewState,
+        Guid? requestedReviewMessageId)
+    {
+        return new VisualQaTurnDto
+        {
+            SessionId = sessionId,
+            TurnId = assistantMessage?.Id.ToString() ?? userMessage.Id.ToString(),
+            ActorRole = "assistant",
+            UserMessageId = userMessage.Id,
+            AssistantMessageId = assistantMessage?.Id,
+            UserMessage = userMessage.Content,
+            MessageText = assistantMessage?.Content,
+            Diagnosis = assistantMessage?.SuggestedDiagnosis ?? assistantMessage?.Content,
+            Findings = SplitMultilineField(assistantMessage?.KeyImagingFindings),
+            DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage?.DifferentialDiagnoses),
+            ReflectiveQuestions = SplitMultilineField(assistantMessage?.ReflectiveQuestions),
+            Citations = ResolveMessageCitations(assistantMessage),
+            CreatedAt = userMessage.CreatedAt,
+            ResponseKind = DetermineResponseKind(assistantMessage),
+            ReviewState = reviewState ?? "none",
+            LastResponderRole = assistantMessage == null ? "system" : "assistant",
+            IsReviewTarget = assistantMessage != null && requestedReviewMessageId.HasValue && assistantMessage.Id == requestedReviewMessageId.Value
+        };
+    }
+
+    private static VisualQaTurnDto MapStandaloneAssistantTurn(
+        Guid sessionId,
+        QAMessage assistantMessage,
+        string? reviewState,
+        Guid? requestedReviewMessageId)
+    {
+        return new VisualQaTurnDto
+        {
+            SessionId = sessionId,
+            TurnId = assistantMessage.Id.ToString(),
+            ActorRole = "assistant",
+            UserMessageId = Guid.Empty,
+            AssistantMessageId = assistantMessage.Id,
+            UserMessage = string.Empty,
+            MessageText = assistantMessage.Content,
+            Diagnosis = assistantMessage.SuggestedDiagnosis ?? assistantMessage.Content,
+            Findings = SplitMultilineField(assistantMessage.KeyImagingFindings),
+            DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage.DifferentialDiagnoses),
+            ReflectiveQuestions = SplitMultilineField(assistantMessage.ReflectiveQuestions),
+            Citations = ResolveMessageCitations(assistantMessage),
+            CreatedAt = assistantMessage.CreatedAt,
+            ResponseKind = DetermineResponseKind(assistantMessage),
+            ReviewState = reviewState ?? "none",
+            LastResponderRole = "assistant",
+            IsReviewTarget = requestedReviewMessageId.HasValue && assistantMessage.Id == requestedReviewMessageId.Value
+        };
+    }
+
+    private static VisualQaTurnDto MapReviewUpdateTurn(Guid sessionId, QAMessage message, string? reviewState)
+    {
+        var actorRole = MapResponderRole(message.Role) ?? "system";
+        return new VisualQaTurnDto
+        {
+            SessionId = sessionId,
+            TurnId = message.Id.ToString(),
+            ActorRole = actorRole,
+            UserMessageId = Guid.Empty,
+            AssistantMessageId = message.Id,
+            UserMessage = string.Empty,
+            MessageText = message.Content,
+            Diagnosis = message.Content,
+            Findings = SplitMultilineField(message.KeyImagingFindings),
+            DifferentialDiagnoses = DeserializeJsonArrayToList(message.DifferentialDiagnoses),
+            ReflectiveQuestions = SplitMultilineField(message.ReflectiveQuestions),
+            Citations = ResolveMessageCitations(message),
+            CreatedAt = message.CreatedAt,
+            ResponseKind = "review_update",
+            ReviewState = reviewState ?? "none",
+            LastResponderRole = actorRole,
+            IsReviewTarget = false
+        };
+    }
+
+    private static VisualQaTurnDto BuildSystemNoticeTurn(Guid sessionId, string notice, string? reason)
+    {
+        return new VisualQaTurnDto
+        {
+            SessionId = sessionId,
+            TurnId = $"system:{reason ?? "notice"}",
+            ActorRole = "system",
+            UserMessageId = Guid.Empty,
+            AssistantMessageId = null,
+            UserMessage = string.Empty,
+            MessageText = notice,
+            Diagnosis = notice,
+            Findings = Array.Empty<string>(),
+            DifferentialDiagnoses = Array.Empty<string>(),
+            ReflectiveQuestions = Array.Empty<string>(),
+            Citations = Array.Empty<CitationItemDto>(),
+            CreatedAt = DateTime.UtcNow,
+            ResponseKind = "system_notice",
+            ReviewState = "none",
+            LastResponderRole = "system",
+            IsReviewTarget = false
+        };
+    }
+
+    private static IReadOnlyList<CitationItemDto> ResolveMessageCitations(QAMessage? message)
+    {
+        if (message == null)
+            return Array.Empty<CitationItemDto>();
+
+        var fromJson = VisualQaCitationMetadataBuilder.DeserializeMany(message.CitationsJson);
+        if (fromJson.Count > 0)
+            return fromJson;
+
+        return MapTurnCitations(message.Citations);
+    }
+
+    private static IReadOnlyList<CitationItemDto> MapTurnCitations(ICollection<Citation>? citations)
+    {
+        if (citations == null || citations.Count == 0)
+            return Array.Empty<CitationItemDto>();
+
+        return citations
+            .OrderBy(c => c.Chunk?.ChunkOrder ?? int.MaxValue)
+            .ThenBy(c => c.Id)
+            .Select(c => VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk))
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> SplitMultilineField(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return Array.Empty<string>();
+
+        return raw
+            .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim().TrimStart('-', '*').Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> DeserializeJsonArrayToList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<string>>(json);
+            if (parsed == null || parsed.Count == 0)
+                return Array.Empty<string>();
+
+            return parsed
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToList();
+        }
+        catch
+        {
+            return SplitMultilineField(json);
+        }
+    }
+
+    private static string? ResolveLastResponderRole(IEnumerable<QAMessage> messages, string? blockingReason = null)
+    {
+        var last = messages
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
+        return last == null && !string.IsNullOrWhiteSpace(blockingReason)
+            ? "system"
+            : MapResponderRole(last?.Role);
+    }
+
+    private static string? MapReviewState(string? status)
+    {
+        return status switch
+        {
+            "PendingExpertReview" => "pending",
+            "EscalatedToExpert" => "escalated",
+            "LecturerApproved" => "reviewed",
+            "ExpertApproved" => "resolved",
+            "Rejected" => "rejected",
+            _ => "none"
+        };
+    }
+
+    private static string DetermineResponseKind(QAMessage? assistantMessage)
+    {
+        if (assistantMessage == null)
+            return "clarification";
+
+        var diagnosis = assistantMessage.SuggestedDiagnosis ?? assistantMessage.Content ?? string.Empty;
+        if (diagnosis.Contains("not related to the musculoskeletal medical domain", StringComparison.OrdinalIgnoreCase) ||
+            diagnosis.Contains("not valid medical data", StringComparison.OrdinalIgnoreCase) ||
+            diagnosis.Contains("not a valid human bone x-ray image", StringComparison.OrdinalIgnoreCase) ||
+            diagnosis.Contains("please upload a proper medical x-ray image", StringComparison.OrdinalIgnoreCase))
+            return "refusal";
+
+        if (string.Equals(assistantMessage.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(assistantMessage.Role, "Expert", StringComparison.OrdinalIgnoreCase))
+            return "review_update";
+
+        return string.IsNullOrWhiteSpace(assistantMessage.KeyImagingFindings)
+               && string.IsNullOrWhiteSpace(assistantMessage.DifferentialDiagnoses)
+               && string.IsNullOrWhiteSpace(assistantMessage.ReflectiveQuestions)
+            ? "clarification"
+            : "analysis";
+    }
+
+    private static string? MapResponderRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+            return null;
+
+        return role.Trim() switch
+        {
+            "Assistant" => "assistant",
+            "Lecturer" => "lecturer",
+            "Expert" => "expert",
+            _ => "system"
+        };
+    }
+
+    private static string? BuildBlockingNotice(string? reason)
+    {
+        return reason switch
+        {
+            "TURN_LIMIT_EXCEEDED" => "You have reached the maximum number of questions for this Visual QA session.",
+            "SESSION_EXPIRED" => "This Visual QA session expired after 24 hours of inactivity.",
+            "SESSION_READ_ONLY" => "This Visual QA session is now read-only because it has entered the review workflow.",
+            _ => null
+        };
+    }
+
+    private async Task<int> CountBillableUserTurnsAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var messages = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Where(m => m.SessionId == sessionId)
+            .Where(m => m.Role == "User" || m.Role == "Assistant")
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToListAsync(cancellationToken);
+
+        var count = 0;
+        QAMessage? pendingUser = null;
+        foreach (var message in messages)
+        {
+            if (string.Equals(message.Role, "User", StringComparison.OrdinalIgnoreCase))
+            {
+                pendingUser = message;
+                continue;
+            }
+
+            if (pendingUser == null)
+                continue;
+
+            var responseKind = DetermineResponseKind(message);
+            if (string.Equals(responseKind, "analysis", StringComparison.Ordinal))
+                count++;
+
+            pendingUser = null;
+        }
+
+        return count;
+    }
+
+    private static string? NormalizeClientRequestId(string? clientRequestId)
+    {
+        if (string.IsNullOrWhiteSpace(clientRequestId))
+            return null;
+
+        var normalized = clientRequestId.Trim();
+        return normalized.Length <= 100 ? normalized : normalized[..100];
     }
 
     public async Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId)

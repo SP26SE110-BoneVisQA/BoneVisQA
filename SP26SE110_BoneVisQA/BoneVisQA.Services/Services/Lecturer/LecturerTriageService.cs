@@ -55,24 +55,25 @@ public class LecturerTriageService : ILecturerTriageService
             .Where(m => m.Role == "Assistant")
             .OrderBy(m => m.CreatedAt)
             .LastOrDefault();
+        var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session);
 
         return new EscalatedAnswerDto
         {
             AnswerId = session.Id,
-            QuestionId = latestUser?.Id ?? Guid.Empty,
+            QuestionId = targetUser?.Id ?? latestUser?.Id ?? Guid.Empty,
             StudentId = session.StudentId,
             StudentName = session.Student?.FullName ?? string.Empty,
             StudentEmail = session.Student?.Email ?? string.Empty,
             CaseId = session.CaseId,
             CaseTitle = session.Case?.Title ?? string.Empty,
-            QuestionText = latestUser?.Content ?? string.Empty,
-            CurrentAnswerText = latestAssistant?.Content,
-            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
-            DifferentialDiagnoses = DeserializeJsonArray(latestAssistant?.DifferentialDiagnoses),
+            QuestionText = targetUser?.Content ?? latestUser?.Content ?? string.Empty,
+            CurrentAnswerText = targetAssistant?.Content ?? latestAssistant?.Content,
+            StructuredDiagnosis = targetAssistant?.SuggestedDiagnosis ?? latestAssistant?.SuggestedDiagnosis,
+            DifferentialDiagnoses = DeserializeJsonArray(targetAssistant?.DifferentialDiagnoses ?? latestAssistant?.DifferentialDiagnoses),
             Status = session.Status,
             EscalatedById = lecturerId,
             EscalatedAt = session.UpdatedAt,
-            AiConfidenceScore = latestAssistant?.AiConfidenceScore,
+            AiConfidenceScore = targetAssistant?.AiConfidenceScore ?? latestAssistant?.AiConfidenceScore,
             ClassId = classEnrollment.ClassId,
             ClassName = classEnrollment.Class?.ClassName ?? string.Empty,
             ReviewNote = request?.ReviewNote
@@ -127,5 +128,29 @@ public class LecturerTriageService : ILecturerTriageService
         {
             return null;
         }
+    }
+
+    private static (QAMessage? User, QAMessage? Assistant) ResolveRequestedReviewPair(VisualQASession session)
+    {
+        var assistant = session.RequestedReviewMessageId.HasValue
+            ? session.Messages
+                .Where(m => m.Role == "Assistant" && m.Id == session.RequestedReviewMessageId.Value)
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .FirstOrDefault()
+            : session.Messages
+                .Where(m => m.Role == "Assistant")
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .FirstOrDefault();
+        if (assistant == null)
+            return (null, null);
+
+        var user = session.Messages
+            .Where(m => m.Role == "User" && m.CreatedAt <= assistant.CreatedAt)
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
+        return (user, assistant);
     }
 }

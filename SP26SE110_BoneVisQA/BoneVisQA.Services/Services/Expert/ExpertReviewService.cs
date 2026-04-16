@@ -4,6 +4,7 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Exceptions;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
@@ -160,7 +161,7 @@ public class ExpertReviewService : IExpertReviewService
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.Id)
             .ToList();
-        var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
+        var userMessage = ResolveRequestedReviewQuestion(session, orderedMessages);
 
         return new ExpertEscalatedAnswerDto
         {
@@ -266,7 +267,7 @@ public class ExpertReviewService : IExpertReviewService
                 CreatedAt = now,
                 UpdatedAt = now,
                 IndexingStatus = DocumentIndexingStatuses.Pending,
-                Version = 1
+                Version = SemanticDocumentVersion.Initial
             };
 
             await _unitOfWork.Context.MedicalCases.AddAsync(newCase);
@@ -350,30 +351,19 @@ public class ExpertReviewService : IExpertReviewService
             throw new ConflictException("Only sessions escalated by lecturers can be processed here.");
 
         var now = DateTime.UtcNow;
-        var assistantMessage = session.Messages
-            .Where(m => m.Role == "Assistant")
-            .OrderByDescending(m => m.CreatedAt)
-            .ThenByDescending(m => m.Id)
-            .FirstOrDefault();
-
-        if (assistantMessage == null)
+        var expertMessage = new QAMessage
         {
-            assistantMessage = new QAMessage
-            {
-                Id = Guid.NewGuid(),
-                SessionId = session.Id,
-                Role = "Assistant",
-                CreatedAt = now
-            };
-            await _unitOfWork.Context.QaMessages.AddAsync(assistantMessage);
-        }
-
-        assistantMessage.Content = request.AnswerText;
-        assistantMessage.SuggestedDiagnosis = request.StructuredDiagnosis;
-        assistantMessage.DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses);
-        assistantMessage.KeyImagingFindings = request.KeyImagingFindings;
-        assistantMessage.ReflectiveQuestions = request.ReflectiveQuestions;
-        assistantMessage.CreatedAt = now;
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Expert",
+            Content = request.AnswerText,
+            SuggestedDiagnosis = request.StructuredDiagnosis,
+            DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses),
+            KeyImagingFindings = request.KeyImagingFindings,
+            ReflectiveQuestions = request.ReflectiveQuestions,
+            CreatedAt = now
+        };
+        await _unitOfWork.Context.QaMessages.AddAsync(expertMessage);
 
         session.Status = "ExpertApproved";
         session.ExpertId = expertId;
@@ -451,6 +441,26 @@ public class ExpertReviewService : IExpertReviewService
             ImageUrl = ResolveSessionImageUrl(session),
             CustomCoordinates = userMessage?.Coordinates
         };
+    }
+
+    private static QAMessage? ResolveRequestedReviewQuestion(VisualQASession session, IEnumerable<QAMessage> orderedMessages)
+    {
+        if (!session.RequestedReviewMessageId.HasValue)
+            return orderedMessages.FirstOrDefault(m => m.Role == "User");
+
+        var assistant = orderedMessages
+            .Where(m => m.Role == "Assistant" && m.Id == session.RequestedReviewMessageId.Value)
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
+        if (assistant == null)
+            return orderedMessages.FirstOrDefault(m => m.Role == "User");
+
+        return orderedMessages
+            .Where(m => m.Role == "User" && m.CreatedAt <= assistant.CreatedAt)
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
     }
 
     public async Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request)

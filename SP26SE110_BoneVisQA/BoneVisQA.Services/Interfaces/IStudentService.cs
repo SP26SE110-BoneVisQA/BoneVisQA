@@ -27,9 +27,19 @@ public interface IStudentService
     Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
     Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
+    Task<VisualQAResponseDto?> GetExistingVisualQaResponseAsync(
+        Guid studentId,
+        Guid sessionId,
+        string clientRequestId,
+        CancellationToken cancellationToken = default);
+    Task<VisualQARequestDto> HydrateVisualQaFollowUpContextAsync(
+        Guid studentId,
+        Guid sessionId,
+        VisualQARequestDto request,
+        CancellationToken cancellationToken = default);
     Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
 
-    Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId);
+    Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null);
     Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default);
 
     /// <summary>Visual QA sessions for the student, newest first.</summary>
@@ -37,6 +47,25 @@ public interface IStudentService
         Guid studentId,
         int limit = 20,
         int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaPersonalHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaCaseHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
+        Guid studentId,
+        Guid sessionId,
+        int maxUserQuestions = 3,
+        CancellationToken cancellationToken = default);
+    Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
+        Guid studentId,
+        Guid sessionId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);

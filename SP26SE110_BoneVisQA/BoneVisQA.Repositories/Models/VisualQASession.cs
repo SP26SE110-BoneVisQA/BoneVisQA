@@ -41,6 +41,9 @@ public partial class VisualQASession
     [Column("promoted_case_id")]
     public Guid? PromotedCaseId { get; set; }
 
+    [Column("requested_review_message_id")]
+    public Guid? RequestedReviewMessageId { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

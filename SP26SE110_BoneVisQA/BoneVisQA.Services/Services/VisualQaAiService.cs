@@ -1,5 +1,6 @@
 using BoneVisQA.Repositories.DBContext;
 using BoneVisQA.Repositories.Models;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
@@ -30,7 +31,7 @@ public class VisualQaAiService : IVisualQaAiService
 
     private const int RagChunkFetch = 12;
     private const int RagCaseFetch = 12;
-    private const int RagTopMerged = 8;
+    private const int RagTopMerged = 5;
 
     private readonly BoneVisQADbContext _dbContext;
     private readonly IEmbeddingService _embeddingService;
@@ -133,6 +134,10 @@ public class VisualQaAiService : IVisualQaAiService
                 ragContextAdequate,
                 cancellationToken);
         }
+        catch (AiResponseFormatException)
+        {
+            throw;
+        }
         catch
         {
             // Do not persist user/assistant messages when generation fails.
@@ -149,6 +154,8 @@ public class VisualQaAiService : IVisualQaAiService
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
                 AiConfidenceScore = calculatedScore,
+                ResponseKind = "refusal",
+                ClientRequestId = request.ClientRequestId,
                 Citations = new List<CitationItemDto>()
             };
         }
@@ -169,6 +176,7 @@ public class VisualQaAiService : IVisualQaAiService
             response.DifferentialDiagnoses = null;
             response.KeyImagingFindings = null;
             response.ReflectiveQuestions = null;
+            response.ResponseKind = "refusal";
         }
         else
         {
@@ -210,6 +218,8 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         response.AiConfidenceScore = calculatedScore;
+        response.ClientRequestId = request.ClientRequestId;
+        response.ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind;
 
         return response;
     }
@@ -286,28 +296,10 @@ public class VisualQaAiService : IVisualQaAiService
         {
             if (r.Chunk != null)
             {
-                return new CitationItemDto
-                {
-                    ChunkId = r.Chunk.Id,
-                    MedicalCaseId = null,
-                    ReferenceUrl = BuildCitationUrl(r.Chunk.Doc?.FilePath, r.Chunk.ChunkOrder),
-                    PageNumber = r.Chunk.StartPage > 0 ? r.Chunk.StartPage : r.Chunk.ChunkOrder + 1,
-                    StartPage = r.Chunk.StartPage > 0 ? r.Chunk.StartPage : r.Chunk.ChunkOrder + 1,
-                    EndPage = r.Chunk.EndPage > 0 ? r.Chunk.EndPage : r.Chunk.ChunkOrder + 1,
-                    SourceText = r.Chunk.Content
-                };
+                return VisualQaCitationMetadataBuilder.FromDocumentChunk(r.Chunk);
             }
 
-            return new CitationItemDto
-            {
-                ChunkId = Guid.Empty,
-                MedicalCaseId = r.Case!.Id,
-                ReferenceUrl = null,
-                PageNumber = null,
-                StartPage = null,
-                EndPage = null,
-                SourceText = BuildMedicalCaseRagText(r.Case)
-            };
+            return VisualQaCitationMetadataBuilder.FromMedicalCase(r.Case!, BuildMedicalCaseRagText(r.Case));
         }).ToList();
 
         return (merged, citations);
@@ -382,7 +374,8 @@ public class VisualQaAiService : IVisualQaAiService
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine("You are an Expert Radiologist assisting medical students.");
+        sb.AppendLine("You are a Senior Radiologist.");
+        sb.AppendLine("Answer questions based on the provided X-ray ROI and Knowledge Base.");
         sb.AppendLine();
 
         if (predefinedCase != null)
@@ -483,19 +476,20 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine(request.QuestionText);
         sb.AppendLine();
 
-        // Hard requirement: Vietnamese only, inserted immediately before JSON requirement.
+        sb.AppendLine("If the question is explicitly binary and the evidence is decisive, you may begin with a concise yes/no conclusion. Otherwise explain the uncertainty instead of forcing a yes/no answer.");
+        sb.AppendLine("Never change left/right laterality unless the image, ROI, retrieved context, or previous conversation explicitly justifies the change.");
         sb.AppendLine("You must reason, explain, and respond entirely in professional medical Vietnamese.");
 
         sb.AppendLine();
-        sb.AppendLine("You must respond with a valid JSON object only, no other text. Use this exact structure (use null for optional fields when refusing or when not applicable):");
+        sb.AppendLine("Format: Strict JSON only with fields: diagnosis, findings, differential_diagnoses, reflective_questions, citations.");
+        sb.AppendLine("Use this exact structure (use null for optional fields when refusing or when not applicable):");
         sb.AppendLine(
             """
             {
-              "answerText": "Full educational answer in Vietnamese. When you use a retrieved document chunk or medical case, insert inline markers exactly as [Doc:CHUNK_UUID] or [Case:CASE_UUID] matching the Context lines above.",
-              "suggestedDiagnosis": "Primary suggested diagnosis or null.",
-              "differentialDiagnoses": "Other differentials or null (string or list per schema).",
-              "keyImagingFindings": "Key imaging signs or null.",
-              "reflectiveQuestions": "1-3 reflective questions for the student (string), or null.",
+              "diagnosis": "Primary diagnosis in Vietnamese. Use a binary lead-in only when the question is truly binary and the evidence is decisive.",
+              "findings": ["Key imaging finding 1", "Key imaging finding 2"],
+              "differential_diagnoses": ["Differential 1", "Differential 2"],
+              "reflective_questions": ["Question 1", "Question 2"],
               "citations": [
                 { "kind": "Doc", "id": "00000000-0000-0000-0000-000000000000" },
                 { "kind": "Case", "id": "00000000-0000-0000-0000-000000000000" }
@@ -518,7 +512,15 @@ public class VisualQaAiService : IVisualQaAiService
             .Where(m => m.Role != "Lecturer" && m.Role != "Expert")
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.Id)
-            .Select(m => new { m.Role, m.Content })
+            .Select(m => new
+            {
+                m.Role,
+                m.Content,
+                m.SuggestedDiagnosis,
+                m.KeyImagingFindings,
+                m.DifferentialDiagnoses,
+                m.ReflectiveQuestions
+            })
             .ToListAsync(cancellationToken);
 
         if (messages.Count == 0)
@@ -526,20 +528,87 @@ public class VisualQaAiService : IVisualQaAiService
 
         var userTurns = messages.Count(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase));
 
+        var recentMessages = messages
+            .TakeLast(6)
+            .ToList();
+
         var sb = new StringBuilder();
         sb.AppendLine("Previous Conversation:");
-        foreach (var msg in messages)
+        foreach (var msg in recentMessages)
         {
             var role = string.Equals(msg.Role, "Assistant", StringComparison.OrdinalIgnoreCase)
                 ? "Assistant"
                 : "User";
-            var content = (msg.Content ?? string.Empty).Trim();
+            var content = role == "Assistant"
+                ? BuildAssistantHistorySummary(
+                    msg.Content,
+                    msg.SuggestedDiagnosis,
+                    msg.KeyImagingFindings,
+                    msg.DifferentialDiagnoses,
+                    msg.ReflectiveQuestions)
+                : (msg.Content ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(content))
                 continue;
             sb.Append(role).Append(": ").AppendLine(content);
         }
 
         return (sb.Length == 0 ? null : sb.ToString().Trim(), userTurns);
+    }
+
+    private static string BuildAssistantHistorySummary(
+        string? content,
+        string? diagnosis,
+        string? findings,
+        string? differentialDiagnosesJson,
+        string? reflectiveQuestions)
+    {
+        var parts = new List<string>();
+        var normalizedDiagnosis = (diagnosis ?? content ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedDiagnosis))
+            parts.Add($"Diagnosis: {normalizedDiagnosis}");
+
+        var normalizedFindings = NormalizeMultiline(findings);
+        if (!string.IsNullOrWhiteSpace(normalizedFindings))
+            parts.Add($"Findings: {normalizedFindings}");
+
+        var normalizedDifferentials = NormalizeJsonArray(differentialDiagnosesJson);
+        if (!string.IsNullOrWhiteSpace(normalizedDifferentials))
+            parts.Add($"Differentials: {normalizedDifferentials}");
+
+        var normalizedReflective = NormalizeMultiline(reflectiveQuestions);
+        if (!string.IsNullOrWhiteSpace(normalizedReflective))
+            parts.Add($"ReflectiveQuestions: {normalizedReflective}");
+
+        return string.Join(" | ", parts);
+    }
+
+    private static string? NormalizeMultiline(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return string.Join("; ",
+            value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim().TrimStart('-', '*').Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
+
+    private static string? NormalizeJsonArray(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        try
+        {
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<List<string>>(value);
+            return parsed == null
+                ? null
+                : string.Join("; ", parsed.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()));
+        }
+        catch
+        {
+            return NormalizeMultiline(value);
+        }
     }
 
     private static double CalculateCosineSimilarity(float[] v1, float[] v2)
@@ -572,12 +641,4 @@ public class VisualQaAiService : IVisualQaAiService
         return cos;
     }
 
-    private static string? BuildCitationUrl(string? filePath, int chunkOrder)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-            return null;
-
-        var pageNumber = chunkOrder + 1;
-        return $"{filePath}#page={pageNumber}";
-    }
 }

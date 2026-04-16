@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System.ComponentModel;
@@ -25,6 +29,9 @@ public class VisualQAFileUploadRequest
 
     [FromForm(Name = "sessionId")]
     public Guid? SessionId { get; set; }
+
+    [FromForm(Name = "clientRequestId")]
+    public string? ClientRequestId { get; set; }
 }
 
 [ApiController]
@@ -62,7 +69,7 @@ public class VisualQAController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = MaxVisualImageBytes)]
     [Consumes("multipart/form-data")]
     [EnableRateLimiting("AiInteractionLimit")]
-    public async Task<ActionResult<VisualQAResponseDto>> Ask([FromForm] VisualQAFileUploadRequest formRequest, CancellationToken cancellationToken)
+    public async Task<ActionResult<VisualQaApiResponseDto>> Ask([FromForm] VisualQAFileUploadRequest formRequest, CancellationToken cancellationToken)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
@@ -125,7 +132,8 @@ public class VisualQAController : ControllerBase
             Coordinates = formRequest.Coordinates,
             SessionId = formRequest.SessionId,
             CaseId = null,
-            AnnotationId = null
+            AnnotationId = null,
+            ClientRequestId = formRequest.ClientRequestId
         };
 
         Guid sessionId;
@@ -149,41 +157,67 @@ public class VisualQAController : ControllerBase
         {
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "SESSION_EXPIRED",
-                    message = "The Q&A session expired due to 24 hours of inactivity."
-                });
+                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "The Q&A session expired due to 24 hours of inactivity."));
             }
 
             if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "SESSION_READ_ONLY",
-                    message = "This Q&A session is view-only and cannot be continued."
-                });
+                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "This Q&A session is view-only and cannot be continued."));
             }
 
             if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "TURN_LIMIT_EXCEEDED",
-                    message = "This chat session has reached the 3-question limit."
-                });
+                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "This chat session has reached the 3-question limit."));
             }
 
             return BadRequest(new { message = ex.Message });
         }
+        if (isFollowUpTurn)
+        {
+            request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
+        }
         VisualQAResponseDto response;
+        if (!string.IsNullOrWhiteSpace(request.ClientRequestId))
+        {
+            var existing = await _studentService.GetExistingVisualQaResponseAsync(
+                studentId,
+                sessionId,
+                request.ClientRequestId,
+                cancellationToken);
+            if (existing != null)
+            {
+                var existingCapabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+                return Ok(ToApiResponse(existing, existingCapabilities));
+            }
+        }
         try
         {
             try
             {
+                request.SessionId = sessionId;
                 response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
                 response.SessionId = sessionId;
                 await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
+            }
+            catch (AiResponseFormatException ex)
+            {
+                if (!string.IsNullOrWhiteSpace(uploadedBucket) && !string.IsNullOrWhiteSpace(uploadedFilePath))
+                {
+                    try
+                    {
+                        await _storageService.DeleteFileAsync(uploadedBucket, uploadedFilePath, cancellationToken);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        _logger.LogWarning(deleteEx, "Failed to cleanup malformed-response upload for {Path}.", uploadedFilePath);
+                    }
+                }
+
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                {
+                    errorCode = "AI_RESPONSE_INVALID_FORMAT",
+                    message = ex.Message
+                });
             }
             catch (Exception)
             {
@@ -227,7 +261,8 @@ public class VisualQAController : ControllerBase
                 });
         }
 
-        return Ok(response);
+        var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+        return Ok(ToApiResponse(response, capabilities));
     }
 
     /// <summary>Lists Visual QA sessions for the current student (newest activity first).</summary>
@@ -247,9 +282,58 @@ public class VisualQAController : ControllerBase
         return Ok(items);
     }
 
+    [HttpGet("history/personal")]
+    [ProducesResponseType(typeof(PagedResultDto<VisualQaSessionHistoryItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PagedResultDto<VisualQaSessionHistoryItemDto>>> GetPersonalHistory(
+        [FromQuery] int limit = 20,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        var items = await _studentService.GetVisualQaPersonalHistoryAsync(studentId, limit, offset, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpGet("history/cases")]
+    [ProducesResponseType(typeof(PagedResultDto<VisualQaSessionHistoryItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PagedResultDto<VisualQaSessionHistoryItemDto>>> GetCaseHistory(
+        [FromQuery] int limit = 20,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        var items = await _studentService.GetVisualQaCaseHistoryAsync(studentId, limit, offset, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpGet("history/{sessionId:guid}")]
+    [ProducesResponseType(typeof(VisualQaThreadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<VisualQaThreadDto>> GetHistoryThread(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        var thread = await _studentService.GetVisualQaThreadAsync(studentId, sessionId, cancellationToken);
+        if (thread == null)
+            return NotFound(new { message = "Q&A session not found." });
+
+        return Ok(thread);
+    }
+
     [HttpPost("ask-json")]
     [EnableRateLimiting("AiInteractionLimit")]
-    public async Task<ActionResult<VisualQAResponseDto>> AskJson([FromBody] VisualQARequestDto request, CancellationToken cancellationToken)
+    public async Task<ActionResult<VisualQaApiResponseDto>> AskJson([FromBody] VisualQARequestDto request, CancellationToken cancellationToken)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
@@ -285,37 +369,51 @@ public class VisualQAController : ControllerBase
         {
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "SESSION_EXPIRED",
-                    message = "The Q&A session expired due to 24 hours of inactivity."
-                });
+                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "The Q&A session expired due to 24 hours of inactivity."));
             }
 
             if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "SESSION_READ_ONLY",
-                    message = "This Q&A session is view-only and cannot be continued."
-                });
+                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "This Q&A session is view-only and cannot be continued."));
             }
 
             if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
             {
-                return BadRequest(new
-                {
-                    errorCode = "TURN_LIMIT_EXCEEDED",
-                    message = "This chat session has reached the 3-question limit."
-                });
+                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "This chat session has reached the 3-question limit."));
             }
 
             return BadRequest(new { message = ex.Message });
         }
+        if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
+        {
+            request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
+        }
         VisualQAResponseDto response;
+        if (!string.IsNullOrWhiteSpace(request.ClientRequestId))
+        {
+            var existing = await _studentService.GetExistingVisualQaResponseAsync(
+                studentId,
+                sessionId,
+                request.ClientRequestId,
+                cancellationToken);
+            if (existing != null)
+            {
+                var existingCapabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+                return Ok(ToApiResponse(existing, existingCapabilities));
+            }
+        }
         try
         {
+            request.SessionId = sessionId;
             response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+        }
+        catch (AiResponseFormatException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                errorCode = "AI_RESPONSE_INVALID_FORMAT",
+                message = ex.Message
+            });
         }
         catch (InvalidOperationException ex)
         {
@@ -335,14 +433,15 @@ public class VisualQAController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
         }
 
-        return Ok(response);
+        var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+        return Ok(ToApiResponse(response, capabilities));
     }
 
-    [HttpPost("{sessionId:guid}/request-review")]
+    [HttpPost("turns/{turnId:guid}/request-review")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RequestReview(Guid sessionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RequestReview(Guid turnId, [FromQuery] Guid sessionId, CancellationToken cancellationToken)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
@@ -350,7 +449,7 @@ public class VisualQAController : ControllerBase
 
         try
         {
-            await _studentService.RequestVisualQaReviewAsync(studentId, sessionId);
+            await _studentService.RequestVisualQaReviewAsync(studentId, sessionId, turnId);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -414,5 +513,86 @@ public class VisualQAController : ControllerBase
         bucket = relative[..slash];
         filePath = relative[(slash + 1)..];
         return !string.IsNullOrWhiteSpace(bucket) && !string.IsNullOrWhiteSpace(filePath);
+    }
+
+    private static VisualQaApiResponseDto ToApiResponse(VisualQAResponseDto response, VisualQaCapabilitiesDto capabilities)
+    {
+        var systemNotice = BuildSystemNotice(capabilities.Reason);
+        return new VisualQaApiResponseDto
+        {
+            SessionId = response.SessionId,
+            Diagnosis = (response.SuggestedDiagnosis ?? response.AnswerText ?? string.Empty).Trim(),
+            Findings = SplitMultilineField(response.KeyImagingFindings),
+            DifferentialDiagnoses = response.DifferentialDiagnoses?.ToList() ?? new List<string>(),
+            ReflectiveQuestions = SplitMultilineField(response.ReflectiveQuestions),
+            Citations = response.Citations,
+            Capabilities = capabilities,
+            ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
+            ClientRequestId = response.ClientRequestId,
+            ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
+            LastResponderRole = "assistant",
+            SystemNotice = systemNotice,
+            LatestTurn = new VisualQaTurnDto
+            {
+                SessionId = response.SessionId ?? Guid.Empty,
+                TurnId = response.TurnId,
+                ActorRole = "assistant",
+                UserMessageId = Guid.Empty,
+                AssistantMessageId = null,
+                UserMessage = string.Empty,
+                MessageText = response.AnswerText,
+                Diagnosis = (response.SuggestedDiagnosis ?? response.AnswerText ?? string.Empty).Trim(),
+                Findings = SplitMultilineField(response.KeyImagingFindings),
+                DifferentialDiagnoses = response.DifferentialDiagnoses?.ToList() ?? new List<string>(),
+                ReflectiveQuestions = SplitMultilineField(response.ReflectiveQuestions),
+                Citations = response.Citations,
+                CreatedAt = DateTime.UtcNow,
+                ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
+                ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
+                LastResponderRole = "assistant",
+                IsReviewTarget = false
+            }
+        };
+    }
+
+    private static IReadOnlyList<string> SplitMultilineField(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return Array.Empty<string>();
+
+        return raw
+            .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim().TrimStart('-', '*').Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+    }
+
+    private static object BuildSessionBlockedResponse(string reason, string message)
+    {
+        return new
+        {
+            errorCode = reason,
+            message,
+            systemNotice = BuildSystemNotice(reason),
+            capabilities = new VisualQaCapabilitiesDto
+            {
+                CanAskNext = false,
+                IsReadOnly = reason is "SESSION_READ_ONLY" or "SESSION_EXPIRED",
+                TurnsUsed = 0,
+                TurnLimit = 3,
+                Reason = reason
+            }
+        };
+    }
+
+    private static string? BuildSystemNotice(string? reason)
+    {
+        return reason switch
+        {
+            "TURN_LIMIT_EXCEEDED" => "You have reached the maximum number of questions for this Visual QA session.",
+            "SESSION_EXPIRED" => "This Visual QA session expired after 24 hours of inactivity.",
+            "SESSION_READ_ONLY" => "This Visual QA session is now read-only because it has entered the review workflow.",
+            _ => null
+        };
     }
 }

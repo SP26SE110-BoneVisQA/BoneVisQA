@@ -977,7 +977,7 @@ public class LecturerService : ILecturerService
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
 
-        return sessions.Select(s =>
+        var visualRows = sessions.Select(s =>
             {
                 var userMessage = s.Messages
                     .Where(m => m.Role == "User")
@@ -1009,10 +1009,86 @@ public class LecturerService : ILecturerService
                     AskedAt = s.CreatedAt,
                     IsEscalated = string.Equals(s.Status, "EscalatedToExpert", StringComparison.Ordinal),
                     EscalatedByName = null,
-                    EscalatedAt = null
+                    EscalatedAt = null,
+                    TriageSource = "VisualQA"
                 };
             })
             .ToList();
+
+        var caseAnswers = await _unitOfWork.Context.CaseAnswers
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(a => a.Question!)
+                .ThenInclude(q => q.Student)
+            .Include(a => a.Question!)
+                .ThenInclude(q => q.Case!)
+                    .ThenInclude(c => c!.MedicalImages)
+            .Include(a => a.Question!)
+                .ThenInclude(q => q.Annotation!)
+                .ThenInclude(an => an!.Image)
+            .Where(a => a.Status == CaseAnswerStatuses.RequiresLecturerReview)
+            .Where(a => a.Question != null && studentIds.Contains(a.Question.StudentId))
+            .OrderByDescending(a => a.GeneratedAt)
+            .ToListAsync();
+
+        var caseRows = caseAnswers.Select(a =>
+        {
+            var q = a.Question!;
+            var flat = ResolveStudentQuestionImageUrl(q);
+            return new LecturerTriageRowDto
+            {
+                AnswerId = a.Id,
+                QuestionId = q.Id,
+                StudentId = q.StudentId,
+                StudentName = q.Student?.FullName ?? string.Empty,
+                StudentEmail = q.Student?.Email,
+                ClassId = classId,
+                ClassName = cls.ClassName ?? string.Empty,
+                CaseId = q.CaseId,
+                CaseTitle = q.Case?.Title,
+                ThumbnailUrl = flat,
+                ImageUrl = flat,
+                QuestionText = q.QuestionText,
+                AnswerText = a.AnswerText,
+                Status = a.Status,
+                AiConfidenceScore = a.AiConfidenceScore,
+                AskedAt = a.GeneratedAt ?? q.CreatedAt,
+                IsEscalated = false,
+                EscalatedByName = null,
+                EscalatedAt = null,
+                TriageSource = "CaseQA",
+                StructuredDiagnosis = a.StructuredDiagnosis,
+                ReflectiveQuestions = a.ReflectiveQuestions,
+                KeyImagingFindings = a.KeyImagingFindings,
+                DifferentialDiagnoses = a.DifferentialDiagnoses,
+                AnnotationLabel = q.Annotation?.Label,
+                AnnotationCoordinates = q.Annotation?.Coordinates,
+                CustomCoordinates = q.CustomCoordinates,
+                CustomImageUrl = q.CustomImageUrl
+            };
+        }).ToList();
+
+        return visualRows
+            .Concat(caseRows)
+            .OrderByDescending(r => r.AskedAt ?? DateTime.MinValue)
+            .ToList();
+    }
+
+    private static string? ResolveStudentQuestionImageUrl(StudentQuestion q)
+    {
+        if (!string.IsNullOrWhiteSpace(q.CustomImageUrl))
+            return q.CustomImageUrl.Trim();
+
+        var images = q.Case?.MedicalImages;
+        if (images == null || images.Count == 0)
+            return null;
+
+        var url = images
+            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(m => m.Id)
+            .Select(m => m.ImageUrl)
+            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+        return string.IsNullOrWhiteSpace(url) ? null : url.Trim();
     }
 
     public async Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId)
@@ -1098,27 +1174,17 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == session.StudentId)
             ?? throw new InvalidOperationException("The lecturer does not have permission to answer this question.");
 
-        var answer = session.Messages
-            .Where(m => m.Role == "Assistant")
-            .OrderByDescending(m => m.CreatedAt)
-            .FirstOrDefault();
-
-        if (answer == null)
+        var answer = new QAMessage
         {
-            answer = new QAMessage
-            {
-                Id = Guid.NewGuid(),
-                SessionId = session.Id,
-                Role = "Assistant",
-                CreatedAt = DateTime.UtcNow
-            };
-            await _unitOfWork.Context.QaMessages.AddAsync(answer);
-        }
-
-        answer.Content = request.AnswerText;
-        answer.SuggestedDiagnosis = request.StructuredDiagnosis;
-        answer.DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses);
-        answer.CreatedAt = DateTime.UtcNow;
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Lecturer",
+            Content = request.AnswerText,
+            SuggestedDiagnosis = request.StructuredDiagnosis,
+            DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses),
+            CreatedAt = DateTime.UtcNow
+        };
+        await _unitOfWork.Context.QaMessages.AddAsync(answer);
 
         session.Status = request.Approve ? "LecturerApproved" : "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
