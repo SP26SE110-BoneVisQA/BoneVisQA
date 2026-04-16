@@ -10,4 +10,12 @@ public interface IDocumentIndexingProgressNotifier
         int progressPercentage,
         string operation,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Emitted after a successful atomic swap so clients can refresh without polling.</summary>
+    Task NotifyIndexingCompletedAsync(
+        Guid documentId,
+        string status,
+        string version,
+        DateTime lastUpdatedUtc,
+        CancellationToken cancellationToken = default);
 }

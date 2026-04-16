@@ -1,10 +1,12 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -48,15 +50,21 @@ namespace BoneVisQA.Services.Services.Admin
                 Id = doc.Id,
                 Title = doc.Title,
                 FilePath = doc.FilePath,
-                Version = doc.Version,
+                Version = SemanticDocumentVersion.Normalize(doc.Version),
                 IsOutdated = doc.IsOutdated,
-                CreatedAt = doc.CreatedAt,
+                CreatedAt = FormatUtc(doc.CreatedAt),
+                UpdatedAt = FormatUtc(doc.UpdatedAt),
                 IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
                 CategoryId = doc.CategoryId,
                 Category = categoryName,
                 TagNames = docTags.Select(dt => dt.Tag.Name).ToList(),
             };
         }
+
+        private static string? FormatUtc(DateTime? dt) =>
+            dt.HasValue
+                ? dt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                : null;
 
         private static string NormalizeApiStatus(string? status)
         {
@@ -122,8 +130,9 @@ namespace BoneVisQA.Services.Services.Admin
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Document not found.");
 
-            doc.Version += 1;
+            doc.Version = SemanticDocumentVersion.BumpMinor(doc.Version);
             doc.IsOutdated = false;
+            doc.UpdatedAt = DateTime.UtcNow;
 
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);
             await _unitOfWork.SaveAsync();

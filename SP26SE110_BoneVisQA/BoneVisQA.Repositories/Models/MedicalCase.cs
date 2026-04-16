@@ -62,9 +62,9 @@ public partial class MedicalCase
     [Column("indexing_status")]
     public string IndexingStatus { get; set; } = "Pending";
 
-    /// <summary>Bump when case text changes so embeddings can be invalidated/rebuilt.</summary>
+    /// <summary>Semantic version (Major.Minor.Patch) for case content/index refreshes.</summary>
     [Column("version")]
-    public int Version { get; set; } = 1;
+    public string? Version { get; set; } = "1.0.0";
 
     [InverseProperty("Case")]
     public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();

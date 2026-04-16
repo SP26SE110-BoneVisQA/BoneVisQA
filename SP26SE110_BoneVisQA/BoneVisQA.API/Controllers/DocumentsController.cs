@@ -28,10 +28,27 @@ public class DocumentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateVersion(Guid id, [FromForm] DocumentVersionUpdateRequest request, CancellationToken cancellationToken)
     {
-        if (request.File == null || request.File.Length == 0)
-            return BadRequest(new { message = "A PDF file is required." });
+        if (!request.ReindexOnly && (request.File == null || request.File.Length == 0))
+            return BadRequest(new { message = "A PDF file is required unless reindexOnly is true." });
 
-        if (request.File.Length > MaxDocumentUploadBytes)
+        if (request.ReindexOnly)
+        {
+            try
+            {
+                var doc = await _documentService.UpdateDocumentVersionAsync(id, null, isNewFile: false, cancellationToken);
+                return Ok(new { message = "Re-index queued (same file).", document = doc });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Document not found." });
+            }
+        }
+
+        if (request.File!.Length > MaxDocumentUploadBytes)
         {
             return BadRequest(new ProblemDetails
             {
@@ -48,7 +65,7 @@ public class DocumentsController : ControllerBase
 
         try
         {
-            var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, cancellationToken);
+            var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, isNewFile: true, cancellationToken);
             return Ok(new { message = "Document update-version queued for indexing.", document });
         }
         catch (InvalidOperationException ex)
@@ -64,5 +81,8 @@ public class DocumentsController : ControllerBase
 
 public class DocumentVersionUpdateRequest
 {
-    public IFormFile File { get; set; } = null!;
+    /// <summary>When true, re-embed the same PDF (patch version) without uploading a file.</summary>
+    public bool ReindexOnly { get; set; }
+
+    public IFormFile? File { get; set; }
 }

@@ -1,10 +1,12 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
 using System.Security.Cryptography;
 
 namespace BoneVisQA.Services.Services;
@@ -45,14 +47,16 @@ public class DocumentService : IDocumentService
         var ext = Path.GetExtension(file.FileName);
         if (string.IsNullOrWhiteSpace(ext))
             ext = ".pdf";
-        const int initialVersion = 1;
-        var objectPath = $"documents/{documentId}_v{initialVersion}{ext}";
+        var initialVersion = SemanticDocumentVersion.Initial;
+        var versionSegment = SemanticDocumentVersion.SanitizeForStoragePath(initialVersion);
+        var objectPath = $"documents/{documentId}_v{versionSegment}{ext}";
         var fileUrl = await _storageService.UploadFileToPathAsync(
             file,
             "knowledge_base",
             objectPath,
             cancellationToken);
 
+        var now = DateTime.UtcNow;
         await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -66,8 +70,10 @@ public class DocumentService : IDocumentService
                 IndexingProgress = 0,
                 ContentHash = contentHash,
                 Version = initialVersion,
+                PendingTargetVersion = null,
                 IsOutdated = false,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = now,
+                UpdatedAt = now,
                 TotalPages = 0,
                 TotalChunks = 0,
                 CurrentPageIndexing = 0
@@ -155,12 +161,13 @@ public class DocumentService : IDocumentService
         DocumentUploadDto metadata,
         CancellationToken cancellationToken = default)
     {
-        return await UpdateDocumentVersionAsync(id, file, cancellationToken);
+        return await UpdateDocumentVersionAsync(id, file, isNewFile: true, cancellationToken);
     }
 
     public async Task<DocumentDto> UpdateDocumentVersionAsync(
         Guid id,
-        IFormFile file,
+        IFormFile? file,
+        bool isNewFile,
         CancellationToken cancellationToken = default)
     {
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id)
@@ -174,61 +181,100 @@ public class DocumentService : IDocumentService
             throw new InvalidOperationException("The document is currently being processed. Please wait until the current operation finishes.");
         }
 
-        var newHash = await ComputeSha256HashAsync(file, cancellationToken);
+        var currentVersion = SemanticDocumentVersion.Normalize(document.Version);
 
-        if (string.Equals(document.ContentHash, newHash, StringComparison.OrdinalIgnoreCase))
+        if (isNewFile)
         {
-            throw new InvalidOperationException("The uploaded document is identical to the current version. No changes detected.");
-        }
+            if (file == null || file.Length == 0)
+                throw new InvalidOperationException("A PDF file is required for a new version upload.");
 
-        string? pendingUrl = null;
-        var ext = Path.GetExtension(file.FileName);
-        if (string.IsNullOrWhiteSpace(ext))
-            ext = ".pdf";
-        var objectPath = $"documents/{id}_pending_{Guid.NewGuid():N}{ext}";
-        try
-        {
-            pendingUrl = await _storageService.UploadFileToPathAsync(file, "knowledge_base", objectPath, cancellationToken);
-            await using var tx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
+            var newHash = await ComputeSha256HashAsync(file, cancellationToken);
+
+            if (string.Equals(document.ContentHash, newHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The uploaded document is identical to the current version. No changes detected.");
+            }
+
+            string? pendingUrl = null;
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext))
+                ext = ".pdf";
+            var objectPath = $"documents/{id}_pending_{Guid.NewGuid():N}{ext}";
             try
             {
-                document.IndexingStatus = DocumentIndexingStatuses.Reindexing;
-                document.IndexingProgress = 0;
-                document.CurrentPageIndexing = 0;
-                document.IsOutdated = false;
-                document.PendingReindexPath = pendingUrl;
-                document.PendingReindexHash = newHash;
+                pendingUrl = await _storageService.UploadFileToPathAsync(file, "knowledge_base", objectPath, cancellationToken);
+                await using var tx = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
+                try
+                {
+                    document.IndexingStatus = DocumentIndexingStatuses.Reindexing;
+                    document.IndexingProgress = 0;
+                    document.CurrentPageIndexing = 0;
+                    document.IsOutdated = false;
+                    document.PendingReindexPath = pendingUrl;
+                    document.PendingReindexHash = newHash;
+                    document.PendingTargetVersion = SemanticDocumentVersion.BumpMinor(currentVersion);
+                    document.UpdatedAt = DateTime.UtcNow;
 
-                await _unitOfWork.DocumentRepository.UpdateAsync(document);
-                await _unitOfWork.SaveAsync();
-                await tx.CommitAsync(cancellationToken);
+                    await _unitOfWork.DocumentRepository.UpdateAsync(document);
+                    await _unitOfWork.SaveAsync();
+                    await tx.CommitAsync(cancellationToken);
+                }
+                catch
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    throw;
+                }
+
+                SetProgress(document.Id, 0, "Queued for atomic re-indexing...");
+
+                return MapToDto(document);
             }
             catch
             {
-                await tx.RollbackAsync(cancellationToken);
+                if (!string.IsNullOrEmpty(pendingUrl) && TryExtractSupabaseFilePointer(pendingUrl, out var nb, out var np))
+                {
+                    try
+                    {
+                        await _storageService.DeleteFileAsync(nb, np, cancellationToken);
+                    }
+                    catch (Exception delEx)
+                    {
+                        _logger.LogWarning(delEx, "Compensating delete failed after document update failure.");
+                    }
+                }
+
                 throw;
             }
+        }
 
-            SetProgress(document.Id, 0, "Queued for atomic re-indexing...");
+        // Re-index only: same file, bump patch; no upload / hash gate.
+        if (string.IsNullOrWhiteSpace(document.FilePath))
+            throw new InvalidOperationException("Document has no indexed file path; upload a new file to re-index.");
 
-            return MapToDto(document);
+        await using var txOnly = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            document.IndexingStatus = DocumentIndexingStatuses.Reindexing;
+            document.IndexingProgress = 0;
+            document.CurrentPageIndexing = 0;
+            document.IsOutdated = false;
+            document.PendingReindexPath = null;
+            document.PendingReindexHash = null;
+            document.PendingTargetVersion = SemanticDocumentVersion.BumpPatch(currentVersion);
+            document.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.DocumentRepository.UpdateAsync(document);
+            await _unitOfWork.SaveAsync();
+            await txOnly.CommitAsync(cancellationToken);
         }
         catch
         {
-            if (!string.IsNullOrEmpty(pendingUrl) && TryExtractSupabaseFilePointer(pendingUrl, out var nb, out var np))
-            {
-                try
-                {
-                    await _storageService.DeleteFileAsync(nb, np, cancellationToken);
-                }
-                catch (Exception delEx)
-                {
-                    _logger.LogWarning(delEx, "Compensating delete failed after document update failure.");
-                }
-            }
-
+            await txOnly.RollbackAsync(cancellationToken);
             throw;
         }
+
+        SetProgress(document.Id, 0, "Queued for re-indexing (same file)...");
+        return MapToDto(document);
     }
 
     public async Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync()
@@ -294,17 +340,13 @@ public class DocumentService : IDocumentService
         return true;
     }
 
-    public Task<bool> TriggerReindexAsync(Guid id)
-    {
-        throw new InvalidOperationException("Re-indexing requires a new file upload. Use the update-version endpoint.");
-    }
-
     public async Task UpdateIndexingStatusAsync(Guid id, string status)
     {
         var document = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
         if (document != null)
         {
             document.IndexingStatus = NormalizeManualStatus(status);
+            document.UpdatedAt = DateTime.UtcNow;
             await _unitOfWork.DocumentRepository.UpdateAsync(document);
             await _unitOfWork.SaveAsync();
         }
@@ -395,13 +437,19 @@ public class DocumentService : IDocumentService
         IndexingStatus = NormalizeApiStatus(doc.IndexingStatus),
         IndexingProgress = doc.IndexingProgress,
         ContentHash = doc.ContentHash,
-        Version = doc.Version,
+        Version = SemanticDocumentVersion.Normalize(doc.Version),
         IsOutdated = doc.IsOutdated,
-        CreatedAt = doc.CreatedAt,
+        CreatedAt = FormatDocumentUtc(doc.CreatedAt),
+        UpdatedAt = FormatDocumentUtc(doc.UpdatedAt),
         TotalPages = doc.TotalPages,
         TotalChunks = doc.TotalChunks,
         CurrentPageIndexing = doc.CurrentPageIndexing
     };
+
+    private static string? FormatDocumentUtc(DateTime? dt) =>
+        dt.HasValue
+            ? dt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+            : null;
 
     private static string NormalizeManualStatus(string? status)
     {

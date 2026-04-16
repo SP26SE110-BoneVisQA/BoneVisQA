@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +21,7 @@ namespace BoneVisQA.Services.Services.Expert
 {
     public class MedicalCaseService : IMedicalCaseService
     {
+        private static readonly Regex SemanticVersionRegex = new(@"^\s*(\d+)\.(\d+)\.(\d+)\s*$", RegexOptions.Compiled);
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWebHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -182,7 +184,7 @@ namespace BoneVisQA.Services.Services.Expert
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 IndexingStatus = DocumentIndexingStatuses.Pending,
-                Version = 1
+                Version = SemanticDocumentVersion.Initial
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
@@ -299,6 +301,12 @@ namespace BoneVisQA.Services.Services.Expert
                 !string.Equals(medicalCase.Description, request.Description, StringComparison.Ordinal) ||
                 !string.Equals(medicalCase.SuggestedDiagnosis, request.SuggestedDiagnosis, StringComparison.Ordinal) ||
                 !string.Equals(medicalCase.KeyFindings, request.KeyFindings, StringComparison.Ordinal);
+            var metadataChanged =
+                !string.Equals(medicalCase.Difficulty, request.Difficulty, StringComparison.Ordinal) ||
+                medicalCase.CategoryId != request.CategoryId ||
+                medicalCase.IsApproved != request.IsApproved ||
+                medicalCase.IsActive != request.IsActive ||
+                medicalCase.CreatedByExpertId != request.CreatedByExpertId;
 
             // Update fields
             medicalCase.Title = request.Title;
@@ -315,7 +323,12 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 // Trigger background re-indexing whenever embedding source text changes.
                 medicalCase.IndexingStatus = DocumentIndexingStatuses.Pending;
-                medicalCase.Version += 1;
+                medicalCase.Version = BumpVersion(medicalCase.Version, isReindexing: true);
+            }
+            else if (metadataChanged)
+            {
+                // Minor metadata edits that do not require re-indexing still advance patch for traceability.
+                medicalCase.Version = BumpVersion(medicalCase.Version, isReindexing: false);
             }
 
             _unitOfWork.MedicalCaseRepository.Update(medicalCase);
@@ -342,6 +355,23 @@ namespace BoneVisQA.Services.Services.Expert
                 KeyFindings = medicalCase.KeyFindings,
                 UpdatedAt = medicalCase.UpdatedAt
             };
+        }
+
+        private static string BumpVersion(string? currentVersion, bool isReindexing)
+        {
+            var normalized = SemanticDocumentVersion.Normalize(currentVersion);
+            var match = SemanticVersionRegex.Match(normalized);
+            if (!match.Success)
+                return SemanticDocumentVersion.Initial;
+
+            var major = int.Parse(match.Groups[1].Value);
+            var minor = int.Parse(match.Groups[2].Value);
+            var patch = int.Parse(match.Groups[3].Value);
+
+            if (isReindexing)
+                return $"{major}.{minor + 1}.0";
+
+            return $"{major}.{minor}.{patch + 1}";
         }
         public async Task<bool> DeleteMedicalCaseAsync(Guid id)
         {

@@ -7,7 +7,7 @@ namespace BoneVisQA.Services.Models.Lecturer;
 /// <summary>Row returned by GET /api/lecturer/triage for the QA Triage workbench.</summary>
 public class LecturerTriageRowDto
 {
-    /// <summary>Primary key of this triage row’s <c>case_answers</c> record (required; use for escalate).</summary>
+    /// <summary>Visual QA: session id. Case QA: <c>case_answers.id</c> (use for escalate / workflows).</summary>
     [JsonPropertyName("answerId")]
     public Guid AnswerId { get; set; }
 
@@ -32,6 +32,18 @@ public class LecturerTriageRowDto
     public bool IsEscalated { get; set; }
     public string? EscalatedByName { get; set; }
     public DateTime? EscalatedAt { get; set; }
+
+    /// <summary><c>VisualQA</c> (session-based) or <c>CaseQA</c> (student case question).</summary>
+    public string TriageSource { get; set; } = "VisualQA";
+
+    public string? StructuredDiagnosis { get; set; }
+    public string? ReflectiveQuestions { get; set; }
+    public string? KeyImagingFindings { get; set; }
+    public string? DifferentialDiagnoses { get; set; }
+    public string? AnnotationLabel { get; set; }
+    public string? AnnotationCoordinates { get; set; }
+    public string? CustomCoordinates { get; set; }
+    public string? CustomImageUrl { get; set; }
 }
 
 /// <summary>Full detail of a single student question for the lectuer to view and respond.</summary>

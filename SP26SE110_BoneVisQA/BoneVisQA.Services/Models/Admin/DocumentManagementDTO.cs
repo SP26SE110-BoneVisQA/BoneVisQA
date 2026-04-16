@@ -29,9 +29,12 @@ namespace BoneVisQA.Services.Models.Admin
         public Guid Id { get; set; }
         public string Title { get; set; } = null!;
         public string? FilePath { get; set; }
-        public int Version { get; set; }
+        public string Version { get; set; } = "1.0.0";
         public bool IsOutdated { get; set; }
-        public DateTime? CreatedAt { get; set; }
+        /// <summary>UTC display without seconds.</summary>
+        public string? CreatedAt { get; set; }
+        /// <summary>UTC display without seconds.</summary>
+        public string? UpdatedAt { get; set; }
         public string? IndexingStatus { get; set; }
         public Guid? CategoryId { get; set; }
         public string? Category { get; set; }

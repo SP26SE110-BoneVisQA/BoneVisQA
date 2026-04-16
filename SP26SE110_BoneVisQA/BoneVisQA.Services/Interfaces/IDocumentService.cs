@@ -29,9 +29,13 @@ public class DocumentDto
     public string IndexingStatus { get; set; } = "Pending";
     public int IndexingProgress { get; set; }
     public string? ContentHash { get; set; }
-    public int Version { get; set; }
+    /// <summary>Semantic version Major.Minor.Patch (e.g. 1.2.0).</summary>
+    public string Version { get; set; } = "1.0.0";
     public bool IsOutdated { get; set; }
-    public DateTime? CreatedAt { get; set; }
+    /// <summary>UTC display timestamp without seconds (yyyy-MM-dd HH:mm).</summary>
+    public string? CreatedAt { get; set; }
+    /// <summary>UTC display timestamp without seconds (yyyy-MM-dd HH:mm).</summary>
+    public string? UpdatedAt { get; set; }
     public int TotalPages { get; set; }
     public int TotalChunks { get; set; }
     public int CurrentPageIndexing { get; set; }
@@ -78,14 +82,15 @@ public interface IDocumentService
         IFormFile file,
         DocumentUploadDto metadata,
         CancellationToken cancellationToken = default);
+    /// <param name="isNewFile">True when uploading a new PDF (minor version bump). False to re-embed the same file (patch bump).</param>
     Task<DocumentDto> UpdateDocumentVersionAsync(
         Guid id,
-        IFormFile file,
+        IFormFile? file,
+        bool isNewFile,
         CancellationToken cancellationToken = default);
     Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync();
     Task<DocumentDto?> GetDocumentByIdAsync(Guid id);
     Task<bool> DeleteDocumentAsync(Guid id);
-    Task<bool> TriggerReindexAsync(Guid id);
     Task UpdateIndexingStatusAsync(Guid id, string status);
     Task<DocumentIngestionStatusDto?> GetIngestionStatusAsync(Guid id);
     Task<IReadOnlyList<DocumentChunkCitationFrequencyDto>> GetChunkCitationFrequencyAsync(

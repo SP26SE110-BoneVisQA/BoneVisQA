@@ -1,6 +1,7 @@
 using System.Text;
 using BoneVisQA.Domain.Settings;
 using BoneVisQA.Repositories.Models;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
@@ -275,6 +276,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     throw new InvalidOperationException($"Document {documentId} not found during atomic swap.");
 
                 var previousActiveFilePath = finalDoc.FilePath;
+                var versionBeforeSwap = SemanticDocumentVersion.Normalize(finalDoc.Version);
                 if (isAtomicReindex && !string.IsNullOrWhiteSpace(previousActiveFilePath))
                 {
                     if (!TryExtractSupabaseFilePointer(previousActiveFilePath, out var oldBucket, out var oldObjectPath))
@@ -283,7 +285,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     var ext = Path.GetExtension(oldObjectPath);
                     if (string.IsNullOrWhiteSpace(ext))
                         ext = ".pdf";
-                    var archivePath = $"archive/{documentId}_v{finalDoc.Version}{ext}";
+                    var archivePath = $"archive/{documentId}_v{SemanticDocumentVersion.SanitizeForStoragePath(versionBeforeSwap)}{ext}";
                     var archived = await _storageService.MoveFileAsync(oldBucket, oldObjectPath, archivePath, cancellationToken);
                     if (!archived)
                         throw new InvalidOperationException("Could not archive old file before atomic swap.");
@@ -325,23 +327,36 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 {
                     finalDoc.ContentHash = finalDoc.PendingReindexHash;
                     finalDoc.PendingReindexHash = null;
-                    finalDoc.Version += 1;
                 }
                 else if (!string.IsNullOrWhiteSpace(computedContentHash) &&
                          !string.Equals(finalDoc.ContentHash, computedContentHash, StringComparison.OrdinalIgnoreCase))
                 {
                     finalDoc.ContentHash = computedContentHash;
-                    finalDoc.Version += 1;
+                }
+
+                if (!string.IsNullOrWhiteSpace(finalDoc.PendingTargetVersion))
+                {
+                    finalDoc.Version = SemanticDocumentVersion.Normalize(finalDoc.PendingTargetVersion);
+                    finalDoc.PendingTargetVersion = null;
                 }
 
                 finalDoc.IndexingStatus = DocumentIndexingStatuses.Completed;
                 finalDoc.IndexingProgress = 100;
                 finalDoc.IsOutdated = false;
+                finalDoc.UpdatedAt = DateTime.UtcNow;
                 if (finalDoc.TotalPages > 0)
                     finalDoc.CurrentPageIndexing = finalDoc.TotalPages;
                 await _unitOfWork.DocumentRepository.UpdateAsync(finalDoc);
                 await _unitOfWork.SaveAsync();
                 await swapTransaction.CommitAsync(cancellationToken);
+
+                var completedAt = finalDoc.UpdatedAt ?? DateTime.UtcNow;
+                await _progressNotifier.NotifyIndexingCompletedAsync(
+                    documentId,
+                    DocumentIndexingStatuses.Completed,
+                    finalDoc.Version,
+                    completedAt,
+                    cancellationToken);
 
                 SetProgress(
                     documentId,
@@ -451,6 +466,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     var pendingPath = doc.PendingReindexPath;
                     doc.PendingReindexPath = null;
                     doc.PendingReindexHash = null;
+                    doc.PendingTargetVersion = null;
                     doc.IndexingStatus = DocumentIndexingStatuses.Completed;
                     doc.IndexingProgress = 100;
                     cacheStatus = DocumentIndexingStatuses.Completed;
@@ -470,6 +486,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 }
                 else
                 {
+                    doc.PendingTargetVersion = null;
                     doc.IndexingStatus = DocumentIndexingStatuses.Failed;
                     doc.IndexingProgress = 100;
                 }

@@ -15,8 +15,9 @@ namespace BoneVisQA.Services.Models.Admin
         public Guid DocumentId { get; set; }
         public string Title { get; set; } = null!;
         public string? FilePath { get; set; }
-        public DateTime? CreatedAt { get; set; }
-        public int Version { get; set; }
+        public string? CreatedAt { get; set; }
+        public string? UpdatedAt { get; set; }
+        public string Version { get; set; } = "1.0.0";
         public int CitationCount { get; set; }
         public int NegativeReviewCount { get; set; }
         public bool IsOutdated { get; set; }

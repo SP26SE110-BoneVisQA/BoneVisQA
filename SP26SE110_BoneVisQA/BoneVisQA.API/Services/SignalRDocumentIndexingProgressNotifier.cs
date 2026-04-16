@@ -35,4 +35,23 @@ public sealed class SignalRDocumentIndexingProgressNotifier : IDocumentIndexingP
             },
             cancellationToken);
     }
+
+    public Task NotifyIndexingCompletedAsync(
+        Guid documentId,
+        string status,
+        string version,
+        DateTime lastUpdatedUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients.All.SendAsync(
+            "DocumentIndexingCompleted",
+            new
+            {
+                documentId,
+                status,
+                version,
+                lastUpdated = lastUpdatedUtc
+            },
+            cancellationToken);
+    }
 }

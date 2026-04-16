@@ -349,7 +349,7 @@ public class AdminDocumentsController : ControllerBase
 
         try
         {
-            var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, cancellationToken);
+            var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, isNewFile: true, cancellationToken);
             return Ok(new { message = "Document updated.", document });
         }
         catch (InvalidOperationException ex)
@@ -363,14 +363,16 @@ public class AdminDocumentsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/reindex")]
-    public async Task<IActionResult> Reindex(Guid id)
+    public async Task<IActionResult> Reindex(Guid id, CancellationToken cancellationToken)
     {
         try
         {
-            var success = await _documentService.TriggerReindexAsync(id);
-            return success
-                ? Ok(new { message = "Reindexing queued." })
-                : NotFound(new { message = "Document not found or has no file path." });
+            var document = await _documentService.UpdateDocumentVersionAsync(id, file: null, isNewFile: false, cancellationToken);
+            return Ok(new { message = "Re-indexing queued (same file, patch version).", document });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Document not found." });
         }
         catch (InvalidOperationException ex)
         {
