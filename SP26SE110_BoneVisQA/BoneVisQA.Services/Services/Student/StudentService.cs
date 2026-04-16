@@ -554,7 +554,8 @@ public class StudentService : IStudentService
                 PassingScore = s.PassingScore,
                 TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
-                Score = attempt?.Score
+                Score = attempt?.Score,
+                AttemptId = attempt?.Id
             };
         }).ToList();
     }

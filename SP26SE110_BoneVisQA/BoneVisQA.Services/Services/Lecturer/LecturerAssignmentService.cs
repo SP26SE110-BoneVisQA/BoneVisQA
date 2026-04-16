@@ -151,15 +151,36 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId)
             ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
 
-        // Validate thời gian mở quiz phải >= thời gian mở của Expert
-        if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
-            throw new InvalidOperationException($"Thời gian mở quiz ({request.OpenTime.Value:dd/MM/yyyy HH:mm}) không được sớm hơn thời gian mở của Expert ({quiz.OpenTime.Value:dd/MM/yyyy HH:mm}).");
+        var warnings = new List<string>();
+        DateTime? effectiveOpenTime = request.OpenTime;
+        DateTime? effectiveCloseTime = request.CloseTime;
 
-        // Validate thời gian đóng quiz phải <= thời gian đóng của Expert
-        if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
-            throw new InvalidOperationException($"Thời gian đóng quiz ({request.CloseTime.Value:dd/MM/yyyy HH:mm}) không được muộn hơn thời gian đóng của Expert ({quiz.CloseTime.Value:dd/MM/yyyy HH:mm}).");
+        // Nếu lecturer muốn sử dụng thời gian của Expert
+        if (request.UseExpertTime)
+        {
+            effectiveOpenTime = quiz.OpenTime;
+            effectiveCloseTime = quiz.CloseTime;
+            warnings.Add("Đã sử dụng thời gian mở/đóng từ Expert.");
+        }
+        else
+        {
+            // Clamp thời gian mở: nếu sớm hơn Expert thì lấy thời gian Expert
+            if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
+            {
+                warnings.Add($"Thời gian mở quiz đã được điều chỉnh từ {request.OpenTime.Value:HH:mm} lên {quiz.OpenTime.Value:HH:mm} (thời gian mở của Expert).");
+                effectiveOpenTime = quiz.OpenTime;
+            }
 
-        if (request.OpenTime.HasValue && request.CloseTime.HasValue && request.OpenTime > request.CloseTime)
+            // Clamp thời gian đóng: nếu muộn hơn Expert thì lấy thời gian Expert
+            if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
+            {
+                warnings.Add($"Thời gian đóng quiz đã được điều chỉnh từ {request.CloseTime.Value:HH:mm} xuống {quiz.CloseTime.Value:HH:mm} (thời gian đóng của Expert).");
+                effectiveCloseTime = quiz.CloseTime;
+            }
+        }
+
+        // Validate openTime <= closeTime (sau khi đã clamp)
+        if (effectiveOpenTime.HasValue && effectiveCloseTime.HasValue && effectiveOpenTime > effectiveCloseTime)
             throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
@@ -177,8 +198,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
         }
 
-        session.OpenTime = ToUtc(request.OpenTime);
-        session.CloseTime = ToUtc(request.CloseTime);
+        session.OpenTime = ToUtc(effectiveOpenTime);
+        session.CloseTime = ToUtc(effectiveCloseTime);
         session.TimeLimitMinutes = request.TimeLimitMinutes;
         session.PassingScore = request.PassingScore;
         session.ShuffleQuestions = request.ShuffleQuestions;
@@ -218,7 +239,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             AllowRetake = session.AllowRetake,
             AllowLate = session.AllowLate,
             ShowResultsAfterSubmission = session.ShowResultsAfterSubmission,
-            RetakeResetAt = session.RetakeResetAt
+            RetakeResetAt = session.RetakeResetAt,
+            Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
         };
     }
 
@@ -844,18 +866,38 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         if (quizSession == null)
             throw new KeyNotFoundException("Không tìm thấy assignment.");
 
-        // Validate thời gian mở quiz phải >= thời gian mở của Expert
-        if (request.OpenDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.OpenTime.HasValue && request.OpenDate.Value < quizSession.Quiz.OpenTime.Value)
-            throw new InvalidOperationException($"Thời gian mở quiz ({request.OpenDate.Value:dd/MM/yyyy HH:mm}) không được sớm hơn thời gian mở của Expert ({quizSession.Quiz.OpenTime.Value:dd/MM/yyyy HH:mm}).");
+        var warnings = new List<string>();
+        DateTime? effectiveOpenDate = request.OpenDate;
+        DateTime? effectiveDueDate = request.DueDate;
 
-        // Validate thời gian đóng quiz phải <= thời gian đóng của Expert
-        if (request.DueDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.CloseTime.HasValue && request.DueDate.Value > quizSession.Quiz.CloseTime.Value)
-            throw new InvalidOperationException($"Thời gian đóng quiz ({request.DueDate.Value:dd/MM/yyyy HH:mm}) không được muộn hơn thời gian đóng của Expert ({quizSession.Quiz.CloseTime.Value:dd/MM/yyyy HH:mm}).");
+        // Nếu lecturer muốn sử dụng thời gian của Expert
+        if (request.UseExpertTime)
+        {
+            effectiveOpenDate = quizSession.Quiz?.OpenTime;
+            effectiveDueDate = quizSession.Quiz?.CloseTime;
+            warnings.Add("Đã sử dụng thời gian mở/đóng từ Expert.");
+        }
+        else
+        {
+            // Clamp thời gian mở: nếu sớm hơn Expert thì lấy thời gian Expert
+            if (request.OpenDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.OpenTime.HasValue && request.OpenDate.Value < quizSession.Quiz.OpenTime.Value)
+            {
+                warnings.Add($"Thời gian mở quiz đã được điều chỉnh từ {request.OpenDate.Value:HH:mm} lên {quizSession.Quiz.OpenTime.Value:HH:mm} (thời gian mở của Expert).");
+                effectiveOpenDate = quizSession.Quiz.OpenTime;
+            }
 
-        if (request.DueDate.HasValue)
-            quizSession.CloseTime = ToUtc(request.DueDate);
-        if (request.OpenDate.HasValue)
-            quizSession.OpenTime = ToUtc(request.OpenDate);
+            // Clamp thời gian đóng: nếu muộn hơn Expert thì lấy thời gian Expert
+            if (request.DueDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.CloseTime.HasValue && request.DueDate.Value > quizSession.Quiz.CloseTime.Value)
+            {
+                warnings.Add($"Thời gian đóng quiz đã được điều chỉnh từ {request.DueDate.Value:HH:mm} xuống {quizSession.Quiz.CloseTime.Value:HH:mm} (thời gian đóng của Expert).");
+                effectiveDueDate = quizSession.Quiz.CloseTime;
+            }
+        }
+
+        if (effectiveDueDate.HasValue)
+            quizSession.CloseTime = ToUtc(effectiveDueDate);
+        if (effectiveOpenDate.HasValue)
+            quizSession.OpenTime = ToUtc(effectiveOpenDate);
         if (request.PassingScore.HasValue)
             quizSession.PassingScore = request.PassingScore.Value;
         if (request.TimeLimitMinutes.HasValue)
@@ -879,7 +921,35 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 quizSession.CloseTime);
         }
 
-        return await GetAssignmentByIdAsync(assignmentId);
+        var detail = new AssignmentDetailDto
+        {
+            Id = quizSession.Id,
+            ClassId = quizSession.ClassId,
+            ClassName = quizSession.Class?.ClassName ?? "",
+            ClassCode = null,
+            Type = "quiz",
+            Title = quizSession.Quiz?.Title ?? "Untitled Quiz",
+            Description = null,
+            Instructions = null,
+            DueDate = quizSession.CloseTime,
+            OpenDate = quizSession.OpenTime,
+            IsMandatory = false,
+            AssignedAt = quizSession.CreatedAt,
+            TotalStudents = await _unitOfWork.Context.ClassEnrollments.CountAsync(e => e.ClassId == quizSession.ClassId),
+            SubmittedCount = await _unitOfWork.Context.QuizAttempts.CountAsync(a => a.QuizId == quizSession.QuizId && a.CompletedAt.HasValue),
+            GradedCount = await _unitOfWork.Context.QuizAttempts.CountAsync(a => a.QuizId == quizSession.QuizId && a.Score.HasValue),
+            MaxScore = 100,
+            PassingScore = quizSession.PassingScore,
+            TimeLimitMinutes = quizSession.TimeLimitMinutes,
+            AllowLate = quizSession.AllowLate,
+            AllowRetake = quizSession.AllowRetake,
+            ShowResultsAfterSubmission = quizSession.ShowResultsAfterSubmission,
+            AvgScore = await _unitOfWork.Context.QuizAttempts.Where(a => a.QuizId == quizSession.QuizId && a.Score.HasValue).AverageAsync(a => (double?)a.Score) ?? null,
+            CreatedAt = quizSession.CreatedAt,
+            Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
+        };
+
+        return detail;
     }
 
     /// <summary>Xóa một assignment.</summary>

@@ -17,6 +17,8 @@ public class QuizListItemDto
     public int TotalQuestions { get; set; }
     public bool IsCompleted { get; set; }
     public double? Score { get; set; }
+    /// <summary>Attempt ID của lần làm gần nhất — dùng để review.</summary>
+    public Guid? AttemptId { get; set; }
 }
 
 /// <summary>

@@ -97,6 +97,8 @@ public class AssignQuizSessionRequestDto
     public bool AllowRetake { get; set; }
     public bool AllowLate { get; set; }
     public bool ShowResultsAfterSubmission { get; set; } = true;
+    /// <summary>Nếu true, sử dụng thời gian mở/đóng từ Expert thay vì thời gian của Lecturer.</summary>
+    public bool UseExpertTime { get; set; }
 }
 
 /// <summary>Yêu cầu bật retake cho một attempt cụ thể của sinh viên.</summary>
@@ -138,6 +140,8 @@ public class ClassQuizSessionDto
     public bool AllowLate { get; set; }
     public bool ShowResultsAfterSubmission { get; set; }
     public DateTime? RetakeResetAt { get; set; }
+    /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
+    public string? Warning { get; set; }
 }
 
 /// <summary>1 assignment entry gộp case + quiz assignment để FE dùng chung card.</summary>
@@ -255,6 +259,8 @@ public class AssignmentDetailDto
     public bool ShowResultsAfterSubmission { get; set; }
     public double? AvgScore { get; set; }
     public DateTime? CreatedAt { get; set; }
+    /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
+    public string? Warning { get; set; }
 }
 
 /// <summary>Yêu cầu cập nhật thông tin assignment.</summary>
@@ -274,6 +280,8 @@ public class UpdateAssignmentRequestDto
     public bool? ShowResultsAfterSubmission { get; set; }
     /// <summary>Gửi email thông báo cập nhật cho sinh viên.</summary>
     public bool SendEmailUpdate { get; set; } = true;
+    /// <summary>Nếu true, sử dụng thời gian mở/đóng từ Expert thay vì thời gian của Lecturer.</summary>
+    public bool UseExpertTime { get; set; }
 }
 
 /// <summary>Thông tin submission của một sinh viên.</summary>
