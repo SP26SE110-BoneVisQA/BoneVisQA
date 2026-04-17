@@ -409,6 +409,7 @@ public class StudentService : IStudentService
             CreatedAt = DateTime.UtcNow
         };
         response.TurnId = assistantMessage.Id.ToString();
+        response.UserQuestionText = userMessage.Content;
 
         try
         {
@@ -498,6 +499,16 @@ public class StudentService : IStudentService
         {
             SessionId = sessionId,
             TurnId = assistantMessage.Id.ToString(),
+            UserQuestionText = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .Where(m =>
+                    m.SessionId == sessionId &&
+                    m.Role == "User" &&
+                    m.ClientRequestId == normalizedClientRequestId)
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Select(m => m.Content)
+                .FirstOrDefaultAsync(cancellationToken),
             AnswerText = assistantMessage.Content,
             SuggestedDiagnosis = assistantMessage.SuggestedDiagnosis ?? assistantMessage.Content,
             DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage.DifferentialDiagnoses).ToList(),
@@ -506,6 +517,7 @@ public class StudentService : IStudentService
             AiConfidenceScore = assistantMessage.AiConfidenceScore,
             ErrorMessage = null,
             ResponseKind = DetermineResponseKind(assistantMessage),
+            PolicyReason = DeterminePolicyReason(assistantMessage),
             ClientRequestId = normalizedClientRequestId,
             Citations = ResolveMessageCitations(assistantMessage).ToList()
         };
@@ -803,8 +815,6 @@ public class StudentService : IStudentService
         const int snippetMax = 240;
         var baseQuery = _unitOfWork.Context.VisualQaSessions
             .AsNoTracking()
-            .AsSplitQuery()
-            .Include(s => s.Messages)
             .Where(s => s.StudentId == studentId);
 
         if (hasCaseSession.HasValue)
@@ -818,17 +828,61 @@ public class StudentService : IStudentService
         var sessions = await orderedQuery
             .Skip(offset)
             .Take(limit)
+            .Select(s => new
+            {
+                s.Id,
+                s.CaseId,
+                s.Status,
+                s.CreatedAt,
+                s.UpdatedAt,
+                s.CustomImageUrl
+            })
             .ToListAsync(cancellationToken);
 
         var list = new List<VisualQaSessionHistoryItemDto>(sessions.Count);
+        var sessionIds = sessions.Select(s => s.Id).ToList();
+        var firstQuestionsBySession = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Where(m => sessionIds.Contains(m.SessionId) && m.Role == "User")
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .GroupBy(m => m.SessionId)
+            .Select(g => new
+            {
+                SessionId = g.Key,
+                Question = g.Select(x => x.Content).FirstOrDefault()
+            })
+            .ToDictionaryAsync(x => x.SessionId, x => x.Question, cancellationToken);
+        var lastResponderBySession = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Where(m => sessionIds.Contains(m.SessionId))
+            .GroupBy(m => m.SessionId)
+            .Select(g => new
+            {
+                SessionId = g.Key,
+                Role = g.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Select(x => x.Role).FirstOrDefault()
+            })
+            .ToDictionaryAsync(x => x.SessionId, x => x.Role, cancellationToken);
+
+        var rejectedSessionIds = sessions.Where(x => string.Equals(x.Status, "Rejected", StringComparison.Ordinal)).Select(x => x.Id).ToList();
+        Dictionary<Guid, string> rejectionReasonBySession = new();
+        if (rejectedSessionIds.Count > 0)
+        {
+            var lecturerRows = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .Where(m => rejectedSessionIds.Contains(m.SessionId) && m.Role == "Lecturer")
+                .Select(m => new { m.SessionId, m.Content, m.CreatedAt, m.Id })
+                .ToListAsync(cancellationToken);
+            rejectionReasonBySession = lecturerRows
+                .GroupBy(x => x.SessionId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First().Content.Trim());
+        }
+
         foreach (var s in sessions)
         {
-            var firstUser = s.Messages
-                .Where(m => m.Role == "User")
-                .OrderBy(m => m.CreatedAt)
-                .ThenBy(m => m.Id)
-                .FirstOrDefault();
-            var raw = firstUser?.Content?.Trim() ?? string.Empty;
+            var raw = (firstQuestionsBySession.TryGetValue(s.Id, out var firstQuestion) ? firstQuestion : null)?.Trim() ?? string.Empty;
             string? snippet = null;
             if (raw.Length > 0)
             {
@@ -846,7 +900,10 @@ public class StudentService : IStudentService
                 QuestionSnippet = snippet,
                 ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(s.CustomImageUrl, cancellationToken),
                 ReviewState = MapReviewState(s.Status),
-                LastResponderRole = ResolveLastResponderRole(s.Messages)
+                LastResponderRole = MapResponderRole(lastResponderBySession.TryGetValue(s.Id, out var lastRole) ? lastRole : null),
+                RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal) && rejectionReasonBySession.TryGetValue(s.Id, out var rr)
+                    ? rr
+                    : null
             });
         }
 
@@ -978,6 +1035,7 @@ public class StudentService : IStudentService
             UserMessageId = userMessage.Id,
             AssistantMessageId = assistantMessage?.Id,
             UserMessage = userMessage.Content,
+            QuestionText = userMessage.Content,
             MessageText = assistantMessage?.Content,
             Diagnosis = assistantMessage?.SuggestedDiagnosis ?? assistantMessage?.Content,
             Findings = SplitMultilineField(assistantMessage?.KeyImagingFindings),
@@ -986,6 +1044,7 @@ public class StudentService : IStudentService
             Citations = ResolveMessageCitations(assistantMessage),
             CreatedAt = userMessage.CreatedAt,
             ResponseKind = DetermineResponseKind(assistantMessage),
+            PolicyReason = DeterminePolicyReason(assistantMessage),
             ReviewState = reviewState ?? "none",
             LastResponderRole = assistantMessage == null ? "system" : "assistant",
             IsReviewTarget = assistantMessage != null && requestedReviewMessageId.HasValue && assistantMessage.Id == requestedReviewMessageId.Value
@@ -1006,6 +1065,7 @@ public class StudentService : IStudentService
             UserMessageId = Guid.Empty,
             AssistantMessageId = assistantMessage.Id,
             UserMessage = string.Empty,
+            QuestionText = null,
             MessageText = assistantMessage.Content,
             Diagnosis = assistantMessage.SuggestedDiagnosis ?? assistantMessage.Content,
             Findings = SplitMultilineField(assistantMessage.KeyImagingFindings),
@@ -1014,6 +1074,7 @@ public class StudentService : IStudentService
             Citations = ResolveMessageCitations(assistantMessage),
             CreatedAt = assistantMessage.CreatedAt,
             ResponseKind = DetermineResponseKind(assistantMessage),
+            PolicyReason = DeterminePolicyReason(assistantMessage),
             ReviewState = reviewState ?? "none",
             LastResponderRole = "assistant",
             IsReviewTarget = requestedReviewMessageId.HasValue && assistantMessage.Id == requestedReviewMessageId.Value
@@ -1031,6 +1092,7 @@ public class StudentService : IStudentService
             UserMessageId = Guid.Empty,
             AssistantMessageId = message.Id,
             UserMessage = string.Empty,
+            QuestionText = null,
             MessageText = message.Content,
             Diagnosis = message.Content,
             Findings = SplitMultilineField(message.KeyImagingFindings),
@@ -1039,6 +1101,7 @@ public class StudentService : IStudentService
             Citations = ResolveMessageCitations(message),
             CreatedAt = message.CreatedAt,
             ResponseKind = "review_update",
+            PolicyReason = "review_update",
             ReviewState = reviewState ?? "none",
             LastResponderRole = actorRole,
             IsReviewTarget = false
@@ -1055,6 +1118,7 @@ public class StudentService : IStudentService
             UserMessageId = Guid.Empty,
             AssistantMessageId = null,
             UserMessage = string.Empty,
+            QuestionText = null,
             MessageText = notice,
             Diagnosis = notice,
             Findings = Array.Empty<string>(),
@@ -1063,6 +1127,7 @@ public class StudentService : IStudentService
             Citations = Array.Empty<CitationItemDto>(),
             CreatedAt = DateTime.UtcNow,
             ResponseKind = "system_notice",
+            PolicyReason = reason,
             ReviewState = "none",
             LastResponderRole = "system",
             IsReviewTarget = false
@@ -1076,7 +1141,9 @@ public class StudentService : IStudentService
 
         var fromJson = VisualQaCitationMetadataBuilder.DeserializeMany(message.CitationsJson);
         if (fromJson.Count > 0)
-            return fromJson;
+            return fromJson
+                .Take(5)
+                .ToList();
 
         return MapTurnCitations(message.Citations);
     }
@@ -1090,6 +1157,7 @@ public class StudentService : IStudentService
             .OrderBy(c => c.Chunk?.ChunkOrder ?? int.MaxValue)
             .ThenBy(c => c.Id)
             .Select(c => VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk))
+            .Take(5)
             .ToList();
     }
 
@@ -1172,6 +1240,21 @@ public class StudentService : IStudentService
                && string.IsNullOrWhiteSpace(assistantMessage.ReflectiveQuestions)
             ? "clarification"
             : "analysis";
+    }
+
+    private static string? DeterminePolicyReason(QAMessage? assistantMessage)
+    {
+        if (assistantMessage == null)
+            return "clarification";
+
+        var responseKind = DetermineResponseKind(assistantMessage);
+        if (string.Equals(responseKind, "refusal", StringComparison.Ordinal))
+            return "off_topic";
+
+        if (string.Equals(responseKind, "review_update", StringComparison.Ordinal))
+            return "review_update";
+
+        return "medical_intent";
     }
 
     private static string? MapResponderRole(string? role)

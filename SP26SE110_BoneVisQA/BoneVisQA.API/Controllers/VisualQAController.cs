@@ -84,12 +84,12 @@ public class VisualQAController : ControllerBase
         });
 
         if (string.IsNullOrWhiteSpace(formRequest.QuestionText))
-            return BadRequest(new { message = "QuestionText is required." });
+            return BadRequest(BuildInputValidationErrorResponse("MISSING_QUESTION", "Please enter your question or observations."));
 
         var isFollowUpTurn = formRequest.SessionId.HasValue && formRequest.SessionId.Value != Guid.Empty;
 
         if (!isFollowUpTurn && (formRequest.CustomImage == null || formRequest.CustomImage.Length == 0))
-            return BadRequest(new { message = "File must not be empty." });
+            return BadRequest(BuildInputValidationErrorResponse("MISSING_IMAGE", "Please attach an image before submitting."));
         if (formRequest.CustomImage != null && formRequest.CustomImage.Length > MaxVisualImageBytes)
         {
             return BadRequest(new ProblemDetails
@@ -262,6 +262,7 @@ public class VisualQAController : ControllerBase
         }
 
         var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+        response.UserQuestionText ??= request.QuestionText;
         return Ok(ToApiResponse(response, capabilities));
     }
 
@@ -297,6 +298,15 @@ public class VisualQAController : ControllerBase
         var items = await _studentService.GetVisualQaPersonalHistoryAsync(studentId, limit, offset, cancellationToken);
         return Ok(items);
     }
+
+    [HttpGet("~/api/student/studies/personal")]
+    [ProducesResponseType(typeof(PagedResultDto<VisualQaSessionHistoryItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PagedResultDto<VisualQaSessionHistoryItemDto>>> GetPersonalStudiesCompatibility(
+        [FromQuery] int limit = 20,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+        => await GetPersonalHistory(limit, offset, cancellationToken);
 
     [HttpGet("history/cases")]
     [ProducesResponseType(typeof(PagedResultDto<VisualQaSessionHistoryItemDto>), StatusCodes.Status200OK)]
@@ -340,7 +350,7 @@ public class VisualQAController : ControllerBase
             return Unauthorized(new { message = "Invalid token." });
 
         if (string.IsNullOrWhiteSpace(request.QuestionText))
-            return BadRequest(new { message = "QuestionText is required." });
+            return BadRequest(BuildInputValidationErrorResponse("MISSING_QUESTION", "Please enter your question or observations."));
 
         if (!string.IsNullOrWhiteSpace(request.ImageUrl)
             && !IsSupabaseHostedImageUrl(request.ImageUrl, _configuration["Supabase:Url"]))
@@ -434,13 +444,15 @@ public class VisualQAController : ControllerBase
         }
 
         var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+        response.UserQuestionText ??= request.QuestionText;
         return Ok(ToApiResponse(response, capabilities));
     }
 
     [HttpPost("turns/{turnId:guid}/request-review")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RequestReview(Guid turnId, [FromQuery] Guid sessionId, CancellationToken cancellationToken)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -450,7 +462,17 @@ public class VisualQAController : ControllerBase
         try
         {
             await _studentService.RequestVisualQaReviewAsync(studentId, sessionId, turnId);
-            return NoContent();
+            var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
+            var thread = await _studentService.GetVisualQaThreadAsync(studentId, sessionId, cancellationToken);
+            return Ok(new
+            {
+                sessionId,
+                reviewRequestedTurnId = turnId,
+                capabilities,
+                reviewState = thread?.ReviewState ?? "pending",
+                systemNotice = BuildSystemNotice(capabilities.Reason),
+                systemNoticeCode = capabilities.Reason
+            });
         }
         catch (KeyNotFoundException ex)
         {
@@ -468,6 +490,10 @@ public class VisualQAController : ControllerBase
             }
 
             return BadRequest(new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
         }
     }
 
@@ -518,6 +544,10 @@ public class VisualQAController : ControllerBase
     private static VisualQaApiResponseDto ToApiResponse(VisualQAResponseDto response, VisualQaCapabilitiesDto capabilities)
     {
         var systemNotice = BuildSystemNotice(capabilities.Reason);
+        var assistantMessageId = Guid.TryParse(response.TurnId, out var parsedAssistantMessageId)
+            ? parsedAssistantMessageId
+            : (Guid?)null;
+        var userMessage = response.UserQuestionText?.Trim() ?? string.Empty;
         return new VisualQaApiResponseDto
         {
             SessionId = response.SessionId,
@@ -528,18 +558,21 @@ public class VisualQAController : ControllerBase
             Citations = response.Citations,
             Capabilities = capabilities,
             ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
+            PolicyReason = response.PolicyReason,
             ClientRequestId = response.ClientRequestId,
             ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
             LastResponderRole = "assistant",
             SystemNotice = systemNotice,
+            SystemNoticeCode = capabilities.Reason,
             LatestTurn = new VisualQaTurnDto
             {
                 SessionId = response.SessionId ?? Guid.Empty,
                 TurnId = response.TurnId,
                 ActorRole = "assistant",
                 UserMessageId = Guid.Empty,
-                AssistantMessageId = null,
-                UserMessage = string.Empty,
+                AssistantMessageId = assistantMessageId,
+                UserMessage = userMessage,
+                QuestionText = userMessage,
                 MessageText = response.AnswerText,
                 Diagnosis = (response.SuggestedDiagnosis ?? response.AnswerText ?? string.Empty).Trim(),
                 Findings = SplitMultilineField(response.KeyImagingFindings),
@@ -548,6 +581,7 @@ public class VisualQAController : ControllerBase
                 Citations = response.Citations,
                 CreatedAt = DateTime.UtcNow,
                 ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
+                PolicyReason = response.PolicyReason,
                 ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
                 LastResponderRole = "assistant",
                 IsReviewTarget = false
@@ -574,6 +608,7 @@ public class VisualQAController : ControllerBase
             errorCode = reason,
             message,
             systemNotice = BuildSystemNotice(reason),
+            systemNoticeCode = reason,
             capabilities = new VisualQaCapabilitiesDto
             {
                 CanAskNext = false,
@@ -581,6 +616,45 @@ public class VisualQAController : ControllerBase
                 TurnsUsed = 0,
                 TurnLimit = 3,
                 Reason = reason
+            },
+            latestTurn = new
+            {
+                turnId = $"system:{reason.ToLowerInvariant()}",
+                actorRole = "system",
+                userMessage = string.Empty,
+                questionText = string.Empty,
+                messageText = BuildSystemNotice(reason) ?? message,
+                responseKind = "system_notice",
+                policyReason = reason
+            }
+        };
+    }
+
+    private static object BuildInputValidationErrorResponse(string reason, string message)
+    {
+        return new
+        {
+            errorCode = reason,
+            message,
+            systemNotice = message,
+            systemNoticeCode = reason,
+            capabilities = new VisualQaCapabilitiesDto
+            {
+                CanAskNext = true,
+                IsReadOnly = false,
+                TurnsUsed = 0,
+                TurnLimit = 3,
+                Reason = null
+            },
+            latestTurn = new
+            {
+                turnId = $"system:{reason.ToLowerInvariant()}",
+                actorRole = "system",
+                userMessage = string.Empty,
+                questionText = string.Empty,
+                messageText = message,
+                responseKind = "system_notice",
+                policyReason = reason
             }
         };
     }

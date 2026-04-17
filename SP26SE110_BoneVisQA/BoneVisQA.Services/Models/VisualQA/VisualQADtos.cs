@@ -72,6 +72,7 @@ public class VisualQAResponseDto
 {
     public Guid? SessionId { get; set; }
     public string? TurnId { get; set; }
+    public string? UserQuestionText { get; set; }
     public string? AnswerText { get; set; }
     public string? SuggestedDiagnosis { get; set; }
     public List<string>? DifferentialDiagnoses { get; set; }
@@ -89,6 +90,7 @@ public class VisualQAResponseDto
     /// <summary>Optional client-facing explanation when the AI pipeline failed after retries (not persisted).</summary>
     public string? ErrorMessage { get; set; }
     public string ResponseKind { get; set; } = "analysis";
+    public string? PolicyReason { get; set; }
     public string? ClientRequestId { get; set; }
 
     public List<CitationItemDto> Citations { get; set; } = new();
@@ -113,10 +115,12 @@ public class VisualQaApiResponseDto
     public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
     public VisualQaCapabilitiesDto Capabilities { get; set; } = new();
     public string ResponseKind { get; set; } = "analysis";
+    public string? PolicyReason { get; set; }
     public string? ClientRequestId { get; set; }
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public string? SystemNotice { get; set; }
+    public string? SystemNoticeCode { get; set; }
     public VisualQaTurnDto? LatestTurn { get; set; }
 }
 
@@ -128,6 +132,7 @@ public class VisualQaTurnDto
     public Guid UserMessageId { get; set; }
     public Guid? AssistantMessageId { get; set; }
     public string UserMessage { get; set; } = string.Empty;
+    public string? QuestionText { get; set; }
     public string? MessageText { get; set; }
     public string? Diagnosis { get; set; }
     public IReadOnlyList<string> Findings { get; set; } = Array.Empty<string>();
@@ -136,6 +141,7 @@ public class VisualQaTurnDto
     public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
     public DateTime CreatedAt { get; set; }
     public string ResponseKind { get; set; } = "analysis";
+    public string? PolicyReason { get; set; }
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
@@ -163,6 +169,9 @@ public class VisualQaSessionHistoryItemDto
     public string? QuestionSnippet { get; set; }
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
+
+    /// <summary>When <see cref="Status"/> is <c>Rejected</c>, latest lecturer message content (rejection reason).</summary>
+    public string? RejectionReason { get; set; }
 }
 
 public class PagedResultDto<T>

@@ -15,6 +15,7 @@ namespace BoneVisQA.Services.Services;
 public class VisualQaAiService : IVisualQaAiService
 {
     private sealed record RagContextItem(double Similarity, DocumentChunk? Chunk, MedicalCase? Case);
+    private sealed record QuestionPolicyClassification(string PolicyReason, bool AllowDiagnosticGeneration);
 
     private const double MinimumRelevantSimilarity = 0.72d;
     private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
@@ -28,6 +29,10 @@ public class VisualQaAiService : IVisualQaAiService
         "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
     private const string AiOverloadVietnameseMessage =
         "The AI system is overloaded. Please try again later.";
+    private const string OffTopicQuestionRefusalMessage =
+        "Tin nhắn nằm ngoài lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn liên quan đến hình ảnh X-quang xương/khớp hoặc chẩn đoán y khoa.";
+    private const string AmbiguousQuestionClarificationMessage =
+        "Câu hỏi chưa đủ rõ để phân tích y khoa. Vui lòng mô tả cụ thể triệu chứng hoặc dấu hiệu bạn muốn đánh giá trên ảnh X-quang.";
 
     private const int RagChunkFetch = 12;
     private const int RagCaseFetch = 12;
@@ -52,6 +57,28 @@ public class VisualQaAiService : IVisualQaAiService
 
     public async Task<VisualQAResponseDto> RunPipelineAsync(VisualQARequestDto request, CancellationToken cancellationToken = default)
     {
+        var questionPolicy = ClassifyQuestionPolicy(request.QuestionText, request.SessionId.HasValue && request.SessionId.Value != Guid.Empty);
+        if (!questionPolicy.AllowDiagnosticGeneration)
+        {
+            var refusalText = string.Equals(questionPolicy.PolicyReason, "ambiguous_intent", StringComparison.Ordinal)
+                ? AmbiguousQuestionClarificationMessage
+                : OffTopicQuestionRefusalMessage;
+            return new VisualQAResponseDto
+            {
+                AnswerText = refusalText,
+                SuggestedDiagnosis = refusalText,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
+                AiConfidenceScore = null,
+                ErrorMessage = null,
+                ResponseKind = "refusal",
+                PolicyReason = questionPolicy.PolicyReason,
+                ClientRequestId = request.ClientRequestId,
+                Citations = new List<CitationItemDto>()
+            };
+        }
+
         // Bounding-box ROI overlay when coordinates are present (single image fetch for the generation call).
         string? imageB64 = null;
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
@@ -155,6 +182,7 @@ public class VisualQaAiService : IVisualQaAiService
                 ReflectiveQuestions = null,
                 AiConfidenceScore = calculatedScore,
                 ResponseKind = "refusal",
+                PolicyReason = "invalid_image",
                 ClientRequestId = request.ClientRequestId,
                 Citations = new List<CitationItemDto>()
             };
@@ -177,13 +205,16 @@ public class VisualQaAiService : IVisualQaAiService
             response.KeyImagingFindings = null;
             response.ReflectiveQuestions = null;
             response.ResponseKind = "refusal";
+            response.PolicyReason = "off_topic";
         }
         else
         {
             // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
             if (response.Citations == null || response.Citations.Count == 0)
             {
-                response.Citations = citationsFromRag;
+                response.Citations = citationsFromRag
+                    .Take(RagTopMerged)
+                    .ToList();
             }
             else
             {
@@ -214,12 +245,17 @@ public class VisualQaAiService : IVisualQaAiService
                         citation.EndPage = meta.EndPage;
                     }
                 }
+
+                response.Citations = response.Citations
+                    .Take(RagTopMerged)
+                    .ToList();
             }
         }
 
         response.AiConfidenceScore = calculatedScore;
         response.ClientRequestId = request.ClientRequestId;
         response.ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind;
+        response.PolicyReason ??= questionPolicy.PolicyReason;
 
         return response;
     }
@@ -478,6 +514,8 @@ public class VisualQaAiService : IVisualQaAiService
 
         sb.AppendLine("If the question is explicitly binary and the evidence is decisive, you may begin with a concise yes/no conclusion. Otherwise explain the uncertainty instead of forcing a yes/no answer.");
         sb.AppendLine("Never change left/right laterality unless the image, ROI, retrieved context, or previous conversation explicitly justifies the change.");
+        sb.AppendLine("For follow-up questions that verify/compare with previous answers, preserve prior conclusions unless new evidence in image/ROI/context clearly contradicts them.");
+        sb.AppendLine("If the user question is social/off-topic and not medical, do not analyze image content and return a refusal according to system policy.");
         sb.AppendLine("You must reason, explain, and respond entirely in professional medical Vietnamese.");
 
         sb.AppendLine();
@@ -499,6 +537,54 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("The \"citations\" array must list every [Doc:...] and [Case:...] marker you relied on (kind is Doc or Case; id is the UUID). Use an empty array [] when no library sources were used.");
 
         return sb.ToString();
+    }
+
+    private static QuestionPolicyClassification ClassifyQuestionPolicy(string? questionText, bool isFollowUpTurn)
+    {
+        if (string.IsNullOrWhiteSpace(questionText))
+            return new QuestionPolicyClassification("off_topic", false);
+
+        var normalized = questionText.Trim().ToLowerInvariant();
+        var tokenCount = normalized
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+        if (normalized.Contains("ignore previous instructions", StringComparison.Ordinal) ||
+            normalized.Contains("bypass policy", StringComparison.Ordinal) ||
+            normalized.Contains("prompt injection", StringComparison.Ordinal))
+        {
+            return new QuestionPolicyClassification("prompt_attack", false);
+        }
+
+        var medicalKeywords = new[]
+        {
+            "x-quang", "xquang", "xray", "x-ray", "roi", "xuong", "xương", "khop", "khớp",
+            "chan doan", "chẩn đoán", "gãy", "gay", "ton thuong", "tổn thương", "benh", "bệnh",
+            "chup", "chụp", "hinh anh", "hình ảnh", "vi tri", "vị trí", "lesion", "musculoskeletal"
+        };
+
+        if (medicalKeywords.Any(normalized.Contains))
+        {
+            var isConsistencyFollowUp = isFollowUpTurn && (normalized.Contains("như trước") ||
+                                                           normalized.Contains("so với") ||
+                                                           normalized.Contains("có nhất quán") ||
+                                                           normalized.Contains("consistent"));
+            return new QuestionPolicyClassification(isConsistencyFollowUp ? "follow_up_consistency" : "medical_intent", true);
+        }
+
+        // Very short, ambiguous prompts should not trigger image diagnosis.
+        if (tokenCount <= 3)
+            return new QuestionPolicyClassification("ambiguous_intent", false);
+
+        var socialOrOffTopicPrefixes = new[]
+        {
+            "hi", "hello", "hey", "xin chao", "chao", "good morning", "good evening",
+            "toi chua an", "tôi chưa ăn", "hom nay", "hôm nay", "thoi tiet", "thời tiết",
+            "gia xang", "giá xăng", "chinh tri", "chính trị", "code", "lap trinh", "lập trình"
+        };
+
+        return socialOrOffTopicPrefixes.Any(normalized.Contains)
+            ? new QuestionPolicyClassification("off_topic", false)
+            : new QuestionPolicyClassification("ambiguous_intent", false);
     }
 
     private async Task<(string? history, int userTurns)> BuildConversationHistoryAsync(Guid? sessionId, CancellationToken cancellationToken)
