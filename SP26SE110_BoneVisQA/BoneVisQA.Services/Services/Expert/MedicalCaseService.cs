@@ -51,7 +51,17 @@ namespace BoneVisQA.Services.Services.Expert
             using var stream = new FileStream(filePath, FileMode.Create);
             await file.CopyToAsync(stream);
 
-            return $"/uploads/images/{fileName}";
+            var relativeUrl = $"/uploads/images/{fileName}";
+
+            // Tạo absolute URL với backend base URL
+            var request = _httpContextAccessor.HttpContext?.Request;
+            if (request != null)
+            {
+                var baseUrl = $"{request.Scheme}://{request.Host.Host}:{request.Host.Port ?? 5046}";
+                return $"{baseUrl}{relativeUrl}";
+            }
+
+            return relativeUrl;
         }
         public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex,int pageSize)
         {
@@ -291,7 +301,7 @@ namespace BoneVisQA.Services.Services.Expert
             if (medicalCase == null)
                 return null;
 
-            // Update fields
+            // Cập nhật các trường
             medicalCase.Title = request.Title;
             medicalCase.Description = request.Description;
             medicalCase.Difficulty = request.Difficulty;
@@ -371,6 +381,19 @@ namespace BoneVisQA.Services.Services.Expert
                 CaseTitle = medicalCase.Title,
                 Annotations = new List<AddAnnotationDTO>()
             };
+        }
+
+        // Xóa medical image
+        public async Task<bool> DeleteMedicalImageAsync(Guid imageId)
+        {
+            var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(imageId);
+            if (image == null) return false;
+
+            // TODO: Xóa file từ Supabase storage nếu cần
+
+            await _unitOfWork.MedicalImageRepository.DeleteAsync(imageId);
+            await _unitOfWork.SaveAsync();
+            return true;
         }
 
         // Thêm annotation cho image

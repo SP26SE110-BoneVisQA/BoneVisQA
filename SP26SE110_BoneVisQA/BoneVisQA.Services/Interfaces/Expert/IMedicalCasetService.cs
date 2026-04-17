@@ -24,6 +24,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize);
         Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
+        Task<bool> DeleteMedicalImageAsync(Guid imageId);
 
         Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize);
         Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);

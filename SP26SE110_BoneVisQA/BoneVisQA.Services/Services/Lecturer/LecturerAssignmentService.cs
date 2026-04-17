@@ -39,7 +39,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// Passing score is always on a 100-point scale (0-100). Identity function.
     /// </summary>
     private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
     {
@@ -61,7 +61,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ToList();
 
         if (caseIds.Count == 0)
-            throw new InvalidOperationException("caseIds phải chứa ít nhất một phần tử hợp lệ.");
+            throw new InvalidOperationException("caseIds must contain at least one valid element.");
 
         var medicalCases = await _unitOfWork.Context.MedicalCases
             .Where(c => caseIds.Contains(c.Id))
@@ -70,7 +70,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         _logger.LogInformation("[AssignCases] Step2 LoadMedicalCases done in {Elapsed}s, found={Count}", elapsed2, medicalCases.Count);
 
         if (medicalCases.Count != caseIds.Count)
-            throw new KeyNotFoundException("Một hoặc nhiều case không tồn tại.");
+            throw new KeyNotFoundException("One or more cases not found.");
 
         var existingAssignments = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
@@ -101,20 +101,25 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var elapsed4 = (DateTime.UtcNow - t0).TotalSeconds;
         _logger.LogInformation("[AssignCases] Step4 SaveAsync done in {Elapsed}s", elapsed4);
 
-        // Phải await phần đọc DB (DbContext scoped); SMTP vẫn chạy nền bên trong QueueAssignmentEmailsAsync
-        await QueueAssignmentEmailsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            "Case Assignment",
-            "Medical Case",
-            request.DueDate);
+        // Must await the DB read part (DbContext scoped); SMTP still runs in background inside QueueAssignmentEmailsAsync
+        // Gửi email riêng cho từng case để có đủ thông tin (title + description)
+        foreach (var medicalCase in medicalCases)
+        {
+            await QueueAssignmentEmailsAsync(
+                academicClass.Id,
+                academicClass.ClassName,
+                medicalCase.Title,
+                "Medical Case",
+                request.DueDate,
+                medicalCase.Description);
+        }
 
-        // Gửi SignalR notification cho sinh viên
+        // Send SignalR notification to students
         await QueueAssignmentNotificationsAsync(
             academicClass.Id,
             academicClass.ClassName,
             "Case Assignment",
-            "Ca Lâm Sàng",
+            "Clinical Case",
             "/student/cases");
 
         var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
@@ -146,42 +151,42 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var academicClass = await EnsureLecturerOwnsClassAsync(lecturerId, classId);
 
         if (request.QuizId == Guid.Empty)
-            throw new InvalidOperationException("quizId là bắt buộc.");
+            throw new InvalidOperationException("quizId is required.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var warnings = new List<string>();
         DateTime? effectiveOpenTime = request.OpenTime;
         DateTime? effectiveCloseTime = request.CloseTime;
 
-        // Nếu lecturer muốn sử dụng thời gian của Expert
+        // If lecturer wants to use Expert's timing
         if (request.UseExpertTime)
         {
             effectiveOpenTime = quiz.OpenTime;
             effectiveCloseTime = quiz.CloseTime;
-            warnings.Add("Đã sử dụng thời gian mở/đóng từ Expert.");
+            warnings.Add("Using Expert's open/close time.");
         }
         else
         {
-            // Clamp thời gian mở: nếu sớm hơn Expert thì lấy thời gian Expert
+            // Clamp open time: if earlier than Expert's, use Expert's time
             if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
             {
-                warnings.Add($"Thời gian mở quiz đã được điều chỉnh từ {request.OpenTime.Value:HH:mm} lên {quiz.OpenTime.Value:HH:mm} (thời gian mở của Expert).");
+                warnings.Add($"Quiz open time adjusted from {request.OpenTime.Value:HH:mm} to {quiz.OpenTime.Value:HH:mm} (Expert's open time).");
                 effectiveOpenTime = quiz.OpenTime;
             }
 
-            // Clamp thời gian đóng: nếu muộn hơn Expert thì lấy thời gian Expert
+            // Clamp close time: if later than Expert's, use Expert's time
             if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
             {
-                warnings.Add($"Thời gian đóng quiz đã được điều chỉnh từ {request.CloseTime.Value:HH:mm} xuống {quiz.CloseTime.Value:HH:mm} (thời gian đóng của Expert).");
+                warnings.Add($"Quiz close time adjusted from {request.CloseTime.Value:HH:mm} to {quiz.CloseTime.Value:HH:mm} (Expert's close time).");
                 effectiveCloseTime = quiz.CloseTime;
             }
         }
 
-        // Validate openTime <= closeTime (sau khi đã clamp)
+        // Validate openTime <= closeTime (after clamping)
         if (effectiveOpenTime.HasValue && effectiveCloseTime.HasValue && effectiveOpenTime > effectiveCloseTime)
-            throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
+            throw new InvalidOperationException("openTime must be less than or equal to closeTime.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(x => x.ClassId == classId && x.QuizId == request.QuizId);
@@ -198,10 +203,95 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
         }
 
+        // ============================================
+        // TIME LIMIT & PASSING SCORE CLAMP LOGIC
+        // ============================================
+        // Expert đặt giá trị gốc trên Quiz. Lecturer có thể điều chỉnh nhưng bị giới hạn:
+        // - TimeLimit: ±50% so với Expert (min 5, max 180)
+        // - PassingScore: ±10% so với Expert (min 0, max 100)
+        // Nếu Lecturer để trống → dùng giá trị Expert
+        // ============================================
+
+        // TIME LIMIT CLAMP
+        int? effectiveTimeLimit = request.TimeLimitMinutes;
+        if (quiz.TimeLimit.HasValue)
+        {
+            var expertTimeLimit = quiz.TimeLimit.Value;
+            var minTimeLimit = Math.Max(5, (int)(expertTimeLimit * 0.5));
+            var maxTimeLimit = Math.Min(180, (int)(expertTimeLimit * 1.5));
+
+            if (request.TimeLimitMinutes.HasValue)
+            {
+                // Lecturer đã nhập giá trị → clamp vào khoảng cho phép
+                if (request.TimeLimitMinutes.Value < minTimeLimit)
+                {
+                    effectiveTimeLimit = minTimeLimit;
+                    warnings.Add($"Time limit adjusted to {minTimeLimit} min (minimum allowed for this quiz).");
+                }
+                else if (request.TimeLimitMinutes.Value > maxTimeLimit)
+                {
+                    effectiveTimeLimit = maxTimeLimit;
+                    warnings.Add($"Time limit adjusted to {maxTimeLimit} min (maximum allowed for this quiz).");
+                }
+                else
+                {
+                    effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                }
+            }
+            else
+            {
+                // Lecturer không nhập → dùng giá trị Expert
+                effectiveTimeLimit = expertTimeLimit;
+            }
+        }
+        else
+        {
+            // Quiz không có TimeLimit từ Expert → dùng giá trị Lecturer (hoặc default 30)
+            effectiveTimeLimit = request.TimeLimitMinutes ?? 30;
+        }
+
+        // PASSING SCORE CLAMP
+        int? effectivePassingScore = request.PassingScore;
+        if (quiz.PassingScore.HasValue)
+        {
+            var expertPassingScore = quiz.PassingScore.Value;
+            var minPassingScore = Math.Max(0, expertPassingScore - 10);
+            var maxPassingScore = Math.Min(100, expertPassingScore + 10);
+
+            if (request.PassingScore.HasValue)
+            {
+                // Lecturer đã nhập giá trị → clamp vào khoảng cho phép
+                if (request.PassingScore.Value < minPassingScore)
+                {
+                    effectivePassingScore = minPassingScore;
+                    warnings.Add($"Passing score adjusted to {minPassingScore}% (minimum allowed for this quiz).");
+                }
+                else if (request.PassingScore.Value > maxPassingScore)
+                {
+                    effectivePassingScore = maxPassingScore;
+                    warnings.Add($"Passing score adjusted to {maxPassingScore}% (maximum allowed for this quiz).");
+                }
+                else
+                {
+                    effectivePassingScore = request.PassingScore.Value;
+                }
+            }
+            else
+            {
+                // Lecturer không nhập → dùng giá trị Expert
+                effectivePassingScore = expertPassingScore;
+            }
+        }
+        else
+        {
+            // Quiz không có PassingScore từ Expert → dùng giá trị Lecturer (hoặc default 70)
+            effectivePassingScore = request.PassingScore ?? 70;
+        }
+
         session.OpenTime = ToUtc(effectiveOpenTime);
         session.CloseTime = ToUtc(effectiveCloseTime);
-        session.TimeLimitMinutes = request.TimeLimitMinutes;
-        session.PassingScore = request.PassingScore;
+        session.TimeLimitMinutes = effectiveTimeLimit;
+        session.PassingScore = effectivePassingScore;
         session.ShuffleQuestions = request.ShuffleQuestions;
         session.AllowRetake = request.AllowRetake;
         session.AllowLate = request.AllowLate;
@@ -214,9 +304,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             academicClass.ClassName,
             quiz.Title,
             "Quiz",
-            request.CloseTime);
+            request.CloseTime,
+            quiz.Topic);  // ← thêm Topic làm description
 
-        // Gửi SignalR notification cho sinh viên
+        // Send SignalR notification to students
         await QueueAssignmentNotificationsAsync(
             academicClass.Id,
             academicClass.ClassName,
@@ -245,7 +336,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Bật retake cho một attempt cụ thể — reset trạng thái để sinh viên làm lại.
+    /// Enable retake for a specific attempt — reset state to allow student to retake.
     /// </summary>
     public async Task AllowRetakeForAttemptAsync(Guid lecturerId, Guid attemptId)
     {
@@ -254,21 +345,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 .ThenInclude(q => q!.ClassQuizSessions)
                     .ThenInclude(cqs => cqs.Class)
             .FirstOrDefaultAsync(a => a.Id == attemptId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         var classSession = attempt.Quiz?.ClassQuizSessions?.FirstOrDefault();
         if (classSession == null)
-            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+            throw new InvalidOperationException("This quiz is not assigned to a class.");
 
-        // Kiểm tra lecturer sở hữu lớp
+        // Check if lecturer owns the class
         var academicClass = classSession.Class;
         if (academicClass == null || academicClass.LecturerId != lecturerId)
-            throw new UnauthorizedAccessException("Bạn không có quyền thực hiện thao tác này.");
+            throw new UnauthorizedAccessException("You do not have permission to perform this action.");
 
         if (!attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Sinh viên chưa nộp bài. Không cần bật retake.");
+            throw new InvalidOperationException("Student has not submitted. No need to enable retake.");
 
-        // Xóa đáp án cũ
+        // Remove old answers
         var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
             .Where(a => a.AttemptId == attempt.Id)
             .ToListAsync();
@@ -279,7 +370,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         attempt.Score = null;
         attempt.StartedAt = DateTime.UtcNow;
 
-        // Đánh dấu retake đã được bật
+        // Mark retake as enabled
         classSession.RetakeResetAt = DateTime.UtcNow;
 
         await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
@@ -287,7 +378,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Bật retake cho toàn bộ sinh viên trong một lớp đã nộp quiz này.
+    /// Enable retake for all students in a class who have submitted this quiz.
     /// </summary>
     public async Task AllowRetakeAllAsync(Guid lecturerId, Guid classId, Guid quizId)
     {
@@ -295,7 +386,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phân công quiz cho lớp này.");
+            ?? throw new KeyNotFoundException("Quiz assignment not found for this class.");
 
         var completedAttempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId && a.CompletedAt.HasValue)
@@ -315,15 +406,16 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Đọc danh sách email trong request (DbContext còn sống), rồi gửi SMTP ở background để API trả 200 ngay.
-    /// Cấu hình SMTP là <c>Email:Username</c>/<c>Email:Password</c> (Gmail App Password, v.v.) — không liên quan Google OAuth Console.
+    /// Read email list from request (DbContext still alive), then send SMTP in background so API returns 200 immediately.
+    /// SMTP configuration is <c>Email:Username</c>/<c>Email:Password</c> (Gmail App Password, etc.) — unrelated to Google OAuth Console.
     /// </summary>
     private async Task QueueAssignmentEmailsAsync(
         Guid classId,
         string className,
         string assignmentTitle,
         string assignmentType,
-        DateTime? dueDate)
+        DateTime? dueDate,
+        string? description)  // ← thêm parameter
     {
         _logger.LogInformation("[AssignmentEmail] Queue started for class {ClassId}", classId);
 
@@ -338,7 +430,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentEmail] Loaded {Count} recipients for class {ClassId} — firing background send", items.Count, classId);
@@ -364,6 +456,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var typeCopy = assignmentType;
         var dueCopy = dueDate;
         var dueDisplayCopy = dueDateDisplay;
+        var descriptionCopy = description;  // ← thêm này
         var log = _logger;
 
         _ = Task.Run(async () =>
@@ -383,7 +476,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                             titleCopy,
                             typeCopy,
                             dueCopy,
-                            dueDisplayCopy);
+                            dueDisplayCopy,
+                            descriptionCopy);  // ← truyền description
                         if (!sent)
                             log.LogWarning("[AssignmentEmail] SMTP returned false for {Email}", email);
                     }
@@ -425,7 +519,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentUpdateEmail] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
@@ -491,7 +585,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Gửi SignalR notification cho tất cả sinh viên trong lớp về bài tập mới được giao.
+    /// Send SignalR notification to all students in the class about newly assigned assignment.
     /// </summary>
     private async Task QueueAssignmentNotificationsAsync(
         Guid classId,
@@ -513,7 +607,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => x.StudentId != Guid.Empty)
-                .Select(x => (x.StudentId, string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.StudentId, string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentNotification] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
@@ -543,8 +637,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 using var scope = _scopeFactory.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-                var notificationTitle = $"Bài tập mới: {titleCopy}";
-                var notificationMessage = $"Giảng viên vừa giao bài {typeCopy} mới cho lớp {nameCopy}";
+                var notificationTitle = $"New Assignment: {titleCopy}";
+                var notificationMessage = $"Lecturer just assigned new {typeCopy} to class {nameCopy}";
 
                 foreach (var (userId, studentName) in items)
                 {
@@ -579,12 +673,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     {
         return await _unitOfWork.Context.AcademicClasses
             .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == lecturerId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học thuộc quyền giảng viên.");
+            ?? throw new KeyNotFoundException("Class not found under lecturer's authority.");
     }
 
     // ── Quiz Review Methods ───────────────────────────────────────────────────────
 
-    /// <summary>Lấy danh sách tất cả bài quiz attempts của sinh viên trong một class + quiz cụ thể.</summary>
+    /// <summary>Get list of all quiz attempts for students in a class + specific quiz.</summary>
     public async Task<IReadOnlyList<StudentQuizAttemptDto>> GetClassQuizAttemptsAsync(
         Guid lecturerId, Guid classId, Guid quizId)
     {
@@ -612,7 +706,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             AttemptId = a.Id,
             StudentId = a.StudentId,
-            StudentName = a.Student.FullName ?? "Sinh viên",
+            StudentName = a.Student.FullName ?? "Student",
             StudentEmail = a.Student.Email ?? "",
             Score = a.Score,
             StartedAt = a.StartedAt,
@@ -625,7 +719,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }).ToList();
     }
 
-    /// <summary>Lấy chi tiết 1 bài quiz: câu hỏi + câu trả lời sinh viên.</summary>
+    /// <summary>Get details for 1 quiz: questions + student answers.</summary>
     public async Task<QuizAttemptDetailDto> GetQuizAttemptDetailAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId)
     {
@@ -637,10 +731,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student's quiz attempt not found.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
@@ -676,7 +770,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         };
     }
 
-    /// <summary>Lecturer chỉnh sửa điểm / câu trả lời của 1 quiz attempt.</summary>
+    /// <summary>Lecturer edits score / answers for a quiz attempt.</summary>
     public async Task<QuizAttemptDetailDto> UpdateQuizAttemptAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId, UpdateQuizAttemptRequestDto request)
     {
@@ -687,13 +781,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student's quiz attempt not found.");
 
-        // Cập nhật điểm nếu có
+        // Update score if provided
         if (request.Score.HasValue)
             attempt.Score = request.Score.Value;
 
-        // Cập nhật câu trả lời nếu có
+        // Update answers if provided
         if (request.Answers.Count > 0)
         {
             var answerMap = attempt.StudentQuizAnswers.ToDictionary(a => a.Id);
@@ -723,7 +817,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
         if (session == null)
-            throw new KeyNotFoundException("Quiz này chưa được gắn cho lớp học.");
+            throw new KeyNotFoundException("This quiz has not been assigned to a class.");
     }
 
     private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
@@ -736,10 +830,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
     // ── Assignment CRUD Methods ─────────────────────────────────────────────────
 
-    /// <summary>Lấy chi tiết một assignment (case hoặc quiz) theo ID.</summary>
+    /// <summary>Get details for an assignment (case or quiz) by ID.</summary>
     public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
     {
-        // Thử tìm trong ClassCases (case assignment)
+        // Try to find in ClassCases (case assignment)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -769,13 +863,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 AssignedAt = classCase.AssignedAt,
                 TotalStudents = totalStudents,
                 SubmittedCount = submittedCount,
-                GradedCount = 0, // Case không có chấm điểm
+                GradedCount = 0, // Case is not graded
                 AllowLate = false,
                 CreatedAt = classCase.AssignedAt
             };
         }
 
-        // Thử tìm trong ClassQuizSessions (quiz assignment)
+        // Try to find in ClassQuizSessions (quiz assignment)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Class)
@@ -783,7 +877,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         var quizTotalStudents = await _unitOfWork.Context.ClassEnrollments
             .CountAsync(e => e.ClassId == quizSession.ClassId);
@@ -826,10 +920,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         };
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
     {
-        // Thử cập nhật ClassCase
+        // Try to update ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .Include(cc => cc.Class)
             .Include(cc => cc.Case)
@@ -849,33 +943,33 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 await QueueAssignmentUpdateEmailsAsync(
                     classCase.ClassId,
                     classCase.Class.ClassName,
-                    classCase.Case.Title ?? "Bài tập ca lâm sàng",
-                    "Ca Lâm Sàng",
+                    classCase.Case.Title ?? "Clinical Case Assignment",
+                    "Clinical Case",
                     classCase.DueDate);
             }
 
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
-        // Thử cập nhật ClassQuizSession
+        // Try to update ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .Include(cqs => cqs.Class)
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         var warnings = new List<string>();
         DateTime? effectiveOpenDate = request.OpenDate;
         DateTime? effectiveDueDate = request.DueDate;
 
-        // Nếu lecturer muốn sử dụng thời gian của Expert
+        // If lecturer wants to use Expert's timing
         if (request.UseExpertTime)
         {
             effectiveOpenDate = quizSession.Quiz?.OpenTime;
             effectiveDueDate = quizSession.Quiz?.CloseTime;
-            warnings.Add("Đã sử dụng thời gian mở/đóng từ Expert.");
+            warnings.Add("Using Expert's open/close time.");
         }
         else
         {
@@ -898,10 +992,81 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             quizSession.CloseTime = ToUtc(effectiveDueDate);
         if (effectiveOpenDate.HasValue)
             quizSession.OpenTime = ToUtc(effectiveOpenDate);
-        if (request.PassingScore.HasValue)
-            quizSession.PassingScore = request.PassingScore.Value;
-        if (request.TimeLimitMinutes.HasValue)
-            quizSession.TimeLimitMinutes = request.TimeLimitMinutes.Value;
+
+        // ============================================
+        // TIME LIMIT & PASSING SCORE CLAMP LOGIC (same as AssignQuizSessionAsync)
+        // ============================================
+        if (request.PassingScore.HasValue || request.TimeLimitMinutes.HasValue)
+        {
+            // Get expert values from Quiz
+            var expertTimeLimit = quizSession.Quiz?.TimeLimit;
+            var expertPassingScore = quizSession.Quiz?.PassingScore;
+
+            // CLAMP TIME LIMIT
+            if (request.TimeLimitMinutes.HasValue)
+            {
+                int effectiveTimeLimit;
+                if (expertTimeLimit.HasValue)
+                {
+                    var minTimeLimit = Math.Max(5, (int)(expertTimeLimit.Value * 0.5));
+                    var maxTimeLimit = Math.Min(180, (int)(expertTimeLimit.Value * 1.5));
+
+                    if (request.TimeLimitMinutes.Value < minTimeLimit)
+                    {
+                        effectiveTimeLimit = minTimeLimit;
+                        warnings.Add($"Time limit adjusted to {minTimeLimit} min (minimum allowed for this quiz).");
+                    }
+                    else if (request.TimeLimitMinutes.Value > maxTimeLimit)
+                    {
+                        effectiveTimeLimit = maxTimeLimit;
+                        warnings.Add($"Time limit adjusted to {maxTimeLimit} min (maximum allowed for this quiz).");
+                    }
+                    else
+                    {
+                        effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                    }
+                }
+                else
+                {
+                    // Quiz không có TimeLimit từ Expert → dùng giá trị Lecturer
+                    effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                }
+                quizSession.TimeLimitMinutes = effectiveTimeLimit;
+            }
+
+            // CLAMP PASSING SCORE
+            if (request.PassingScore.HasValue)
+            {
+                int effectivePassingScore;
+                if (expertPassingScore.HasValue)
+                {
+                    var minPassingScore = Math.Max(0, expertPassingScore.Value - 10);
+                    var maxPassingScore = Math.Min(100, expertPassingScore.Value + 10);
+
+                    if (request.PassingScore.Value < minPassingScore)
+                    {
+                        effectivePassingScore = minPassingScore;
+                        warnings.Add($"Passing score adjusted to {minPassingScore}% (minimum allowed for this quiz).");
+                    }
+                    else if (request.PassingScore.Value > maxPassingScore)
+                    {
+                        effectivePassingScore = maxPassingScore;
+                        warnings.Add($"Passing score adjusted to {maxPassingScore}% (maximum allowed for this quiz).");
+                    }
+                    else
+                    {
+                        effectivePassingScore = request.PassingScore.Value;
+                    }
+                }
+                else
+                {
+                    // Quiz không có PassingScore từ Expert → dùng giá trị Lecturer
+                    effectivePassingScore = request.PassingScore.Value;
+                }
+                quizSession.PassingScore = effectivePassingScore;
+            }
+        }
+
         if (request.AllowRetake.HasValue)
             quizSession.AllowRetake = request.AllowRetake.Value;
         if (request.AllowLate.HasValue)
@@ -952,10 +1117,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return detail;
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     public async Task DeleteAssignmentAsync(Guid assignmentId)
     {
-        // Thử xóa ClassCase
+        // Try to delete ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
 
@@ -966,21 +1131,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             return;
         }
 
-        // Thử xóa ClassQuizSession
+        // Try to delete ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         _unitOfWork.Context.ClassQuizSessions.Remove(quizSession);
         await _unitOfWork.SaveAsync();
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get list of submissions for an assignment.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
     {
-        // Thử lấy submissions từ ClassCases (case)
+        // Try to get submissions from ClassCases (case)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -1015,7 +1180,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var quizEnrollments = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -1049,7 +1214,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts

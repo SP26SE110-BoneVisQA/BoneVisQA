@@ -244,3 +244,13 @@ public class CreateQuizRequestDto
     /// <summary>Lớp cần gán quiz (optional). Để trống / Guid.Empty nếu chỉ tạo quiz chưa gán lớp.</summary>
     public Guid ClassId { get; set; }
 }
+
+/// <summary>
+/// DTO returning quiz details with questions — used when lecturer selects quiz to assign as assignment.
+/// </summary>
+public class QuizWithQuestionsDto
+{
+    public QuizDto Quiz { get; set; } = null!;
+    public List<QuizQuestionDto> Questions { get; set; } = new();
+    public int TotalQuestions => Questions.Count;
+}

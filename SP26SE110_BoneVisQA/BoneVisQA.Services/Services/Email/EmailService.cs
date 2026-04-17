@@ -989,7 +989,8 @@ public class EmailService : IEmailService
         string assignmentTitle,
         string assignmentType,
         DateTime? dueDate,
-        string? dueDateDisplay)
+        string? dueDateDisplay,
+        string? description)  // ← thêm parameter
     {
         _logger.LogInformation("[SendAssignmentEmailAsync] Sending assignment email to {ToEmail} - {Title}", toEmail, assignmentTitle);
 
@@ -1019,6 +1020,7 @@ public class EmailService : IEmailService
         .assignment-card {{ background: linear-gradient(135deg, #f8f9fa, #e8f4f8); border-left: 5px solid #1a5f7a; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
         .assignment-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }}
         .assignment-type {{ font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }}
+        .assignment-description {{ font-size: 14px; color: #555; line-height: 1.6; margin-top: 12px; padding: 12px; background: #f8f9fa; border-left: 3px solid #1a5f7a; }}
         .due-date {{ background-color: #fff3cd; border: 1px solid #ffc107; padding: 10px 15px; border-radius: 6px; margin: 15px 0; font-size: 14px; color: #856404; }}
         .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1a5f7a, #2980b9); color: white !important; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: bold; margin: 15px 0; }}
         .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
@@ -1037,6 +1039,9 @@ public class EmailService : IEmailService
             <div class='assignment-card'>
                 <div class='assignment-type'>{assignmentType}</div>
                 <div class='assignment-title'>{assignmentTitle}</div>
+                {(string.IsNullOrEmpty(description) ? "" : $@"
+                <div class='assignment-description'>{description}</div>
+                ")}
                 <div class='due-date'>⏰ {dueDateText}</div>
             </div>
             <p>Đăng nhập vào <strong>BoneVisQA</strong> để xem chi tiết và làm bài.</p>

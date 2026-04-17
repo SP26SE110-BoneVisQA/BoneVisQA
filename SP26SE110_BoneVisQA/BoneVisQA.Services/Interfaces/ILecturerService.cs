@@ -51,6 +51,7 @@ public interface ILecturerService
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
     Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId);
+    Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId);
 
     Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
@@ -69,5 +70,8 @@ public interface ILecturerService
     Task DeleteAssignmentAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
+
+    // Expert medical case images
+    Task<bool> DeleteMedicalImageAsync(Guid imageId);
 }
 

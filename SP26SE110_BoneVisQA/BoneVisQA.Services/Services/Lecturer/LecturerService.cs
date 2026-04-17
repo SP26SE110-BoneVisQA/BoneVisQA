@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.Services;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -17,11 +18,13 @@ public class LecturerService : ILecturerService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
+    private readonly IMedicalCaseService _medicalCaseService;
 
-    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService)
+    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService, IMedicalCaseService medicalCaseService)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
+        _medicalCaseService = medicalCaseService;
     }
 
     /// <summary>
@@ -38,7 +41,7 @@ public class LecturerService : ILecturerService
         {
             DateTimeKind.Utc => dt.Value,                          // đã là UTC, giữ nguyên
             DateTimeKind.Local => dt.Value.ToUniversalTime(),       // local → UTC
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime() // unspecified → giả sử local → UTC
+            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime() // unspecified → assume local → UTC
         };
     }
 
@@ -56,7 +59,7 @@ public class LecturerService : ILecturerService
             .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
             .AnyAsync();
         if (!ownsClass)
-            throw new UnauthorizedAccessException("Giảng viên không có quyền truy cập lớp học này.");
+            throw new UnauthorizedAccessException("Lecturer does not have permission to access this class.");
     }
 
     public async Task<ClassDto> CreateClassAsync(Guid lecturerId, CreateClassRequestDto request)
@@ -257,17 +260,17 @@ public class LecturerService : ILecturerService
         await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var now = DateTime.UtcNow;
 
-        // Lấy thông tin lớp và giảng viên
+        // Get class and lecturer information
         var academicClass = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId)
             .Include(c => c.Lecturer)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Khong tim thay lop.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
-        var lecturerName = academicClass.Lecturer?.FullName ?? "Giảng viên";
+        var lecturerName = academicClass.Lecturer?.FullName ?? "Lecturer";
         var className = academicClass.ClassName;
 
-        // Tạo announcement entity
+        // Create announcement entity
         var entity = new Announcement
         {
             Id = Guid.NewGuid(),
@@ -302,7 +305,7 @@ public class LecturerService : ILecturerService
             .Include(a => a.Class)
                 .ThenInclude(c => c!.Lecturer)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Khong tim thay thong bao.");
+            ?? throw new KeyNotFoundException("Announcement not found.");
 
         entity.Title = request.Title.Trim();
         entity.Content = request.Content.Trim();
@@ -310,7 +313,7 @@ public class LecturerService : ILecturerService
         await _unitOfWork.AnnouncementRepository.UpdateAsync(entity);
         await _unitOfWork.SaveAsync();
 
-        var lecturerName = entity.Class?.Lecturer?.FullName ?? "Giảng viên";
+        var lecturerName = entity.Class?.Lecturer?.FullName ?? "Lecturer";
         var className = entity.Class?.ClassName ?? "";
         if (request.SendEmail)
             await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, entity.Title, entity.Content);
@@ -356,7 +359,7 @@ public class LecturerService : ILecturerService
         foreach (var student in enrolledStudents)
         {
             if (student == null || string.IsNullOrWhiteSpace(student.Email)) continue;
-            var studentName = student.FullName ?? "Sinh viên";
+            var studentName = student.FullName ?? "Student";
             _ = _emailService.SendAnnouncementEmailAsync(
                 student.Email,
                 studentName,
@@ -371,13 +374,13 @@ public class LecturerService : ILecturerService
     public async Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var questions = await _unitOfWork.QuizQuestionRepository
             .FindIncludeAsync(
                 q => q.QuizId == quizId,
                 q => q.Quiz,
-                q => q.Case  // ✅ thêm include Case
+                q => q.Case  // ✅ add include Case
             );
 
         return questions.Select(q => new QuizQuestionDto
@@ -436,7 +439,7 @@ public class LecturerService : ILecturerService
         if (request.ClassId != Guid.Empty)
         {
             _ = await _unitOfWork.AcademicClassRepository.GetByIdAsync(request.ClassId)
-                ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+                ?? throw new KeyNotFoundException("Class not found.");
         }
 
         var quiz = new Quiz
@@ -452,7 +455,7 @@ public class LecturerService : ILecturerService
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
-            PassingScore = request.PassingScore, // Lecturer quiz dùng thang 100 trực tiếp
+            PassingScore = request.PassingScore, // Lecturer quiz uses 100-point scale directly
             CreatedAt = now
         };
 
@@ -501,13 +504,13 @@ public class LecturerService : ILecturerService
             return false;
 
         // ============================================================
-        // IMPORTANT: KHONG xoa Quiz goc - vi quiz co the do Expert tao
-        // Quiz goc can duoc giu nguyen trong Expert Library
-        // Chi xoa lien ket voi lop (ClassQuizSession) va lich su lam bai
+        // IMPORTANT: DO NOT delete the original Quiz - the quiz may have been created by Expert
+        // The original Quiz must be kept in the Expert Library
+        // Only remove the class link (ClassQuizSession) and attempt history
         // ============================================================
 
         // 1. Remove from all class assignments (ClassQuizSession)
-        //    Chi xoa lien ket, KHONG xoa quiz goc
+        //    Only remove the link, DO NOT delete the original quiz
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
             .Where(cqs => cqs.QuizId == quizId)
             .ToListAsync();
@@ -515,7 +518,7 @@ public class LecturerService : ILecturerService
         foreach (var session in classSessions)
             _unitOfWork.Context.ClassQuizSessions.Remove(session);
 
-        // 2. Remove quiz attempts (lich su lam bai - co the xoa de giai phong du lieu)
+        // 2. Remove quiz attempts (attempt history - can be deleted to free up data)
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId)
             .ToListAsync();
@@ -523,14 +526,14 @@ public class LecturerService : ILecturerService
         foreach (var attempt in attempts)
             _unitOfWork.Context.QuizAttempts.Remove(attempt);
 
-        // 3. BO QUA: Khong xoa QuizQuestions
-        //    Vi quiz co the la cua Expert, cau hoi do Expert tao va quan ly
-        //    Neu xoa cau hoi se lam mat du lieu trong Expert Library
+        // 3. SKIP: Do not delete QuizQuestions
+        //    Because the quiz may belong to Expert, questions were created and managed by Expert
+        //    Deleting questions would lose data in the Expert Library
 
-        // 4. BO QUA: Khong xoa Quiz goc
-        //    Quiz goc (dat biet la quiz cua Expert) phai duoc giu lai
-        //    vi no con duoc su dung trong Expert Quiz Library
-        // _unitOfWork.Context.Quizzes.Remove(quiz);  // DA COMMENT - KHONG XOA
+        // 4. SKIP: Do not delete the original Quiz
+        //    The original Quiz (especially Expert's quiz) must be retained
+        //    because it is still used in the Expert Quiz Library
+        // _unitOfWork.Context.Quizzes.Remove(quiz);  // ALREADY COMMENTED - DO NOT DELETE
 
         await _unitOfWork.SaveAsync();
 
@@ -552,14 +555,14 @@ public class LecturerService : ILecturerService
     public async Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         MedicalCase? medicalCase = null;
         if (request.CaseId.HasValue)
         {
             medicalCase = await _unitOfWork.MedicalCaseRepository
                 .GetByIdAsync(request.CaseId.Value)
-                ?? throw new KeyNotFoundException("Không tìm thấy medical case.");
+                ?? throw new KeyNotFoundException("Medical case not found.");
         }
 
         var question = new QuizQuestion
@@ -599,13 +602,13 @@ public class LecturerService : ILecturerService
     public async Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request)
     {
         var entity = await _unitOfWork.QuizQuestionRepository.GetByIdAsync(questionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy câu hỏi.");
+            ?? throw new KeyNotFoundException("Question not found.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(entity.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         if (entity == null)
-            throw new KeyNotFoundException("Không tìm thấy cau hoi.");
+            throw new KeyNotFoundException("Question not found.");
 
 
         entity.QuestionText = request.QuestionText;
@@ -780,7 +783,7 @@ public class LecturerService : ILecturerService
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {
-        // Không dùng Task.WhenAll cho nhiều query trên cùng một DbContext — EF Core không thread-safe, dễ gây 500.
+        // Do not use Task.WhenAll for multiple queries on the same DbContext - EF Core is not thread-safe, may cause 500 errors.
         var studentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Select(e => e.StudentId)
@@ -845,7 +848,7 @@ public class LecturerService : ILecturerService
     public async Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request)
     {
         var classEntity = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var caseIds = request.CaseIds
             .Where(id => id != Guid.Empty)
@@ -936,7 +939,7 @@ public class LecturerService : ILecturerService
             .FindByCondition(x => x.Id == classId && x.LecturerId == lecturerId)
             .Include(x => x.Expert)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
         c.ClassName = request.ClassName;
         c.Semester = request.Semester;
         c.ExpertId = request.ExpertId;
@@ -980,7 +983,7 @@ public class LecturerService : ILecturerService
     public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId)
     {
         var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var studentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
@@ -1117,12 +1120,12 @@ public class LecturerService : ILecturerService
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == questionId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phiên hỏi đáp.");
+            ?? throw new KeyNotFoundException("Q&A session not found.");
 
         // verify class ownership
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
             .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == session.StudentId)
-            ?? throw new InvalidOperationException("Giảng viên không có quyền trả lời câu hỏi này.");
+            ?? throw new InvalidOperationException("Lecturer does not have permission to answer this question.");
 
         var answer = session.Messages
             .Where(m => m.Role == "Assistant")
@@ -1186,7 +1189,7 @@ public class LecturerService : ILecturerService
     public async Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId)
     {
         var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var enrollments = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
@@ -1324,11 +1327,11 @@ public class LecturerService : ILecturerService
         var academicClass = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var className = academicClass.ClassName ?? "";
 
-        // Tuần tự: cùng một DbContext không an toàn khi chạy nhiều query song song (Task.WhenAll).
+        // Sequential: the same DbContext is not safe when running multiple parallel queries (Task.WhenAll).
         var totalStudents = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .CountAsync(e => e.ClassId == classId);
@@ -1430,7 +1433,7 @@ public class LecturerService : ILecturerService
         var classIds = classList.Select(c => c.Id).ToList();
         var classNameMap = classList.ToDictionary(c => c.Id, c => c.ClassName ?? "");
 
-        // Tuần tự: không start ToDictionaryAsync rồi await query khác — EF DbContext không cho nhiều operation đồng thời.
+        // Sequential: do not start ToDictionaryAsync then await another query - EF DbContext does not allow multiple simultaneous operations.
         var enrollmentCounts = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .Where(e => classIds.Contains(e.ClassId))
@@ -1559,7 +1562,7 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Chỉ quiz chưa gán lớp thuộc giảng viên (hoặc legacy null). Quiz AI của sinh viên lưu CreatedByExpertId = studentId — không hiển thị ở đây.
+        // Only unassigned quizzes belonging to the lecturer (or legacy null). Student AI quizzes have CreatedByExpertId = studentId — do not display here.
         var unassignedQuizzes = await _unitOfWork.Context.Quizzes
             .Where(q => !unassignedQuizIds.Contains(q.Id)
                 && (!q.CreatedByExpertId.HasValue || q.CreatedByExpertId == lecturerId))
@@ -1580,7 +1583,7 @@ public class LecturerService : ILecturerService
             .Select(g => new { QuizId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.QuizId, x => x.Count);
 
-        // Build result list: assigned quizzes + quiz chưa gán lớp (chỉ của GV hoặc legacy CreatedByExpertId null)
+        // Build result list: assigned quizzes + unassigned quizzes (only from lecturer or legacy CreatedByExpertId null)
         var results = classQuizzes
             .Select(cq => new ClassQuizDto
             {
@@ -1597,7 +1600,7 @@ public class LecturerService : ILecturerService
             })
             .ToList();
 
-        // Quiz chưa gán lớp (đã lọc bỏ quiz AI do sinh viên tạo — CreatedByExpertId = studentId)
+        // Unassigned quizzes (filtered to exclude AI quizzes created by students — CreatedByExpertId = studentId)
         foreach (var quiz in unassignedQuizzes)
         {
             results.Add(new ClassQuizDto
@@ -1670,11 +1673,57 @@ public class LecturerService : ILecturerService
         };
     }
 
+    public async Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId)
+    {
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var questions = await _unitOfWork.QuizQuestionRepository
+            .FindByCondition(q => q.QuizId == quizId)
+            .Include(q => q.Case)
+            .OrderBy(q => q.Id) // keep order
+            .ToListAsync();
+
+        return new QuizWithQuestionsDto
+        {
+            Quiz = new QuizDto
+            {
+                Id = quiz.Id,
+                ClassId = Guid.Empty, // not needed
+                Title = quiz.Title,
+                Topic = quiz.Topic,
+                IsAiGenerated = quiz.IsAiGenerated,
+                Difficulty = quiz.Difficulty,
+                Classification = quiz.Classification,
+                OpenTime = quiz.OpenTime,
+                CloseTime = quiz.CloseTime,
+                TimeLimit = quiz.TimeLimit,
+                PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
+                CreatedAt = quiz.CreatedAt
+            },
+            Questions = questions.Select(q => new QuizQuestionDto
+            {
+                Id = q.Id,
+                QuizId = q.QuizId,
+                CaseId = q.CaseId,
+                CaseTitle = q.Case?.Title,
+                QuestionText = q.QuestionText,
+                Type = q.Type,
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                CorrectAnswer = q.CorrectAnswer,
+                ImageUrl = q.ImageUrl
+            }).ToList()
+        };
+    }
+
     public async Task<QuizDto> UpdateQuizAsync(Guid quizId, UpdateQuizRequestDto request)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
         if (quiz == null)
-            throw new KeyNotFoundException("Quiz không tồn tại.");
+            throw new KeyNotFoundException("Quiz does not exist.");
 
         quiz.Title = request.Title;
         quiz.OpenTime = ToUtc(request.OpenTime);
@@ -1755,17 +1804,17 @@ public class LecturerService : ILecturerService
     {
         var academicClass = await _unitOfWork.AcademicClassRepository
             .GetByIdAsync(classId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var quiz = await _unitOfWork.QuizRepository
             .GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var existing = await _unitOfWork.ClassQuizSessionRepository
             .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
 
-        // Idempotent: Save từ FE có thể gọi lại khi quiz đã gán (tránh 409 Conflict).
-        if (existing != null)
+            // Idempotent: Save from FE may be called again when quiz is already assigned (avoid 409 Conflict).
+            if (existing != null)
         {
             var existingQuestionCount = await _unitOfWork.Context.QuizQuestions
                 .AsNoTracking()
@@ -1832,7 +1881,7 @@ public class LecturerService : ILecturerService
                     {
                         RowNumber = 0,
                         Success = false,
-                        ErrorMessage = "Lớp không tồn tại.",
+                        ErrorMessage = "Class does not exist.",
                     },
                 },
             };
@@ -1857,7 +1906,7 @@ public class LecturerService : ILecturerService
             {
                 RowNumber = 0,
                 Success = false,
-                ErrorMessage = "File Excel không có dữ liệu (chỉ có header).",
+                        ErrorMessage = "Excel file has no data (header only).",
             });
             return result;
         }
@@ -1894,7 +1943,7 @@ public class LecturerService : ILecturerService
             if (string.IsNullOrWhiteSpace(email))
             {
                 item.Success = false;
-                item.ErrorMessage = "Email trống.";
+                item.ErrorMessage = "Email is empty.";
                 result.Results.Add(item);
                 result.FailedCount++;
                 continue;
@@ -1905,7 +1954,7 @@ public class LecturerService : ILecturerService
             if (!studentUsers.TryGetValue(emailLower, out var user))
             {
                 item.Success = false;
-                item.ErrorMessage = $"Không tìm thấy sinh viên với email '{email}'.";
+                item.ErrorMessage = $"Student not found with email '{email}'.";
                 result.Results.Add(item);
                 result.NotFoundCount++;
                 result.FailedCount++;
@@ -1915,7 +1964,7 @@ public class LecturerService : ILecturerService
             if (enrolledSet.Contains(user.Id))
             {
                 item.Success = false;
-                item.ErrorMessage = $"Sinh viên '{user.FullName}' đã có trong lớp.";
+                item.ErrorMessage = $"Student '{user.FullName}' is already in the class.";
                 result.Results.Add(item);
                 result.AlreadyEnrolledCount++;
                 result.FailedCount++;
@@ -1974,7 +2023,7 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync();
 
         if (academicClass == null)
-            throw new UnauthorizedAccessException("Bạn không có quyền sửa lớp học này.");
+            throw new UnauthorizedAccessException("You do not have permission to edit this class.");
 
         academicClass.ExpertId = expertId;
         academicClass.UpdatedAt = DateTime.UtcNow;
@@ -1995,10 +2044,10 @@ public class LecturerService : ILecturerService
 
     // ── Assignment CRUD Methods ─────────────────────────────────────────────────
 
-    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    /// <summary>Get details of an assignment by ID.</summary>
     public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
     {
-        // Thử tìm trong ClassCases (case assignment)
+        // Try to find in ClassCases (case assignment)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -2034,7 +2083,7 @@ public class LecturerService : ILecturerService
             };
         }
 
-        // Thử tìm trong ClassQuizSessions (quiz assignment)
+        // Try to find in ClassQuizSessions (quiz assignment)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Class)
@@ -2042,7 +2091,7 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         var quizTotalStudents = await _unitOfWork.Context.ClassEnrollments
             .CountAsync(e => e.ClassId == quizSession.ClassId);
@@ -2085,10 +2134,10 @@ public class LecturerService : ILecturerService
         };
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
     {
-        // Thử cập nhật ClassCase
+        // Try to update ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .Include(cc => cc.Class)
             .Include(cc => cc.Case)
@@ -2105,14 +2154,14 @@ public class LecturerService : ILecturerService
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
-        // Thử cập nhật ClassQuizSession
+        // Try to update ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .Include(cqs => cqs.Class)
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         if (request.DueDate.HasValue)
             quizSession.CloseTime = ToUtc(request.DueDate);
@@ -2133,10 +2182,10 @@ public class LecturerService : ILecturerService
         return await GetAssignmentByIdAsync(assignmentId);
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     public async Task DeleteAssignmentAsync(Guid assignmentId)
     {
-        // Thử xóa ClassCase
+        // Try to delete ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
 
@@ -2147,21 +2196,21 @@ public class LecturerService : ILecturerService
             return;
         }
 
-        // Thử xóa ClassQuizSession
+        // Try to delete ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         _unitOfWork.Context.ClassQuizSessions.Remove(quizSession);
         await _unitOfWork.SaveAsync();
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get submissions list of an assignment.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
     {
-        // Thử lấy submissions từ ClassCases (case)
+        // Try to get submissions from ClassCases (case)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -2191,12 +2240,12 @@ public class LecturerService : ILecturerService
             }).ToList();
         }
 
-        // Lấy submissions từ ClassQuizSessions (quiz)
+        // Get submissions from ClassQuizSessions (quiz)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var quizEnrollments = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -2222,7 +2271,7 @@ public class LecturerService : ILecturerService
         }).ToList();
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(
         Guid assignmentId, UpdateSubmissionsRequestDto request)
     {
@@ -2230,7 +2279,7 @@ public class LecturerService : ILecturerService
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
@@ -2247,5 +2296,10 @@ public class LecturerService : ILecturerService
 
         await _unitOfWork.SaveAsync();
         return await GetAssignmentSubmissionsAsync(assignmentId);
+    }
+
+    public async Task<bool> DeleteMedicalImageAsync(Guid imageId)
+    {
+        return await _medicalCaseService.DeleteMedicalImageAsync(imageId);
     }
 }

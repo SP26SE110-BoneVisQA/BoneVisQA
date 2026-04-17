@@ -324,8 +324,8 @@ public class StudentService : IStudentService
         {
             var annotationId = request.AnnotationId.Value;
 
-            // Validate existence and fetch authoritative coordinates (and image URL) from DB.
-            // Includes are needed so we can also derive the image URL for vision processing.
+            // Kiểm tra sự tồn tại và lấy tọa độ chính xác (và URL hình ảnh) từ DB.
+            // Cần include để có thể lấy URL hình ảnh cho xử lý vision.
             var annotations = await _unitOfWork.CaseAnnotationRepository
                 .FindIncludeAsync(a => a.Id == annotationId, a => a.Image);
 
@@ -569,7 +569,7 @@ public class StudentService : IStudentService
         var quiz = await _studentRepository.GetQuizWithQuestionsAsync(quizId);
         if (quiz == null)
         {
-            throw new InvalidOperationException("Quiz không tồn tại.");
+            throw new InvalidOperationException("Quiz does not exist.");
         }
 
         var utcNow = DateTime.UtcNow;
@@ -692,7 +692,7 @@ public class StudentService : IStudentService
             Questions = questionDtos
         };
     }
-    //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
+    //Có 2 hàm student submit question và submit quiz, hàm submit question để lưu từng câu hỏi 1, hàm submit quiz để tính điểm và kết thúc quiz
 
     //===================== phan nam =====================   
 
@@ -798,7 +798,7 @@ public class StudentService : IStudentService
     //        if (quiz == null)
     //        {
     //            await _unitOfWork.RollbackTransactionAsync();
-    //            throw new InvalidOperationException("Quiz không tồn tại.");
+    //            throw new InvalidOperationException("Quiz does not exist.");
     //        }
 
     //        var questionDict = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);

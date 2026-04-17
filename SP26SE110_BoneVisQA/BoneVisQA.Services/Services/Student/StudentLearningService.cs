@@ -739,8 +739,25 @@ public class StudentLearningService : IStudentLearningService
         var total = reviewItems.Count;
         var score = total == 0 ? 0.0 : (double)correctCount * 100 / total;
 
+        // Lấy ClassQuizSession (assignment config) cho ĐÚNG lớp của student
+        // Student có thể thuộc nhiều lớp → lấy ClassQuizSession đầu tiên tìm thấy
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        var passingScoreOverride = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Where(cqs => cqs.QuizId == attempt.QuizId && classIds.Contains(cqs.ClassId))
+            .Select(cqs => (int?)cqs.PassingScore)
+            .FirstOrDefaultAsync();
+
         var quizForPass = attempt.Quiz;
-        var normalizedPassingScore = NormalizePassingScore(quizForPass?.PassingScore, quizForPass?.IsAiGenerated ?? false);
+        var normalizedPassingScore = NormalizePassingScore(
+            passingScoreOverride ?? quizForPass?.PassingScore,
+            quizForPass?.IsAiGenerated ?? false);
+
         var passed = quizForPass == null || !normalizedPassingScore.HasValue
             || score >= normalizedPassingScore.Value;
 
@@ -752,6 +769,7 @@ public class StudentLearningService : IStudentLearningService
             TotalQuestions = total,
             CorrectAnswers = correctCount,
             Passed = passed,
+            PassingScore = passingScoreOverride ?? quizForPass?.PassingScore,
             Questions = reviewItems,
         };
     }

@@ -136,6 +136,22 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
+        [HttpDelete("images/{imageId:guid}")]
+        public async Task<IActionResult> DeleteImage([FromRoute] Guid imageId)
+        {
+            var deleted = await _medicalcaseService.DeleteMedicalImageAsync(imageId);
+            if (!deleted)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = "Medical image not found."
+                });
+            }
+            return Ok(new { message = "Medical image deleted successfully." });
+        }
+
         /// <summary>Upload quiz question image to Supabase storage</summary>
         [HttpPost("quiz-questions/upload-image")]
         [RequestSizeLimit(10485760)]

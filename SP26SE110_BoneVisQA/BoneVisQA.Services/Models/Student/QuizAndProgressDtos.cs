@@ -174,6 +174,7 @@ public class QuizAttemptReviewDto
     public int TotalQuestions { get; set; }
     public int CorrectAnswers { get; set; }
     public bool Passed { get; set; }
+    public int? PassingScore { get; set; }  // ← Thêm
     public IReadOnlyList<QuestionReviewItemDto> Questions { get; set; } = Array.Empty<QuestionReviewItemDto>();
 }
 
