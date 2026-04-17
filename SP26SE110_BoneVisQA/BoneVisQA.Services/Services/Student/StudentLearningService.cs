@@ -81,9 +81,10 @@ public class StudentLearningService : IStudentLearningService
         if (candidateQuizzes.Count > 0)
         {
             var quiz = candidateQuizzes[Random.Shared.Next(candidateQuizzes.Count)];
-            var shuffleSetting = quiz.ClassQuizSessions
-                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId))?.ShuffleQuestions ?? false;
-            return await CreateSessionFromQuizAsync(quiz, studentId, shuffleSetting);
+            var classSession = quiz.ClassQuizSessions
+                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId));
+            var shuffleSetting = classSession?.ShuffleQuestions ?? false;
+            return await CreateSessionFromQuizAsync(quiz, studentId, shuffleSetting, classSession);
         }
 
         // 3. Fallback cuối: Tìm bất kỳ quiz nào (AI hoặc lecturer)
@@ -102,9 +103,10 @@ public class StudentLearningService : IStudentLearningService
 
         if (anyQuiz != null)
         {
-            var shuffleSetting = anyQuiz.ClassQuizSessions
-                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId))?.ShuffleQuestions ?? false;
-            return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting);
+            var classSession = anyQuiz.ClassQuizSessions
+                .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId));
+            var shuffleSetting = classSession?.ShuffleQuestions ?? false;
+            return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting, classSession);
         }
 
         throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
@@ -131,7 +133,8 @@ public class StudentLearningService : IStudentLearningService
     private async Task<QuizSessionDto> CreateSessionFromQuizAsync(
         BoneVisQA.Repositories.Models.Quiz quiz,
         Guid studentId,
-        bool shuffleQuestions = false)
+        bool shuffleQuestions = false,
+        ClassQuizSession? classSession = null)
     {
         var attempt = await _unitOfWork.Context.QuizAttempts
             .Include(a => a.StudentQuizAnswers)
@@ -167,7 +170,7 @@ public class StudentLearningService : IStudentLearningService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
-            TimeLimit = quiz.TimeLimit,
+            TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
             Questions = questions
                 .Select(q => new StudentQuizQuestionDto
                 {

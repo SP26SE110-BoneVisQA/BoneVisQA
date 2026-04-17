@@ -39,10 +39,23 @@ public class LecturerService : ILecturerService
         if (!dt.HasValue) return null;
         return dt.Value.Kind switch
         {
-            DateTimeKind.Utc => dt.Value,                          // đã là UTC, giữ nguyên
-            DateTimeKind.Local => dt.Value.ToUniversalTime(),       // local → UTC
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime() // unspecified → assume local → UTC
+            DateTimeKind.Utc => dt.Value,
+            DateTimeKind.Local => dt.Value.ToUniversalTime(),
+            // Unspecified: assume it's a local datetime string (e.g., from datetime-local input)
+            // Parse as Vietnam time (UTC+7) and convert to UTC
+            _ => ParseLocalToUtc(dt.Value, 7) // Treat as UTC+7 (Vietnam)
         };
+    }
+
+    /// <summary>
+    /// Parse a DateTime with Kind=Unspecified as local time in the given timezone offset hours,
+    /// then convert to UTC.
+    /// </summary>
+    private static DateTime ParseLocalToUtc(DateTime dt, int utcOffsetHours)
+    {
+        var localDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        var offset = TimeSpan.FromHours(utcOffsetHours);
+        return DateTime.SpecifyKind(localDateTime.Subtract(offset), DateTimeKind.Utc);
     }
 
     /// <summary>

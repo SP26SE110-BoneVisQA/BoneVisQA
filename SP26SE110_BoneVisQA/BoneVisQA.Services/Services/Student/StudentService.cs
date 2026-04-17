@@ -687,7 +687,7 @@ public class StudentService : IStudentService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
-            TimeLimit = quiz.TimeLimit,
+            TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
             CloseTime = classSession?.CloseTime ?? quiz.CloseTime,
             Questions = questionDtos
         };

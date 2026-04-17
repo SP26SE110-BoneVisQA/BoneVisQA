@@ -22,8 +22,24 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             DateTimeKind.Utc => dt.Value,
             DateTimeKind.Local => dt.Value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime()
+            // Unspecified: assume it's a local datetime string (e.g., from datetime-local input)
+            // Parse as Vietnam time (UTC+7) and convert to UTC
+            _ => ParseLocalToUtc(dt.Value, 7) // Treat as UTC+7 (Vietnam)
         };
+    }
+
+    /// <summary>
+    /// Parse a DateTime with Kind=Unspecified as local time in the given timezone offset hours,
+    /// then convert to UTC.
+    /// </summary>
+    private static DateTime ParseLocalToUtc(DateTime dt, int utcOffsetHours)
+    {
+        // Create a DateTime in the specified timezone offset
+        var localDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        // Treat as local time in UTC+offset timezone
+        var offset = TimeSpan.FromHours(utcOffsetHours);
+        // Convert: subtract offset to get UTC
+        return DateTime.SpecifyKind(localDateTime.Subtract(offset), DateTimeKind.Utc);
     }
 
     public LecturerAssignmentService(
