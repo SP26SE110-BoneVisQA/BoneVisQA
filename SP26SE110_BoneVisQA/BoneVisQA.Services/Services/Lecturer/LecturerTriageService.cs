@@ -1,6 +1,7 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Exceptions;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Lecturer;
 using System.Text.Json;
@@ -21,8 +22,13 @@ public class LecturerTriageService : ILecturerTriageService
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Student)
-            .Include(s => s.Case)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
             .Include(s => s.Messages)
+                .ThenInclude(m => m.Citations)
+                    .ThenInclude(c => c.Chunk)
+                        .ThenInclude(ch => ch.Doc)
             .FirstOrDefaultAsync(s => s.Id == sessionId)
             ?? throw new KeyNotFoundException("The Q&A session to escalate was not found.");
 
@@ -40,6 +46,8 @@ public class LecturerTriageService : ILecturerTriageService
 
         if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
             throw new ConflictException("This Q&A session has already been escalated.");
+        if (!CanTransitionFrom(session.Status, "EscalatedToExpert"))
+            throw new ConflictException($"Cannot escalate a session from status '{session.Status}'.");
 
         session.Status = "EscalatedToExpert";
         session.ExpertId = classEnrollment.Class.ExpertId.Value;
@@ -56,6 +64,7 @@ public class LecturerTriageService : ILecturerTriageService
             .OrderBy(m => m.CreatedAt)
             .LastOrDefault();
         var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session);
+        EnsureSelectedPairConsistency(session, targetUser, targetAssistant);
 
         return new EscalatedAnswerDto
         {
@@ -76,7 +85,13 @@ public class LecturerTriageService : ILecturerTriageService
             AiConfidenceScore = targetAssistant?.AiConfidenceScore ?? latestAssistant?.AiConfidenceScore,
             ClassId = classEnrollment.ClassId,
             ClassName = classEnrollment.Class?.ClassName ?? string.Empty,
-            ReviewNote = request?.ReviewNote
+            ReviewNote = request?.ReviewNote,
+            ImageUrl = ResolveSessionImageUrl(session),
+            CustomCoordinates = targetUser?.Coordinates,
+            RequestedReviewMessageId = session.RequestedReviewMessageId,
+            SelectedUserMessageId = targetUser?.Id,
+            SelectedAssistantMessageId = targetAssistant?.Id,
+            Citations = ResolveLecturerCitations(targetAssistant)
         };
     }
 
@@ -98,6 +113,8 @@ public class LecturerTriageService : ILecturerTriageService
 
         if (classEnrollment == null)
             throw new InvalidOperationException("The lecturer does not have permission to reject this Q&A session.");
+        if (!CanTransitionFrom(session.Status, "Rejected"))
+            throw new ConflictException($"Cannot reject a session from status '{session.Status}'.");
 
         session.Status = "Rejected";
         session.LecturerId = lecturerId;
@@ -152,5 +169,61 @@ public class LecturerTriageService : ILecturerTriageService
             .ThenByDescending(m => m.Id)
             .FirstOrDefault();
         return (user, assistant);
+    }
+
+    private static void EnsureSelectedPairConsistency(VisualQASession session, QAMessage? user, QAMessage? assistant)
+    {
+        if (!session.RequestedReviewMessageId.HasValue)
+            return;
+
+        if (assistant == null || assistant.Id != session.RequestedReviewMessageId.Value || user == null)
+            throw new ConflictException("Cannot escalate this session because the selected review pair is inconsistent.");
+    }
+
+    private static IReadOnlyList<BoneVisQA.Services.Models.VisualQA.CitationItemDto> ResolveLecturerCitations(QAMessage? assistantMessage)
+    {
+        if (assistantMessage == null)
+            return Array.Empty<BoneVisQA.Services.Models.VisualQA.CitationItemDto>();
+
+        var fromJson = VisualQaCitationMetadataBuilder.DeserializeMany(assistantMessage.CitationsJson);
+        if (fromJson.Count > 0)
+            return fromJson.Take(5).ToList();
+
+        return assistantMessage.Citations
+            .OrderBy(c => c.Chunk?.ChunkOrder ?? int.MaxValue)
+            .ThenBy(c => c.Id)
+            .Select(c => VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk))
+            .Take(5)
+            .ToList();
+    }
+
+    private static string? ResolveSessionImageUrl(VisualQASession session)
+    {
+        if (!string.IsNullOrWhiteSpace(session.CustomImageUrl))
+            return session.CustomImageUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(session.Image?.ImageUrl))
+            return session.Image.ImageUrl.Trim();
+        return session.Case?.MedicalImages?
+            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(m => m.Id)
+            .Select(m => m.ImageUrl)
+            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+    }
+
+    private static bool CanTransitionFrom(string currentStatus, string targetStatus)
+    {
+        if (string.Equals(targetStatus, "EscalatedToExpert", StringComparison.Ordinal))
+        {
+            return string.Equals(currentStatus, "PendingExpertReview", StringComparison.Ordinal)
+                   || string.Equals(currentStatus, "Active", StringComparison.Ordinal);
+        }
+
+        if (string.Equals(targetStatus, "Rejected", StringComparison.Ordinal))
+        {
+            return !string.Equals(currentStatus, "ExpertApproved", StringComparison.Ordinal)
+                   && !string.Equals(currentStatus, "EscalatedToExpert", StringComparison.Ordinal);
+        }
+
+        return true;
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
@@ -44,6 +45,10 @@ public class LecturerTriageRowDto
     public string? AnnotationCoordinates { get; set; }
     public string? CustomCoordinates { get; set; }
     public string? CustomImageUrl { get; set; }
+    public Guid? RequestedReviewMessageId { get; set; }
+    public Guid? SelectedUserMessageId { get; set; }
+    public Guid? SelectedAssistantMessageId { get; set; }
+    public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
 }
 
 /// <summary>Full detail of a single student question for the lectuer to view and respond.</summary>
@@ -97,6 +102,8 @@ public class RespondToQuestionRequestDto
     public string? StructuredDiagnosis { get; set; }
     public List<string>? DifferentialDiagnoses { get; set; }
     public bool Approve { get; set; } = false;
+    /// <summary>Optional explicit decision. Supported values: approve_and_escalate, approve_finalize, hold.</summary>
+    public string? Decision { get; set; }
 }
 
 public class LecturerAnswerDto
@@ -154,4 +161,10 @@ public class EscalatedAnswerDto
     public Guid? ClassId { get; set; }
     public string ClassName { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? CustomCoordinates { get; set; }
+    public Guid? RequestedReviewMessageId { get; set; }
+    public Guid? SelectedUserMessageId { get; set; }
+    public Guid? SelectedAssistantMessageId { get; set; }
+    public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
 }

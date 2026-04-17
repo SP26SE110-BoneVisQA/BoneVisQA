@@ -34,11 +34,11 @@ public interface ILecturerService
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
-    Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId);
+    Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId, string? source = null);
     Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId);
     Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request);
     Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId);
-    Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId);
+    Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId, string? source = null);
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
     Task<List<ClassAssignmentDto>> GetClassAssignmentsAsync(Guid classId);
     Task<List<ClassAssignmentDto>> GetAllAssignmentsForLecturerAsync(Guid lecturerId);

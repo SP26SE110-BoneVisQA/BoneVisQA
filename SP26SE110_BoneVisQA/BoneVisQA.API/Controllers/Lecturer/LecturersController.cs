@@ -589,11 +589,26 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>
     [HttpGet("triage")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId, [FromQuery] string? source = null)
     {
         try
         {
-            var result = await _lecturerService.GetTriageListAsync(classId);
+            var result = await _lecturerService.GetTriageListAsync(classId, source);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Visual QA only triage list (exclude Case QA rows) for deterministic testing.</summary>
+    [HttpGet("triage/visual-qa")]
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList([FromQuery] Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetTriageListAsync(classId, "visual-qa");
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -628,6 +643,9 @@ public class LecturersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            if (ex.Message.StartsWith("Cannot ", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = ex.Message });
+
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -647,11 +665,19 @@ public class LecturersController : ControllerBase
         }
     }
 
+    /// <param name="source">Optional: <c>case-qa</c> (default when omitted), <c>visual-qa</c>, or <c>all</c> to merge case + Visual QA rows (Visual QA rows mirror GET triage).</param>
     [HttpGet("classes/{classId:guid}/questions")]
-    public async Task<ActionResult<IReadOnlyList<LectStudentQuestionDto>>> GetStudentQuestions(Guid classId, [FromQuery] Guid? caseId, [FromQuery] Guid? studentId)
+    public async Task<ActionResult<IReadOnlyList<LectStudentQuestionDto>>> GetStudentQuestions(Guid classId, [FromQuery] Guid? caseId, [FromQuery] Guid? studentId, [FromQuery] string? source = null)
     {
-        var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId);
-        return Ok(result);
+        try
+        {
+            var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId, source);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     #endregion
