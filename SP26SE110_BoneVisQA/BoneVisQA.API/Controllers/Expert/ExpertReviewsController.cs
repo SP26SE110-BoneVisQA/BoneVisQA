@@ -110,6 +110,10 @@ public class ExpertReviewsController : ControllerBase
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{sessionId:guid}/respond")]
@@ -138,6 +142,10 @@ public class ExpertReviewsController : ControllerBase
             return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
                 ? BadRequest(new { message = ex.Message })
                 : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
         }
     }
 
@@ -177,6 +185,7 @@ public class ExpertReviewsController : ControllerBase
     /// Flags a retrieved document chunk as low quality for later knowledge base review.
     /// </summary>
     [HttpPost("chunks/{chunkId:guid}/flag")]
+    [HttpPost("~/api/expert/documents/chunks/{chunkId:guid}/flag")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

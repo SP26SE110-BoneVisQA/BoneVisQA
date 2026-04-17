@@ -81,6 +81,9 @@ public class ExpertEscalatedAnswerDto
 
     /// <summary>Normalized ROI JSON on <c>student_questions.custom_coordinates</c>.</summary>
     public string? CustomCoordinates { get; set; }
+    public Guid? RequestedReviewMessageId { get; set; }
+    public Guid? SelectedUserMessageId { get; set; }
+    public Guid? SelectedAssistantMessageId { get; set; }
 }
 
 // Expert Dashboard DTOs

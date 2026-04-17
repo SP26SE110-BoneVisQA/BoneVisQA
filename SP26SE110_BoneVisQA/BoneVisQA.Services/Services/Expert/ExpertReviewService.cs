@@ -78,8 +78,31 @@ public class ExpertReviewService : IExpertReviewService
                 .OrderBy(m => m.CreatedAt)
                 .ThenBy(m => m.Id)
                 .ToList();
-            var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
-            var latestAssistant = orderedMessages.LastOrDefault(m => m.Role == "Assistant");
+            var (userMessage, latestAssistant) = ResolveRequestedReviewPair(s, orderedMessages);
+        if (s.RequestedReviewMessageId.HasValue &&
+            (latestAssistant == null || latestAssistant.Id != s.RequestedReviewMessageId.Value || userMessage == null))
+        {
+            return new ExpertEscalatedAnswerDto
+            {
+                AnswerId = s.Id,
+                QuestionId = s.Id,
+                StudentId = s.StudentId,
+                StudentName = s.Student?.FullName ?? string.Empty,
+                StudentEmail = s.Student?.Email ?? string.Empty,
+                CaseId = s.CaseId,
+                CaseTitle = s.Case?.Title ?? string.Empty,
+                QuestionText = string.Empty,
+                CurrentAnswerText = "Selected review pair is inconsistent. Please re-request review from student flow.",
+                Status = s.Status,
+                EscalatedById = s.LecturerId,
+                EscalatedAt = s.UpdatedAt ?? s.CreatedAt,
+                ClassId = enrollment?.ClassId,
+                ClassName = enrollment?.Class?.ClassName ?? string.Empty,
+                RequestedReviewMessageId = s.RequestedReviewMessageId,
+                SelectedUserMessageId = null,
+                SelectedAssistantMessageId = null
+            };
+        }
 
             return new ExpertEscalatedAnswerDto
             {
@@ -106,7 +129,10 @@ public class ExpertReviewService : IExpertReviewService
                 PromotedCaseId = s.PromotedCaseId,
                 Citations = MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
                 ImageUrl = ResolveSessionImageUrl(s),
-                CustomCoordinates = userMessage?.Coordinates
+                CustomCoordinates = userMessage?.Coordinates,
+                RequestedReviewMessageId = s.RequestedReviewMessageId,
+                SelectedUserMessageId = userMessage?.Id,
+                SelectedAssistantMessageId = latestAssistant?.Id
             };
         }).ToList();
     }
@@ -139,6 +165,8 @@ public class ExpertReviewService : IExpertReviewService
 
         if (enrollment == null)
             throw new InvalidOperationException("The expert does not have permission to respond to this Q&A session.");
+        if (!CanTransitionFrom(session.Status, "Active"))
+            throw new ConflictException($"Cannot respond to a session from status '{session.Status}'.");
 
         var now = DateTime.UtcNow;
         var expertMessage = new QAMessage
@@ -162,6 +190,13 @@ public class ExpertReviewService : IExpertReviewService
             .ThenBy(m => m.Id)
             .ToList();
         var userMessage = ResolveRequestedReviewQuestion(session, orderedMessages);
+        if (userMessage == null)
+            throw new InvalidOperationException("The selected student question could not be resolved for this review session.");
+        if (session.RequestedReviewMessageId.HasValue &&
+            !orderedMessages.Any(m => m.Role == "Assistant" && m.Id == session.RequestedReviewMessageId.Value))
+        {
+            throw new ConflictException("Cannot respond because the selected review assistant turn is inconsistent.");
+        }
 
         return new ExpertEscalatedAnswerDto
         {
@@ -188,7 +223,10 @@ public class ExpertReviewService : IExpertReviewService
             PromotedCaseId = session.PromotedCaseId,
             Citations = new List<ExpertCitationDto>(),
             ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = userMessage?.Coordinates
+            CustomCoordinates = userMessage?.Coordinates,
+            RequestedReviewMessageId = session.RequestedReviewMessageId,
+            SelectedUserMessageId = userMessage?.Id,
+            SelectedAssistantMessageId = session.RequestedReviewMessageId
         };
     }
 
@@ -206,6 +244,8 @@ public class ExpertReviewService : IExpertReviewService
 
         if (enrollment == null)
             throw new InvalidOperationException("The expert does not have permission to approve this Q&A session.");
+        if (!CanTransitionFrom(session.Status, "ExpertApproved"))
+            throw new ConflictException($"Cannot approve a session from status '{session.Status}'.");
 
         session.Status = "ExpertApproved";
         session.ExpertId = expertId;
@@ -351,6 +391,14 @@ public class ExpertReviewService : IExpertReviewService
             throw new ConflictException("Only sessions escalated by lecturers can be processed here.");
 
         var now = DateTime.UtcNow;
+        var selectedQuestion = ResolveRequestedReviewQuestion(session, session.Messages);
+        if (selectedQuestion == null)
+            throw new InvalidOperationException("The selected student question could not be resolved for this review session.");
+        if (session.RequestedReviewMessageId.HasValue &&
+            !session.Messages.Any(m => m.Role == "Assistant" && m.Id == session.RequestedReviewMessageId.Value))
+        {
+            throw new ConflictException("Cannot resolve because the selected review assistant turn is inconsistent.");
+        }
         var expertMessage = new QAMessage
         {
             Id = Guid.NewGuid(),
@@ -407,12 +455,7 @@ public class ExpertReviewService : IExpertReviewService
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.Id)
             .ToList();
-        var userMessage = orderedMessages.FirstOrDefault(m => m.Role == "User");
-        var latestAssistant = orderedMessages
-            .Where(m => m.Role == "Assistant")
-            .OrderByDescending(m => m.CreatedAt)
-            .ThenByDescending(m => m.Id)
-            .FirstOrDefault();
+        var (userMessage, latestAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
 
         return new ExpertEscalatedAnswerDto
         {
@@ -439,7 +482,10 @@ public class ExpertReviewService : IExpertReviewService
             PromotedCaseId = session.PromotedCaseId,
             Citations = MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
             ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = userMessage?.Coordinates
+            CustomCoordinates = userMessage?.Coordinates,
+            RequestedReviewMessageId = session.RequestedReviewMessageId,
+            SelectedUserMessageId = userMessage?.Id,
+            SelectedAssistantMessageId = latestAssistant?.Id
         };
     }
 
@@ -461,6 +507,30 @@ public class ExpertReviewService : IExpertReviewService
             .OrderByDescending(m => m.CreatedAt)
             .ThenByDescending(m => m.Id)
             .FirstOrDefault();
+    }
+
+    private static (QAMessage? User, QAMessage? Assistant) ResolveRequestedReviewPair(VisualQASession session, IEnumerable<QAMessage> orderedMessages)
+    {
+        var messages = orderedMessages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+
+        var user = ResolveRequestedReviewQuestion(session, messages);
+        var assistant = session.RequestedReviewMessageId.HasValue
+            ? messages.FirstOrDefault(m => m.Role == "Assistant" && m.Id == session.RequestedReviewMessageId.Value)
+            : messages.LastOrDefault(m => m.Role == "Assistant");
+
+        if (assistant == null)
+        {
+            assistant = messages
+                .Where(m => m.Role == "Assistant")
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .FirstOrDefault();
+        }
+
+        return (user, assistant);
     }
 
     public async Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request)
@@ -487,6 +557,9 @@ public class ExpertReviewService : IExpertReviewService
         if (!chunk.IsFlagged)
         {
             chunk.IsFlagged = true;
+            chunk.FlagReason = request.Reason.Trim();
+            chunk.FlaggedByExpertId = expertId;
+            chunk.FlaggedAt = DateTime.UtcNow;
             await _unitOfWork.DocumentChunkRepository.UpdateAsync(chunk);
             await _unitOfWork.SaveAsync();
         }
@@ -558,5 +631,17 @@ public class ExpertReviewService : IExpertReviewService
             return null;
 
         return filePath;
+    }
+
+    private static bool CanTransitionFrom(string currentStatus, string targetStatus)
+    {
+        if (string.Equals(targetStatus, "ExpertApproved", StringComparison.Ordinal))
+            return string.Equals(currentStatus, "EscalatedToExpert", StringComparison.Ordinal);
+
+        if (string.Equals(targetStatus, "Active", StringComparison.Ordinal))
+            return string.Equals(currentStatus, "EscalatedToExpert", StringComparison.Ordinal)
+                   || string.Equals(currentStatus, "ExpertApproved", StringComparison.Ordinal);
+
+        return true;
     }
 }
