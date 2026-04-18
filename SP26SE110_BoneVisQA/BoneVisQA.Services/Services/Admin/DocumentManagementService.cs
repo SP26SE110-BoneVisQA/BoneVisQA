@@ -114,7 +114,13 @@ namespace BoneVisQA.Services.Services.Admin
             var doc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy tài liệu.");
 
-            doc.Version += 1;
+            // Increment semantic version string
+            var versionParts = doc.Version.Split('.');
+            if (versionParts.Length == 3 && int.TryParse(versionParts[2], out var patch))
+            {
+                versionParts[2] = (patch + 1).ToString();
+                doc.Version = string.Join(".", versionParts);
+            }
             doc.IsOutdated = false;
 
             await _unitOfWork.DocumentRepository.UpdateAsync(doc);

@@ -264,7 +264,7 @@ namespace BoneVisQA.Services.Services.Expert
                     CaseTitle = caseTitle,
 
                     QuestionText = q.QuestionText,
-                    Type = q.Type,
+                    Type = q.Type?.ToString(),
 
                     OptionA = q.OptionA,
                     OptionB = q.OptionB,
@@ -291,12 +291,16 @@ namespace BoneVisQA.Services.Services.Expert
                     ?? throw new KeyNotFoundException("Không tìm thấy medical case.");
             }
 
+            var questionType = string.IsNullOrEmpty(request.Type)
+                ? QuestionType.MultipleChoice
+                : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+
             var question = new QuizQuestion
             {
                 QuizId = quizId,
                 CaseId = request.CaseId,
                 QuestionText = request.QuestionText,
-                Type = request.Type,
+                Type = questionType,
                 OptionA = request.OptionA,
                 OptionB = request.OptionB,
                 OptionC = request.OptionC,
@@ -316,7 +320,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CaseId = question.CaseId,
                 CaseTitle = medicalCase?.Title,
                 QuestionText = question.QuestionText,
-                Type = question.Type,
+                Type = question.Type?.ToString(),
                 OptionA = question.OptionA,
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
@@ -354,7 +358,10 @@ namespace BoneVisQA.Services.Services.Expert
             }
 
             question.QuestionText = update.QuestionText;
-            question.Type = update.Type;
+            var questionType = string.IsNullOrEmpty(update.Type)
+                ? QuestionType.MultipleChoice
+                : Enum.TryParse<QuestionType>(update.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+            question.Type = questionType;
 
             question.OptionA = update.OptionA;
             question.OptionB = update.OptionB;
@@ -384,7 +391,7 @@ namespace BoneVisQA.Services.Services.Expert
                 QuestionText = question.QuestionText,
                 QuizTitle = quizForResponse?.Title,
                 CaseTitle = caseTitle,
-                Type = question.Type,
+                Type = question.Type?.ToString(),
                 CorrectAnswer = question.CorrectAnswer,
                 OptionA = question.OptionA,
                 OptionB = question.OptionB,
@@ -683,6 +690,12 @@ namespace BoneVisQA.Services.Services.Expert
             query = query.Where(q => q.CreatedByExpertId != null);
 
             // ============================================
+            // BƯỚC 1.5: Lọc ra quiz được tạo thủ công bởi Expert (không phải AI)
+            // Chỉ hiển thị quiz do Expert tạo thực tế, không phải quiz AI
+            // ============================================
+            query = query.Where(q => q.IsAiGenerated == false);
+
+            // ============================================
             // BƯỚC 2: Áp dụng các bộ lọc tùy chọn
             // ============================================
             if (!string.IsNullOrWhiteSpace(topic))
@@ -768,11 +781,13 @@ namespace BoneVisQA.Services.Services.Expert
                 throw new KeyNotFoundException("Không tìm thấy quiz.");
 
             // ============================================
-            // BƯỚC 1: Kiểm tra quiz có phải do Expert tạo không
-            // Chỉ cho phép xem câu hỏi từ quiz của Expert
+            // BƯỚC 1: Kiểm tra quiz có phải do Expert tạo và KHÔNG PHẢI AI không
+            // Chỉ cho phép xem câu hỏi từ quiz của Expert (không phải quiz AI)
             // ============================================
             if (quiz.CreatedByExpertId == null)
                 throw new InvalidOperationException("Chỉ có thể xem câu hỏi từ quiz của Expert.");
+            if (quiz.IsAiGenerated)
+                throw new InvalidOperationException("Quiz này được tạo bởi AI và không nằm trong thư viện Expert.");
 
             // ============================================
             // BƯỚC 2: Lấy tất cả câu hỏi trong quiz
@@ -801,7 +816,7 @@ namespace BoneVisQA.Services.Services.Expert
                 {
                     QuestionId = q.Id,
                     QuestionText = q.QuestionText,
-                    Type = q.Type,
+                    Type = q.Type?.ToString(),
                     OptionA = q.OptionA,
                     OptionB = q.OptionB,
                     OptionC = q.OptionC,

@@ -395,6 +395,38 @@ public class LecturersController : ControllerBase
             return NotFound(new { message = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Get quizzes created by the lecturer that are NOT assigned to any class.
+    /// Used for "My Quizzes" tab.
+    /// </summary>
+    [HttpGet("quizzes/my")]
+    public async Task<ActionResult<IReadOnlyList<QuizDto>>> GetMyQuizzes()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetUnassignedLecturerQuizzesAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get all quiz assignments (ClassQuizSession) for lecturer's classes.
+    /// Includes both lecturer-created and expert library quizzes that have been assigned.
+    /// Used for "Assigned Quizzes" tab.
+    /// </summary>
+    [HttpGet("quizzes/assigned")]
+    public async Task<ActionResult<IReadOnlyList<AssignedQuizDto>>> GetAssignedQuizzes()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetAssignedQuizzesAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
     #endregion
 
     #region AI Quiz Management

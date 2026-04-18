@@ -25,8 +25,20 @@ public partial class Document
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
+    [Column("updated_at")]
+    public DateTime? UpdatedAt { get; set; }
+
     [Column("version")]
-    public int Version { get; set; } = 1;
+    public string Version { get; set; } = "1.0.0";
+
+    [Column("total_pages")]
+    public int TotalPages { get; set; } = 0;
+
+    [Column("current_page_indexing")]
+    public int? CurrentPageIndexing { get; set; } = 0;
+
+    [Column("total_chunks")]
+    public int? TotalChunks { get; set; } = 0;
 
     [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
@@ -40,6 +52,15 @@ public partial class Document
     [Column("content_hash")]
     [StringLength(64)]
     public string? ContentHash { get; set; }
+
+    [Column("pending_reindex_path")]
+    public string? PendingReindexPath { get; set; }
+
+    [Column("pending_reindex_hash")]
+    public string? PendingReindexHash { get; set; }
+
+    [Column("pending_target_version")]
+    public string? PendingTargetVersion { get; set; }
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]

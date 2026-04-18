@@ -208,8 +208,14 @@ public class QuestionWithAnswerDto
     public string? OptionD { get; set; }
     public string? CorrectAnswer { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public bool? IsCorrect { get; set; }
     public Guid AnswerId { get; set; }
+    public int MaxScore { get; set; } = 1;
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool IsGraded { get; set; } = false;
+    public string? ReferenceAnswer { get; set; }
 }
 
 /// <summary>Request chỉnh sửa điểm / câu trả lời của một quiz attempt.</summary>
@@ -228,6 +234,9 @@ public class UpdateAnswerDto
     public Guid AnswerId { get; set; }
     public string? StudentAnswer { get; set; }
     public bool? IsCorrect { get; set; }
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool? IsGraded { get; set; }
 }
 
 // ── Assignment CRUD DTOs ───────────────────────────────────────────────────────

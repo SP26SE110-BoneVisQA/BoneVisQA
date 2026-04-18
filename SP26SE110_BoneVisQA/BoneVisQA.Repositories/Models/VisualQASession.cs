@@ -44,6 +44,14 @@ public partial class VisualQASession
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
 
+    // ── FK: session được promoted từ case nào (nếu có) ────────────────────────────────────────
+    [Column("promoted_case_id")]
+    public Guid? PromotedCaseId { get; set; }
+
+    [ForeignKey("PromotedCaseId")]
+    [InverseProperty("PromotedFromSessions")]
+    public virtual MedicalCase? PromotedCase { get; set; }
+
     [ForeignKey("StudentId")]
     [InverseProperty("VisualQASessions")]
     public virtual User Student { get; set; } = null!;

@@ -31,6 +31,12 @@ public class QuizDto
     public int? PassingScore { get; set; }
 
     public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// True nếu quiz này từ Expert Library (CreatedByExpertId != null và != lecturer hiện tại).
+    /// Lecturer có thể xem và gán vào lớp, nhưng KHÔNG được sửa/xóa câu hỏi.
+    /// </summary>
+    public bool IsFromExpertLibrary { get; set; }
 }
 
 // Update Quiz Request Dto — dùng JsonPropertyName để nhận cả PascalCase (BE) lẫn camelCase (FE)
@@ -111,6 +117,12 @@ public class CreateQuizQuestionDto
 
     [JsonPropertyName("imageUrl")]
     public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("referenceAnswer")]
+    public string? ReferenceAnswer { get; set; }
+
+    [JsonPropertyName("maxScore")]
+    public int MaxScore { get; set; } = 1;
 }
 
 // UpdateQuizsQuestionRequestDto - For updating questions (expert style)
@@ -139,6 +151,12 @@ public class UpdateQuizsQuestionRequestDto
 
     [JsonPropertyName("imageUrl")]
     public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("referenceAnswer")]
+    public string? ReferenceAnswer { get; set; }
+
+    [JsonPropertyName("maxScore")]
+    public int MaxScore { get; set; } = 1;
 }
 
 // UpdateQuizsQuestionResponseDto - Response for updating questions
@@ -153,6 +171,21 @@ public class UpdateQuizsQuestionResponseDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? ImageUrl { get; set; }
+}
+
+public class AssignedQuizDto
+{
+    public Guid AssignmentId { get; set; } // ClassQuizSession.Id
+    public Guid ClassId { get; set; }
+    public Guid QuizId { get; set; }
+    public string? QuizName { get; set; }
+    public string? ClassName { get; set; }
+    public string? Topic { get; set; }
+    public DateTime? AssignedAt { get; set; }
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int QuestionCount { get; set; }
+    public bool IsFromExpertLibrary { get; set; }
 }
 
 // QuizQuestionDto - For quiz questions with individual options
@@ -171,6 +204,8 @@ public class QuizQuestionDto
     public string? OptionD { get; set; }
     public string? CorrectAnswer { get; set; }
     public string? ImageUrl { get; set; }
+    public string? ReferenceAnswer { get; set; }
+    public int MaxScore { get; set; } = 1;
 }
 
 // QuizScoreResultDto - Used for quiz score calculation

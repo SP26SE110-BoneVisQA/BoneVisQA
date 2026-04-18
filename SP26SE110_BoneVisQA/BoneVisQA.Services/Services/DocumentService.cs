@@ -73,7 +73,7 @@ public class DocumentService : IDocumentService
             IndexingStatus = InternalProcessingStatus,
             IndexingProgress = 0,
             ContentHash = contentHash,
-            Version = 1,
+            Version = "1.0.0",
             IsOutdated = false,
             CreatedAt = DateTime.UtcNow
         };
@@ -164,7 +164,17 @@ public class DocumentService : IDocumentService
 
         document.IndexingStatus = InternalProcessingStatus;
         document.IndexingProgress = 0;
-        document.Version += 1;
+        // Increment semantic version string (e.g., "1.0.0" -> "1.0.1")
+        var versionParts = document.Version.Split('.');
+        if (versionParts.Length == 3 && int.TryParse(versionParts[2], out var patch))
+        {
+            versionParts[2] = (patch + 1).ToString();
+            document.Version = string.Join(".", versionParts);
+        }
+        else
+        {
+            document.Version = "1.0.0"; // fallback
+        }
         await _unitOfWork.DocumentRepository.UpdateAsync(document);
         await _unitOfWork.SaveAsync();
         SetProgress(docId: document.Id, 0, "Queued for re-indexing...");

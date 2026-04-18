@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
@@ -42,10 +43,19 @@ public partial class QAMessage
     [Column("ai_confidence_score")]
     public double? AiConfidenceScore { get; set; }
 
+    [Column("client_request_id")]
+    public string? ClientRequestId { get; set; }
+
+    [Column("citations_json", TypeName = "jsonb")]
+    public string? CitationsJson { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     [ForeignKey("SessionId")]
     [InverseProperty("Messages")]
     public virtual VisualQASession Session { get; set; } = null!;
+
+    [InverseProperty("Message")]
+    public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 }

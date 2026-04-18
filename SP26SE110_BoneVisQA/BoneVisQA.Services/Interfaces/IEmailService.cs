@@ -46,4 +46,13 @@ public interface IEmailService
         string quizTitle,
         string className,
         string lecturerName);
+
+    // Essay submission notification email
+    Task<bool> SendEssaySubmittedNotificationAsync(
+        string toEmail,
+        string lecturerName,
+        string studentName,
+        string quizTitle,
+        string className,
+        string attemptDetailUrl);
 }

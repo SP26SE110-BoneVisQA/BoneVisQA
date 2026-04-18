@@ -23,6 +23,9 @@ public partial class Citation
     [Column("similarity_score")]
     public double SimilarityScore { get; set; }
 
+    [Column("message_id")]
+    public Guid? MessageId { get; set; }
+
     [NotMapped]
     public string? ReferenceUrl { get; set; }
 
@@ -36,4 +39,8 @@ public partial class Citation
     [ForeignKey("ChunkId")]
     [InverseProperty("Citations")]
     public virtual DocumentChunk Chunk { get; set; } = null!;
+
+    [ForeignKey("MessageId")]
+    [InverseProperty("Citations")]
+    public virtual QAMessage? Message { get; set; }
 }

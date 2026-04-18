@@ -669,7 +669,7 @@ public class StudentService : IStudentService
                 {
                     QuestionId = q.Id,
                     QuestionText = q.QuestionText,
-                    Type = q.Type,
+                    Type = q.Type?.ToString(),
                     CaseId = q.CaseId,
                     CaseTitle = q.Case?.Title,
                     OptionA = q.OptionA,

@@ -21,7 +21,7 @@ public class DocumentDto
     public string IndexingStatus { get; set; } = "Pending";
     public int IndexingProgress { get; set; }
     public string? ContentHash { get; set; }
-    public int Version { get; set; }
+    public string? Version { get; set; }
     public bool IsOutdated { get; set; }
     public DateTime? CreatedAt { get; set; }
 }

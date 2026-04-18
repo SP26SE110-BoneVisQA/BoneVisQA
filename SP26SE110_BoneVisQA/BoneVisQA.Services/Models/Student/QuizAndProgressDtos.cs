@@ -49,6 +49,8 @@ public class StudentQuizQuestionDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? ImageUrl { get; set; }
+    public int MaxScore { get; set; } = 1;
+    public string? ReferenceAnswer { get; set; } // For essay, shown only after grading if configured
 }
 
 public class QuizSessionDto
@@ -67,7 +69,8 @@ public class QuizSessionDto
 public class SubmitQuizQuestionAnswerDto
 {
     public Guid QuestionId { get; set; }
-    public string? StudentAnswer { get; set; }
+    public string? StudentAnswer { get; set; } // For MC/TF
+    public string? EssayAnswer { get; set; }   // For essay
 }
 
 public class SubmitQuizRequestDto
@@ -174,7 +177,7 @@ public class QuizAttemptReviewDto
     public int TotalQuestions { get; set; }
     public int CorrectAnswers { get; set; }
     public bool Passed { get; set; }
-    public int? PassingScore { get; set; }  // ← Thêm
+    public int? PassingScore { get; set; }
     public IReadOnlyList<QuestionReviewItemDto> Questions { get; set; } = Array.Empty<QuestionReviewItemDto>();
 }
 
@@ -182,13 +185,19 @@ public class QuestionReviewItemDto
 {
     public Guid QuestionId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
+    public string? Type { get; set; }
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public string? CorrectAnswer { get; set; }
     public bool IsCorrect { get; set; }
     public string? ImageUrl { get; set; }
     public string? CaseId { get; set; }
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool IsGraded { get; set; }
+    public int MaxScore { get; set; } = 1;
 }

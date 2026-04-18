@@ -82,4 +82,7 @@ public partial class MedicalCase
 
     [InverseProperty("Case")]
     public virtual ICollection<VisualQASession> VisualQASessions { get; set; } = new List<VisualQASession>();
+
+    [InverseProperty("PromotedCase")]
+    public virtual ICollection<VisualQASession> PromotedFromSessions { get; set; } = new List<VisualQASession>();
 }

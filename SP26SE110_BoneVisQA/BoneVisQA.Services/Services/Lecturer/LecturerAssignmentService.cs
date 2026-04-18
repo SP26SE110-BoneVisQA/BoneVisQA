@@ -762,7 +762,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             QuizId = attempt.QuizId,
             QuizTitle = quiz.Title,
             StudentId = attempt.StudentId,
-            StudentName = attempt.Student.FullName ?? "Sinh viên",
+            StudentName = attempt.Student?.FullName ?? "Sinh viên",
             Score = attempt.Score,
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
@@ -773,15 +773,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 {
                     QuestionId = sa.QuestionId,
                     QuestionText = sa.Question.QuestionText,
-                    Type = sa.Question.Type,
+                    Type = sa.Question.Type?.ToString(),
                     OptionA = sa.Question.OptionA,
                     OptionB = sa.Question.OptionB,
                     OptionC = sa.Question.OptionC,
                     OptionD = sa.Question.OptionD,
                     CorrectAnswer = sa.Question.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
+                    EssayAnswer = sa.EssayAnswer,
                     IsCorrect = sa.Question != null && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer),
-                    AnswerId = sa.Id
+                    AnswerId = sa.Id,
+                    MaxScore = sa.Question.MaxScore,
+                    ScoreAwarded = sa.ScoreAwarded,
+                    LecturerFeedback = sa.LecturerFeedback,
+                    IsGraded = sa.IsGraded,
+                    ReferenceAnswer = sa.Question.ReferenceAnswer
                 }).ToList()
         };
     }
@@ -811,12 +817,34 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             {
                 if (answerMap.TryGetValue(update.AnswerId, out var answer))
                 {
+                    // Allow updating StudentAnswer, ScoreAwarded, LecturerFeedback, IsGraded
                     if (update.StudentAnswer != null)
                         answer.StudentAnswer = update.StudentAnswer;
                     if (update.IsCorrect.HasValue)
                         answer.IsCorrect = update.IsCorrect.Value;
+                    if (update.ScoreAwarded.HasValue)
+                    {
+                        answer.ScoreAwarded = update.ScoreAwarded.Value;
+                        answer.IsGraded = true;
+                        answer.GradedAt = DateTime.UtcNow;
+                    }
+                    if (update.LecturerFeedback != null)
+                        answer.LecturerFeedback = update.LecturerFeedback;
+                    if (update.IsGraded.HasValue)
+                    {
+                        answer.IsGraded = update.IsGraded.Value;
+                        if (update.IsGraded.Value && answer.GradedAt == null)
+                            answer.GradedAt = DateTime.UtcNow;
+                    }
                 }
             }
+
+            // Recalculate attempt score based on updated essay scores
+            var totalMaxScore = attempt.StudentQuizAnswers.Sum(a => a.Question.MaxScore);
+            var totalScoreAwarded = attempt.StudentQuizAnswers
+                .Where(a => a.ScoreAwarded.HasValue)
+                .Sum(a => a.ScoreAwarded.Value);
+            attempt.Score = totalMaxScore == 0 ? 0 : (double)(totalScoreAwarded * 100 / totalMaxScore);
         }
 
         await _unitOfWork.SaveAsync();

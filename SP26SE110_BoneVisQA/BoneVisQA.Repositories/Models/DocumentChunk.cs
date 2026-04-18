@@ -38,6 +38,12 @@ public partial class DocumentChunk
     [Column("flagged_at")]
     public DateTime? FlaggedAt { get; set; }
 
+    [Column("start_page")]
+    public int? StartPage { get; set; } = 0;
+
+    [Column("end_page")]
+    public int? EndPage { get; set; } = 0;
+
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 

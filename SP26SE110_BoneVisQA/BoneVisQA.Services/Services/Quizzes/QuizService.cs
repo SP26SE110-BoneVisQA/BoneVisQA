@@ -94,13 +94,17 @@ public class QuizService : IQuizService
         if (quiz == null)
             throw new Exception("Quiz not found");
 
+        var questionType = string.IsNullOrEmpty(request.Type)
+            ? QuestionType.MultipleChoice
+            : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+
         var question = new QuizQuestion
         {
             Id = Guid.NewGuid(),
             QuizId = quizId,
             CaseId = request.CaseId,
             QuestionText = request.QuestionText,
-            Type = request.Type,
+            Type = questionType,
             CorrectAnswer = request.CorrectAnswer
         };
 

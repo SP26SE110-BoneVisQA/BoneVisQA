@@ -54,6 +54,8 @@ public interface ILecturerService
     Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId);
 
     Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetUnassignedLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<AssignedQuizDto>> GetAssignedQuizzesAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
