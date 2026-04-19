@@ -20,6 +20,12 @@ public class LecturerTriageRowDto
     public string ClassName { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
+    /// <summary>From <see cref="BoneVisQA.Repositories.Models.MedicalCase"/> when session is case-based (catalog).</summary>
+    public string? CaseDescription { get; set; }
+    /// <summary>Expert case teaching diagnosis (<c>medical_cases.suggested_diagnosis</c>).</summary>
+    public string? CaseSuggestedDiagnosis { get; set; }
+    /// <summary>Expert key findings on the case (<c>medical_cases.key_findings</c>).</summary>
+    public string? CaseKeyFindings { get; set; }
     /// <summary>X-ray / study image: Visual QA upload (<c>CustomImageUrl</c>) or first <c>MedicalImage</c> on the case.</summary>
     public string? ThumbnailUrl { get; set; }
     /// <summary>Resolved study image: personal upload or first case image (explicit for FE binding).</summary>
@@ -61,6 +67,10 @@ public class LectStudentQuestionDetailDto
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
     public string? CaseDescription { get; set; }
+    /// <summary>Teaching diagnosis from catalog case (<c>medical_cases.suggested_diagnosis</c>).</summary>
+    public string? CaseSuggestedDiagnosis { get; set; }
+    /// <summary>Key findings from catalog case (<c>medical_cases.key_findings</c>).</summary>
+    public string? CaseKeyFindings { get; set; }
     public string? CaseThumbnailUrl { get; set; }
     /// <summary>Same resolved image as <see cref="CaseThumbnailUrl"/> (<c>imageUrl</c> for clients).</summary>
     public string? ImageUrl { get; set; }

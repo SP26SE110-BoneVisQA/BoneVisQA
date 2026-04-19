@@ -18,11 +18,13 @@ public class LecturerService : ILecturerService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
+    private readonly INotificationService _notificationService;
 
-    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService)
+    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
+        _notificationService = notificationService;
     }
 
     /// <summary>
@@ -952,8 +954,14 @@ public class LecturerService : ILecturerService
             .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
     }
 
-    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId, string? source = null)
+    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null)
     {
+        var ownsClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .AnyAsync();
+        if (!ownsClass)
+            throw new KeyNotFoundException("Class not found.");
+
         var cls = await _unitOfWork.AcademicClassRepository.GetByIdAsync(classId)
             ?? throw new KeyNotFoundException("Class not found.");
         var normalizedSource = source?.Trim().ToLowerInvariant();
@@ -994,6 +1002,7 @@ public class LecturerService : ILecturerService
                 {
                     var (userMessage, assistantMessage) = ResolveRequestedReviewPair(s);
                     var flatImageUrl = ResolveSessionImageUrl(s);
+                    var mc = s.Case;
 
                     return new LecturerTriageRowDto
                     {
@@ -1005,7 +1014,10 @@ public class LecturerService : ILecturerService
                         ClassId = classId,
                         ClassName = cls.ClassName,
                         CaseId = s.CaseId,
-                        CaseTitle = s.Case?.Title,
+                        CaseTitle = mc?.Title,
+                        CaseDescription = mc?.Description,
+                        CaseSuggestedDiagnosis = mc?.SuggestedDiagnosis,
+                        CaseKeyFindings = mc?.KeyFindings,
                         ThumbnailUrl = flatImageUrl,
                         ImageUrl = flatImageUrl,
                         QuestionText = userMessage?.Content ?? string.Empty,
@@ -1017,6 +1029,10 @@ public class LecturerService : ILecturerService
                         EscalatedByName = null,
                         EscalatedAt = null,
                         TriageSource = "VisualQA",
+                        StructuredDiagnosis = assistantMessage?.SuggestedDiagnosis,
+                        ReflectiveQuestions = assistantMessage?.ReflectiveQuestions,
+                        KeyImagingFindings = assistantMessage?.KeyImagingFindings,
+                        DifferentialDiagnoses = assistantMessage?.DifferentialDiagnoses,
                         CustomCoordinates = userMessage?.Coordinates,
                         CustomImageUrl = s.CustomImageUrl,
                         RequestedReviewMessageId = s.RequestedReviewMessageId,
@@ -1111,7 +1127,7 @@ public class LecturerService : ILecturerService
         return string.IsNullOrWhiteSpace(url) ? null : url.Trim();
     }
 
-    public async Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId)
+    public async Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid lecturerId, Guid classId, Guid questionId)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .AsNoTracking()
@@ -1125,10 +1141,12 @@ public class LecturerService : ILecturerService
 
         if (session == null) return null;
 
-        // verify class ownership via enrollment
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
-            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == session.StudentId);
-        if (enrollment == null) return null;
+            .FindByCondition(e => e.ClassId == classId && e.StudentId == session.StudentId)
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync();
+        if (enrollment?.Class?.LecturerId != lecturerId)
+            return null;
 
         var orderedMessages = session.Messages
             .OrderBy(m => m.CreatedAt)
@@ -1147,6 +1165,8 @@ public class LecturerService : ILecturerService
             CaseId = session.CaseId,
             CaseTitle = session.Case?.Title,
             CaseDescription = session.Case?.Description,
+            CaseSuggestedDiagnosis = session.Case?.SuggestedDiagnosis,
+            CaseKeyFindings = session.Case?.KeyFindings,
             CaseThumbnailUrl = detailImageUrl,
             ImageUrl = detailImageUrl,
             CaseDifficulty = session.Case?.Difficulty,
@@ -1177,7 +1197,7 @@ public class LecturerService : ILecturerService
         };
     }
 
-    public async Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request)
+    public async Task<LecturerAnswerDto> RespondToQuestionAsync(Guid lecturerId, Guid classId, Guid questionId, RespondToQuestionRequestDto request)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Messages)
@@ -1185,12 +1205,14 @@ public class LecturerService : ILecturerService
             ?? throw new KeyNotFoundException("Q&A session not found.");
         ResolveRequestedReviewPairStrict(session);
 
-        // verify class ownership
         var enrollment = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId && e.StudentId == session.StudentId)
             .Include(e => e.Class)
             .FirstOrDefaultAsync()
             ?? throw new InvalidOperationException("The lecturer does not have permission to answer this question.");
+
+        if (enrollment.Class?.LecturerId != lecturerId)
+            throw new InvalidOperationException("The lecturer does not have permission to answer this question.");
 
         var answer = new QAMessage
         {
@@ -1229,6 +1251,17 @@ public class LecturerService : ILecturerService
         session.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveAsync();
+
+        var preview = request.AnswerText.Trim();
+        if (preview.Length > 200)
+            preview = preview[..200].TrimEnd() + "…";
+
+        await _notificationService.SendNotificationToUserAsync(
+            session.StudentId,
+            "Lecturer replied to your Visual QA session",
+            preview,
+            "visual_qa_lecturer_reply",
+            $"/student/qa/image?sessionId={session.Id}");
 
         return new LecturerAnswerDto
         {
@@ -1423,8 +1456,14 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId, string? source = null)
+    public async Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid lecturerId, Guid classId, Guid? caseId, Guid? studentId, string? source = null)
     {
+        var ownsClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
+            .AnyAsync();
+        if (!ownsClass)
+            throw new KeyNotFoundException("Class not found.");
+
         var normalized = source?.Trim().ToLowerInvariant();
         bool includeCase;
         bool includeVisual;
@@ -1456,7 +1495,7 @@ public class LecturerService : ILecturerService
             : Array.Empty<LectStudentQuestionDto>();
 
         var visualRows = includeVisual
-            ? await GetVisualStudentQuestionsFromTriageAsync(classId, caseId, studentId)
+            ? await GetVisualStudentQuestionsFromTriageAsync(lecturerId, classId, caseId, studentId)
             : Array.Empty<LectStudentQuestionDto>();
 
         if (!includeCase && !includeVisual)
@@ -1522,9 +1561,9 @@ public class LecturerService : ILecturerService
             .ToList();
     }
 
-    private async Task<IReadOnlyList<LectStudentQuestionDto>> GetVisualStudentQuestionsFromTriageAsync(Guid classId, Guid? caseId, Guid? studentId)
+    private async Task<IReadOnlyList<LectStudentQuestionDto>> GetVisualStudentQuestionsFromTriageAsync(Guid lecturerId, Guid classId, Guid? caseId, Guid? studentId)
     {
-        var triage = await GetTriageListAsync(classId, "visual-qa");
+        var triage = await GetTriageListAsync(lecturerId, classId, "visual-qa");
         IEnumerable<LecturerTriageRowDto> rows = triage;
         if (caseId.HasValue)
             rows = rows.Where(r => r.CaseId == caseId.Value);

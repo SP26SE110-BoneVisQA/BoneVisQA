@@ -12,10 +12,12 @@ namespace BoneVisQA.Services.Services.Lecturer;
 public class LecturerTriageService : ILecturerTriageService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly INotificationService _notificationService;
 
-    public LecturerTriageService(IUnitOfWork unitOfWork)
+    public LecturerTriageService(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
     }
 
     public async Task<EscalatedAnswerDto> EscalateAnswerAsync(Guid lecturerId, Guid sessionId, EscalateAnswerRequestDto? request)
@@ -131,6 +133,17 @@ public class LecturerTriageService : ILecturerTriageService
 
         await _unitOfWork.Context.QaMessages.AddAsync(rejectionMessage);
         await _unitOfWork.SaveAsync();
+
+        var preview = reason.Trim();
+        if (preview.Length > 200)
+            preview = preview[..200].TrimEnd() + "…";
+
+        await _notificationService.SendNotificationToUserAsync(
+            session.StudentId,
+            "Lecturer updated your Visual QA session",
+            preview,
+            "visual_qa_lecturer_reply",
+            $"/student/qa/image?sessionId={session.Id}");
     }
 
     private static List<string>? DeserializeJsonArray(string? json)

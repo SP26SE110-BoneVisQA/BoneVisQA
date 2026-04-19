@@ -593,12 +593,18 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            var result = await _lecturerService.GetTriageListAsync(classId, source);
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
     }
 
@@ -608,19 +614,29 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            var result = await _lecturerService.GetTriageListAsync(classId, "visual-qa");
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa");
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
     }
 
     [HttpGet("classes/{classId:guid}/questions/{questionId:guid}")]
     public async Task<ActionResult<LectStudentQuestionDetailDto>> GetQuestionDetail(Guid classId, Guid questionId)
     {
-        var result = await _lecturerService.GetQuestionDetailAsync(classId, questionId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetQuestionDetailAsync(lecturerId.Value, classId, questionId);
         if (result == null)
             return NotFound(new { message = "Question not found." });
         return Ok(result);
@@ -634,7 +650,9 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            var result = await _lecturerService.RespondToQuestionAsync(classId, questionId, request);
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.RespondToQuestionAsync(lecturerId, classId, questionId, request);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -645,6 +663,9 @@ public class LecturersController : ControllerBase
         {
             if (ex.Message.StartsWith("Cannot ", StringComparison.OrdinalIgnoreCase))
                 return Conflict(new { message = ex.Message });
+
+            if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
 
             return BadRequest(new { message = ex.Message });
         }
@@ -671,8 +692,14 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId, source);
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetStudentQuestionsAsync(lecturerId, classId, caseId, studentId, source);
             return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {
