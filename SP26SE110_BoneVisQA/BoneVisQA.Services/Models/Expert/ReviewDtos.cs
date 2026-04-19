@@ -60,6 +60,12 @@ public class ExpertEscalatedAnswerDto
     public string StudentEmail { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string CaseTitle { get; set; } = string.Empty;
+    /// <summary>Full case description when session is case-based.</summary>
+    public string? CaseDescription { get; set; }
+    /// <summary>Expert teaching diagnosis from case.</summary>
+    public string? CaseSuggestedDiagnosis { get; set; }
+    /// <summary>Expert key findings from case.</summary>
+    public string? CaseKeyFindings { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }

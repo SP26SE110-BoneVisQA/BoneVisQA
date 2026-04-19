@@ -91,6 +91,9 @@ public class ExpertReviewService : IExpertReviewService
                 StudentEmail = s.Student?.Email ?? string.Empty,
                 CaseId = s.CaseId,
                 CaseTitle = s.Case?.Title ?? string.Empty,
+                CaseDescription = s.Case?.Description,
+                CaseSuggestedDiagnosis = s.Case?.SuggestedDiagnosis,
+                CaseKeyFindings = s.Case?.KeyFindings,
                 QuestionText = string.Empty,
                 CurrentAnswerText = "Selected review pair is inconsistent. Please re-request review from student flow.",
                 Status = s.Status,
@@ -113,6 +116,9 @@ public class ExpertReviewService : IExpertReviewService
                 StudentEmail = s.Student?.Email ?? string.Empty,
                 CaseId = s.CaseId,
                 CaseTitle = s.Case?.Title ?? string.Empty,
+                CaseDescription = s.Case?.Description,
+                CaseSuggestedDiagnosis = s.Case?.SuggestedDiagnosis,
+                CaseKeyFindings = s.Case?.KeyFindings,
                 QuestionText = userMessage?.Content ?? string.Empty,
                 CurrentAnswerText = latestAssistant?.Content,
                 StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
@@ -444,10 +450,10 @@ public class ExpertReviewService : IExpertReviewService
 
         await _notificationService.SendNotificationToUserAsync(
             session.StudentId,
-            "An expert has processed your question",
-            "Your answer has been approved by an expert. You can review it in your question history.",
+            "An expert replied to your Visual QA session",
+            "Your session has been updated by an expert. Open Visual QA to read the full response.",
             "expert_review",
-            $"/student/cases/history");
+            $"/student/qa/image?sessionId={session.Id}");
 
         await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(session.Id);
 
