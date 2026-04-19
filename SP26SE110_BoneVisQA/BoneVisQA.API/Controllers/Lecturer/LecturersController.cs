@@ -24,12 +24,18 @@ public class LecturersController : ControllerBase
     private readonly ILecturerService _lecturerService;
     private readonly IAIQuizService _aiQuizService;
     private readonly IQuizsService _quizService;
+    private readonly ILogger<LecturersController> _logger;
 
-    public LecturersController(ILecturerService lecturerService, IAIQuizService aiQuizService, IQuizsService quizService)
+    public LecturersController(
+        ILecturerService lecturerService,
+        IAIQuizService aiQuizService,
+        IQuizsService quizService,
+        ILogger<LecturersController> logger)
     {
         _lecturerService = lecturerService;
         _aiQuizService = aiQuizService;
         _quizService = quizService;
+        _logger = logger;
     }
 
     private static Guid? TryGetJwtUserId(ClaimsPrincipal user)
@@ -211,6 +217,36 @@ public class LecturersController : ControllerBase
         if (!deleted)
             return NotFound(new { message = "Announcement does not exist." });
         return NoContent();
+    }
+
+    /// <summary>Move an announcement to a different class.</summary>
+    [HttpPut("announcements/{announcementId}/move")]
+    public async Task<ActionResult<AnnouncementDto>> MoveAnnouncement(string announcementId, [FromBody] MoveAnnouncementRequestDto request)
+    {
+        if (!Guid.TryParse(announcementId, out var aId))
+            return BadRequest(new { message = "Invalid announcement ID." });
+
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _lecturerService.MoveAnnouncementAsync(lecturerId.Value, aId, request.TargetClassId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "An error occurred while moving the announcement." });
+        }
     }
 
     #endregion
@@ -487,6 +523,29 @@ public class LecturersController : ControllerBase
 
         var result = await _lecturerService.GetAssignedQuizzesAsync(lecturerId.Value);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Export all quiz results for this lecturer into a single Excel file.
+    /// Includes overview sheet and detailed sheet per quiz.
+    /// </summary>
+    [HttpGet("quizzes/export-all")]
+    public async Task<ActionResult> ExportAllQuizResults()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var (fileBytes, fileName) = await _lecturerService.ExportAllQuizResultsAsync(lecturerId.Value);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting all quiz results for lecturer {LecturerId}", lecturerId);
+            return StatusCode(500, new { message = "Error exporting quiz results." });
+        }
     }
 
     #endregion

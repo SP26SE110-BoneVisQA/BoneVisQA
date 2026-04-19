@@ -892,7 +892,12 @@ public class EmailService : IEmailService
         string lecturerName,
         string className,
         string announcementTitle,
-        string announcementContent)
+        string announcementContent,
+        string? assignmentTitle = null,
+        string? assignmentType = null,
+        DateTime? dueDate = null,
+        string? dueDateDisplay = null,
+        string? assignmentUrl = null)
     {
         _logger.LogInformation("[SendAnnouncementEmailAsync] Sending announcement email to {ToEmail} from {LecturerName}", toEmail, lecturerName);
 
@@ -902,52 +907,115 @@ public class EmailService : IEmailService
             return false;
         }
 
+        // Build assignment info if provided
+        var hasAssignment = !string.IsNullOrEmpty(assignmentTitle);
+        var dueDateText = dueDate.HasValue
+            ? $"<strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : null;
+
         try
         {
             var subject = $"[BoneVisQA] Thông báo mới từ lớp {className}: {announcementTitle}";
+            
+            // Build assignment card HTML if assignment is linked
+            var assignmentCardHtml = hasAssignment ? $@"
+            <div style='margin: 20px 0; background: linear-gradient(135deg, #f8f9fa, #e8f4f8); border-left: 5px solid #1a5f7a; padding: 20px; border-radius: 0 8px 8px 0;'>
+                <p style='margin: 0 0 8px; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;'>
+                    📋 Bài tập liên kết
+                </p>
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 12px;'>
+                    <span style='display: inline-block; background: #f39c12; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase;'>
+                        {assignmentType ?? "assignment"}
+                    </span>
+                    <strong style='font-size: 16px; color: #2c3e50;'>{assignmentTitle}</strong>
+                </div>
+                " + (dueDateText != null ? $@"
+                <div style='background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #856404;'>
+                    ⏰ Hạn nộp: {dueDateText}
+                </div>" : "") + @"
+            </div>" : "";
+
+            var assignmentCardNoHtml = hasAssignment ? $@"
+
+═══════════════════════════════════════════
+📋 BÀI TẬP LIÊN KẾT
+═══════════════════════════════════════════
+Loại: {(assignmentType ?? "assignment").ToUpper()}
+Tiêu đề: {assignmentTitle}
+" + (dueDateText != null ? $"Hạn nộp: {dueDateText}\n" : "") + $@"
+═══════════════════════════════════════════
+" : "";
+
             var body = $@"
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset='utf-8'>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #2c3e50; color: white; padding: 25px; text-align: center; }}
-        .header h1 {{ margin: 0; font-size: 22px; }}
-        .announcement-badge {{ background-color: #e74c3c; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; display: inline-block; margin-bottom: 10px; }}
-        .content {{ padding: 30px; background-color: #ffffff; }}
-        .announcement-card {{ background-color: #fef9e7; border-left: 5px solid #f39c12; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
-        .announcement-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }}
-        .announcement-body {{ font-size: 15px; color: #555; white-space: pre-wrap; line-height: 1.8; }}
-        .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
-        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; background-color: #f5f5f5; }}
-    </style>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>{subject}</title>
 </head>
-<body>
-    <div class='container'>
-        <div class='header'>
-            <div class='announcement-badge'>Thông báo mới</div>
-            <h1>BoneVisQA</h1>
-        </div>
-        <div class='content'>
-            <p>Xin chào <strong>{studentName}</strong>,</p>
-            <p>Bạn có một thông báo mới từ giảng viên <strong>{lecturerName}</strong> trong lớp <strong>{className}</strong>:</p>
-            <div class='announcement-card'>
-                <div class='announcement-title'>{announcementTitle}</div>
-                <div class='announcement-body'>{announcementContent}</div>
-                <div class='meta'>
-                    <strong>Giảng viên:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Lớp:</strong> {className}
-                </div>
-            </div>
-            <p>Đăng nhập vào <a href='#'>BoneVisQA</a> để xem chi tiết và cập nhật.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
-        </div>
-        <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Vui lòng không trả lời trực tiếp email này.</p>
-        </div>
-    </div>
+<body style='margin:0;padding:0;background:#f4f4f4;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='background:#f4f4f4;padding:30px 0;'>
+        <tr>
+            <td align='center'>
+                <table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);'>
+                    <!-- Header -->
+                    <tr>
+                        <td style='background:linear-gradient(135deg,#1a5f7a,#2c3e50);padding:30px 40px;text-align:center;'>
+                            <div style='display:inline-block;background:#e74c3c;color:white;padding:4px 16px;border-radius:20px;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;'>
+                                🔔 Thông báo mới
+                            </div>
+                            <h1 style='color:#ffffff;margin:10px 0 0;font-size:24px;'>BoneVisQA</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style='padding:35px 40px;'>
+                            <p style='margin:0 0 20px;font-size:16px;color:#333;'>
+                                Xin chào <strong>{studentName}</strong>,
+                            </p>
+                            <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
+                                Bạn có một thông báo mới từ giảng viên <strong>{lecturerName}</strong> trong lớp <strong>{className}</strong>:
+                            </p>
+                            
+                            <!-- Announcement Card -->
+                            <div style='background:#fef9e7;border-left:5px solid #f39c12;padding:20px;border-radius:0 8px 8px 0;margin:20px 0;'>
+                                <h2 style='margin:0 0 10px;font-size:18px;font-weight:bold;color:#2c3e50;'>{announcementTitle}</h2>
+                                <p style='margin:0;font-size:15px;color:#555;line-height:1.8;white-space:pre-wrap;'>{announcementContent}</p>
+                            </div>
+                            
+                            {assignmentCardHtml}
+                            
+                            <!-- Meta Info -->
+                            <div style='margin-top:25px;padding-top:20px;border-top:1px solid #eee;color:#888;font-size:13px;'>
+                                <strong>Giảng viên:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Lớp:</strong> {className}
+                            </div>
+                            
+                            <!-- CTA Button -->
+                            <div style='margin-top:25px;text-align:center;'>
+                                <a href='{_appUrl}' target='_blank' style='display:inline-block;background:linear-gradient(135deg,#1a5f7a,#2980b9);color:white !important;padding:14px 35px;border-radius:25px;text-decoration:none;font-weight:bold;font-size:15px;'>
+                                    Mở BoneVisQA →
+                                </a>
+                            </div>
+                            
+                            <p style='margin:25px 0 0;font-size:14px;color:#555;line-height:1.7;'>
+                                Trân trọng,<br><strong>Đội ngũ BoneVisQA</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style='background:#f8f9fa;padding:20px 40px;border-top:1px solid #eee;'>
+                            <p style='margin:0;font-size:12px;color:#aaa;text-align:center;'>
+                                Email này được gửi tự động từ BoneVisQA — Radiology Education Platform.<br>
+                                Vui lòng không trả lời trực tiếp email này.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>";
 

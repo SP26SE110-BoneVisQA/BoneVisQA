@@ -78,5 +78,11 @@ public interface ILecturerService
 
     // Expert medical case images
     Task<bool> DeleteMedicalImageAsync(Guid imageId);
+
+    /// <summary>Move an announcement to a different class.</summary>
+    Task<AnnouncementDto> MoveAnnouncementAsync(Guid lecturerId, Guid announcementId, Guid targetClassId);
+
+    /// <summary>Export all quiz results for a lecturer into a single Excel file with multiple sheets.</summary>
+    Task<(byte[] FileBytes, string FileName)> ExportAllQuizResultsAsync(Guid lecturerId);
 }
 

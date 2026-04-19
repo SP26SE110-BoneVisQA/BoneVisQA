@@ -17,7 +17,8 @@ public interface IEmailService
     Task<bool> SendWelcomeWithRoleEmailAsync(string toEmail, string fullName, string roleName);
 
     // Announcement Emails
-    Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent);
+    Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent,
+        string? assignmentTitle = null, string? assignmentType = null, DateTime? dueDate = null, string? dueDateDisplay = null, string? assignmentUrl = null);
 
     // Assignment notification emails
     Task<bool> SendAssignmentEmailAsync(

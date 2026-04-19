@@ -509,8 +509,10 @@ public class StudentService : IStudentService
     {
         var announcements = await _studentRepository.GetAnnouncementsForStudentAsync(studentId);
 
-        return announcements
-            .Select(a => new StudentAnnouncementDto
+        var results = new List<StudentAnnouncementDto>();
+        foreach (var a in announcements)
+        {
+            var dto = new StudentAnnouncementDto
             {
                 Id = a.Id,
                 ClassId = a.ClassId,
@@ -518,8 +520,57 @@ public class StudentService : IStudentService
                 Title = a.Title,
                 Content = a.Content,
                 CreatedAt = a.CreatedAt
-            })
-            .ToList();
+            };
+
+            // Get related assignment info if present
+            if (a.AssignmentId.HasValue)
+            {
+                dto.RelatedAssignment = await GetRelatedAssignmentInfoForStudentAsync(a.AssignmentId);
+            }
+
+            results.Add(dto);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Get assignment info for student announcement response (case or quiz).
+    /// </summary>
+    private async Task<Models.Student.AnnouncementAssignmentInfoDto?> GetRelatedAssignmentInfoForStudentAsync(Guid? assignmentId)
+    {
+        if (!assignmentId.HasValue)
+            return null;
+
+        // Check if it's a ClassCase
+        var classCase = await _unitOfWork.Context.ClassCases
+            .Include(cc => cc.Case)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId.Value);
+        if (classCase != null)
+        {
+            return new Models.Student.AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = classCase.CaseId,
+                AssignmentTitle = classCase.Case?.Title ?? "Case Assignment",
+                AssignmentType = "case"
+            };
+        }
+
+        // Check if it's a ClassQuizSession
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .Include(qs => qs.Quiz)
+            .FirstOrDefaultAsync(qs => qs.Id == assignmentId.Value);
+        if (quizSession != null)
+        {
+            return new Models.Student.AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = quizSession.Id,
+                AssignmentTitle = quizSession.Quiz?.Title ?? "Quiz Assignment",
+                AssignmentType = "quiz"
+            };
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId)
@@ -1048,19 +1099,31 @@ public class StudentService : IStudentService
             })
             .ToListAsync();
 
-        // Announcements
-        var announcements = await _unitOfWork.Context.Announcements
+        // Announcements with related assignment info
+        var announcementsRaw = await _unitOfWork.Context.Announcements
             .AsNoTracking()
             .Where(a => a.ClassId == classId)
             .OrderByDescending(a => a.CreatedAt)
-            .Select(a => new ClassAnnouncementDto
+            .ToListAsync();
+
+        var announcements = new List<ClassAnnouncementDto>();
+        foreach (var a in announcementsRaw)
+        {
+            var dto = new ClassAnnouncementDto
             {
                 Id = a.Id,
                 Title = a.Title,
                 Content = a.Content,
                 CreatedAt = a.CreatedAt,
-            })
-            .ToListAsync();
+            };
+
+            if (a.AssignmentId.HasValue)
+            {
+                dto.RelatedAssignment = await GetRelatedAssignmentInfoForStudentAsync(a.AssignmentId);
+            }
+
+            announcements.Add(dto);
+        }
 
         return new StudentClassDetailDto
         {

@@ -106,6 +106,19 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
 
+    // Custom schema ID resolver to handle duplicate class names in different namespaces
+    c.CustomSchemaIds(type =>
+    {
+        if (type.IsNested)
+        {
+            var parentName = type.ReflectedType != null
+                ? type.ReflectedType.FullName
+                : type.DeclaringType?.FullName;
+            return $"{parentName}.{type.Name}";
+        }
+        return type.FullName;
+    });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization. Nhập token sau 'Bearer '",

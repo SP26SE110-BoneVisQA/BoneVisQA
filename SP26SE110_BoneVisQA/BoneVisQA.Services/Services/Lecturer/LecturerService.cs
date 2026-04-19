@@ -6,6 +6,8 @@ using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,12 +21,24 @@ public class LecturerService : ILecturerService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
     private readonly IMedicalCaseService _medicalCaseService;
+    private readonly INotificationService _notificationService;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<LecturerService> _logger;
 
-    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService, IMedicalCaseService medicalCaseService)
+    public LecturerService(
+        IUnitOfWork unitOfWork,
+        IEmailService emailService,
+        IMedicalCaseService medicalCaseService,
+        INotificationService notificationService,
+        IServiceScopeFactory scopeFactory,
+        ILogger<LecturerService> logger)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
         _medicalCaseService = medicalCaseService;
+        _notificationService = notificationService;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     /// <summary>
@@ -291,14 +305,27 @@ public class LecturerService : ILecturerService
             Title = request.Title,
             Content = request.Content,
             SendEmail = request.SendEmail,
+            AssignmentId = request.AssignmentId,
             CreatedAt = now
         };
 
         await _unitOfWork.AnnouncementRepository.AddAsync(entity);
         await _unitOfWork.SaveAsync();
 
+        // Bidirectional sync: set AnnouncementId on the linked assignment
+        if (request.AssignmentId.HasValue)
+        {
+            await SyncAssignmentAnnouncementIdAsync(request.AssignmentId.Value, entity.Id, isAdding: true);
+        }
+
+        // Get assignment info for response
+        var relatedAssignment = await GetRelatedAssignmentInfoAsync(request.AssignmentId);
+
         if (request.SendEmail)
-            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, request.Title, request.Content);
+        {
+            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, request.Title, request.Content, relatedAssignment);
+            await QueueAnnouncementNotificationsAsync(classId, className, request.Title, relatedAssignment?.AssignmentTitle, relatedAssignment?.AssignmentType, $"/student/classes/{classId}");
+        }
 
         return new AnnouncementDto
         {
@@ -307,7 +334,8 @@ public class LecturerService : ILecturerService
             Title = entity.Title,
             Content = entity.Content,
             SendEmail = entity.SendEmail,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            RelatedAssignment = relatedAssignment
         };
     }
 
@@ -320,16 +348,37 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Announcement not found.");
 
+        var oldAssignmentId = entity.AssignmentId;
         entity.Title = request.Title.Trim();
         entity.Content = request.Content.Trim();
+        entity.AssignmentId = request.AssignmentId;
 
         await _unitOfWork.AnnouncementRepository.UpdateAsync(entity);
+
+        // Bidirectional sync: update AnnouncementId on assignments
+        // 1. Clear AnnouncementId from old assignment (if changed or removed)
+        if (oldAssignmentId.HasValue && oldAssignmentId != request.AssignmentId)
+        {
+            await SyncAssignmentAnnouncementIdAsync(oldAssignmentId.Value, announcementId, isAdding: false);
+        }
+        // 2. Set AnnouncementId on new assignment (if assigned)
+        if (request.AssignmentId.HasValue && request.AssignmentId != oldAssignmentId)
+        {
+            await SyncAssignmentAnnouncementIdAsync(request.AssignmentId.Value, announcementId, isAdding: true);
+        }
+
         await _unitOfWork.SaveAsync();
+
+        // Get assignment info for response
+        var relatedAssignment = await GetRelatedAssignmentInfoAsync(request.AssignmentId);
 
         var lecturerName = entity.Class?.Lecturer?.FullName ?? "Lecturer";
         var className = entity.Class?.ClassName ?? "";
         if (request.SendEmail)
-            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, entity.Title, entity.Content);
+        {
+            await SendAnnouncementEmailsToEnrolledStudentsAsync(classId, lecturerName, className, entity.Title, entity.Content, relatedAssignment);
+            await QueueAnnouncementNotificationsAsync(classId, className, entity.Title, relatedAssignment?.AssignmentTitle, relatedAssignment?.AssignmentType, $"/student/classes/{classId}");
+        }
 
         return new AnnouncementDto
         {
@@ -339,7 +388,8 @@ public class LecturerService : ILecturerService
             Title = entity.Title,
             Content = entity.Content,
             SendEmail = entity.SendEmail,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            RelatedAssignment = relatedAssignment
         };
     }
 
@@ -351,9 +401,129 @@ public class LecturerService : ILecturerService
         if (entity == null)
             return false;
 
+        // Bidirectional sync: clear AnnouncementId from the linked assignment
+        if (entity.AssignmentId.HasValue)
+        {
+            await SyncAssignmentAnnouncementIdAsync(entity.AssignmentId.Value, announcementId, isAdding: false);
+        }
+
         await _unitOfWork.AnnouncementRepository.RemoveAsync(entity);
         await _unitOfWork.SaveAsync();
         return true;
+    }
+
+    public async Task<AnnouncementDto> MoveAnnouncementAsync(Guid lecturerId, Guid announcementId, Guid targetClassId)
+    {
+        // 1. Find the announcement
+        var entity = await _unitOfWork.AnnouncementRepository
+            .FindByCondition(a => a.Id == announcementId)
+            .Include(a => a.Class).ThenInclude(c => c!.Lecturer)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Announcement not found.");
+
+        // 2. Verify target class exists and lecturer owns it
+        await EnsureLecturerOwnsClassAsync(lecturerId, targetClassId);
+
+        // 3. If moving to a different class, handle assignment link
+        if (entity.ClassId != targetClassId)
+        {
+            // Clear the assignment link since assignment belongs to different class
+            if (entity.AssignmentId.HasValue)
+            {
+                await SyncAssignmentAnnouncementIdAsync(entity.AssignmentId.Value, announcementId, isAdding: false);
+                entity.AssignmentId = null;
+            }
+
+            entity.ClassId = targetClassId;
+        }
+
+        // 4. Save changes
+        await _unitOfWork.AnnouncementRepository.UpdateAsync(entity);
+        await _unitOfWork.SaveAsync();
+
+        // 5. Return updated entity
+        var targetClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == targetClassId)
+            .FirstOrDefaultAsync();
+
+        return new AnnouncementDto
+        {
+            Id = entity.Id,
+            ClassId = entity.ClassId,
+            ClassName = targetClass?.ClassName ?? entity.Class?.ClassName,
+            Title = entity.Title,
+            Content = entity.Content,
+            SendEmail = entity.SendEmail,
+            CreatedAt = entity.CreatedAt,
+            RelatedAssignment = null // Assignment cleared when moving to different class
+        };
+    }
+
+    /// <summary>
+    /// Get assignment info for announcement response (case or quiz).
+    /// </summary>
+    private async Task<AnnouncementAssignmentInfoDto?> GetRelatedAssignmentInfoAsync(Guid? assignmentId)
+    {
+        if (!assignmentId.HasValue)
+            return null;
+
+        // Check if it's a ClassCase
+        var classCase = await _unitOfWork.Context.ClassCases
+            .Include(cc => cc.Case)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId.Value);
+        if (classCase != null)
+        {
+            return new AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = classCase.CaseId,
+                AssignmentTitle = classCase.Case?.Title ?? "Case Assignment",
+                AssignmentType = "case"
+            };
+        }
+
+        // Check if it's a ClassQuizSession
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .Include(qs => qs.Quiz)
+            .FirstOrDefaultAsync(qs => qs.Id == assignmentId.Value);
+        if (quizSession != null)
+        {
+            return new AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = quizSession.Id,
+                AssignmentTitle = quizSession.Quiz?.Title ?? "Quiz Assignment",
+                AssignmentType = "quiz"
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Bidirectional sync: set or clear the AnnouncementId on an assignment (ClassCase or ClassQuizSession).
+    /// - isAdding = true  → sets AnnouncementId = announcementId on the target assignment
+    /// - isAdding = false → clears AnnouncementId (sets to null) on the target assignment
+    /// </summary>
+    private async Task SyncAssignmentAnnouncementIdAsync(Guid assignmentId, Guid announcementId, bool isAdding)
+    {
+        // Check ClassCase (keyed by composite: ClassId + CaseId)
+        var classCase = await _unitOfWork.Context.ClassCases
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
+        if (classCase != null)
+        {
+            classCase.AnnouncementId = isAdding ? announcementId : null;
+            return;
+        }
+
+        // Check ClassQuizSession (keyed by Id)
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(qs => qs.Id == assignmentId);
+        if (quizSession != null)
+        {
+            quizSession.AnnouncementId = isAdding ? announcementId : null;
+            return;
+        }
+
+        // Assignment not found — silently ignore (may have been deleted already)
     }
 
     private async Task SendAnnouncementEmailsToEnrolledStudentsAsync(
@@ -361,7 +531,8 @@ public class LecturerService : ILecturerService
         string lecturerName,
         string className,
         string title,
-        string content)
+        string content,
+        AnnouncementAssignmentInfoDto? relatedAssignment = null)
     {
         var enrolledStudents = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Student)
@@ -379,8 +550,80 @@ public class LecturerService : ILecturerService
                 lecturerName,
                 className,
                 title,
-                content);
+                content,
+                relatedAssignment?.AssignmentTitle,
+                relatedAssignment?.AssignmentType,
+                null,
+                null,
+                $"/student/classes/{classId}");
         }
+    }
+
+    private async Task QueueAnnouncementNotificationsAsync(
+        Guid classId,
+        string className,
+        string announcementTitle,
+        string? assignmentTitle = null,
+        string? assignmentType = null,
+        string targetUrl = "")
+    {
+        var enrolledStudents = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Student)
+            .Where(e => e.ClassId == classId)
+            .Select(e => new { e.StudentId, e.Student!.FullName })
+            .ToListAsync();
+
+        if (enrolledStudents.Count == 0)
+        {
+            _logger.LogInformation("[AnnouncementNotification] No enrolled students for class {ClassId}", classId);
+            return;
+        }
+
+        var nameCopy = className;
+        var titleCopy = announcementTitle;
+        var urlCopy = targetUrl;
+        var assignmentTitleCopy = assignmentTitle;
+        var assignmentTypeCopy = assignmentType;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                var notificationTitle = $"New Announcement: {titleCopy}";
+                var notificationMessage = !string.IsNullOrEmpty(assignmentTitleCopy)
+                    ? $"[{assignmentTypeCopy?.ToUpper() ?? "Assignment"}] {assignmentTitleCopy} - {nameCopy}"
+                    : $"New announcement in class {nameCopy}";
+
+                foreach (var student in enrolledStudents)
+                {
+                    try
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            student.StudentId,
+                            notificationTitle,
+                            notificationMessage,
+                            "announcement",
+                            urlCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[AnnouncementNotification] Error sending to user {UserId}", student.StudentId);
+                    }
+                }
+
+                _logger.LogInformation(
+                    "[AnnouncementNotification] Sent to {Count} students for class {ClassName}",
+                    enrolledStudents.Count,
+                    nameCopy);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[AnnouncementNotification] Background task failed for class {ClassId}", classId);
+            }
+        });
     }
 
     //====================================================================================================
@@ -1631,8 +1874,10 @@ public class LecturerService : ILecturerService
             .OrderByDescending(a => a.CreatedAt)
             .ToListAsync();
 
-        return announcements
-            .Select(a => new AnnouncementDto
+        var results = new List<AnnouncementDto>();
+        foreach (var a in announcements)
+        {
+            var dto = new AnnouncementDto
             {
                 Id = a.Id,
                 ClassId = a.ClassId,
@@ -1641,8 +1886,18 @@ public class LecturerService : ILecturerService
                 Content = a.Content,
                 SendEmail = a.SendEmail,
                 CreatedAt = a.CreatedAt
-            })
-            .ToList();
+            };
+
+            // Get related assignment info if present
+            if (a.AssignmentId.HasValue)
+            {
+                dto.RelatedAssignment = await GetRelatedAssignmentInfoAsync(a.AssignmentId);
+            }
+
+            results.Add(dto);
+        }
+
+        return results;
     }
 
     public async Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId)
@@ -2686,5 +2941,194 @@ public class LecturerService : ILecturerService
     public async Task<bool> DeleteMedicalImageAsync(Guid imageId)
     {
         return await _medicalCaseService.DeleteMedicalImageAsync(imageId);
+    }
+
+    /// <summary>
+    /// Export all quiz results for a lecturer into a single Excel file.
+    /// Creates a workbook with:
+    /// - Sheet "Overview": Summary of all quizzes (Quiz Name, Class, Total Attempts, Avg Score, Pass Rate)
+    /// - Sheet per quiz: Detailed results for each student attempt
+    /// </summary>
+    public async Task<(byte[] FileBytes, string FileName)> ExportAllQuizResultsAsync(Guid lecturerId)
+    {
+        using var memoryStream = new MemoryStream();
+        var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // Get all classes for this lecturer
+        var classes = await _unitOfWork.Context.AcademicClasses
+            .AsNoTracking()
+            .Where(c => c.LecturerId == lecturerId)
+            .ToListAsync();
+
+        var classIds = classes.Select(c => c.Id).ToList();
+
+        // Get all quiz sessions for lecturer's classes
+        var quizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(qs => qs.Quiz)
+            .Where(qs => classIds.Contains(qs.ClassId))
+            .ToListAsync();
+
+        // =============================================
+        // Sheet 1: Overview
+        // =============================================
+        var overviewSheet = workbook.Worksheets.Add("Overview");
+        overviewSheet.Cell(1, 1).Value = "All Quizzes Results Summary";
+        overviewSheet.Cell(1, 1).Style.Font.Bold = true;
+        overviewSheet.Cell(1, 1).Style.Font.FontSize = 14;
+        overviewSheet.Range(1, 1, 1, 6).Merge();
+
+        var overviewHeaders = new[] { "Quiz Name", "Class", "Total Questions", "Total Attempts", "Avg Score (%)", "Pass Rate (%)" };
+        for (int i = 0; i < overviewHeaders.Length; i++)
+        {
+            overviewSheet.Cell(3, i + 1).Value = overviewHeaders[i];
+            overviewSheet.Cell(3, i + 1).Style.Font.Bold = true;
+            overviewSheet.Cell(3, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        int overviewRow = 4;
+        var classDict = classes.ToDictionary(c => c.Id, c => c.ClassName);
+
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var className = classDict.GetValueOrDefault(session.ClassId, "Unknown");
+
+            // Get all attempts for this quiz
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Where(a => a.QuizId == session.QuizId)
+                .ToListAsync();
+
+            var totalAttempts = attempts.Count;
+            var avgScore = attempts.Any() && attempts.Any(a => a.Score.HasValue)
+                ? attempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
+                : 0;
+
+            // Get question count
+            var questionCount = await _unitOfWork.Context.QuizQuestions
+                .Where(q => q.QuizId == session.QuizId)
+                .CountAsync();
+
+            // Calculate pass rate
+            var passingScore = session.PassingScore ?? 50.0;
+            var passCount = attempts.Count(a => a.Score.HasValue && a.Score.Value >= passingScore);
+            var passRate = totalAttempts > 0 ? (passCount * 100.0 / totalAttempts) : 0;
+
+            overviewSheet.Cell(overviewRow, 1).Value = quiz?.Title ?? "Unknown Quiz";
+            overviewSheet.Cell(overviewRow, 2).Value = className;
+            overviewSheet.Cell(overviewRow, 3).Value = questionCount;
+            overviewSheet.Cell(overviewRow, 4).Value = totalAttempts;
+            overviewSheet.Cell(overviewRow, 5).Value = Math.Round(avgScore, 1);
+            overviewSheet.Cell(overviewRow, 6).Value = Math.Round(passRate, 1);
+
+            overviewRow++;
+        }
+
+        overviewSheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet per Quiz (Detail)
+        // =============================================
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var className = classDict.GetValueOrDefault(session.ClassId, "Unknown");
+
+            // Sanitize sheet name (max 31 chars, no special chars)
+            var safeQuizName = (quiz?.Title ?? "Quiz")
+                .Replace(":", "")
+                .Replace("\\", "")
+                .Replace("/", "")
+                .Replace("?", "")
+                .Replace("*", "")
+                .Replace("[", "")
+                .Replace("]", "");
+            if (safeQuizName.Length > 28) safeQuizName = safeQuizName.Substring(0, 28);
+            var sheetName = $"{safeQuizName}_{className}".Length > 31
+                ? safeQuizName.Substring(0, 31 - className.Length - 1) + "_" + className
+                : $"{safeQuizName}_{className}";
+
+            var detailSheet = workbook.Worksheets.Add(sheetName);
+
+            // Quiz info header
+            detailSheet.Cell(1, 1).Value = "Quiz:";
+            detailSheet.Cell(1, 1).Style.Font.Bold = true;
+            detailSheet.Cell(1, 2).Value = quiz?.Title ?? "Unknown Quiz";
+            detailSheet.Cell(2, 1).Value = "Class:";
+            detailSheet.Cell(2, 1).Style.Font.Bold = true;
+            detailSheet.Cell(2, 2).Value = className;
+            detailSheet.Cell(3, 1).Value = "Export Date:";
+            detailSheet.Cell(3, 1).Style.Font.Bold = true;
+            detailSheet.Cell(3, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+            // Get attempts with student info
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Student)
+                .Where(a => a.QuizId == session.QuizId)
+                .OrderBy(a => a.Student != null ? a.Student.FullName : "")
+                .ThenBy(a => a.StartedAt)
+                .ToListAsync();
+
+            // Headers
+            var headers = new[] { "STT", "Student Name", "Email", "Score", "Max Score", "Percentage", "Pass/Fail", "Started At", "Completed At", "Time Taken (min)" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                detailSheet.Cell(5, i + 1).Value = headers[i];
+                detailSheet.Cell(5, i + 1).Style.Font.Bold = true;
+                detailSheet.Cell(5, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+            }
+
+            // Data rows
+            int dataRow = 6;
+            int stt = 1;
+            var questionCount = await _unitOfWork.Context.QuizQuestions
+                .Where(q => q.QuizId == session.QuizId)
+                .CountAsync();
+            var maxScore = questionCount * 1.0;
+            var passingScore = session.PassingScore ?? 50.0;
+
+            foreach (var attempt in attempts)
+            {
+                var percentage = maxScore > 0 && attempt.Score.HasValue
+                    ? (attempt.Score.Value / maxScore) * 100
+                    : 0;
+                var isPass = percentage >= passingScore;
+                var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
+                    ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
+                    : (double?)null;
+
+                detailSheet.Cell(dataRow, 1).Value = stt++;
+                detailSheet.Cell(dataRow, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
+                detailSheet.Cell(dataRow, 3).Value = attempt.Student?.Email ?? "";
+                detailSheet.Cell(dataRow, 4).Value = attempt.Score ?? 0;
+                detailSheet.Cell(dataRow, 5).Value = maxScore;
+                detailSheet.Cell(dataRow, 6).Value = Math.Round(percentage, 1);
+                detailSheet.Cell(dataRow, 7).Value = isPass ? "Pass" : "Fail";
+                detailSheet.Cell(dataRow, 7).Style.Font.Bold = true;
+                detailSheet.Cell(dataRow, 7).Style.Font.FontColor = isPass
+                    ? ClosedXML.Excel.XLColor.Green
+                    : ClosedXML.Excel.XLColor.Red;
+                detailSheet.Cell(dataRow, 8).Value = attempt.StartedAt.HasValue
+                    ? attempt.StartedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "-";
+                detailSheet.Cell(dataRow, 9).Value = attempt.CompletedAt.HasValue
+                    ? attempt.CompletedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "In Progress";
+                detailSheet.Cell(dataRow, 10).Value = timeTaken.HasValue ? timeTaken.Value : 0;
+
+                dataRow++;
+            }
+
+            detailSheet.Columns().AdjustToContents();
+        }
+
+        workbook.SaveAs(memoryStream);
+        memoryStream.Position = 0;
+
+        var fileName = $"AllQuizResults_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+
+        return (memoryStream.ToArray(), fileName);
     }
 }

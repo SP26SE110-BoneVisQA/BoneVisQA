@@ -21,6 +21,17 @@ public partial class ClassCase
     [Column("is_mandatory")]
     public bool IsMandatory { get; set; }
 
+    /// <summary>
+    /// ID của announcement đã tạo ra assignment này.
+    /// Dùng để liên kết 2 chiều: announcement &lt;-&gt; assignment.
+    /// </summary>
+    [Column("announcement_id")]
+    public Guid? AnnouncementId { get; set; }
+
+    [ForeignKey("AnnouncementId")]
+    [InverseProperty("ClassCases")]
+    public virtual Announcement? Announcement { get; set; }
+
     [ForeignKey("CaseId")]
     [InverseProperty("ClassCases")]
     public virtual MedicalCase Case { get; set; } = null!;

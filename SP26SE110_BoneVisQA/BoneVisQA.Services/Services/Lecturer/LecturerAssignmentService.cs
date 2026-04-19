@@ -1512,4 +1512,366 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         return new CreateAssignmentManualResponseDto { Results = results };
     }
+
+    /// <summary>
+    /// Export quiz results to an Excel file.
+    /// Creates a workbook with:
+    /// - Sheet "Summary": Quiz info, class name, export date, total students
+    /// - Sheet "Results": Student name, email, score, max score, percentage, pass/fail status, submitted time, time taken
+    /// </summary>
+    public async Task<(byte[] FileBytes, string FileName)> ExportQuizResultsAsync(
+        Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+
+        // Get quiz and class info
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == classId)
+            ?? throw new KeyNotFoundException("Class not found.");
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
+
+        // Get all attempts with student info
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => a.QuizId == quizId)
+            .Include(a => a.Student)
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
+            .OrderBy(a => a.Student.FullName)
+            .ThenBy(a => a.StartedAt)
+            .ToListAsync();
+
+        var questionCounts = await _unitOfWork.Context.QuizQuestions
+            .Where(q => q.QuizId == quizId)
+            .GroupBy(_ => 1)
+            .Select(g => new { Count = g.Count() })
+            .FirstOrDefaultAsync();
+
+        var totalQuestions = questionCounts?.Count ?? 0;
+        var maxScore = totalQuestions * 1.0; // Each question is 1 point
+        var passingScore = session?.PassingScore ?? 50.0;
+
+        using var memoryStream = new MemoryStream();
+        var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // =============================================
+        // Sheet 1: Summary
+        // =============================================
+        var summarySheet = workbook.Worksheets.Add("Summary");
+        summarySheet.Cell(1, 1).Value = "Quiz Results Export";
+        summarySheet.Cell(1, 1).Style.Font.Bold = true;
+        summarySheet.Cell(1, 1).Style.Font.FontSize = 14;
+        summarySheet.Range(1, 1, 1, 2).Merge();
+
+        summarySheet.Cell(3, 1).Value = "Quiz Name:";
+        summarySheet.Cell(3, 1).Style.Font.Bold = true;
+        summarySheet.Cell(3, 2).Value = quiz.Title ?? "Untitled Quiz";
+
+        summarySheet.Cell(4, 1).Value = "Class Name:";
+        summarySheet.Cell(4, 1).Style.Font.Bold = true;
+        summarySheet.Cell(4, 2).Value = academicClass.ClassName ?? "Unknown Class";
+
+        summarySheet.Cell(5, 1).Value = "Total Questions:";
+        summarySheet.Cell(5, 1).Style.Font.Bold = true;
+        summarySheet.Cell(5, 2).Value = totalQuestions;
+
+        summarySheet.Cell(6, 1).Value = "Passing Score:";
+        summarySheet.Cell(6, 1).Style.Font.Bold = true;
+        summarySheet.Cell(6, 2).Value = $"{passingScore}%";
+
+        summarySheet.Cell(7, 1).Value = "Total Students Attempted:";
+        summarySheet.Cell(7, 1).Style.Font.Bold = true;
+        summarySheet.Cell(7, 2).Value = attempts.Count;
+
+        summarySheet.Cell(8, 1).Value = "Export Date:";
+        summarySheet.Cell(8, 1).Style.Font.Bold = true;
+        summarySheet.Cell(8, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+        // Auto-fit columns
+        summarySheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet 2: Results
+        // =============================================
+        var resultsSheet = workbook.Worksheets.Add("Results");
+
+        // Headers
+        var headers = new[] { "STT", "Student Name", "Email", "Score", "Max Score", "Percentage", "Pass/Fail", "Started At", "Completed At", "Time Taken (min)" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            resultsSheet.Cell(1, i + 1).Value = headers[i];
+            resultsSheet.Cell(1, i + 1).Style.Font.Bold = true;
+            resultsSheet.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        // Data rows
+        int row = 2;
+        int stt = 1;
+        foreach (var attempt in attempts)
+        {
+            var percentage = maxScore > 0 && attempt.Score.HasValue
+                ? (attempt.Score.Value / maxScore) * 100
+                : 0;
+            var isPass = percentage >= passingScore;
+            var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
+                ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
+                : (double?)null;
+
+            resultsSheet.Cell(row, 1).Value = stt++;
+            resultsSheet.Cell(row, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
+            resultsSheet.Cell(row, 3).Value = attempt.Student?.Email ?? "";
+            resultsSheet.Cell(row, 4).Value = attempt.Score ?? 0;
+            resultsSheet.Cell(row, 5).Value = maxScore;
+            resultsSheet.Cell(row, 6).Value = Math.Round(percentage, 1);
+            resultsSheet.Cell(row, 7).Value = isPass ? "Pass" : "Fail";
+            resultsSheet.Cell(row, 7).Style.Font.Bold = true;
+            resultsSheet.Cell(row, 7).Style.Font.FontColor = isPass
+                ? ClosedXML.Excel.XLColor.Green
+                : ClosedXML.Excel.XLColor.Red;
+            resultsSheet.Cell(row, 8).Value = attempt.StartedAt.HasValue
+                ? attempt.StartedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                : "-";
+            resultsSheet.Cell(row, 9).Value = attempt.CompletedAt.HasValue
+                ? attempt.CompletedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                : "In Progress";
+            resultsSheet.Cell(row, 10).Value = timeTaken.HasValue ? timeTaken.Value : 0;
+
+            row++;
+        }
+
+        // Auto-fit columns
+        resultsSheet.Columns().AdjustToContents();
+
+        workbook.SaveAs(memoryStream);
+        memoryStream.Position = 0;
+
+        var fileName = $"QuizResults_{quiz.Title?.Replace(" ", "_") ?? "Export"}_{academicClass.ClassName?.Replace(" ", "_") ?? "Class"}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        return (memoryStream.ToArray(), fileName);
+    }
+
+    /// <summary>
+    /// Export all quiz results for a specific class to Excel.
+    /// - Sheet "Summary": Class overview info
+    /// - Sheet "Quiz Overview": Summary of all quizzes with question type breakdown
+    /// - Sheet per quiz: Detailed student results
+    /// </summary>
+    public async Task<(byte[] FileBytes, string FileName)> ExportClassAllQuizResultsAsync(
+        Guid lecturerId, Guid classId)
+    {
+        // 1. Verify class exists and lecturer owns it
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == classId)
+            ?? throw new KeyNotFoundException("Class not found.");
+
+        if (academicClass.LecturerId != lecturerId)
+            throw new UnauthorizedAccessException("You do not have permission to export this class.");
+
+        // 2. Get all quiz sessions for this class
+        var quizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(qs => qs.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
+            .Where(qs => qs.ClassId == classId)
+            .ToListAsync();
+
+        if (!quizSessions.Any())
+            throw new KeyNotFoundException("No quizzes found for this class.");
+
+        using var memoryStream = new MemoryStream();
+        var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // =============================================
+        // Sheet 1: Summary
+        // =============================================
+        var summarySheet = workbook.Worksheets.Add("Summary");
+
+        summarySheet.Cell(1, 1).Value = "Class Quiz Results Export";
+        summarySheet.Cell(1, 1).Style.Font.Bold = true;
+        summarySheet.Cell(1, 1).Style.Font.FontSize = 14;
+        summarySheet.Range(1, 1, 1, 2).Merge();
+
+        summarySheet.Cell(3, 1).Value = "Class Name:";
+        summarySheet.Cell(3, 1).Style.Font.Bold = true;
+        summarySheet.Cell(3, 2).Value = academicClass.ClassName ?? "Unknown Class";
+
+        summarySheet.Cell(4, 1).Value = "Total Quizzes:";
+        summarySheet.Cell(4, 1).Style.Font.Bold = true;
+        summarySheet.Cell(4, 2).Value = quizSessions.Count;
+
+        summarySheet.Cell(5, 1).Value = "Total Students in Class:";
+        summarySheet.Cell(5, 1).Style.Font.Bold = true;
+        summarySheet.Cell(5, 2).Value = academicClass.ClassEnrollments?.Count ?? 0;
+
+        summarySheet.Cell(6, 1).Value = "Export Date:";
+        summarySheet.Cell(6, 1).Style.Font.Bold = true;
+        summarySheet.Cell(6, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+        summarySheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet 2: Quiz Overview
+        // =============================================
+        var overviewSheet = workbook.Worksheets.Add("Quiz Overview");
+
+        var overviewHeaders = new[] { "STT", "Quiz Name", "Total Questions", "MC Count", "Essay Count", "Total Attempts", "Avg Score", "Pass Rate (%)" };
+        for (int i = 0; i < overviewHeaders.Length; i++)
+        {
+            overviewSheet.Cell(1, i + 1).Value = overviewHeaders[i];
+            overviewSheet.Cell(1, i + 1).Style.Font.Bold = true;
+            overviewSheet.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        int overviewRow = 2;
+        int stt = 1;
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
+            var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
+            var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
+            var totalQuestions = questions.Count;
+
+            // Get all attempts for this quiz
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Where(a => a.QuizId == session.QuizId)
+                .ToListAsync();
+
+            var totalAttempts = attempts.Count;
+            var avgScore = attempts.Any() && attempts.Any(a => a.Score.HasValue)
+                ? attempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
+                : 0;
+
+            // Calculate pass rate
+            var passingScore = session.PassingScore ?? 50.0;
+            var passCount = attempts.Count(a => a.Score.HasValue && a.Score.Value >= passingScore);
+            var passRate = totalAttempts > 0 ? (passCount * 100.0 / totalAttempts) : 0;
+
+            overviewSheet.Cell(overviewRow, 1).Value = stt++;
+            overviewSheet.Cell(overviewRow, 2).Value = quiz?.Title ?? "Unknown Quiz";
+            overviewSheet.Cell(overviewRow, 3).Value = totalQuestions;
+            overviewSheet.Cell(overviewRow, 4).Value = mcCount;
+            overviewSheet.Cell(overviewRow, 5).Value = essayCount;
+            overviewSheet.Cell(overviewRow, 6).Value = totalAttempts;
+            overviewSheet.Cell(overviewRow, 7).Value = Math.Round(avgScore, 1);
+            overviewSheet.Cell(overviewRow, 8).Value = Math.Round(passRate, 1);
+
+            overviewRow++;
+        }
+
+        overviewSheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet per Quiz (Detail)
+        // =============================================
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var className = academicClass.ClassName ?? "Unknown";
+
+            // Sanitize sheet name (max 31 chars, no special chars)
+            var safeQuizName = (quiz?.Title ?? "Quiz")
+                .Replace(":", "")
+                .Replace("\\", "")
+                .Replace("/", "")
+                .Replace("?", "")
+                .Replace("*", "")
+                .Replace("[", "")
+                .Replace("]", "");
+            if (safeQuizName.Length > 28) safeQuizName = safeQuizName.Substring(0, 28);
+            var sheetName = $"{safeQuizName}_{className}".Length > 31
+                ? safeQuizName.Substring(0, 31 - className.Length - 1) + "_" + className
+                : $"{safeQuizName}_{className}";
+
+            var detailSheet = workbook.Worksheets.Add(sheetName);
+
+            // Quiz info header
+            detailSheet.Cell(1, 1).Value = "Quiz:";
+            detailSheet.Cell(1, 1).Style.Font.Bold = true;
+            detailSheet.Cell(1, 2).Value = quiz?.Title ?? "Unknown Quiz";
+            detailSheet.Cell(2, 1).Value = "Class:";
+            detailSheet.Cell(2, 1).Style.Font.Bold = true;
+            detailSheet.Cell(2, 2).Value = className;
+            detailSheet.Cell(3, 1).Value = "Export Date:";
+            detailSheet.Cell(3, 1).Style.Font.Bold = true;
+            detailSheet.Cell(3, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+            // Get attempts with student info
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Student)
+                .Where(a => a.QuizId == session.QuizId)
+                .OrderBy(a => a.Student != null ? a.Student.FullName : "")
+                .ThenBy(a => a.StartedAt)
+                .ToListAsync();
+
+            // Headers
+            var headers = new[] { "STT", "Student Name", "Email", "Score", "Max Score", "Percentage", "Pass/Fail", "Started At", "Completed At", "Time Taken (min)" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                detailSheet.Cell(5, i + 1).Value = headers[i];
+                detailSheet.Cell(5, i + 1).Style.Font.Bold = true;
+                detailSheet.Cell(5, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+            }
+
+            // Data rows
+            int dataRow = 6;
+            int rowStt = 1;
+            var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
+            var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
+            var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
+            var maxScore = questions.Sum(q => q.MaxScore);
+            var passingScore = session.PassingScore ?? 50.0;
+
+            foreach (var attempt in attempts)
+            {
+                var percentage = maxScore > 0 && attempt.Score.HasValue
+                    ? (attempt.Score.Value / maxScore) * 100
+                    : 0;
+                var isPass = percentage >= passingScore;
+                var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
+                    ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
+                    : (double?)null;
+
+                detailSheet.Cell(dataRow, 1).Value = rowStt++;
+                detailSheet.Cell(dataRow, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
+                detailSheet.Cell(dataRow, 3).Value = attempt.Student?.Email ?? "";
+                detailSheet.Cell(dataRow, 4).Value = attempt.Score ?? 0;
+                detailSheet.Cell(dataRow, 5).Value = maxScore;
+                detailSheet.Cell(dataRow, 6).Value = Math.Round(percentage, 1);
+                detailSheet.Cell(dataRow, 7).Value = isPass ? "Pass" : "Fail";
+                detailSheet.Cell(dataRow, 7).Style.Font.Bold = true;
+                detailSheet.Cell(dataRow, 7).Style.Font.FontColor = isPass
+                    ? ClosedXML.Excel.XLColor.Green
+                    : ClosedXML.Excel.XLColor.Red;
+                detailSheet.Cell(dataRow, 8).Value = attempt.StartedAt.HasValue
+                    ? attempt.StartedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "-";
+                detailSheet.Cell(dataRow, 9).Value = attempt.CompletedAt.HasValue
+                    ? attempt.CompletedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "In Progress";
+                detailSheet.Cell(dataRow, 10).Value = timeTaken.HasValue ? timeTaken.Value : 0;
+
+                dataRow++;
+            }
+
+            detailSheet.Columns().AdjustToContents();
+        }
+
+        workbook.SaveAs(memoryStream);
+        memoryStream.Position = 0;
+
+        var fileName = $"ClassQuizResults_{academicClass.ClassName?.Replace(" ", "_") ?? "Export"}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        return (memoryStream.ToArray(), fileName);
+    }
 }

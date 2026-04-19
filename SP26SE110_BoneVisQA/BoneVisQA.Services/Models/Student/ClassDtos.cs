@@ -1,4 +1,5 @@
 using System;
+using BoneVisQA.Services.Models.Lecturer;
 
 namespace BoneVisQA.Services.Models.Student;
 
@@ -66,4 +67,6 @@ public class ClassAnnouncementDto
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
+    /// <summary>Thông tin assignment liên quan (nếu có)</summary>
+    public AnnouncementAssignmentInfoDto? RelatedAssignment { get; set; }
 }

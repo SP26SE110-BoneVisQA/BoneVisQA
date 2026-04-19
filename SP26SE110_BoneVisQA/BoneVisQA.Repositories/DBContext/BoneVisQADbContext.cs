@@ -127,6 +127,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.SendEmail).HasDefaultValueSql("true");
 
             entity.HasOne(d => d.Class).WithMany(p => p.Announcements).HasConstraintName("announcements_class_id_fkey");
+            // Note: No FK to class_cases because it uses composite key (class_id, case_id)
+            // Application validates assignmentId exists in class_cases or class_quiz_sessions
         });
 
         modelBuilder.Entity<CaseAnnotation>(entity =>

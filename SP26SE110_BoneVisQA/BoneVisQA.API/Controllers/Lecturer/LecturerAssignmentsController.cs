@@ -178,6 +178,52 @@ public class LecturerAssignmentsController : ControllerBase
         }
     }
 
+    /// <summary>Export quiz results to Excel file.</summary>
+    [HttpGet("quizzes/{quizId:guid}/export")]
+    public async Task<ActionResult> ExportQuizResults(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var (fileBytes, fileName) = await _lecturerAssignmentService.ExportQuizResultsAsync(lecturerId.Value, classId, quizId);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Export all quiz results to Excel file for a specific class.</summary>
+    [HttpGet("export-all")]
+    public async Task<ActionResult> ExportClassAllQuizResults(Guid classId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var (fileBytes, FileName) = await _lecturerAssignmentService.ExportClassAllQuizResultsAsync(lecturerId.Value, classId);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", FileName);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
     private Guid? GetUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
