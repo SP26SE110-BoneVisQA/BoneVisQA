@@ -32,7 +32,7 @@ public class LecturerReviewsController : ControllerBase
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {

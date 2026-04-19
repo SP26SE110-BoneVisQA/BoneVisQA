@@ -77,7 +77,7 @@ public class LecturerDashboardService : ILecturerDashboardService
             .AnyAsync(c => c.Id == classId && c.LecturerId == lecturerId);
 
         if (!classExists)
-            throw new KeyNotFoundException("Không tìm thấy lớp học thuộc quyền giảng viên.");
+            throw new KeyNotFoundException("No class under this lecturer was found.");
 
         var students = await _unitOfWork.Context.ClassEnrollments
             .Where(e => e.ClassId == classId)

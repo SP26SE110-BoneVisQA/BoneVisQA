@@ -15,5 +15,7 @@ public interface IGeminiService
     Task<VisualQAResponseDto> GenerateMedicalAnswerAsync(
         string prompt,
         string imageUrl,
+        string? conversationHistory = null,
+        bool ragContextAdequate = true,
         CancellationToken cancellationToken = default);
 }

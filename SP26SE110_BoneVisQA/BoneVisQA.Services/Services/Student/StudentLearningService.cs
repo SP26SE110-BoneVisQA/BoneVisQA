@@ -115,7 +115,7 @@ public class StudentLearningService : IStudentLearningService
             return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting, classSession);
         }
 
-        throw new KeyNotFoundException("Không tìm thấy quiz luyện tập phù hợp.");
+        throw new KeyNotFoundException("No suitable practice quiz found.");
     }
 
     /// <summary>
@@ -203,13 +203,13 @@ public class StudentLearningService : IStudentLearningService
             .Include(a => a.StudentQuizAnswers)
                 .ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync(a => a.Id == request.AttemptId && a.StudentId == studentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         if (attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Quiz này đã được nộp.");
+            throw new InvalidOperationException("This quiz has already been submitted.");
 
         if (attempt.Quiz == null)
-            throw new KeyNotFoundException("Không tìm thấy quiz.");
+            throw new KeyNotFoundException("Quiz not found.");
 
         // Quiz AI tự tạo không gắn ClassQuizSession — chỉ kiểm tra cửa sổ nộp cho quiz lớp.
         if (!attempt.Quiz.IsAiGenerated)
@@ -228,18 +228,18 @@ public class StudentLearningService : IStudentLearningService
                     classIds.Contains(cqs.ClassId));
 
             if (session == null)
-                throw new InvalidOperationException("Quiz không được gán qua lớp học.");
+                throw new InvalidOperationException("This quiz is not assigned through a class.");
 
             // Kiểm tra quiz đã đóng chưa
             var effectiveCloseTime = session.CloseTime ?? session.Quiz?.CloseTime;
             if (effectiveCloseTime.HasValue && effectiveCloseTime.Value < utcNow)
-                throw new InvalidOperationException("Quiz đã đóng. Không thể nộp bài.");
+                throw new InvalidOperationException("The quiz is closed. Submission is not allowed.");
         }
 
         var quiz = await _unitOfWork.Context.Quizzes
             .Include(q => q.QuizQuestions)
             .FirstOrDefaultAsync(q => q.Id == attempt.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var questionMap = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
         var incomingAnswers = request.Answers
@@ -250,7 +250,7 @@ public class StudentLearningService : IStudentLearningService
         foreach (var answer in incomingAnswers)
         {
             if (!questionMap.TryGetValue(answer.QuestionId, out var question))
-                throw new InvalidOperationException("Phát hiện câu trả lời không thuộc quiz này.");
+                throw new InvalidOperationException("An answer not belonging to this quiz was detected.");
 
             var existing = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == answer.QuestionId);
 
@@ -456,7 +456,7 @@ public class StudentLearningService : IStudentLearningService
         string? difficulty)
     {
         if (!generated.Success || generated.Questions.Count == 0)
-            throw new InvalidOperationException("Không có câu hỏi để lưu.");
+            throw new InvalidOperationException("There are no questions to save.");
 
         // 1. Tạo Quiz record
         var quiz = new BoneVisQA.Repositories.Models.Quiz
@@ -691,8 +691,70 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<IReadOnlyList<StudentRecentActivityDto>> GetRecentActivityAsync(Guid studentId)
     {
-        // TODO: Implement recent activity
-        return new List<StudentRecentActivityDto>();
+        var recentQuestions = await _unitOfWork.Context.QaMessages
+            .AsNoTracking()
+            .Include(m => m.Session)
+                .ThenInclude(s => s.Case)
+                    .ThenInclude(c => c!.Category)
+            .Where(m => m.Role == "User" && m.Session.StudentId == studentId)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(10)
+            .Select(m => new StudentRecentActivityDto
+            {
+                ActivityType = "visual_qa",
+                Title = m.Session.Case != null ? $"Asked a question on {m.Session.Case.Title}" : "Asked a visual QA question",
+                Description = m.Content,
+                Topic = m.Session.Case != null
+                    ? m.Session.Case.Category != null
+                        ? m.Session.Case.Category.Name
+                        : m.Session.Case.Title
+                    : "Personal Upload",
+                OccurredAt = m.CreatedAt,
+                SessionId = m.SessionId,
+                TargetUrl = "/student/qa/image?sessionId=" + m.SessionId.ToString()
+            })
+            .ToListAsync();
+
+        var recentQuizAttempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q.QuizQuestions)
+                    .ThenInclude(qq => qq.Case)
+                        .ThenInclude(c => c!.Category)
+            .Where(a => a.StudentId == studentId && a.CompletedAt.HasValue)
+            .OrderByDescending(a => a.CompletedAt)
+            .Take(10)
+            .ToListAsync();
+
+        var recentQuizzes = recentQuizAttempts.Select(a => new StudentRecentActivityDto
+        {
+            ActivityType = "Quiz",
+            Title = $"Completed Quiz {a.Quiz.Title}",
+            Description = a.Score.HasValue
+                ? $"Completed Quiz {a.Quiz.Title} with {a.Score.Value:F0}%"
+                : $"Completed Quiz {a.Quiz.Title}",
+            Topic = InferQuizTopic(a),
+            OccurredAt = a.CompletedAt ?? a.StartedAt ?? DateTime.MinValue
+        }).ToList();
+
+        return recentQuestions
+            .Concat(recentQuizzes)
+            .OrderByDescending(x => x.OccurredAt)
+            .Take(10)
+            .ToList();
+    }
+
+    private static string InferQuizTopic(QuizAttempt a)
+    {
+        var firstQuestion = a.Quiz.QuizQuestions.FirstOrDefault();
+        var caseEntity = firstQuestion?.Case;
+        if (!string.IsNullOrWhiteSpace(caseEntity?.Category?.Name))
+            return caseEntity!.Category!.Name!;
+        if (!string.IsNullOrWhiteSpace(caseEntity?.Title))
+            return caseEntity!.Title;
+        if (!string.IsNullOrWhiteSpace(a.Quiz.Title))
+            return a.Quiz.Title;
+        return "Quiz";
     }
 
     public async Task AutoCloseExpiredAttemptsAsync()

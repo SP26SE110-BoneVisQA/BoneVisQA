@@ -25,7 +25,7 @@ public partial class Announcement
     public string Content { get; set; } = null!;
 
     [Column("send_email")]
-    public bool SendEmail { get; set; } = true;
+    public bool? SendEmail { get; set; }
 
     /// <summary>
     /// Optional: ID of the assignment (case or quiz) associated with this announcement.

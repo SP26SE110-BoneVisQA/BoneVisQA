@@ -11,6 +11,7 @@ using System.Data;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Services.Admin
@@ -49,8 +50,96 @@ namespace BoneVisQA.Services.Services.Admin
                 Roles = user.UserRoles.Select(r => r.Role.Name).ToList(),
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt
+                UpdatedAt = user.UpdatedAt,
+                ClassAssignments = new List<UserClassAssignmentDto>()
             };
+        }
+
+        private async Task<Dictionary<Guid, List<UserClassAssignmentDto>>> LoadClassAssignmentsForUserIdsAsync(
+            IReadOnlyList<Guid> userIds,
+            CancellationToken cancellationToken = default)
+        {
+            var result = userIds.Distinct().ToDictionary(id => id, _ => new List<UserClassAssignmentDto>());
+            if (result.Count == 0)
+                return result;
+
+            var enrollments = await _unitOfWork.Context.ClassEnrollments
+                .AsNoTracking()
+                .Where(e => userIds.Contains(e.StudentId))
+                .Select(e => new
+                {
+                    e.StudentId,
+                    e.ClassId,
+                    Name = e.Class.ClassName,
+                    e.EnrolledAt
+                })
+                .ToListAsync(cancellationToken);
+            foreach (var e in enrollments)
+            {
+                if (!result.TryGetValue(e.StudentId, out var list))
+                    continue;
+                list.Add(new UserClassAssignmentDto
+                {
+                    ClassId = e.ClassId,
+                    ClassName = e.Name,
+                    RoleInClass = "Student",
+                    EnrolledAt = e.EnrolledAt
+                });
+            }
+
+            var lecturerClasses = await _unitOfWork.Context.AcademicClasses
+                .AsNoTracking()
+                .Where(c => c.LecturerId != null && userIds.Contains(c.LecturerId.Value))
+                .Select(c => new { UserId = c.LecturerId!.Value, c.Id, c.ClassName })
+                .ToListAsync(cancellationToken);
+            foreach (var c in lecturerClasses)
+            {
+                if (!result.TryGetValue(c.UserId, out var list))
+                    continue;
+                list.Add(new UserClassAssignmentDto
+                {
+                    ClassId = c.Id,
+                    ClassName = c.ClassName,
+                    RoleInClass = "Lecturer",
+                    EnrolledAt = null
+                });
+            }
+
+            var expertClasses = await _unitOfWork.Context.AcademicClasses
+                .AsNoTracking()
+                .Where(c => c.ExpertId != null && userIds.Contains(c.ExpertId.Value))
+                .Select(c => new { UserId = c.ExpertId!.Value, c.Id, c.ClassName })
+                .ToListAsync(cancellationToken);
+            foreach (var c in expertClasses)
+            {
+                if (!result.TryGetValue(c.UserId, out var list))
+                    continue;
+                list.Add(new UserClassAssignmentDto
+                {
+                    ClassId = c.Id,
+                    ClassName = c.ClassName,
+                    RoleInClass = "Expert",
+                    EnrolledAt = null
+                });
+            }
+
+            return result;
+        }
+
+        private async Task EnrichClassAssignmentsAsync(List<UserManagementDTO> items, CancellationToken cancellationToken = default)
+        {
+            if (items.Count == 0)
+                return;
+            var map = await LoadClassAssignmentsForUserIdsAsync(items.Select(i => i.Id).ToList(), cancellationToken);
+            foreach (var dto in items)
+            {
+                if (!map.TryGetValue(dto.Id, out var list))
+                    continue;
+                dto.ClassAssignments = list
+                    .OrderBy(x => x.ClassName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.RoleInClass, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
         }
 
         private async Task<User?> GetUserWithRolesAsync(Guid userId)
@@ -91,25 +180,19 @@ namespace BoneVisQA.Services.Services.Admin
 
         public async Task<List<UserManagementDTO>> GetAllUsersAsync()
         {
-            return await _unitOfWork.Context.Users
+            var users = await _unitOfWork.Context.Users
                 .AsNoTracking()
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                 .OrderByDescending(u => u.CreatedAt ?? DateTime.MinValue)
                 .ThenByDescending(u => u.Id)
-                .Select(u => new UserManagementDTO
-                {
-                    Id = u.Id,
-                    FullName = u.FullName,
-                    Email = u.Email ?? string.Empty,
-                    SchoolCohort = u.SchoolCohort,
-                    LastLogin = u.LastLogin,
-                    Roles = u.UserRoles.Select(r => r.Role.Name).ToList(),
-                    IsActive = u.IsActive,
-                    CreatedAt = u.CreatedAt,
-                    UpdatedAt = u.UpdatedAt
-                })
+                // Exclude Admin role; must be translatable to SQL (no local helper in Where).
+                .Where(u => !u.UserRoles.Any(r => r.Role.Name.ToLower() == "admin"))
                 .ToListAsync();
+
+            var items = users.Select(MapUser).ToList();
+            await EnrichClassAssignmentsAsync(items);
+            return items;
         }
 
         public async Task<PagedUsersResultDto> GetUsersPagedAsync(int page, int pageSize)
@@ -120,7 +203,8 @@ namespace BoneVisQA.Services.Services.Admin
             var baseQuery = _unitOfWork.Context.Users
                 .AsNoTracking()
                 .Include(u => u.UserRoles)
-                    .ThenInclude(ur => ur.Role);
+                    .ThenInclude(ur => ur.Role)
+                .Where(u => !u.UserRoles.Any(r => r.Role.Name.ToLower() == "admin"));
 
             var totalCount = await baseQuery.CountAsync();
 
@@ -131,9 +215,12 @@ namespace BoneVisQA.Services.Services.Admin
                 .Take(pageSize)
                 .ToListAsync();
 
+            var items = users.Select(MapUser).ToList();
+            await EnrichClassAssignmentsAsync(items);
+
             return new PagedUsersResultDto
             {
-                Items = users.Select(MapUser).ToList(),
+                Items = items,
                 TotalCount = totalCount,
                 Page = page,
                 PageSize = pageSize

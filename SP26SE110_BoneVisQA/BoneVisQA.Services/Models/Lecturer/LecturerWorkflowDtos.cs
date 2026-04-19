@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
 /// <summary>Row returned by GET /api/lecturer/triage for the QA Triage workbench.</summary>
 public class LecturerTriageRowDto
 {
-    /// <summary>Primary key of this triage row’s <c>case_answers</c> record (required; use for escalate).</summary>
+    /// <summary>Visual QA: session id. Case QA: <c>case_answers.id</c> (use for escalate / workflows).</summary>
     [JsonPropertyName("answerId")]
     public Guid AnswerId { get; set; }
 
@@ -19,6 +20,12 @@ public class LecturerTriageRowDto
     public string ClassName { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
+    /// <summary>From <see cref="BoneVisQA.Repositories.Models.MedicalCase"/> when session is case-based (catalog).</summary>
+    public string? CaseDescription { get; set; }
+    /// <summary>Expert case teaching diagnosis (<c>medical_cases.suggested_diagnosis</c>).</summary>
+    public string? CaseSuggestedDiagnosis { get; set; }
+    /// <summary>Expert key findings on the case (<c>medical_cases.key_findings</c>).</summary>
+    public string? CaseKeyFindings { get; set; }
     /// <summary>X-ray / study image: Visual QA upload (<c>CustomImageUrl</c>) or first <c>MedicalImage</c> on the case.</summary>
     public string? ThumbnailUrl { get; set; }
     /// <summary>Resolved study image: personal upload or first case image (explicit for FE binding).</summary>
@@ -32,6 +39,22 @@ public class LecturerTriageRowDto
     public bool IsEscalated { get; set; }
     public string? EscalatedByName { get; set; }
     public DateTime? EscalatedAt { get; set; }
+
+    /// <summary><c>VisualQA</c> (session-based) or <c>CaseQA</c> (student case question).</summary>
+    public string TriageSource { get; set; } = "VisualQA";
+
+    public string? StructuredDiagnosis { get; set; }
+    public string? ReflectiveQuestions { get; set; }
+    public string? KeyImagingFindings { get; set; }
+    public string? DifferentialDiagnoses { get; set; }
+    public string? AnnotationLabel { get; set; }
+    public string? AnnotationCoordinates { get; set; }
+    public string? CustomCoordinates { get; set; }
+    public string? CustomImageUrl { get; set; }
+    public Guid? RequestedReviewMessageId { get; set; }
+    public Guid? SelectedUserMessageId { get; set; }
+    public Guid? SelectedAssistantMessageId { get; set; }
+    public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
 }
 
 /// <summary>Full detail of a single student question for the lectuer to view and respond.</summary>
@@ -44,6 +67,10 @@ public class LectStudentQuestionDetailDto
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
     public string? CaseDescription { get; set; }
+    /// <summary>Teaching diagnosis from catalog case (<c>medical_cases.suggested_diagnosis</c>).</summary>
+    public string? CaseSuggestedDiagnosis { get; set; }
+    /// <summary>Key findings from catalog case (<c>medical_cases.key_findings</c>).</summary>
+    public string? CaseKeyFindings { get; set; }
     public string? CaseThumbnailUrl { get; set; }
     /// <summary>Same resolved image as <see cref="CaseThumbnailUrl"/> (<c>imageUrl</c> for clients).</summary>
     public string? ImageUrl { get; set; }
@@ -85,6 +112,8 @@ public class RespondToQuestionRequestDto
     public string? StructuredDiagnosis { get; set; }
     public List<string>? DifferentialDiagnoses { get; set; }
     public bool Approve { get; set; } = false;
+    /// <summary>Optional explicit decision. Supported values: approve_and_escalate, approve_finalize, hold.</summary>
+    public string? Decision { get; set; }
 }
 
 public class LecturerAnswerDto
@@ -117,6 +146,11 @@ public class EscalateAnswerRequestDto
     public string? ReviewNote { get; set; }
 }
 
+public class RejectAnswerRequestDto
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class EscalatedAnswerDto
 {
     public Guid AnswerId { get; set; }
@@ -137,4 +171,10 @@ public class EscalatedAnswerDto
     public Guid? ClassId { get; set; }
     public string ClassName { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? CustomCoordinates { get; set; }
+    public Guid? RequestedReviewMessageId { get; set; }
+    public Guid? SelectedUserMessageId { get; set; }
+    public Guid? SelectedAssistantMessageId { get; set; }
+    public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
 }

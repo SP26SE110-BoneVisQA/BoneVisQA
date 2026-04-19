@@ -47,9 +47,10 @@ public class QuizGeminiService : IQuizGeminiService
         if (string.IsNullOrWhiteSpace(prompt))
             throw new ArgumentException("Prompt must not be empty.", nameof(prompt));
 
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        var apiKeys = _settings.GetResolvedApiKeys();
+        if (apiKeys.Count == 0)
         {
-            _logger.LogWarning("QuizGeminiService: Gemini:ApiKey not configured. Skipping.");
+            _logger.LogWarning("QuizGeminiService: Gemini:ApiKeys not configured. Skipping.");
             return null;
         }
 
@@ -68,7 +69,7 @@ public class QuizGeminiService : IQuizGeminiService
 
         var baseUrl = _settings.BaseUrl.TrimEnd('/');
         var modelId = resolvedModels[0];
-        var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={_settings.ApiKey}";
+        var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={apiKeys[0]}";
 
         string? base64Image = null;
         string? mimeType = null;

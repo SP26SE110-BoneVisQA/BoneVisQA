@@ -60,11 +60,11 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetClassByIdAsync(lecturerId.Value, classId);
         if (result == null)
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền truy cập lớp học này." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "You do not have permission to access this class." });
         return Ok(result);
     }
 
@@ -73,7 +73,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetClassesForLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -86,7 +86,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         IReadOnlyList<StudentEnrollmentDto> result;
         try
@@ -106,7 +106,7 @@ public class LecturersController : ControllerBase
     // {
     //     var lecturerId = GetLecturerId();
     //     if (lecturerId == null)
-    //         return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+    //         return Unauthorized(new { message = "Token does not contain a valid user id." });
     //
     //     IReadOnlyList<StudentEnrollmentDto> result;
     //     try
@@ -126,7 +126,7 @@ public class LecturersController : ControllerBase
     // public async Task<ActionResult<ImportStudentsSummaryDto>> ImportStudentsFromExcel(Guid classId, IFormFile file)
     // {
     //     if (file == null || file.Length == 0)
-    //         return BadRequest(new { message = "File không được để trống." });
+    //         return BadRequest(new { message = "File must not be empty." });
     //
     //     var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
     //     if (extension != ".xlsx" && extension != ".xls")
@@ -142,7 +142,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.CreateAnnouncementAsync(lecturerId.Value, classId, request);
         return Ok(result);
@@ -182,7 +182,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetAllAssignmentsForLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -278,7 +278,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _lecturerService.GetQuizzesByLecturerAsync(lecturerId.Value);
         return Ok(result);
@@ -308,7 +308,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizByIdAsync(quizId);
         if (result == null)
-            return NotFound(new { message = "Quiz không tồn tại." });
+            return NotFound(new { message = "Quiz does not exist." });
         return Ok(result);
     }
 
@@ -346,7 +346,7 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetQuizQuestionByIdAsync(questionId);
         if (result == null)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return Ok(result);
     }
 
@@ -399,7 +399,7 @@ public class LecturersController : ControllerBase
     {
         var deleted = await _lecturerService.DeleteQuizQuestionAsync(questionId);
         if (!deleted)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return NoContent();
     }
 
@@ -410,16 +410,16 @@ public class LecturersController : ControllerBase
         {
             var lecturerId = GetLecturerId();
             if (lecturerId == null)
-                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
 
             var deleted = await _lecturerService.DeleteQuizAsync(quizId);
             if (!deleted)
-                return NotFound(new { message = "Quiz không tồn tại." });
+                return NotFound(new { message = "Quiz does not exist." });
             return NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { title = "Không thể xóa", status = 400, detail = ex.Message });
+            return BadRequest(new { title = "Cannot delete quiz", status = 400, detail = ex.Message });
         }
     }
 
@@ -428,7 +428,7 @@ public class LecturersController : ControllerBase
     {
         var lecturerId = GetLecturerId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -559,7 +559,7 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<AIQuizGenerationResultDto>> GenerateQuiz([FromBody] AIAutoGenerateQuizRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         var result = await _aiQuizService.GenerateQuizQuestionsAsync(
             request.Topic,
@@ -592,10 +592,10 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> CreateQuizFromAI([FromBody] AIAutoGenerateQuizRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
-            return BadRequest(new { message = "Title là bắt buộc." });
+            return BadRequest(new { message = "Title is required." });
 
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         try
         {
@@ -674,7 +674,7 @@ public class LecturersController : ControllerBase
     {
         var updated = await _lecturerService.ApproveCaseAsync(caseId, request);
         if (!updated)
-            return NotFound(new { message = "Case không tồn tại." });
+            return NotFound(new { message = "Case not found." });
         return NoContent();
     }
 
@@ -682,7 +682,7 @@ public class LecturersController : ControllerBase
 
     #region Assignment CRUD
 
-    /// <summary>Lấy chi tiết một assignment theo ID.</summary>
+    /// <summary>Get assignment details by ID.</summary>
     [HttpGet("assignments/{assignmentId:guid}")]
     public async Task<ActionResult<AssignmentDetailDto>> GetAssignmentById(Guid assignmentId)
     {
@@ -697,7 +697,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     [HttpPut("assignments/{assignmentId:guid}")]
     public async Task<ActionResult<AssignmentDetailDto>> UpdateAssignment(Guid assignmentId, [FromBody] UpdateAssignmentRequestDto request)
     {
@@ -712,7 +712,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     [HttpDelete("assignments/{assignmentId:guid}")]
     public async Task<IActionResult> DeleteAssignment(Guid assignmentId)
     {
@@ -727,7 +727,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get submission list for an assignment.</summary>
     [HttpGet("assignments/{assignmentId:guid}/submissions")]
     public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> GetAssignmentSubmissions(Guid assignmentId)
     {
@@ -742,7 +742,7 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     [HttpPut("assignments/{assignmentId:guid}/submissions")]
     public async Task<ActionResult<IReadOnlyList<AssignmentSubmissionDto>>> UpdateAssignmentSubmissions(
         Guid assignmentId, [FromBody] UpdateSubmissionsRequestDto request)
@@ -764,25 +764,56 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>
     [HttpGet("triage")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId, [FromQuery] string? source = null)
     {
         try
         {
-            var result = await _lecturerService.GetTriageListAsync(classId);
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Visual QA only triage list (exclude Case QA rows) for deterministic testing.</summary>
+    [HttpGet("triage/visual-qa")]
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList([FromQuery] Guid classId)
+    {
+        try
+        {
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa");
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
     }
 
     [HttpGet("classes/{classId:guid}/questions/{questionId:guid}")]
     public async Task<ActionResult<LectStudentQuestionDetailDto>> GetQuestionDetail(Guid classId, Guid questionId)
     {
-        var result = await _lecturerService.GetQuestionDetailAsync(classId, questionId);
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetQuestionDetailAsync(lecturerId.Value, classId, questionId);
         if (result == null)
-            return NotFound(new { message = "Câu hỏi không tồn tại." });
+            return NotFound(new { message = "Question not found." });
         return Ok(result);
     }
 
@@ -794,7 +825,9 @@ public class LecturersController : ControllerBase
     {
         try
         {
-            var result = await _lecturerService.RespondToQuestionAsync(classId, questionId, request);
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.RespondToQuestionAsync(lecturerId, classId, questionId, request);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -803,6 +836,12 @@ public class LecturersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            if (ex.Message.StartsWith("Cannot ", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { message = ex.Message });
+
+            if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -822,11 +861,25 @@ public class LecturersController : ControllerBase
         }
     }
 
+    /// <param name="source">Optional: <c>case-qa</c> (default when omitted), <c>visual-qa</c>, or <c>all</c> to merge case + Visual QA rows (Visual QA rows mirror GET triage).</param>
     [HttpGet("classes/{classId:guid}/questions")]
-    public async Task<ActionResult<IReadOnlyList<LectStudentQuestionDto>>> GetStudentQuestions(Guid classId, [FromQuery] Guid? caseId, [FromQuery] Guid? studentId)
+    public async Task<ActionResult<IReadOnlyList<LectStudentQuestionDto>>> GetStudentQuestions(Guid classId, [FromQuery] Guid? caseId, [FromQuery] Guid? studentId, [FromQuery] string? source = null)
     {
-        var result = await _lecturerService.GetStudentQuestionsAsync(classId, caseId, studentId);
-        return Ok(result);
+        try
+        {
+            var lecturerId = GetLecturerId()
+                ?? throw new InvalidOperationException("Token does not contain a valid user id.");
+            var result = await _lecturerService.GetStudentQuestionsAsync(lecturerId, classId, caseId, studentId, source);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     #endregion

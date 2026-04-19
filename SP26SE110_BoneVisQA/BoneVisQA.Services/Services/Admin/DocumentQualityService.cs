@@ -1,9 +1,11 @@
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -44,8 +46,13 @@ namespace BoneVisQA.Services.Services.Admin
                 DocumentId = doc.Id,
                 Title = doc.Title,
                 FilePath = doc.FilePath,
-                CreatedAt = doc.CreatedAt,
-                Version = doc.Version,
+                CreatedAt = doc.CreatedAt.HasValue
+                    ? doc.CreatedAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                    : null,
+                UpdatedAt = doc.UpdatedAt.HasValue
+                    ? doc.UpdatedAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                    : null,
+                Version = SemanticDocumentVersion.Normalize(doc.Version),
                 CitationCount = citationCount,
                 NegativeReviewCount = negativeReviewCount,
                 IsOutdated = doc.IsOutdated,
@@ -95,7 +102,7 @@ namespace BoneVisQA.Services.Services.Admin
             foreach (var doc in outdatedDocs)
                 dtos.Add(await BuildDTOAsync(doc));
 
-            return dtos.OrderByDescending(d => d.CreatedAt ?? DateTime.MinValue).ToList();
+            return dtos.OrderByDescending(d => d.CreatedAt ?? string.Empty).ToList();
         }
 
         public async Task<List<DocumentQualityDTO>> GetDocumentsFlaggedForReviewAsync()
@@ -111,7 +118,7 @@ namespace BoneVisQA.Services.Services.Admin
             }
 
             return dtos.OrderByDescending(d => d.NegativeReviewCount)
-                       .ThenByDescending(d => d.CreatedAt ?? DateTime.MinValue)
+                       .ThenByDescending(d => d.CreatedAt ?? string.Empty)
                        .ToList();
         }
     }

@@ -39,7 +39,8 @@ public class LecturerProfileService : ILecturerProfileService
 
         user.FullName = request.FullName.Trim();
         user.Department = string.IsNullOrWhiteSpace(request.Department) ? null : request.Department.Trim();
-        user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+            user.AvatarUrl = request.AvatarUrl.Trim();
         UserPersonalFieldsHelper.Apply(
             user,
             request.DateOfBirth,

@@ -20,6 +20,23 @@ namespace BoneVisQA.Services.Models.Admin
         public DateTime? CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+
+        /// <summary>Assigned lecturer for this class (at most one).</summary>
+        public Guid? LecturerId { get; set; }
+
+        /// <summary>Assigned expert for this class (at most one).</summary>
+        public Guid? ExpertId { get; set; }
+
+        public string? LecturerName { get; set; }
+
+        public string? ExpertName { get; set; }
+
+        public string? LecturerEmail { get; set; }
+
+        public string? ExpertEmail { get; set; }
+
+        /// <summary>Number of student enrollment rows for this class.</summary>
+        public int StudentCount { get; set; }
     }
     public class CreateClassManagementDTO
     {
@@ -46,6 +63,9 @@ namespace BoneVisQA.Services.Models.Admin
     public class GetAssignClassDTO
     {
         public Guid Id { get; set; }
+
+        /// <summary>Academic class this enrollment row belongs to (use for stable filtering on the FE).</summary>
+        public Guid ClassId { get; set; }
 
         public string? ClassName { get; set; }
 

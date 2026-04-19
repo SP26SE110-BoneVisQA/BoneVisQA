@@ -48,3 +48,10 @@ public class StudentCaseHistoryItemDto
     public string? LatestAnswerStatus { get; set; }
     public DateTime? ReviewedAt { get; set; }
 }
+
+public class CaseCatalogFiltersDto
+{
+    public IReadOnlyList<string> Locations { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> LesionTypes { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> Difficulties { get; set; } = Array.Empty<string>();
+}

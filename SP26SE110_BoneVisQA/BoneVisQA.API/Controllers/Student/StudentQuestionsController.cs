@@ -24,7 +24,7 @@ public class StudentQuestionsController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.AskQuestionAsync(studentId.Value, request);
         return Ok(result);
@@ -35,7 +35,7 @@ public class StudentQuestionsController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetQuestionHistoryAsync(studentId.Value);
         return Ok(result);

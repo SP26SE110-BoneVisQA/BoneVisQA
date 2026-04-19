@@ -2,6 +2,16 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BoneVisQA.Services.Models.Admin
 {
+    /// <summary>One class relationship for admin user table (student enrollment or class staff).</summary>
+    public class UserClassAssignmentDto
+    {
+        public Guid ClassId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        /// <summary><c>Student</c>, <c>Lecturer</c>, or <c>Expert</c>.</summary>
+        public string RoleInClass { get; set; } = string.Empty;
+        public DateTime? EnrolledAt { get; set; }
+    }
+
     public class UserManagementDTO
     {
         public Guid Id { get; set; }
@@ -13,6 +23,9 @@ namespace BoneVisQA.Services.Models.Admin
         public DateTime? LastLogin { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+
+        /// <summary>Classes where the user is enrolled as a student or assigned as lecturer/expert.</summary>
+        public List<UserClassAssignmentDto> ClassAssignments { get; set; } = new();
     }
 
     /// <summary>Danh sách user có phân trang (mới nhất theo CreatedAt).</summary>

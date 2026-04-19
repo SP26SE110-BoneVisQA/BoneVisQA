@@ -21,18 +21,18 @@ public class AIQuizService : IAIQuizService
     private readonly ILogger<AIQuizService> _logger;
 
     private const string QuizGenerationSystemPrompt =
-        "BẠN LÀ CHUYÊN GIA TẠO CÂU HỎI TRẮC NGHIỆM Y KHOA CƠ XƯƠNG KHỚP.\n" +
-        "NHIỆM VỤ: Tạo câu hỏi trắc nghiệm chất lượng cao về chẩn đoán hình ảnh cơ xương khớp.\n\n" +
-        "QUY TẮC NGHIÊM NGẶT:\n" +
-        "1. Mỗi câu hỏi phải có 4 lựa chọn (A, B, C, D)\n" +
-        "2. Chỉ có 1 đáp án đúng duy nhất\n" +
-        "3. Các đáp án sai phải hợp lý và có thể nhầm lẫn\n" +
-        "4. Câu hỏi phải dựa trên hình ảnh X-ray, CT, MRI được mô tả\n" +
-        "5. Trả lời bằng tiếng Việt, chuyên ngành y khoa chuẩn xác\n" +
-        "6. Đáp án đúng phải là A, B, C hoặc D (không phải text đáp án)\n\n" +
-        "CHỈ TRẢ VỀ MỘT MẢNG JSON với format:\n" +
+        "YOU ARE AN EXPERT IN CREATING MUSCULOSKELETAL MEDICAL MULTIPLE-CHOICE QUESTIONS.\n" +
+        "TASK: Generate high-quality multiple-choice questions on musculoskeletal imaging diagnosis.\n\n" +
+        "STRICT RULES:\n" +
+        "1. Each question must have 4 options (A, B, C, D)\n" +
+        "2. There must be exactly 1 correct answer\n" +
+        "3. Incorrect options must be plausible and potentially confusable\n" +
+        "4. Questions must be based on the described X-ray, CT, or MRI findings\n" +
+        "5. Respond in professional, accurate medical English\n" +
+        "6. The correct answer must be A, B, C, or D (not answer text)\n\n" +
+        "RETURN ONLY A JSON ARRAY in this format:\n" +
         "{\"questions\": [{\"questionText\": \"...\", \"optionA\": \"...\", \"optionB\": \"...\", \"optionC\": \"...\", \"optionD\": \"...\", \"correctAnswer\": \"A\"}]}\n" +
-        "KHÔNG thêm bất kỳ text nào khác ngoài JSON.";
+        "DO NOT add any text outside the JSON.";
 
     public AIQuizService(
         IUnitOfWork unitOfWork,
@@ -52,7 +52,7 @@ public class AIQuizService : IAIQuizService
     {
         try
         {
-            // 1. Lấy cases liên quan đến topic (title/mô tả/category/tags). Không bắt buộc is_approved để tránh DB trống.
+            // 1. Lấy cases liên quan đến topic (title/mô tả/category/tags). Không required is_approved để tránh DB trống.
             var cases = await GetCasesByTopicAsync(topic, cancellationToken);
             List<AIQuizCaseInputDto> caseInfos;
             string prompt;
@@ -66,7 +66,7 @@ public class AIQuizService : IAIQuizService
             }
             else
             {
-                // Không có case trong DB: vẫn tạo câu hỏi theo chủ đề (ôn lý thuyết / hình ảnh chung)
+                // None case trong DB: vẫn tạo câu hỏi theo chủ đề (ôn lý thuyết / hình ảnh chung)
                 caseInfos = new List<AIQuizCaseInputDto>();
                 prompt = BuildTopicOnlyQuizPrompt(topic, questionCount, difficulty);
                 imageUrl = string.Empty;
@@ -82,8 +82,8 @@ public class AIQuizService : IAIQuizService
                 {
                     Success = false,
                     Message =
-                        "Gemini không trả về dữ liệu. Kiểm tra: (1) cấu hình Gemini:ApiKey trong appsettings / biến môi trường, " +
-                        "(2) Gemini:ModelId và Gemini:BaseUrl (vd. v1beta + gemini-2.0-flash), (3) quota API.",
+                        "Gemini returned no data. Check: (1) Gemini:ApiKeys configuration in appsettings/environment variables, " +
+                        "(2) Gemini:ModelId and Gemini:BaseUrl (e.g., v1beta + gemini-2.0-flash), (3) API quota.",
                     Questions = new List<AIQuizQuestionDto>(),
                     Topic = topic,
                     Difficulty = difficulty
@@ -92,13 +92,13 @@ public class AIQuizService : IAIQuizService
 
             var questions = ParseAIQuizResponse(rawText, caseInfos);
 
-            var suffix = cases.Count == 0 ? " (theo chủ đề, chưa gắn case cụ thể trong hệ thống)" : string.Empty;
+            var suffix = cases.Count == 0 ? " (topic-based, not linked to a specific case in the system)" : string.Empty;
             return new AIQuizGenerationResultDto
             {
                 Success = questions.Count > 0,
                 Message = questions.Count > 0
-                    ? $"Đã tạo {questions.Count} câu hỏi{suffix}"
-                    : "Không parse được JSON câu hỏi từ Gemini. Thử giảm số câu hoặc đổi model.",
+                    ? $"Generated {questions.Count} questions{suffix}"
+                    : "Could not parse quiz JSON from Gemini. Try reducing the number of questions or changing the model.",
                 Questions = questions,
                 Topic = topic,
                 Difficulty = difficulty
@@ -110,7 +110,7 @@ public class AIQuizService : IAIQuizService
             return new AIQuizGenerationResultDto
             {
                 Success = false,
-                Message = "Đã xảy ra lỗi khi tạo câu hỏi: " + ex.Message
+                Message = "An error occurred while generating questions: " + ex.Message
             };
         }
     }
@@ -127,14 +127,14 @@ public class AIQuizService : IAIQuizService
                 return new AIQuizGenerationResultDto
                 {
                     Success = false,
-                    Message = "Vui lòng chọn ít nhất 1 case"
+                    Message = "Please select at least 1 case"
                 };
             }
 
             // 1. Lấy chi tiết cases từ database nếu chỉ có CaseId
             var caseDetails = await EnrichCasesAsync(cases, cancellationToken);
 
-            // 2. Tạo prompt cho AI
+            // 2. Generate prompt cho AI
             var prompt = BuildCaseBasedQuizPrompt(caseDetails, questionsPerCase);
 
             var imageUrl = caseDetails.FirstOrDefault(c => !string.IsNullOrEmpty(c.ImageUrl))?.ImageUrl;
@@ -145,7 +145,7 @@ public class AIQuizService : IAIQuizService
                 {
                     Success = false,
                     Message =
-                        "Gemini không trả về dữ liệu. Kiểm tra Gemini:ApiKey, ModelId, BaseUrl và quota.",
+                        "Gemini returned no data. Check Gemini:ApiKeys, ModelId, BaseUrl, and quota.",
                     Questions = new List<AIQuizQuestionDto>()
                 };
             }
@@ -156,8 +156,8 @@ public class AIQuizService : IAIQuizService
             {
                 Success = questions.Count > 0,
                 Message = questions.Count > 0
-                    ? $"Đã gợi ý {questions.Count} câu hỏi từ {cases.Count} cases"
-                    : "Không parse được JSON câu hỏi từ Gemini.",
+                    ? $"Suggested {questions.Count} questions from {cases.Count} cases"
+                    : "Could not parse quiz JSON from Gemini.",
                 Questions = questions
             };
         }
@@ -167,7 +167,7 @@ public class AIQuizService : IAIQuizService
             return new AIQuizGenerationResultDto
             {
                 Success = false,
-                Message = "Đã xảy ra lỗi khi gợi ý câu hỏi: " + ex.Message
+                Message = "An error occurred while suggesting questions: " + ex.Message
             };
         }
     }
@@ -285,48 +285,48 @@ public class AIQuizService : IAIQuizService
     {
         var caseDescriptions = string.Join("\n\n", cases.Select((c, i) =>
             $"Case {i + 1}: {c.CaseTitle}\n" +
-            $"Mô tả: {c.CaseDescription}\n" +
-            $"Triệu chứng: {c.KeyFindings ?? "Không có"}\n" +
-            $"Chẩn đoán gợi ý: {c.SuggestedDiagnosis ?? "Không có"}"
+            $"Description: {c.CaseDescription}\n" +
+            $"Symptoms: {c.KeyFindings ?? "None"}\n" +
+            $"Suggested diagnosis: {c.SuggestedDiagnosis ?? "None"}"
         ));
 
         return
             $"{QuizGenerationSystemPrompt}\n\n" +
-            $"CHỦ ĐỀ: {topic}\n" +
-            $"SỐ CÂU HỎI CẦN TẠO: {questionCount}\n" +
-            $"{(string.IsNullOrEmpty(difficulty) ? "" : $"ĐỘ KHÓ: {difficulty}\n")}\n\n" +
-            $"THÔNG TIN CASES:\n{caseDescriptions}\n\n" +
-            $"Tạo {questionCount} câu hỏi trắc nghiệm dựa trên các cases trên.";
+            $"TOPIC: {topic}\n" +
+            $"NUMBER OF QUESTIONS TO GENERATE: {questionCount}\n" +
+            $"{(string.IsNullOrEmpty(difficulty) ? "" : $"DIFFICULTY: {difficulty}\n")}\n\n" +
+            $"CASE INFORMATION:\n{caseDescriptions}\n\n" +
+            $"Generate {questionCount} multiple-choice questions based on the cases above.";
     }
 
     private static string BuildTopicOnlyQuizPrompt(string topic, int questionCount, string? difficulty)
     {
         return
             $"{QuizGenerationSystemPrompt}\n\n" +
-            "LƯU Ý: Hiện không có case cụ thể trong CSDL. Hãy tạo câu hỏi dựa trên kiến thức chuẩn y khoa về chủ đề (giải phẫu, chẩn đoán hình ảnh, điều trị) liên quan đến chủ đề.\n\n" +
-            $"CHỦ ĐỀ: {topic}\n" +
-            $"SỐ CÂU HỎI: {questionCount}\n" +
-            $"{(string.IsNullOrEmpty(difficulty) ? "" : $"ĐỘ KHÓ: {difficulty}\n")}\n" +
-            $"Tạo đúng {questionCount} câu hỏi trắc nghiệm 4 lựa chọn, đáp án đúng là A/B/C/D.";
+            "NOTE: There are no specific cases in the database. Generate questions based on standard medical knowledge for this topic (anatomy, imaging diagnosis, treatment).\n\n" +
+            $"TOPIC: {topic}\n" +
+            $"NUMBER OF QUESTIONS: {questionCount}\n" +
+            $"{(string.IsNullOrEmpty(difficulty) ? "" : $"DIFFICULTY: {difficulty}\n")}\n" +
+            $"Generate exactly {questionCount} 4-option multiple-choice questions with the correct answer as A/B/C/D.";
     }
 
     private string BuildCaseBasedQuizPrompt(List<AIQuizCaseInputDto> cases, int questionsPerCase)
     {
         var caseDescriptions = string.Join("\n\n", cases.Select((c, i) =>
             $"Case {i + 1}: {c.CaseTitle}\n" +
-            $"Mô tả: {c.CaseDescription}\n" +
-            $"Hình ảnh: {c.Modality ?? "X-Ray"}\n" +
-            $"Triệu chứng: {c.KeyFindings ?? "Không có"}\n" +
-            $"Chẩn đoán: {c.SuggestedDiagnosis ?? "Không có"}"
+            $"Description: {c.CaseDescription}\n" +
+            $"Imaging modality: {c.Modality ?? "X-Ray"}\n" +
+            $"Symptoms: {c.KeyFindings ?? "None"}\n" +
+            $"Diagnosis: {c.SuggestedDiagnosis ?? "None"}"
         ));
 
         var totalQuestions = cases.Count * questionsPerCase;
 
         return
             $"{QuizGenerationSystemPrompt}\n\n" +
-            $"SỐ CÂU HỎI CẦN TẠO: {totalQuestions} (mỗi case {questionsPerCase} câu)\n\n" +
-            $"THÔNG TIN CASES:\n{caseDescriptions}\n\n" +
-            $"Tạo {totalQuestions} câu hỏi trắc nghiệm, mỗi case {questionsPerCase} câu hỏi.";
+            $"NUMBER OF QUESTIONS TO GENERATE: {totalQuestions} ({questionsPerCase} per case)\n\n" +
+            $"CASE INFORMATION:\n{caseDescriptions}\n\n" +
+            $"Generate {totalQuestions} multiple-choice questions, {questionsPerCase} per case.";
     }
 
     private List<AIQuizQuestionDto> ParseAIQuizResponse(string? responseText, List<AIQuizCaseInputDto> cases)

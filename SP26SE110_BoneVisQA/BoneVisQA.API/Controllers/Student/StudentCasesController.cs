@@ -30,6 +30,7 @@ public class StudentCasesController : ControllerBase
         var filter = new CaseFilterRequestDto
         {
             Location = location,
+            LesionType = lesionType,
             LessonType = lesionType,
             Difficulty = difficulty
         };
@@ -50,7 +51,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetFilteredCasesAsync(studentId.Value, filter);
         return Ok(result);
@@ -66,7 +67,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetCaseHistoryAsync(studentId.Value);
         return Ok(result);
@@ -83,11 +84,11 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetCaseDetailAsync(caseId, studentId.Value);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy ca bệnh." })
+            ? NotFound(new { message = "Medical case not found." })
             : Ok(result);
     }
 
@@ -96,7 +97,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.CreateAnnotationAsync(studentId.Value, request);
         return Ok(result);

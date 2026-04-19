@@ -103,6 +103,22 @@ public class EmbeddingService : IEmbeddingService
         }
     }
 
+    public async Task<IReadOnlyList<float[]>> BatchEmbedContentsAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default)
+    {
+        var list = texts?.ToList() ?? new List<string>();
+        if (list.Count == 0)
+            return Array.Empty<float[]>();
+
+        var vectors = new List<float[]>(list.Count);
+        foreach (var text in list)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            vectors.Add(await EmbedTextAsync(text, cancellationToken));
+        }
+
+        return vectors;
+    }
+
     /// <summary>
     /// HF feature-extraction may return <c>[float,...]</c>, <c>[[float,...]]</c>, or deeper nesting; drill to the first 1D float array.
     /// </summary>
