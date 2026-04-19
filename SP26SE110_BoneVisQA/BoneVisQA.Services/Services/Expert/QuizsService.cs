@@ -600,14 +600,29 @@ namespace BoneVisQA.Services.Services.Expert
             if (!questions.Any())
                 throw new InvalidOperationException("Quiz chưa có câu hỏi.");
 
-            var studentAnswers = await _unitOfWork.StudentQuizAnswerRepository
-                .FindAsync(a => a.AttemptId == attemptId);
+            // ✅ FIX: Load student answers với Question để kiểm tra Type
+            var studentAnswers = await _unitOfWork.Context.StudentQuizAnswers
+                .Include(a => a.Question)
+                .Where(a => a.AttemptId == attemptId)
+                .ToListAsync();
 
             int totalQuestions = questions.Count;
+
+            // ✅ FIX: Tính điểm theo ScoreAwarded (bao gồm essay đã chấm)
+            var totalMaxScore = questions.Sum(q => q.MaxScore);
+            var totalScoreAwarded = studentAnswers
+                .Where(a => a.ScoreAwarded.HasValue)
+                .Sum(a => a.ScoreAwarded.Value);
+
+            float score = totalMaxScore == 0 ? 0 :
+                (float)Math.Round((double)totalScoreAwarded / totalMaxScore * 100, 1);
+
+            // Số câu đúng (chỉ MCQ/TF) - vẫn giữ cho thống kê
             int correctAnswers = studentAnswers.Count(a => a.IsCorrect == true);
 
-            // Tính điểm thang 100
-            float score = (float)Math.Round((double)correctAnswers / totalQuestions * 100, 1);
+            // Kiểm tra xem có essay nào chưa chấm không
+            int ungradedEssayCount = studentAnswers.Count(a =>
+                a.Question.Type == QuestionType.Essay && !a.IsGraded);
 
             int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
             bool isPassed = normalizedPassingScore.HasValue && score >= normalizedPassingScore.Value;
@@ -628,7 +643,9 @@ namespace BoneVisQA.Services.Services.Expert
                 Score = score,
                 PassingScore = normalizedPassingScore,
                 IsPassed = isPassed,
-                CompletedAt = attempt.CompletedAt
+                CompletedAt = attempt.CompletedAt,
+                // ✅ THÊM: Thông tin essay chưa chấm
+                UngradedEssayCount = ungradedEssayCount
             };
         }
 
@@ -885,6 +902,87 @@ namespace BoneVisQA.Services.Services.Expert
                 .CountAsync();
 
             return (count > 0, count);
+        }
+
+        /// <summary>
+        /// Tạo bản copy của một Expert Quiz để Lecturer có thể tùy chỉnh.
+        /// Quiz mới sẽ không có CreatedByExpertId và có thể edit câu hỏi.
+        /// </summary>
+        /// <param name="expertQuizId">ID của expert quiz cần copy</param>
+        /// <param name="lecturerId">ID của lecturer đang thực hiện copy</param>
+        /// <param name="newTitle">Tiêu đề mới cho quiz (optional)</param>
+        /// <returns>Thông tin quiz đã được copy</returns>
+        public async Task<CopiedExpertQuizDto> CopyExpertQuizForLecturerAsync(Guid expertQuizId, Guid lecturerId, string? newTitle = null)
+        {
+            var now = DateTime.UtcNow;
+
+            // Lấy quiz gốc
+            var originalQuiz = await _unitOfWork.QuizRepository.GetByIdAsync(expertQuizId)
+                ?? throw new KeyNotFoundException("Expert quiz không tồn tại.");
+
+            // Kiểm tra quiz phải do Expert tạo
+            if (originalQuiz.CreatedByExpertId == null)
+                throw new InvalidOperationException("Chỉ có thể copy quiz từ thư viện Expert.");
+
+            // Tạo quiz mới (không có CreatedByExpertId để có thể edit)
+            var newQuiz = new Quiz
+            {
+                Id = Guid.NewGuid(),
+                Title = string.IsNullOrWhiteSpace(newTitle) ? $"Copy of {originalQuiz.Title}" : newTitle,
+                Topic = originalQuiz.Topic,
+                Difficulty = originalQuiz.Difficulty,
+                Classification = originalQuiz.Classification,
+                IsAiGenerated = false,
+                IsVerifiedCurriculum = false,
+                CreatedByExpertId = null, // Quan trọng: Lecturer có thể edit
+                OpenTime = null,
+                CloseTime = null,
+                TimeLimit = originalQuiz.TimeLimit,
+                PassingScore = originalQuiz.PassingScore,
+                CreatedAt = now
+            };
+
+            await _unitOfWork.QuizRepository.AddAsync(newQuiz);
+            await _unitOfWork.SaveAsync();
+
+            // Lấy tất cả câu hỏi từ quiz gốc
+            var originalQuestions = await _unitOfWork.QuizQuestionRepository
+                .FindAsync(q => q.QuizId == expertQuizId);
+
+            // Copy từng câu hỏi
+            foreach (var originalQ in originalQuestions)
+            {
+                var newQuestion = new QuizQuestion
+                {
+                    Id = Guid.NewGuid(),
+                    QuizId = newQuiz.Id,
+                    QuestionText = originalQ.QuestionText,
+                    Type = originalQ.Type,
+                    OptionA = originalQ.OptionA,
+                    OptionB = originalQ.OptionB,
+                    OptionC = originalQ.OptionC,
+                    OptionD = originalQ.OptionD,
+                    CorrectAnswer = originalQ.CorrectAnswer,
+                    ImageUrl = originalQ.ImageUrl,
+                    CaseId = originalQ.CaseId,
+                    MaxScore = originalQ.MaxScore,
+                    ReferenceAnswer = originalQ.ReferenceAnswer
+                };
+
+                await _unitOfWork.QuizQuestionRepository.AddAsync(newQuestion);
+            }
+
+            await _unitOfWork.SaveAsync();
+
+            return new CopiedExpertQuizDto
+            {
+                NewQuizId = newQuiz.Id,
+                NewQuizTitle = newQuiz.Title,
+                OriginalQuizId = originalQuiz.Id,
+                OriginalQuizTitle = originalQuiz.Title,
+                QuestionCount = originalQuestions.Count,
+                CreatedAt = now
+            };
         }
     }
 }

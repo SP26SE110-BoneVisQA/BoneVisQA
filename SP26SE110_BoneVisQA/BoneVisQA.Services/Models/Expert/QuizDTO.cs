@@ -345,6 +345,7 @@ namespace BoneVisQA.Services.Models.Expert
     // - Nếu không truyền, hệ thống sẽ dùng thông số mặc định từ quiz gốc
     public class AssignExpertQuizRequestDto
     {
+        public string? TitleOverride { get; set; }                            // Tiêu đề mới cho bản sao (optional)
         public DateTime? OpenTime { get; set; }                               // Thời gian mở quiz (override)
         public DateTime? CloseTime { get; set; }                              // Thời gian đóng quiz (override)
         public int? PassingScore { get; set; }                                 // Điểm đạt (override)

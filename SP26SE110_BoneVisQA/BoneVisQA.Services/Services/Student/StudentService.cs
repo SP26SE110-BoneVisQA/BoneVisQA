@@ -539,9 +539,16 @@ public class StudentService : IStudentService
             .ToListAsync();
         var countByQuiz = questionCounts.ToDictionary(x => x.QuizId, x => x.Count);
 
+        // Lấy CreatedAt từ bảng quizzes
+        var quizzesWithCreatedAt = await _unitOfWork.Context.Quizzes
+            .Where(q => quizIds.Contains(q.Id))
+            .Select(q => new { q.Id, q.CreatedAt })
+            .ToDictionaryAsync(x => x.Id, x => x.CreatedAt);
+
         return sessions.Select(s =>
         {
             var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
+            quizzesWithCreatedAt.TryGetValue(s.QuizId, out var createdAt);
             return new QuizListItemDto
             {
                 QuizId = s.QuizId,
@@ -555,9 +562,13 @@ public class StudentService : IStudentService
                 TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
                 Score = attempt?.Score,
-                AttemptId = attempt?.Id
+                AttemptId = attempt?.Id,
+                CreatedAt = createdAt
             };
-        }).ToList();
+        })
+        .OrderByDescending(q => q.CreatedAt.HasValue)  // Items with CreatedAt come first
+        .ThenByDescending(q => q.CreatedAt)            // Within those, sort by date descending
+        .ToList();
     }
 
 

@@ -117,29 +117,35 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var elapsed4 = (DateTime.UtcNow - t0).TotalSeconds;
         _logger.LogInformation("[AssignCases] Step4 SaveAsync done in {Elapsed}s", elapsed4);
 
-        // Must await the DB read part (DbContext scoped); SMTP still runs in background inside QueueAssignmentEmailsAsync
-        // Gửi email riêng cho từng case để có đủ thông tin (title + description)
-        foreach (var medicalCase in medicalCases)
-        {
-            await QueueAssignmentEmailsAsync(
-                academicClass.Id,
-                academicClass.ClassName,
-                medicalCase.Title,
-                "Medical Case",
-                request.DueDate,
-                medicalCase.Description);
-        }
+        // =========================================================
+        // COMMENTED OUT: Auto-send email/notification when assigning case
+        // Email and notification should only be sent when manually creating assignment
+        // from /lecturer/assignments/create page
+        // foreach (var medicalCase in medicalCases)
+        // {
+        //     await QueueAssignmentEmailsAsync(
+        //         academicClass.Id,
+        //         academicClass.ClassName,
+        //         medicalCase.Title,
+        //         "Medical Case",
+        //         request.DueDate,
+        //         medicalCase.Description);
+        // }
+        //
+        // // Send SignalR notification to students
+        // await QueueAssignmentNotificationsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     "Case Assignment",
+        //     "Clinical Case",
+        //     "/student/cases");
+        // =========================================================
 
-        // Send SignalR notification to students
-        await QueueAssignmentNotificationsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            "Case Assignment",
-            "Clinical Case",
-            "/student/cases");
-
-        var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
-        _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
+        // =========================================================
+        // LOG COMMENTED: Email/notification disabled for auto-assign
+        // var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
+        // _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
+        // =========================================================
 
         var result = medicalCases
             .OrderBy(c => c.Title)
@@ -315,21 +321,26 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         await _unitOfWork.SaveAsync();
 
-        await QueueAssignmentEmailsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            quiz.Title,
-            "Quiz",
-            request.CloseTime,
-            quiz.Topic);  // ← thêm Topic làm description
-
-        // Send SignalR notification to students
-        await QueueAssignmentNotificationsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            quiz.Title,
-            "Quiz",
-            "/student/quizzes");
+        // =========================================================
+        // COMMENTED OUT: Auto-send email/notification when assigning quiz
+        // Email and notification should only be sent when manually creating assignment
+        // from /lecturer/assignments/create page
+        // await QueueAssignmentEmailsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     quiz.Title,
+        //     "Quiz",
+        //     request.CloseTime,
+        //     quiz.Topic);
+        //
+        // // Send SignalR notification to students
+        // await QueueAssignmentNotificationsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     quiz.Title,
+        //     "Quiz",
+        //     "/student/quizzes");
+        // =========================================================
 
         return new ClassQuizSessionDto
         {
@@ -787,7 +798,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                     ScoreAwarded = sa.ScoreAwarded,
                     LecturerFeedback = sa.LecturerFeedback,
                     IsGraded = sa.IsGraded,
-                    ReferenceAnswer = sa.Question.ReferenceAnswer
+                    ReferenceAnswer = sa.Question.ReferenceAnswer,
+                    ImageUrl = sa.Question.ImageUrl
                 }).ToList()
         };
     }
@@ -817,9 +829,11 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             {
                 if (answerMap.TryGetValue(update.AnswerId, out var answer))
                 {
-                    // Allow updating StudentAnswer, ScoreAwarded, LecturerFeedback, IsGraded
+                    // Allow updating StudentAnswer, EssayAnswer, ScoreAwarded, LecturerFeedback, IsGraded
                     if (update.StudentAnswer != null)
                         answer.StudentAnswer = update.StudentAnswer;
+                    if (update.EssayAnswer != null)
+                        answer.EssayAnswer = update.EssayAnswer;
                     if (update.IsCorrect.HasValue)
                         answer.IsCorrect = update.IsCorrect.Value;
                     if (update.ScoreAwarded.HasValue)
@@ -1275,5 +1289,227 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         await _unitOfWork.SaveAsync();
         return await GetAssignmentSubmissionsAsync(assignmentId);
+    }
+
+    /// <summary>
+    /// Tạo Assignment THỦ CÔNG (không auto gửi email notification).
+    /// </summary>
+    public async Task<CreateAssignmentManualResponseDto> CreateAssignmentManualAsync(
+        Guid lecturerId,
+        CreateAssignmentManualRequestDto request)
+    {
+        var results = new List<ManualAssignmentResultDto>();
+
+        if (request.ClassIds.Count == 0)
+            throw new InvalidOperationException("Phải chọn ít nhất một lớp học.");
+
+        if (string.IsNullOrEmpty(request.AssignmentType))
+            throw new InvalidOperationException("Phải chọn loại assignment (case hoặc quiz).");
+
+        if (request.AssignmentType.ToLower() == "quiz" && request.QuizId == Guid.Empty)
+            throw new InvalidOperationException("Phải chọn quiz khi tạo assignment loại quiz.");
+
+        if (request.AssignmentType.ToLower() == "case" && request.CaseId == Guid.Empty)
+            throw new InvalidOperationException("Phải chọn case khi tạo assignment loại case.");
+
+        // Validate từng lớp học
+        var classes = await _unitOfWork.Context.AcademicClasses
+            .Where(c => request.ClassIds.Contains(c.Id) && c.LecturerId == lecturerId)
+            .ToListAsync();
+
+        if (classes.Count != request.ClassIds.Count)
+            throw new KeyNotFoundException("Một hoặc nhiều lớp học không thuộc quyền quản lý của bạn.");
+
+        foreach (var academicClass in classes)
+        {
+            try
+            {
+                Guid assignmentId;
+                string title;
+                string description = null!;
+
+                if (request.AssignmentType.ToLower() == "quiz")
+                {
+                    var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId.Value)
+                        ?? throw new KeyNotFoundException($"Quiz không tìm thấy.");
+
+                    // Kiểm tra đã tồn tại chưa
+                    var existing = await _unitOfWork.Context.ClassQuizSessions
+                        .FirstOrDefaultAsync(cqs => cqs.ClassId == academicClass.Id && cqs.QuizId == request.QuizId.Value);
+
+                    if (existing != null)
+                    {
+                        results.Add(new ManualAssignmentResultDto
+                        {
+                            ClassId = academicClass.Id,
+                            ClassName = academicClass.ClassName,
+                            AssignmentId = existing.Id,
+                            Success = false,
+                            Message = "Quiz đã được gán cho lớp này rồi."
+                        });
+                        continue;
+                    }
+
+                    // Xử lý thời gian
+                    DateTime? effectiveOpenTime = request.OpenTime;
+                    DateTime? effectiveCloseTime = request.CloseTime;
+
+                    if (request.UseExpertTime)
+                    {
+                        effectiveOpenTime = quiz.OpenTime;
+                        effectiveCloseTime = quiz.CloseTime;
+                    }
+                    else
+                    {
+                        if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
+                            effectiveOpenTime = quiz.OpenTime;
+                        if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
+                            effectiveCloseTime = quiz.CloseTime;
+                    }
+
+                    // Clamp time limit và passing score
+                    int? effectiveTimeLimit = request.TimeLimitMinutes ?? quiz.TimeLimit ?? 30;
+                    int? effectivePassingScore = request.PassingScore ?? quiz.PassingScore ?? 70;
+
+                    if (quiz.TimeLimit.HasValue)
+                    {
+                        var minTime = Math.Max(5, (int)(quiz.TimeLimit.Value * 0.5));
+                        var maxTime = Math.Min(180, (int)(quiz.TimeLimit.Value * 1.5));
+                        if (effectiveTimeLimit < minTime) effectiveTimeLimit = minTime;
+                        if (effectiveTimeLimit > maxTime) effectiveTimeLimit = maxTime;
+                    }
+
+                    if (quiz.PassingScore.HasValue)
+                    {
+                        var minScore = Math.Max(0, quiz.PassingScore.Value - 10);
+                        var maxScore = Math.Min(100, quiz.PassingScore.Value + 10);
+                        if (effectivePassingScore < minScore) effectivePassingScore = minScore;
+                        if (effectivePassingScore > maxScore) effectivePassingScore = maxScore;
+                    }
+
+                    var session = new ClassQuizSession
+                    {
+                        Id = Guid.NewGuid(),
+                        ClassId = academicClass.Id,
+                        QuizId = request.QuizId.Value,
+                        OpenTime = ToUtc(effectiveOpenTime),
+                        CloseTime = ToUtc(effectiveCloseTime),
+                        TimeLimitMinutes = effectiveTimeLimit,
+                        PassingScore = effectivePassingScore,
+                        ShuffleQuestions = request.ShuffleQuestions,
+                        AllowRetake = request.AllowRetake,
+                        AllowLate = request.AllowLate,
+                        ShowResultsAfterSubmission = request.ShowResultsAfterSubmission,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
+                    assignmentId = session.Id;
+                    title = quiz.Title;
+                    description = quiz.Topic;
+                }
+                else // case
+                {
+                    var medicalCase = await _unitOfWork.Context.MedicalCases
+                        .FirstOrDefaultAsync(c => c.Id == request.CaseId)
+                        ?? throw new KeyNotFoundException($"Case không tìm thấy.");
+
+                    // Kiểm tra đã tồn tại chưa
+                    var existing = await _unitOfWork.Context.ClassCases
+                        .FirstOrDefaultAsync(cc => cc.ClassId == academicClass.Id && cc.CaseId == request.CaseId);
+
+                    if (existing != null)
+                    {
+                        results.Add(new ManualAssignmentResultDto
+                        {
+                            ClassId = academicClass.Id,
+                            ClassName = academicClass.ClassName,
+                            AssignmentId = existing.CaseId,
+                            Success = false,
+                            Message = "Case đã được gán cho lớp này rồi."
+                        });
+                        continue;
+                    }
+
+                    var classCase = new ClassCase
+                    {
+                        ClassId = academicClass.Id,
+                        CaseId = request.CaseId.Value,
+                        AssignedAt = DateTime.UtcNow,
+                        DueDate = ToUtc(request.DueDate),
+                        IsMandatory = request.IsMandatory
+                    };
+
+                    await _unitOfWork.ClassCaseRepository.AddAsync(classCase);
+                    assignmentId = classCase.CaseId;
+                    title = medicalCase.Title;
+                    description = medicalCase.Description;
+                }
+
+                await _unitOfWork.SaveAsync();
+
+                // Gửi email notification nếu được yêu cầu
+                if (request.SendNotification)
+                {
+                    if (request.AssignmentType.ToLower() == "quiz")
+                    {
+                        await QueueAssignmentEmailsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Quiz",
+                            request.CloseTime ?? request.DueDate,
+                            description);
+
+                        await QueueAssignmentNotificationsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Quiz",
+                            "/student/quizzes");
+                    }
+                    else
+                    {
+                        await QueueAssignmentEmailsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Medical Case",
+                            request.DueDate,
+                            description);
+
+                        await QueueAssignmentNotificationsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            "Case Assignment",
+                            "Clinical Case",
+                            "/student/cases");
+                    }
+                }
+
+                results.Add(new ManualAssignmentResultDto
+                {
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    AssignmentId = assignmentId,
+                    Success = true,
+                    Message = "Tạo assignment thành công."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CreateAssignmentManual] Lỗi khi tạo assignment cho lớp {ClassId}", academicClass.Id);
+                results.Add(new ManualAssignmentResultDto
+                {
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    AssignmentId = Guid.Empty,
+                    Success = false,
+                    Message = $"Lỗi: {ex.Message}"
+                });
+            }
+        }
+
+        return new CreateAssignmentManualResponseDto { Results = results };
     }
 }

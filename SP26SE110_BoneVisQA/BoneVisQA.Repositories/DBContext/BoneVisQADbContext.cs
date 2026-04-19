@@ -443,7 +443,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("quiz_questions_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
-            entity.Property(e => e.MaxScore).HasDefaultValue(1);
+            entity.Property(e => e.MaxScore).HasDefaultValue(10);
 
             entity.HasOne(d => d.Case).WithMany(p => p.QuizQuestions)
                 .OnDelete(DeleteBehavior.SetNull)

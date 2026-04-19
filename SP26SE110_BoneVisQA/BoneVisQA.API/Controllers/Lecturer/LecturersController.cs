@@ -370,14 +370,21 @@ public class LecturersController : ControllerBase
     [HttpDelete("quizzes/{quizId:guid}")]
     public async Task<IActionResult> DeleteQuiz(Guid quizId)
     {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+        try
+        {
+            var lecturerId = GetLecturerId();
+            if (lecturerId == null)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
-        var deleted = await _lecturerService.DeleteQuizAsync(quizId);
-        if (!deleted)
-            return NotFound(new { message = "Quiz không tồn tại." });
-        return NoContent();
+            var deleted = await _lecturerService.DeleteQuizAsync(quizId);
+            if (!deleted)
+                return NotFound(new { message = "Quiz không tồn tại." });
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { title = "Không thể xóa", status = 400, detail = ex.Message });
+        }
     }
 
     [HttpPost("classes/{classId:guid}/quizzes/{quizId:guid}")]
@@ -432,6 +439,22 @@ public class LecturersController : ControllerBase
             return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
         var result = await _lecturerService.GetUnassignedLecturerQuizzesAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get all quizzes created by the lecturer with their assigned classes.
+    /// Shows ALL quizzes (including assigned ones) for the "My Quizzes" tab.
+    /// Each quiz includes a list of classes it has been assigned to.
+    /// </summary>
+    [HttpGet("quizzes/my-with-classes")]
+    public async Task<ActionResult<IReadOnlyList<MyQuizWithClassesDto>>> GetMyQuizzesWithClasses()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetMyQuizzesWithClassesAsync(lecturerId.Value);
         return Ok(result);
     }
 
@@ -865,17 +888,23 @@ public class LecturersController : ControllerBase
     }
 
     /// <summary>
-    /// Bước 4: Gán quiz vào lớp học - Lấy CẢ BỘ câu hỏi.
+    /// Bước 4: Gán quiz vào lớp học - TỰ ĐỘNG TẠO BẢN SAO từ quiz Expert.
     /// 
     /// Mô tả luồng:
     /// - Lecturer đã xem và chọn được quiz phù hợp cho lớp mình
     /// - Lecturer quyết định gán quiz này vào lớp
-    /// - Hệ thống sẽ gán TẤT CẢ câu hỏi trong quiz đó vào ClassQuizSession
-    /// - Không cần chọn số lượng câu hỏi - lấy cả bộ (ví dụ: 5 câu hoặc 10 câu tùy quiz)
+    /// - Hệ thống sẽ TỰ ĐỘNG tạo bản sao (copy) của quiz Expert
+    /// - Sau đó gán bản sao đó vào ClassQuizSession
+    /// 
+    /// TẠI SAO CẦN COPY:
+    /// - Tránh việc chỉnh sửa câu hỏi của Lecturer ảnh hưởng đến quiz gốc của Expert
+    /// - Quiz gốc của Expert luôn được bảo toàn
+    /// - Lecturer có thể tùy chỉnh bản sao (đổi tên, sửa câu hỏi) mà không ảnh hưởng ai
     /// 
     /// Ví dụ:
-    /// - Quiz "Lower Limb Module" có 10 câu hỏi → Student nhận đủ 10 câu
-    /// - Quiz "Chest X-Ray Basics" có 5 câu hỏi → Student nhận đủ 5 câu
+    /// - Quiz "Lower Limb Module" của Expert → Hệ thống tạo "Copy of Lower Limb Module"
+    /// - "Copy of Lower Limb Module" được gán vào lớp
+    /// - Lecturer có thể edit "Copy of Lower Limb Module" tùy ý
     /// 
     /// Body (optional):
     /// - openTime, closeTime: Thời gian mở/đóng quiz
@@ -884,6 +913,7 @@ public class LecturersController : ControllerBase
     /// 
     /// Trả về:
     /// - Thông báo thành công kèm số câu hỏi đã gán
+    /// - Có thông tin về bản sao đã tạo
     /// </summary>
     [HttpPost("classes/{classId:guid}/expert-quizzes/{quizId:guid}")]
     public async Task<IActionResult> AssignExpertQuizToClass(
@@ -893,13 +923,16 @@ public class LecturersController : ControllerBase
     {
         try
         {
+            var lecturerId = GetLecturerId();
+            if (lecturerId == null)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
             // ============================================
-            // BƯỚC 1: Lấy quiz từ Expert Library để kiểm tra
-            // Filter theo quizId để lấy đúng quiz
+            // BƯỚC 1: Lấy quiz từ Expert Library để kiểm tra tồn tại
             // ============================================
             var quiz = await _quizService.GetExpertQuizzesForLecturerAsync(
                 pageIndex: 1,
-                pageSize: 1000, // Tăng pageSize để đảm bảo lấy đủ quiz
+                pageSize: 1000,
                 topic: null,
                 difficulty: null,
                 classification: null);
@@ -909,13 +942,24 @@ public class LecturersController : ControllerBase
                 return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert hoặc quiz này không phải do Expert tạo." });
 
             // ============================================
-            // BƯỚC 2: Gán quiz vào lớp
+            // BƯỚC 2: TẠO BẢN SAO của quiz Expert
+            // Quiz mới sẽ không có CreatedByExpertId
+            // Lecturer có thể edit bản sao này
+            // ============================================
+            var copiedQuiz = await _quizService.CopyExpertQuizForLecturerAsync(
+                expertQuizId: quizId,
+                lecturerId: lecturerId.Value,
+                newTitle: request?.TitleOverride // Cho phép đổi tên nếu muốn
+            );
+
+            // ============================================
+            // BƯỚC 3: Gán bản sao vào lớp
             // ============================================
             var assignRequest = new AssignQuizRequestDTO
             {
                 ClassId = classId,
-                QuizId = quizId,
-                AssignedExpertId = null, // Không cần thiết vì Expert quiz đã được verify ở trên
+                QuizId = copiedQuiz.NewQuizId, // Gán quiz BẢN SAO, không phải quiz gốc
+                AssignedExpertId = null,
                 OpenTime = request?.OpenTime,
                 CloseTime = request?.CloseTime,
                 PassingScore = request?.PassingScore,
@@ -926,10 +970,17 @@ public class LecturersController : ControllerBase
 
             return Ok(new
             {
-                message = $"Đã gán quiz '{expertQuiz.Title}' vào lớp thành công.",
+                message = $"Đã gán quiz '{copiedQuiz.NewQuizTitle}' vào lớp thành công.",
                 result = result,
-                questionCount = expertQuiz.QuestionCount,
-                note = "Quiz này có " + expertQuiz.QuestionCount + " câu hỏi. Tất cả câu hỏi đã được gán cho lớp."
+                questionCount = copiedQuiz.QuestionCount,
+                copiedQuiz = new
+                {
+                    newQuizId = copiedQuiz.NewQuizId,
+                    newQuizTitle = copiedQuiz.NewQuizTitle,
+                    originalQuizId = copiedQuiz.OriginalQuizId,
+                    originalQuizTitle = copiedQuiz.OriginalQuizTitle
+                },
+                note = $"Đã tạo bản sao từ quiz '{expertQuiz.Title}' của Expert. Bạn có thể chỉnh sửa bản sao này."
             });
         }
         catch (KeyNotFoundException ex)
@@ -954,6 +1005,39 @@ public class LecturersController : ControllerBase
     {
         var result = await _lecturerService.GetExpertsAsync();
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Tạo bản copy của một Expert Quiz để Lecturer có thể tùy chỉnh.
+    /// Quiz mới sẽ không có CreatedByExpertId và có thể edit câu hỏi.
+    /// </summary>
+    /// <param name="expertQuizId">ID của expert quiz cần copy</param>
+    /// <param name="title">Tiêu đề mới cho quiz (optional)</param>
+    [HttpPost("expert-quizzes/{expertQuizId:guid}/copy")]
+    public async Task<IActionResult> CopyExpertQuiz(Guid expertQuizId, [FromBody] CopyExpertQuizRequestDto? request = null)
+    {
+        try
+        {
+            var lecturerId = GetLecturerId();
+            if (lecturerId == null)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+            var result = await _quizService.CopyExpertQuizForLecturerAsync(expertQuizId, lecturerId.Value, request?.Title);
+
+            return Ok(new
+            {
+                message = "Đã tạo bản copy quiz thành công. Bạn có thể chỉnh sửa câu hỏi.",
+                result
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Đã xảy ra lỗi: " + ex.Message });
+        }
     }
 
 }

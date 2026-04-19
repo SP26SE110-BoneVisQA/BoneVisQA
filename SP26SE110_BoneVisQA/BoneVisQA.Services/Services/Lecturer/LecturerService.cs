@@ -525,13 +525,15 @@ public class LecturerService : ILecturerService
 
         var isExpertQuiz = quiz.CreatedByExpertId.HasValue;
 
-        // 1. Remove from all class assignments (ClassQuizSession)
+        // 1. Check if quiz is assigned to any class - block deletion if so
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
             .Where(cqs => cqs.QuizId == quizId)
             .ToListAsync();
 
-        foreach (var session in classSessions)
-            _unitOfWork.Context.ClassQuizSessions.Remove(session);
+        if (classSessions.Any())
+        {
+            throw new InvalidOperationException("Quiz đang được gán cho lớp. Vui lòng gỡ quiz khỏi lớp trước khi xóa.");
+        }
 
         // 2. Remove quiz attempts (attempt history)
         var attempts = await _unitOfWork.Context.QuizAttempts
@@ -1702,7 +1704,6 @@ public class LecturerService : ILecturerService
                 OpenTime = cq.Quiz?.OpenTime,
                 CloseTime = cq.Quiz?.CloseTime,
                 QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId),
-                IsFromExpertLibrary = cq.Quiz != null && cq.Quiz.CreatedByExpertId.HasValue
             })
             .ToList();
 
@@ -1720,7 +1721,6 @@ public class LecturerService : ILecturerService
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
                 QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
-                IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue
             });
         }
 
@@ -1776,7 +1776,6 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
-                IsFromExpertLibrary = false
             })
             .ToList();
     }
@@ -1834,7 +1833,6 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
-                IsFromExpertLibrary = q.CreatedByExpertId != null
             })
             .ToList();
     }
@@ -1904,12 +1902,72 @@ public class LecturerService : ILecturerService
                     OpenTime = s.OpenTime ?? quiz?.OpenTime,
                     CloseTime = s.CloseTime ?? quiz?.CloseTime,
                     QuestionCount = questionCounts.GetValueOrDefault(s.QuizId),
-                    IsFromExpertLibrary = quiz != null && quiz.CreatedByExpertId.HasValue,
                     CreatorName = creatorName,
                     CreatorType = creatorType
                 };
             })
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<MyQuizWithClassesDto>> GetMyQuizzesWithClassesAsync(Guid lecturerId)
+    {
+        var classIds = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        var sessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Class)
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .OrderByDescending(cqs => cqs.CreatedAt)
+            .ToListAsync();
+
+        var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
+        var questionCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizQuestions
+                .AsNoTracking()
+                .Where(qq => quizIds.Contains(qq.QuizId))
+                .GroupBy(qq => qq.QuizId)
+                .Select(g => new { QuizId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.QuizId, x => x.Count)
+            : new Dictionary<Guid, int>();
+
+        var result = sessions
+            .GroupBy(s => s.QuizId)
+            .Select(g =>
+            {
+                var firstSession = g.First();
+                var quiz = firstSession.Quiz;
+                var classes = g.Select(s => new MyQuizClassInfoDto
+                {
+                    ClassId = s.ClassId,
+                    ClassName = s.Class?.ClassName ?? string.Empty,
+                    AssignedAt = s.CreatedAt,
+                    AssignmentId = s.Id
+                }).ToList();
+
+                return new MyQuizWithClassesDto
+                {
+                    QuizId = quiz!.Id,
+                    QuizName = quiz.Title,
+                    Topic = quiz.Topic,
+                    OpenTime = quiz.OpenTime,
+                    CloseTime = quiz.CloseTime,
+                    TimeLimit = quiz.TimeLimit,
+                    PassingScore = (int?)quiz.PassingScore,
+                    CreatedAt = quiz.CreatedAt,
+                    QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
+                    IsAiGenerated = quiz.IsAiGenerated,
+                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,
+                    Difficulty = quiz.Difficulty,
+                    Classes = classes
+                };
+            })
+            .ToList();
+
+        return result;
     }
 
     public async Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId)

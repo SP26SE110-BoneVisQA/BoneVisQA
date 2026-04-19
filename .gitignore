@@ -85,6 +85,9 @@ CopilotIndices/
 dataset/
 dataset.rar
 
+# Uploaded files (user uploads, images, etc.)
+wwwroot/uploads/
+
 # -----------------------------------------------------------------------------
 # Configuration: tracked vs ignored (explicit)
 # -----------------------------------------------------------------------------

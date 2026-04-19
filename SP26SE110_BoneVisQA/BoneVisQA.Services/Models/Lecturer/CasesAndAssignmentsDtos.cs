@@ -101,6 +101,60 @@ public class AssignQuizSessionRequestDto
     public bool UseExpertTime { get; set; }
 }
 
+/// <summary>
+/// Request để tạo Assignment THỦ CÔNG (không auto gửi email notification).
+/// Dùng khi Lecturer muốn tạo assignment card trước rồi gửi thông báo sau.
+/// </summary>
+public class CreateAssignmentManualRequestDto
+{
+    /// <summary>"case" hoặc "quiz"</summary>
+    public string AssignmentType { get; set; } = string.Empty;
+    
+    /// <summary>Danh sách lớp học được gán assignment này</summary>
+    public List<Guid> ClassIds { get; set; } = new();
+    
+    /// <summary>ID của Case (nếu type = "case")</summary>
+    public Guid? CaseId { get; set; }
+    
+    /// <summary>ID của Quiz (nếu type = "quiz")</summary>
+    public Guid? QuizId { get; set; }
+    
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int? TimeLimitMinutes { get; set; }
+    public int? PassingScore { get; set; }
+    public bool ShuffleQuestions { get; set; }
+    public bool AllowRetake { get; set; }
+    public bool AllowLate { get; set; }
+    public bool ShowResultsAfterSubmission { get; set; } = true;
+    public bool UseExpertTime { get; set; }
+    public DateTime? DueDate { get; set; }
+    public bool IsMandatory { get; set; } = true;
+    
+    /// <summary>
+    /// Nếu true, gửi email notification cho sinh viên ngay lập tức.
+    /// Nếu false, chỉ tạo assignment card mà không gửi email.
+    /// </summary>
+    public bool SendNotification { get; set; } = false;
+}
+
+/// <summary>
+/// Response trả về sau khi tạo assignment thủ công
+/// </summary>
+public class CreateAssignmentManualResponseDto
+{
+    public List<ManualAssignmentResultDto> Results { get; set; } = new();
+}
+
+public class ManualAssignmentResultDto
+{
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public Guid AssignmentId { get; set; }
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+}
+
 /// <summary>Yêu cầu bật retake cho một attempt cụ thể của sinh viên.</summary>
 public class AllowRetakeRequestDto
 {
@@ -211,11 +265,12 @@ public class QuestionWithAnswerDto
     public string? EssayAnswer { get; set; }
     public bool? IsCorrect { get; set; }
     public Guid AnswerId { get; set; }
-    public int MaxScore { get; set; } = 1;
+    public int MaxScore { get; set; } = 10;
     public decimal? ScoreAwarded { get; set; }
     public string? LecturerFeedback { get; set; }
     public bool IsGraded { get; set; } = false;
     public string? ReferenceAnswer { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 /// <summary>Request chỉnh sửa điểm / câu trả lời của một quiz attempt.</summary>
@@ -228,11 +283,12 @@ public class UpdateQuizAttemptRequestDto
     public List<UpdateAnswerDto> Answers { get; set; } = new();
 }
 
-/// <summary>Cập nhật 1 câu trả lời cụ thể.</summary>
+/// <summary>Cap nhat 1 cau tra loi cu the.</summary>
 public class UpdateAnswerDto
 {
     public Guid AnswerId { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public bool? IsCorrect { get; set; }
     public decimal? ScoreAwarded { get; set; }
     public string? LecturerFeedback { get; set; }

@@ -201,6 +201,7 @@ public class StudentLearningService : IStudentLearningService
         var attempt = await _unitOfWork.Context.QuizAttempts
             .Include(a => a.Quiz)
             .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync(a => a.Id == request.AttemptId && a.StudentId == studentId)
             ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
 
@@ -282,7 +283,7 @@ public class StudentLearningService : IStudentLearningService
                     await _unitOfWork.StudentQuizAnswerRepository.UpdateAsync(existing);
                 }
             }
-            else // MultipleChoice or TrueFalse: auto-grade
+            else // MultipleChoice: auto-grade
             {
                 var isCorrect = QuizAnswerMatchesCorrect(question.CorrectAnswer, answer.StudentAnswer);
 
@@ -421,6 +422,10 @@ public class StudentLearningService : IStudentLearningService
         // Chuẩn hóa PassingScore về thang 100 trước khi so sánh
         int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
 
+        // Đếm số essay chưa chấm (cần load Question)
+        int ungradedEssayCount = attempt.StudentQuizAnswers.Count(a =>
+            a.Question.Type == QuestionType.Essay && !a.IsGraded);
+
         return new QuizResultDto
         {
             AttemptId = attempt.Id,
@@ -430,7 +435,8 @@ public class StudentLearningService : IStudentLearningService
             Passed = !normalizedPassingScore.HasValue || score >= normalizedPassingScore.Value,
             TotalQuestions = quiz.QuizQuestions.Count,
             CorrectAnswers = quiz.QuizQuestions.Count(q =>
-                attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == q.Id)?.IsCorrect == true)
+                attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == q.Id)?.IsCorrect == true),
+            UngradedEssayCount = ungradedEssayCount
         };
     }
 

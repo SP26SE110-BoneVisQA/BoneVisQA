@@ -47,7 +47,7 @@ public partial class QuizQuestion
     public string? ReferenceAnswer { get; set; }
 
     [Column("max_score")]
-    public int MaxScore { get; set; } = 1;
+    public int MaxScore { get; set; } = 10;
 
     [ForeignKey("CaseId")]
     [InverseProperty("QuizQuestions")]
