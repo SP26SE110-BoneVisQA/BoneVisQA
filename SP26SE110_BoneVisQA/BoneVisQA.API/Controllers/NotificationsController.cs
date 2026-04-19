@@ -42,6 +42,7 @@ public class NotificationsController : ControllerBase
                 Message = n.Message,
                 Type = n.Type,
                 TargetUrl = n.TargetUrl,
+                Route = NotificationAppRoute.Normalize(n.TargetUrl),
                 IsRead = n.IsRead,
                 CreatedAt = n.CreatedAt
             })
