@@ -120,11 +120,16 @@ public class StudentTopicStatDto
 
 public class StudentRecentActivityDto
 {
+    /// <summary>Stable token for UI routing (e.g. <c>visual_qa</c> for Visual QA timeline rows).</summary>
     public string ActivityType { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string? Topic { get; set; }
     public DateTime OccurredAt { get; set; }
+    /// <summary>Visual QA session id when <see cref="ActivityType"/> is visual QA.</summary>
+    public Guid? SessionId { get; set; }
+    /// <summary>Optional deep link (relative). FE may derive from <see cref="SessionId"/> when null.</summary>
+    public string? TargetUrl { get; set; }
 }
 
 /// <summary>

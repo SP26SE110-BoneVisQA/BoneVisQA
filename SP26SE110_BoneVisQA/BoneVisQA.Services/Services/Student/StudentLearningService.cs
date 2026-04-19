@@ -548,7 +548,7 @@ public class StudentLearningService : IStudentLearningService
             .Take(10)
             .Select(m => new StudentRecentActivityDto
             {
-                ActivityType = "Question",
+                ActivityType = "visual_qa",
                 Title = m.Session.Case != null ? $"Asked a question on {m.Session.Case.Title}" : "Asked a visual QA question",
                 Description = m.Content,
                 Topic = m.Session.Case != null
@@ -556,7 +556,9 @@ public class StudentLearningService : IStudentLearningService
                         ? m.Session.Case.Category.Name
                         : m.Session.Case.Title
                     : "Personal Upload",
-                OccurredAt = m.CreatedAt
+                OccurredAt = m.CreatedAt,
+                SessionId = m.SessionId,
+                TargetUrl = "/student/qa/image?sessionId=" + m.SessionId.ToString()
             })
             .ToListAsync();
 
