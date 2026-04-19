@@ -132,6 +132,8 @@ public class VisualQaTurnDto
     public Guid UserMessageId { get; set; }
     public Guid? AssistantMessageId { get; set; }
     public string UserMessage { get; set; } = string.Empty;
+    /// <summary>ROI / bbox JSON from <c>qa_messages.coordinates</c> on the user message (normalized 0–1 when stored that way).</summary>
+    public string? QuestionCoordinates { get; set; }
     public string? QuestionText { get; set; }
     public string? MessageText { get; set; }
     public string? Diagnosis { get; set; }
@@ -150,6 +152,16 @@ public class VisualQaTurnDto
 public class VisualQaThreadDto
 {
     public Guid SessionId { get; set; }
+    /// <summary>Resolved study image (signed when required). Aligns with history list <see cref="VisualQaSessionHistoryItemDto.ImageUrl"/>.</summary>
+    public string? SessionImageUrl { get; set; }
+    /// <summary>Same as <see cref="SessionImageUrl"/> (JSON name <c>imageUrl</c>) for clients that reuse list-row field naming.</summary>
+    public string? ImageUrl { get; set; }
+    /// <summary>Same as <see cref="SessionImageUrl"/> (JSON name <c>studyImageUrl</c>) for Visual QA page prefill / query symmetry.</summary>
+    public string? StudyImageUrl { get; set; }
+    /// <summary>Primary ROI JSON for the viewer (latest user message with coordinates in this session).</summary>
+    public string? RoiBoundingBox { get; set; }
+    public Guid? CaseId { get; set; }
+    public Guid? ImageId { get; set; }
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
     public VisualQaCapabilitiesDto Capabilities { get; set; } = new();
     public string? ReviewState { get; set; }

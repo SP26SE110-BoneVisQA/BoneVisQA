@@ -29,8 +29,9 @@ public class GeminiService : IGeminiService
         var ragPolicy = ragContextAdequate
             ? "Only when the image (if any) is valid medical data, the question is related to musculoskeletal medicine, and context is sufficient should you fill diagnosis, differential_diagnoses, findings, reflective_questions, and citations.\n" +
               "Always prioritize RAG context. If context is insufficient, set diagnosis exactly to: '" + NoContextAnswer + "' and set differential_diagnoses, findings, reflective_questions, and citations ([]) to null or empty.\n"
-            : "The document library (RAG context) may be missing or not relevant enough. IN THIS CASE, you MUST still answer using general musculoskeletal medical knowledge (prioritize image analysis when available). You may fill diagnosis, differential_diagnoses, findings, and reflective_questions when appropriate; citations are usually []. At the end of diagnosis, ALWAYS append exactly: (Note: This analysis is based on general AI knowledge because no direct reference documents were found in the system library).\n" +
-              "DO NOT return diagnosis as only a generic refusal when the question is still in the musculoskeletal medical domain—provide an academic explanation first, then optionally add the missing-document note above.\n";
+            : "The document library (RAG context) may be weak or empty. Still answer in professional medical Vietnamese using general musculoskeletal knowledge and the image when present.\n" +
+              "If there are NO clear radiographic signs (e.g. no definite fracture in the ROI), say so in plain short Vietnamese in the diagnosis field only — do NOT paste long template disclaimers, do NOT invent citations, and leave citations as [] unless RAG chunks were actually used.\n" +
+              "Do not fill findings/differential/citations with boilerplate or restate the prompt; use null or empty arrays when there is nothing meaningful to add.\n";
 
         return
             "STEP 1: Analyze if the provided image is a Human Bone X-Ray. If it is NOT (e.g., it is a CT scan, MRI, an animal, or a random object), YOU MUST refuse to answer medical questions and output EXACTLY this string: 'INVALID_IMAGE_NOT_XRAY'. Stop processing further.\n" +

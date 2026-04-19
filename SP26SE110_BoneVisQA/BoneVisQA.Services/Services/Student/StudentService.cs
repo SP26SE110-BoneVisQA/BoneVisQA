@@ -571,24 +571,19 @@ public class StudentService : IStudentService
             throw new KeyNotFoundException("Q&A session not found.");
 
         var userTurnCount = await CountBillableUserTurnsAsync(sessionId, cancellationToken);
-        var hasInstructorMessage = await _unitOfWork.Context.QaMessages
-            .AsNoTracking()
-            .AnyAsync(m =>
-                m.SessionId == sessionId &&
-                (m.Role == "Expert" || m.Role == "Lecturer"),
-                cancellationToken);
 
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
         var isExpired = DateTime.UtcNow - lastActivity >= TimeSpan.FromHours(24);
-        var isInactiveStatus = !string.Equals(session.Status, "Active", StringComparison.Ordinal);
         var turnLimitExceeded = userTurnCount >= maxUserQuestions;
-        var isReadOnly = isInactiveStatus || hasInstructorMessage || isExpired;
+        var closed = IsVisualQaSessionClosedForStudent(session.Status);
+        // Student may continue asking until turn limit while review is pending; instructor messages do not lock the session.
+        var isReadOnly = isExpired || turnLimitExceeded || closed;
 
         var reason = turnLimitExceeded
             ? "TURN_LIMIT_EXCEEDED"
             : isExpired
                 ? "SESSION_EXPIRED"
-                : isReadOnly
+                : closed
                     ? "SESSION_READ_ONLY"
                     : null;
 
@@ -602,6 +597,18 @@ public class StudentService : IStudentService
         };
     }
 
+    /// <summary>Statuses where the student must not open new AI turns (finalized / rejected).</summary>
+    private static bool IsVisualQaSessionClosedForStudent(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return false;
+        return status.Trim() switch
+        {
+            "LecturerApproved" or "ExpertApproved" or "Rejected" => true,
+            _ => false
+        };
+    }
+
     public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
@@ -610,12 +617,7 @@ public class StudentService : IStudentService
         if (session == null)
             throw new KeyNotFoundException("Q&A session not found.");
 
-        var hasInstructorMessage = await _unitOfWork.Context.QaMessages
-            .AsNoTracking()
-            .AnyAsync(m =>
-                m.SessionId == sessionId &&
-                (m.Role == "Expert" || m.Role == "Lecturer"));
-        if (!string.Equals(session.Status, "Active", StringComparison.Ordinal) || hasInstructorMessage)
+        if (IsVisualQaSessionClosedForStudent(session.Status))
             throw new InvalidOperationException("SESSION_READ_ONLY");
 
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
@@ -655,6 +657,40 @@ public class StudentService : IStudentService
         session.Status = "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
+
+        var enrollments = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+            .Where(e => e.StudentId == studentId && e.Class != null && e.Class.LecturerId != null)
+            .ToListAsync();
+
+        var student = await _unitOfWork.Context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == studentId);
+
+        var firstUser = session.Messages
+            .Where(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .FirstOrDefault();
+        var snippet = (firstUser?.Content ?? string.Empty).Trim();
+        if (snippet.Length > 200)
+            snippet = snippet[..200].TrimEnd() + "…";
+
+        foreach (var e in enrollments)
+        {
+            var lecturerId = e.Class!.LecturerId!.Value;
+            var body =
+                $"{student?.FullName ?? "A student"} requested a review on a Visual QA session." +
+                (string.IsNullOrWhiteSpace(snippet) ? string.Empty : $"\nQuestion: {snippet}");
+
+            await _notificationService.SendNotificationToUserAsync(
+                lecturerId,
+                "Student requested Visual QA review",
+                body.Trim(),
+                "visual_qa_review_request",
+                $"/lecturer/triage?classId={e.ClassId}");
+        }
     }
 
     public async Task<CaseCatalogFiltersDto> GetCaseCatalogFiltersAsync(CancellationToken cancellationToken = default)
@@ -825,18 +861,13 @@ public class StudentService : IStudentService
         var orderedQuery = baseQuery.OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
 
         var totalCount = await orderedQuery.CountAsync(cancellationToken);
-        var sessions = await orderedQuery
+        var sessions = await baseQuery
+            .Include(s => s.Image)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt)
             .Skip(offset)
             .Take(limit)
-            .Select(s => new
-            {
-                s.Id,
-                s.CaseId,
-                s.Status,
-                s.CreatedAt,
-                s.UpdatedAt,
-                s.CustomImageUrl
-            })
             .ToListAsync(cancellationToken);
 
         var list = new List<VisualQaSessionHistoryItemDto>(sessions.Count);
@@ -898,7 +929,9 @@ public class StudentService : IStudentService
                 Status = s.Status,
                 UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
                 QuestionSnippet = snippet,
-                ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(s.CustomImageUrl, cancellationToken),
+                ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(
+                    ResolveVisualQaSessionRawImageUrl(s),
+                    cancellationToken),
                 ReviewState = MapReviewState(s.Status),
                 LastResponderRole = MapResponderRole(lastResponderBySession.TryGetValue(s.Id, out var lastRole) ? lastRole : null),
                 RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal) && rejectionReasonBySession.TryGetValue(s.Id, out var rr)
@@ -921,6 +954,9 @@ public class StudentService : IStudentService
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .AsNoTracking()
+            .Include(s => s.Image)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
         if (session == null)
             return null;
@@ -981,14 +1017,28 @@ public class StudentService : IStudentService
 
         var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
         var blockingNotice = BuildBlockingNotice(capabilities.Reason);
-        if (!string.IsNullOrWhiteSpace(blockingNotice))
-        {
-            turns.Add(BuildSystemNoticeTurn(sessionId, blockingNotice, capabilities.Reason));
-        }
+        // Single client-facing notice: use thread.BlockingNotice + Capabilities.Reason (machine code).
+        // Do not duplicate the same text as a synthetic system_notice turn (avoids triple display with FE banners).
+
+        var sessionImageRaw = ResolveVisualQaSessionRawImageUrl(session);
+        var sessionImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(sessionImageRaw, cancellationToken);
+
+        var latestUserWithRoi = messages
+            .Where(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(m.Coordinates))
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
+            .FirstOrDefault();
 
         return new VisualQaThreadDto
         {
             SessionId = sessionId,
+            SessionImageUrl = sessionImageUrl,
+            ImageUrl = sessionImageUrl,
+            StudyImageUrl = sessionImageUrl,
+            RoiBoundingBox = latestUserWithRoi?.Coordinates,
+            CaseId = session.CaseId,
+            ImageId = session.ImageId,
             Turns = turns,
             Capabilities = capabilities,
             ReviewState = reviewState,
@@ -1020,6 +1070,22 @@ public class StudentService : IStudentService
         return value;
     }
 
+    /// <summary>Raw storage URL/path for the session study (before signing for student clients).</summary>
+    private static string? ResolveVisualQaSessionRawImageUrl(VisualQASession? session)
+    {
+        if (session == null)
+            return null;
+        if (!string.IsNullOrWhiteSpace(session.CustomImageUrl))
+            return session.CustomImageUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(session.Image?.ImageUrl))
+            return session.Image.ImageUrl.Trim();
+        return session.Case?.MedicalImages?
+            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(m => m.Id)
+            .Select(m => m.ImageUrl)
+            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+    }
+
     private static VisualQaTurnDto MapTurn(
         Guid sessionId,
         QAMessage userMessage,
@@ -1035,6 +1101,7 @@ public class StudentService : IStudentService
             UserMessageId = userMessage.Id,
             AssistantMessageId = assistantMessage?.Id,
             UserMessage = userMessage.Content,
+            QuestionCoordinates = userMessage.Coordinates,
             QuestionText = userMessage.Content,
             MessageText = assistantMessage?.Content,
             Diagnosis = assistantMessage?.SuggestedDiagnosis ?? assistantMessage?.Content,
@@ -1101,35 +1168,9 @@ public class StudentService : IStudentService
             Citations = ResolveMessageCitations(message),
             CreatedAt = message.CreatedAt,
             ResponseKind = "review_update",
-            PolicyReason = "review_update",
+            PolicyReason = null,
             ReviewState = reviewState ?? "none",
             LastResponderRole = actorRole,
-            IsReviewTarget = false
-        };
-    }
-
-    private static VisualQaTurnDto BuildSystemNoticeTurn(Guid sessionId, string notice, string? reason)
-    {
-        return new VisualQaTurnDto
-        {
-            SessionId = sessionId,
-            TurnId = $"system:{reason ?? "notice"}",
-            ActorRole = "system",
-            UserMessageId = Guid.Empty,
-            AssistantMessageId = null,
-            UserMessage = string.Empty,
-            QuestionText = null,
-            MessageText = notice,
-            Diagnosis = notice,
-            Findings = Array.Empty<string>(),
-            DifferentialDiagnoses = Array.Empty<string>(),
-            ReflectiveQuestions = Array.Empty<string>(),
-            Citations = Array.Empty<CitationItemDto>(),
-            CreatedAt = DateTime.UtcNow,
-            ResponseKind = "system_notice",
-            PolicyReason = reason,
-            ReviewState = "none",
-            LastResponderRole = "system",
             IsReviewTarget = false
         };
     }
@@ -1275,9 +1316,9 @@ public class StudentService : IStudentService
     {
         return reason switch
         {
-            "TURN_LIMIT_EXCEEDED" => "You have reached the maximum number of questions for this Visual QA session.",
-            "SESSION_EXPIRED" => "This Visual QA session expired after 24 hours of inactivity.",
-            "SESSION_READ_ONLY" => "This Visual QA session is now read-only because it has entered the review workflow.",
+            "TURN_LIMIT_EXCEEDED" => "Bạn đã dùng hết số lượt hỏi cho phiên Visual QA này.",
+            "SESSION_EXPIRED" => "Phiên Visual QA đã hết hạn sau 24 giờ không hoạt động.",
+            "SESSION_READ_ONLY" => "Phiên Visual QA đã được đóng (đã duyệt hoặc từ chối). Bạn không thể gửi câu hỏi mới.",
             _ => null
         };
     }

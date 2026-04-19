@@ -21,8 +21,7 @@ public class VisualQaAiService : IVisualQaAiService
     private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
     private const string InvalidBoneXrayUserMessage =
         "The system detected that this is not a valid human bone X-ray image. Please upload a proper medical X-ray image for analysis support.";
-    private const string RagGeneralKnowledgeDisclaimer =
-        "(Note: This analysis is based on general AI knowledge because no direct reference documents were found in the system library).";
+    // Intentionally no longer appended to answers — see Gemini RAG policy (plain Vietnamese, no boilerplate note).
     private const string TemporaryVectorSearchUnavailableAnswer =
         "Vector search is temporarily unavailable due to high network demand. Please try again later.";
     private const string TemporaryAiGenerationUnavailableAnswer =
@@ -186,12 +185,6 @@ public class VisualQaAiService : IVisualQaAiService
                 ClientRequestId = request.ClientRequestId,
                 Citations = new List<CitationItemDto>()
             };
-        }
-
-        if (!ragContextAdequate && !string.IsNullOrWhiteSpace(response.AnswerText)
-            && !response.AnswerText.Contains(RagGeneralKnowledgeDisclaimer, StringComparison.Ordinal))
-        {
-            response.AnswerText = response.AnswerText.TrimEnd() + "\n\n" + RagGeneralKnowledgeDisclaimer;
         }
 
         var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
