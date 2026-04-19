@@ -112,4 +112,15 @@ ALTER TABLE public.visual_qa_sessions
 ALTER TABLE public.documents
   ALTER COLUMN pending_target_version TYPE character varying(32);
 
+-- =========================================================
+-- 5. ROI + notifications (Visual QA thread + FE deep links)
+--    See also db/20260418_contract_fe_be_alignment_readme.sql
+-- =========================================================
+
+ALTER TABLE public.qa_messages
+  ADD COLUMN IF NOT EXISTS coordinates jsonb;
+
+ALTER TABLE public.notifications
+  ADD COLUMN IF NOT EXISTS target_url text;
+
 COMMIT;
