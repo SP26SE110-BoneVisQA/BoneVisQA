@@ -27,10 +27,7 @@ namespace BoneVisQA.Services.Services.Admin
 
         public async Task<PagedResult<GetClassManagementDTO>> GetAcademicClassAsync(int pageIndex,int pageSize)
         {
-            var query = _unitOfWork.AcademicClassRepository
-                .GetQueryable()
-                .Include(x => x.Lecturer)
-                .Include(x => x.Expert);
+            var query = _unitOfWork.AcademicClassRepository.GetQueryable();
 
             var totalCount = await query.CountAsync();
 
@@ -44,7 +41,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ClassName = x.ClassName,
                     Semester = x.Semester,
                     CreatedAt = x.CreatedAt,
-                    UpdatedAt = x.UpdatedAt
+                    UpdatedAt = x.UpdatedAt,
+                    LecturerId = x.LecturerId,
+                    ExpertId = x.ExpertId,
+                    LecturerName = x.Lecturer != null ? x.Lecturer.FullName : null,
+                    ExpertName = x.Expert != null ? x.Expert.FullName : null,
+                    LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
+                    ExpertEmail = x.Expert != null ? x.Expert.Email : null,
+                    StudentCount = x.ClassEnrollments.Count
                 })
                 .ToListAsync();
 
@@ -55,6 +59,29 @@ namespace BoneVisQA.Services.Services.Admin
                 PageIndex = pageIndex,
                 PageSize = pageSize
             };
+        }
+
+        public async Task<GetClassManagementDTO?> GetAcademicClassByIdAsync(Guid id)
+        {
+            return await _unitOfWork.AcademicClassRepository
+                .GetQueryable()
+                .Where(x => x.Id == id)
+                .Select(x => new GetClassManagementDTO
+                {
+                    Id = x.Id,
+                    ClassName = x.ClassName,
+                    Semester = x.Semester,
+                    CreatedAt = x.CreatedAt,
+                    UpdatedAt = x.UpdatedAt,
+                    LecturerId = x.LecturerId,
+                    ExpertId = x.ExpertId,
+                    LecturerName = x.Lecturer != null ? x.Lecturer.FullName : null,
+                    ExpertName = x.Expert != null ? x.Expert.FullName : null,
+                    LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
+                    ExpertEmail = x.Expert != null ? x.Expert.Email : null,
+                    StudentCount = x.ClassEnrollments.Count
+                })
+                .FirstOrDefaultAsync();
         }
 
         public async Task<CreateClassManagementDTO> CreateAcademicClassAsync(CreateClassManagementDTO dto)
@@ -110,19 +137,16 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         //=======================================================  ASSIGN CLASS  ===================================================
-        public async Task<PagedResult<GetAssignClassDTO>> GetAssignClassAsync(int pageIndex,int pageSize)
+        public async Task<PagedResult<GetAssignClassDTO>> GetAssignClassAsync(int pageIndex,int pageSize, Guid? classId = null)
         {
             var query = _unitOfWork.ClassEnrollmentRepository
                 .GetQueryable()
-                .Include(x => x.Class)
-                .ThenInclude(x => x.Lecturer)
-                .Include(x => x.Class)
-                .ThenInclude(x => x.Expert)
-                .Include(x => x.Student);
+                .AsQueryable();
 
+            if (classId.HasValue)
+                query = query.Where(x => x.ClassId == classId.Value);
 
             var totalCount = await query.CountAsync();
-
 
             var data = await query
                 .OrderByDescending(x => x.EnrolledAt)
@@ -131,6 +155,7 @@ namespace BoneVisQA.Services.Services.Admin
                 .Select(x => new GetAssignClassDTO
                 {
                     Id = x.Id,
+                    ClassId = x.ClassId,
                     ClassName = x.Class.ClassName,
                     LecturerName = x.Class.Lecturer != null ? x.Class.Lecturer.FullName : null,
                     ExpertName = x.Class.Expert != null ? x.Class.Expert.FullName : null,
