@@ -4,6 +4,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -19,12 +20,18 @@ public class LecturerService : ILecturerService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
+    private readonly IMedicalCaseService _medicalCaseService;
 
-    public LecturerService(IUnitOfWork unitOfWork, IEmailService emailService, INotificationService notificationService)
+    public LecturerService(
+        IUnitOfWork unitOfWork,
+        IEmailService emailService,
+        INotificationService notificationService,
+        IMedicalCaseService medicalCaseService)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
         _notificationService = notificationService;
+        _medicalCaseService = medicalCaseService;
     }
 
     /// <summary>
@@ -39,10 +46,31 @@ public class LecturerService : ILecturerService
         if (!dt.HasValue) return null;
         return dt.Value.Kind switch
         {
-            DateTimeKind.Utc => dt.Value,                          // đã là UTC, giữ nguyên
-            DateTimeKind.Local => dt.Value.ToUniversalTime(),       // local → UTC
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime() // unspecified → giả sử local → UTC
+            DateTimeKind.Utc => dt.Value,
+            DateTimeKind.Local => dt.Value.ToUniversalTime(),
+            // Unspecified: assume it's a local datetime string (e.g., from datetime-local input)
+            // Parse as Vietnam time (UTC+7) and convert to UTC
+            _ => ParseLocalToUtc(dt.Value, 7) // Treat as UTC+7 (Vietnam)
         };
+    }
+
+    /// <summary>
+    /// Parse a DateTime with Kind=Unspecified as local time in the given timezone offset hours,
+    /// then convert to UTC.
+    /// </summary>
+    private static DateTime ParseLocalToUtc(DateTime dt, int utcOffsetHours)
+    {
+        var localDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        var offset = TimeSpan.FromHours(utcOffsetHours);
+        return DateTime.SpecifyKind(localDateTime.Subtract(offset), DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
     }
 
     private async Task EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
@@ -252,17 +280,17 @@ public class LecturerService : ILecturerService
         await EnsureLecturerOwnsClassAsync(lecturerId, classId);
         var now = DateTime.UtcNow;
 
-        // Lấy thông tin lớp và giảng viên
+        // Get class and lecturer information
         var academicClass = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId)
             .Include(c => c.Lecturer)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Khong tim thay lop.");
+            ?? throw new KeyNotFoundException("Class not found.");
 
         var lecturerName = academicClass.Lecturer?.FullName ?? "Lecturer";
         var className = academicClass.ClassName;
 
-        // Tạo announcement entity
+        // Create announcement entity
         var entity = new Announcement
         {
             Id = Guid.NewGuid(),
@@ -297,7 +325,7 @@ public class LecturerService : ILecturerService
             .Include(a => a.Class)
                 .ThenInclude(c => c!.Lecturer)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Khong tim thay thong bao.");
+            ?? throw new KeyNotFoundException("Announcement not found.");
 
         entity.Title = request.Title.Trim();
         entity.Content = request.Content.Trim();
@@ -372,7 +400,7 @@ public class LecturerService : ILecturerService
             .FindIncludeAsync(
                 q => q.QuizId == quizId,
                 q => q.Quiz,
-                q => q.Case  // ✅ thêm include Case
+                q => q.Case  // ✅ add include Case
             );
 
         return questions.Select(q => new QuizQuestionDto
@@ -383,7 +411,7 @@ public class LecturerService : ILecturerService
             CaseId = q.CaseId,
             CaseTitle = q.Case?.Title ?? "",
             QuestionText = q.QuestionText,
-            Type = q.Type,
+            Type = q.Type?.ToString(),
             OptionA = q.OptionA,
             OptionB = q.OptionB,
             OptionC = q.OptionC,
@@ -414,7 +442,7 @@ public class LecturerService : ILecturerService
             CaseId = question.CaseId,
             CaseTitle = question.Case?.Title,
             QuestionText = question.QuestionText,
-            Type = question.Type,
+            Type = question.Type?.ToString(),
             OptionA = question.OptionA,
             OptionB = question.OptionB,
             OptionC = question.OptionC,
@@ -447,7 +475,7 @@ public class LecturerService : ILecturerService
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
-            PassingScore = request.PassingScore,
+            PassingScore = request.PassingScore, // Lecturer quiz uses 100-point scale directly
             CreatedAt = now
         };
 
@@ -484,7 +512,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt
         };
     }
@@ -495,23 +523,26 @@ public class LecturerService : ILecturerService
         if (quiz == null)
             return false;
 
-        // Remove from all class assignments first
+        // ============================================================
+        // IMPORTANT: Only delete the original Quiz if it belongs to the lecturer
+        // - Expert quizzes (CreatedByExpertId != null) must be kept in Expert Library
+        // - Only remove the class link (ClassQuizSession) and attempt history for expert quizzes
+        // - For lecturer-owned quizzes (CreatedByExpertId == null), delete everything including the quiz itself
+        // ============================================================
+
+        var isExpertQuiz = quiz.CreatedByExpertId.HasValue;
+
+        // 1. Check if quiz is assigned to any class - block deletion if so
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
             .Where(cqs => cqs.QuizId == quizId)
             .ToListAsync();
 
-        foreach (var session in classSessions)
-            _unitOfWork.Context.ClassQuizSessions.Remove(session);
+        if (classSessions.Any())
+        {
+            throw new InvalidOperationException("Quiz đang được gán cho lớp. Vui lòng gỡ quiz khỏi lớp trước khi xóa.");
+        }
 
-        // Remove all questions
-        var questions = await _unitOfWork.Context.QuizQuestions
-            .Where(q => q.QuizId == quizId)
-            .ToListAsync();
-
-        foreach (var question in questions)
-            _unitOfWork.Context.QuizQuestions.Remove(question);
-
-        // Remove quiz attempts
+        // 2. Remove quiz attempts (attempt history)
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId)
             .ToListAsync();
@@ -519,11 +550,38 @@ public class LecturerService : ILecturerService
         foreach (var attempt in attempts)
             _unitOfWork.Context.QuizAttempts.Remove(attempt);
 
-        // Remove the quiz
-        _unitOfWork.Context.Quizzes.Remove(quiz);
+        // 3. Remove quiz questions (only if we're deleting the quiz itself)
+        if (!isExpertQuiz)
+        {
+            var questions = await _unitOfWork.Context.QuizQuestions
+                .Where(q => q.QuizId == quizId)
+                .ToListAsync();
+
+            foreach (var question in questions)
+                _unitOfWork.Context.QuizQuestions.Remove(question);
+        }
+
+        // 4. Delete the original Quiz only if it's NOT an expert quiz
+        if (!isExpertQuiz)
+        {
+            _unitOfWork.Context.Quizzes.Remove(quiz);
+        }
+
         await _unitOfWork.SaveAsync();
 
         return true;
+    }
+
+    public async Task RemoveQuizFromClassAsync(Guid classId, Guid quizId)
+    {
+        var classQuizSession = await _unitOfWork.ClassQuizSessionRepository
+            .FirstOrDefaultAsync(cqs => cqs.ClassId == classId && cqs.QuizId == quizId);
+
+        if (classQuizSession == null)
+            throw new KeyNotFoundException("Quiz is not assigned to this class.");
+
+        await _unitOfWork.ClassQuizSessionRepository.DeleteAsync(classQuizSession.Id);
+        await _unitOfWork.SaveAsync();
     }
 
     public async Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request)
@@ -539,12 +597,16 @@ public class LecturerService : ILecturerService
                 ?? throw new KeyNotFoundException("Medical case not found.");
         }
 
+        var questionType = string.IsNullOrEmpty(request.Type)
+            ? QuestionType.MultipleChoice
+            : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+
         var question = new QuizQuestion
         {
             QuizId = quizId,
             CaseId = request.CaseId,
             QuestionText = request.QuestionText,
-            Type = request.Type,
+            Type = questionType,
             OptionA = request.OptionA,
             OptionB = request.OptionB,
             OptionC = request.OptionC,
@@ -564,7 +626,7 @@ public class LecturerService : ILecturerService
             CaseId = question.CaseId,
             CaseTitle = medicalCase?.Title,
             QuestionText = question.QuestionText,
-            Type = question.Type,
+            Type = question.Type?.ToString(),
             OptionA = question.OptionA,
             OptionB = question.OptionB,
             OptionC = question.OptionC,
@@ -573,6 +635,82 @@ public class LecturerService : ILecturerService
             ImageUrl = question.ImageUrl
         };
     }
+
+    public async Task<List<QuizQuestionDto>> AddQuizQuestionsBatchAsync(Guid quizId, List<CreateQuizQuestionDto> requests)
+    {
+        if (requests == null || requests.Count == 0)
+            return new List<QuizQuestionDto>();
+
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var questions = new List<QuizQuestion>();
+        var result = new List<QuizQuestionDto>();
+
+        foreach (var request in requests)
+        {
+            MedicalCase? medicalCase = null;
+            if (request.CaseId.HasValue)
+            {
+                medicalCase = await _unitOfWork.MedicalCaseRepository
+                    .GetByIdAsync(request.CaseId.Value)
+                    ?? throw new KeyNotFoundException($"Medical case with ID {request.CaseId} not found.");
+            }
+
+            var questionType = string.IsNullOrEmpty(request.Type)
+                ? QuestionType.MultipleChoice
+                : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+
+            var question = new QuizQuestion
+            {
+                QuizId = quizId,
+                CaseId = request.CaseId,
+                QuestionText = request.QuestionText,
+                Type = questionType,
+                OptionA = request.OptionA,
+                OptionB = request.OptionB,
+                OptionC = request.OptionC,
+                OptionD = request.OptionD,
+                CorrectAnswer = request.CorrectAnswer,
+                ImageUrl = request.ImageUrl
+            };
+
+            questions.Add(question);
+        }
+
+        await _unitOfWork.QuizQuestionRepository.AddRangeAsync(questions);
+        await _unitOfWork.SaveAsync();
+
+        foreach (var question in questions)
+        {
+            // Fetch medical case again for each question (could be optimized)
+            MedicalCase? medicalCase = null;
+            if (question.CaseId.HasValue)
+            {
+                medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(question.CaseId.Value);
+            }
+
+            result.Add(new QuizQuestionDto
+            {
+                Id = question.Id,
+                QuizId = question.QuizId,
+                QuizTitle = quiz.Title,
+                CaseId = question.CaseId,
+                CaseTitle = medicalCase?.Title,
+                QuestionText = question.QuestionText,
+                Type = question.Type?.ToString(),
+                OptionA = question.OptionA,
+                OptionB = question.OptionB,
+                OptionC = question.OptionC,
+                OptionD = question.OptionD,
+                CorrectAnswer = question.CorrectAnswer,
+                ImageUrl = question.ImageUrl
+            });
+        }
+
+        return result;
+    }
+
     public async Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request)
     {
         var entity = await _unitOfWork.QuizQuestionRepository.GetByIdAsync(questionId)
@@ -586,7 +724,10 @@ public class LecturerService : ILecturerService
 
 
         entity.QuestionText = request.QuestionText;
-        entity.Type = request.Type;
+        var questionType = string.IsNullOrEmpty(request.Type)
+            ? QuestionType.MultipleChoice
+            : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+        entity.Type = questionType;
         entity.OptionA = request.OptionA;
         entity.OptionB = request.OptionB;
         entity.OptionC = request.OptionC;
@@ -757,7 +898,7 @@ public class LecturerService : ILecturerService
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
     {
-        // Không dùng Task.WhenAll cho nhiều query trên cùng một DbContext — EF Core không thread-safe, dễ gây 500.
+        // Do not use Task.WhenAll for multiple queries on the same DbContext - EF Core is not thread-safe, may cause 500 errors.
         var studentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
             .Select(e => e.StudentId)
@@ -1600,7 +1741,7 @@ public class LecturerService : ILecturerService
 
         var className = academicClass.ClassName ?? "";
 
-        // Tuần tự: cùng một DbContext không an toàn khi chạy nhiều query song song (Task.WhenAll).
+        // Sequential: the same DbContext is not safe when running multiple parallel queries (Task.WhenAll).
         var totalStudents = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .CountAsync(e => e.ClassId == classId);
@@ -1702,7 +1843,7 @@ public class LecturerService : ILecturerService
         var classIds = classList.Select(c => c.Id).ToList();
         var classNameMap = classList.ToDictionary(c => c.Id, c => c.ClassName ?? "");
 
-        // Tuần tự: không start ToDictionaryAsync rồi await query khác — EF DbContext không cho nhiều operation đồng thời.
+        // Sequential: do not start ToDictionaryAsync then await another query - EF DbContext does not allow multiple simultaneous operations.
         var enrollmentCounts = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
             .Where(e => classIds.Contains(e.ClassId))
@@ -1831,7 +1972,7 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Chỉ quiz chưa gán lớp thuộc giảng viên (hoặc legacy null). Quiz AI của sinh viên lưu CreatedByExpertId = studentId — không hiển thị ở đây.
+        // Only unassigned quizzes belonging to the lecturer (or legacy null). Student AI quizzes have CreatedByExpertId = studentId — do not display here.
         var unassignedQuizzes = await _unitOfWork.Context.Quizzes
             .Where(q => !unassignedQuizIds.Contains(q.Id)
                 && (!q.CreatedByExpertId.HasValue || q.CreatedByExpertId == lecturerId))
@@ -1852,7 +1993,7 @@ public class LecturerService : ILecturerService
             .Select(g => new { QuizId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.QuizId, x => x.Count);
 
-        // Build result list: assigned quizzes + quiz chưa gán lớp (chỉ của GV hoặc legacy CreatedByExpertId null)
+        // Build result list: assigned quizzes + unassigned quizzes (only from lecturer or legacy CreatedByExpertId null)
         var results = classQuizzes
             .Select(cq => new ClassQuizDto
             {
@@ -1864,11 +2005,11 @@ public class LecturerService : ILecturerService
                 AssignedAt = cq.CreatedAt,
                 OpenTime = cq.Quiz?.OpenTime,
                 CloseTime = cq.Quiz?.CloseTime,
-                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId)
+                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId),
             })
             .ToList();
 
-        // Quiz chưa gán lớp (đã lọc bỏ quiz AI do sinh viên tạo — CreatedByExpertId = studentId)
+        // Unassigned quizzes (filtered to exclude AI quizzes created by students — CreatedByExpertId = studentId)
         foreach (var quiz in unassignedQuizzes)
         {
             results.Add(new ClassQuizDto
@@ -1881,11 +2022,254 @@ public class LecturerService : ILecturerService
                 AssignedAt = quiz.CreatedAt,
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
-                QuestionCount = questionCounts.GetValueOrDefault(quiz.Id)
+                QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
             });
         }
 
         return results.OrderByDescending(r => r.AssignedAt).ToList();
+    }
+
+    /// <summary>
+    /// Get unassigned quizzes created by the lecturer (CreatedByExpertId = null, CreatedByLecturerId = lecturerId)
+    /// These are quizzes in lecturer's personal pool that have NOT been assigned to any class yet.
+    /// </summary>
+    public async Task<IReadOnlyList<QuizDto>> GetUnassignedLecturerQuizzesAsync(Guid lecturerId)
+    {
+        // Get all quiz IDs that are already assigned to ANY class (not just lecturer's classes)
+        var assignedQuizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Select(cqs => cqs.QuizId)
+            .ToListAsync();
+
+        // Get unassigned quizzes created by this lecturer
+        var quizzes = await _unitOfWork.Context.Quizzes
+            .Where(q =>
+                // Quiz created by this lecturer (not from Expert Library)
+                q.CreatedByExpertId == null &&
+                // Not assigned to any class yet
+                !assignedQuizIds.Contains(q.Id)
+            )
+            .OrderByDescending(q => q.CreatedAt)
+            .ToListAsync();
+
+        // Get question counts
+        var quizIds = quizzes.Select(q => q.Id).ToList();
+        var questionCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizQuestions
+                .AsNoTracking()
+                .Where(qq => quizIds.Contains(qq.QuizId))
+                .GroupBy(qq => qq.QuizId)
+                .Select(g => new { QuizId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.QuizId, x => x.Count)
+            : new Dictionary<Guid, int>();
+
+        return quizzes
+            .Select(q => new QuizDto
+            {
+                Id = q.Id,
+                ClassId = Guid.Empty,
+                Title = q.Title,
+                Topic = q.Topic,
+                IsAiGenerated = q.IsAiGenerated,
+                IsVerifiedCurriculum = q.IsVerifiedCurriculum,
+                Difficulty = q.Difficulty,
+                Classification = q.Classification,
+                OpenTime = q.OpenTime,
+                CloseTime = q.CloseTime,
+                TimeLimit = q.TimeLimit,
+                PassingScore = q.PassingScore,
+                CreatedAt = q.CreatedAt,
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Get all quizzes available to lecturer (both own and expert library quizzes),
+    /// excluding AI-generated quizzes. Does not include assigned quizzes.
+    /// Used for "My Quizzes" tab with full library view.
+    /// </summary>
+    public async Task<IReadOnlyList<QuizDto>> GetAllLecturerQuizzesAsync(Guid lecturerId)
+    {
+        // Get all quiz IDs that are already assigned to ANY class
+        var assignedQuizIds = await _unitOfWork.Context.ClassQuizSessions
+            .Select(cqs => cqs.QuizId)
+            .ToListAsync();
+
+        // Get quizzes that are either:
+        // 1. Created by this lecturer (not from Expert Library, not AI-generated)
+        // 2. From Expert Library (CreatedByExpertId != null), not AI-generated
+        var quizzes = await _unitOfWork.Context.Quizzes
+            .Where(q =>
+                // Not AI-generated
+                !q.IsAiGenerated &&
+                // Not assigned to any class yet
+                !assignedQuizIds.Contains(q.Id)
+            )
+            .OrderBy(q => q.Title)
+            .ThenByDescending(q => q.CreatedAt)
+            .ToListAsync();
+
+        // Get question counts
+        var quizIds = quizzes.Select(q => q.Id).ToList();
+        var questionCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizQuestions
+                .AsNoTracking()
+                .Where(qq => quizIds.Contains(qq.QuizId))
+                .GroupBy(qq => qq.QuizId)
+                .Select(g => new { QuizId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.QuizId, x => x.Count)
+            : new Dictionary<Guid, int>();
+
+        return quizzes
+            .Select(q => new QuizDto
+            {
+                Id = q.Id,
+                ClassId = Guid.Empty,
+                Title = q.Title,
+                Topic = q.Topic,
+                IsAiGenerated = q.IsAiGenerated,
+                IsVerifiedCurriculum = q.IsVerifiedCurriculum,
+                Difficulty = q.Difficulty,
+                Classification = q.Classification,
+                OpenTime = q.OpenTime,
+                CloseTime = q.CloseTime,
+                TimeLimit = q.TimeLimit,
+                PassingScore = q.PassingScore,
+                CreatedAt = q.CreatedAt,
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Get all quizzes assigned to lecturer's classes (ClassQuizSession).
+    /// Includes both lecturer-created quizzes and expert library quizzes that have been assigned.
+    /// </summary>
+    public async Task<IReadOnlyList<AssignedQuizDto>> GetAssignedQuizzesAsync(Guid lecturerId)
+    {
+        // Get all classes owned by this lecturer
+        var classIds = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        // Get all ClassQuizSessions for these classes
+        var sessions = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .Include(cqs => cqs.Quiz)
+                .ThenInclude(q => q.CreatedByExpert)
+            .Include(cqs => cqs.Class)
+            .OrderByDescending(cqs => cqs.CreatedAt)
+            .ToListAsync();
+
+        // Get question counts for all quizzes
+        var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
+        var questionCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizQuestions
+                .AsNoTracking()
+                .Where(qq => quizIds.Contains(qq.QuizId))
+                .GroupBy(qq => qq.QuizId)
+                .Select(g => new { QuizId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.QuizId, x => x.Count)
+            : new Dictionary<Guid, int>();
+
+        return sessions
+            .Select(s =>
+            {
+                var quiz = s.Quiz;
+                string? creatorName = null;
+                string? creatorType = null;
+
+                if (quiz != null)
+                {
+                    if (quiz.CreatedByExpertId.HasValue)
+                    {
+                        creatorType = "Expert";
+                        creatorName = quiz.CreatedByExpert?.FullName;
+                    }
+                    else
+                    {
+                        creatorType = "Lecturer";
+                        creatorName = "Lecturer";
+                    }
+                }
+
+                return new AssignedQuizDto
+                {
+                    AssignmentId = s.Id,
+                    ClassId = s.ClassId,
+                    QuizId = s.QuizId,
+                    QuizName = quiz?.Title,
+                    ClassName = s.Class?.ClassName,
+                    Topic = quiz?.Topic,
+                    AssignedAt = s.CreatedAt,
+                    OpenTime = s.OpenTime ?? quiz?.OpenTime,
+                    CloseTime = s.CloseTime ?? quiz?.CloseTime,
+                    QuestionCount = questionCounts.GetValueOrDefault(s.QuizId),
+                    CreatorName = creatorName,
+                    CreatorType = creatorType
+                };
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<MyQuizWithClassesDto>> GetMyQuizzesWithClassesAsync(Guid lecturerId)
+    {
+        var classIds = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        var sessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Class)
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .OrderByDescending(cqs => cqs.CreatedAt)
+            .ToListAsync();
+
+        var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
+        var questionCounts = quizIds.Count > 0
+            ? await _unitOfWork.Context.QuizQuestions
+                .AsNoTracking()
+                .Where(qq => quizIds.Contains(qq.QuizId))
+                .GroupBy(qq => qq.QuizId)
+                .Select(g => new { QuizId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.QuizId, x => x.Count)
+            : new Dictionary<Guid, int>();
+
+        var result = sessions
+            .GroupBy(s => s.QuizId)
+            .Select(g =>
+            {
+                var firstSession = g.First();
+                var quiz = firstSession.Quiz;
+                var classes = g.Select(s => new MyQuizClassInfoDto
+                {
+                    ClassId = s.ClassId,
+                    ClassName = s.Class?.ClassName ?? string.Empty,
+                    AssignedAt = s.CreatedAt,
+                    AssignmentId = s.Id
+                }).ToList();
+
+                return new MyQuizWithClassesDto
+                {
+                    QuizId = quiz!.Id,
+                    QuizName = quiz.Title,
+                    Topic = quiz.Topic,
+                    OpenTime = quiz.OpenTime,
+                    CloseTime = quiz.CloseTime,
+                    TimeLimit = quiz.TimeLimit,
+                    PassingScore = (int?)quiz.PassingScore,
+                    CreatedAt = quiz.CreatedAt,
+                    QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
+                    IsAiGenerated = quiz.IsAiGenerated,
+                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,
+                    Difficulty = quiz.Difficulty,
+                    Classes = classes
+                };
+            })
+            .ToList();
+
+        return result;
     }
 
     public async Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId)
@@ -1906,7 +2290,8 @@ public class LecturerService : ILecturerService
                 CloseTime = cqs.CloseTime,
                 TimeLimit = cqs.TimeLimitMinutes,
                 PassingScore = (int?)cqs.PassingScore,
-                CreatedAt = cqs.CreatedAt
+                CreatedAt = cqs.CreatedAt,
+                IsFromExpertLibrary = cqs.Quiz != null && cqs.Quiz.CreatedByExpertId.HasValue
             })
             .ToList();
     }
@@ -1923,6 +2308,10 @@ public class LecturerService : ILecturerService
             .OrderByDescending(cqs => cqs.CreatedAt)
             .FirstOrDefaultAsync();
 
+        // IsFromExpertLibrary: true nếu quiz được tạo bởi Expert (CreatedByExpertId != null)
+        // và không phải do lecturer hiện tại tạo (tức là CreatedByExpertId != lecturerId, nhưng ở đây chỉ cần biết có expertId là đủ)
+        var isFromExpertLibrary = quiz.CreatedByExpertId.HasValue;
+
         return new QuizDto
         {
             Id = quiz.Id,
@@ -1935,8 +2324,67 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
-            CreatedAt = quiz.CreatedAt
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
+            CreatedAt = quiz.CreatedAt,
+            IsFromExpertLibrary = isFromExpertLibrary
+        };
+    }
+
+    public async Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId)
+    {
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var questions = await _unitOfWork.QuizQuestionRepository
+            .FindByCondition(q => q.QuizId == quizId)
+            .Include(q => q.Case)
+            .OrderBy(q => q.Id) // keep order
+            .ToListAsync();
+
+        var isFromExpertLibrary = quiz.CreatedByExpertId.HasValue;
+
+        // Get the latest class assignment (if any)
+        var latestClassSession = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Where(cqs => cqs.QuizId == quizId)
+            .OrderByDescending(cqs => cqs.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        var classId = latestClassSession?.ClassId ?? Guid.Empty;
+
+        return new QuizWithQuestionsDto
+        {
+            Quiz = new QuizDto
+            {
+                Id = quiz.Id,
+                ClassId = classId,
+                Title = quiz.Title,
+                Topic = quiz.Topic,
+                IsAiGenerated = quiz.IsAiGenerated,
+                Difficulty = quiz.Difficulty,
+                Classification = quiz.Classification,
+                OpenTime = quiz.OpenTime,
+                CloseTime = quiz.CloseTime,
+                TimeLimit = quiz.TimeLimit,
+                PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
+                CreatedAt = quiz.CreatedAt,
+                IsFromExpertLibrary = isFromExpertLibrary
+            },
+            Questions = questions.Select(q => new QuizQuestionDto
+            {
+                Id = q.Id,
+                QuizId = q.QuizId,
+                CaseId = q.CaseId,
+                CaseTitle = q.Case?.Title,
+                QuestionText = q.QuestionText,
+                Type = q.Type?.ToString(),
+                OptionA = q.OptionA,
+                OptionB = q.OptionB,
+                OptionC = q.OptionC,
+                OptionD = q.OptionD,
+                CorrectAnswer = q.CorrectAnswer,
+                ImageUrl = q.ImageUrl
+            }).ToList()
         };
     }
 
@@ -1955,6 +2403,24 @@ public class LecturerService : ILecturerService
         _unitOfWork.QuizRepository.Update(quiz);
         await _unitOfWork.SaveAsync();
 
+        // Update all ClassQuizSessions associated with this quiz to reflect new settings
+        var classSessions = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.QuizId == quizId)
+            .ToListAsync();
+
+        if (classSessions.Any())
+        {
+            foreach (var session in classSessions)
+            {
+                session.OpenTime = ToUtc(request.OpenTime);
+                session.CloseTime = ToUtc(request.CloseTime);
+                session.TimeLimitMinutes = request.TimeLimit;
+                session.PassingScore = NormalizePassingScore(request.PassingScore, quiz.IsAiGenerated);
+            }
+            _unitOfWork.Context.ClassQuizSessions.UpdateRange(classSessions);
+            await _unitOfWork.SaveAsync();
+        }
+
         var classLink = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Where(cqs => cqs.QuizId == quizId)
@@ -1973,7 +2439,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt
         };
     }
@@ -2034,8 +2500,8 @@ public class LecturerService : ILecturerService
         var existing = await _unitOfWork.ClassQuizSessionRepository
             .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
 
-        // Idempotent: Save từ FE có thể gọi lại khi quiz đã gán (tránh 409 Conflict).
-        if (existing != null)
+            // Idempotent: Save from FE may be called again when quiz is already assigned (avoid 409 Conflict).
+            if (existing != null)
         {
             var existingQuestionCount = await _unitOfWork.Context.QuizQuestions
                 .AsNoTracking()
@@ -2063,7 +2529,7 @@ public class LecturerService : ILecturerService
             OpenTime = quiz.OpenTime,
             CloseTime = quiz.CloseTime,
             TimeLimitMinutes = quiz.TimeLimit,
-            PassingScore = quiz.PassingScore,
+            PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -2175,7 +2641,7 @@ public class LecturerService : ILecturerService
             if (!studentUsers.TryGetValue(emailLower, out var user))
             {
                 item.Success = false;
-                item.ErrorMessage = $"Student with email not found '{email}'.";
+                item.ErrorMessage = $"Student not found with email '{email}'.";
                 result.Results.Add(item);
                 result.NotFoundCount++;
                 result.FailedCount++;
@@ -2517,5 +2983,10 @@ public class LecturerService : ILecturerService
 
         await _unitOfWork.SaveAsync();
         return await GetAssignmentSubmissionsAsync(assignmentId);
+    }
+
+    public async Task<bool> DeleteMedicalImageAsync(Guid imageId)
+    {
+        return await _medicalCaseService.DeleteMedicalImageAsync(imageId);
     }
 }

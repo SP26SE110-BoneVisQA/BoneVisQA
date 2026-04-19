@@ -54,7 +54,17 @@ namespace BoneVisQA.Services.Services.Expert
             using var stream = new FileStream(filePath, FileMode.Create);
             await file.CopyToAsync(stream);
 
-            return $"/uploads/images/{fileName}";
+            var relativeUrl = $"/uploads/images/{fileName}";
+
+            // Tạo absolute URL với backend base URL
+            var request = _httpContextAccessor.HttpContext?.Request;
+            if (request != null)
+            {
+                var baseUrl = $"{request.Scheme}://{request.Host.Host}:{request.Host.Port ?? 5046}";
+                return $"{baseUrl}{relativeUrl}";
+            }
+
+            return relativeUrl;
         }
         public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex,int pageSize)
         {
@@ -289,12 +299,12 @@ namespace BoneVisQA.Services.Services.Expert
         await _unitOfWork.SaveAsync();
     }
 
-        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
-        {
-            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
+    public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
+    {
+        var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
 
-            if (medicalCase == null)
-                return null;
+        if (medicalCase == null)
+            return null;
 
             var contentChanged =
                 !string.Equals(medicalCase.Title, request.Title, StringComparison.Ordinal) ||
@@ -416,6 +426,19 @@ namespace BoneVisQA.Services.Services.Expert
                 CaseTitle = medicalCase.Title,
                 Annotations = new List<AddAnnotationDTO>()
             };
+        }
+
+        // Xóa medical image
+        public async Task<bool> DeleteMedicalImageAsync(Guid imageId)
+        {
+            var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(imageId);
+            if (image == null) return false;
+
+            // TODO: Xóa file từ Supabase storage nếu cần
+
+            await _unitOfWork.MedicalImageRepository.DeleteAsync(imageId);
+            await _unitOfWork.SaveAsync();
+            return true;
         }
 
         // Add annotation for image

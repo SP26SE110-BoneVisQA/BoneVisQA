@@ -23,7 +23,7 @@ public partial class QuizQuestion
     public string QuestionText { get; set; } = null!;
 
     [Column("type")]
-    public string? Type { get; set; }
+    public QuestionType? Type { get; set; }
 
     [Column("option_a")]
     public string? OptionA { get; set; }
@@ -42,6 +42,12 @@ public partial class QuizQuestion
 
     [Column("image_url")]
     public string? ImageUrl { get; set; }
+
+    [Column("reference_answer")]
+    public string? ReferenceAnswer { get; set; }
+
+    [Column("max_score")]
+    public int MaxScore { get; set; } = 10;
 
     [ForeignKey("CaseId")]
     [InverseProperty("QuizQuestions")]

@@ -49,6 +49,14 @@ public class StudentService : IStudentService
     private readonly INotificationService _notificationService;
     private readonly IEmailService _emailService;
 
+    /// <summary>
+    /// Passing score luôn ở thang 100 (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
+    }
+
     public async Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId)
     {
         var classIds = await _unitOfWork.Context.ClassEnrollments
@@ -321,8 +329,8 @@ public class StudentService : IStudentService
         {
             var annotationId = request.AnnotationId.Value;
 
-            // Validate existence and fetch authoritative coordinates (and image URL) from DB.
-            // Includes are needed so we can also derive the image URL for vision processing.
+            // Kiểm tra sự tồn tại và lấy tọa độ chính xác (và URL hình ảnh) từ DB.
+            // Cần include để có thể lấy URL hình ảnh cho xử lý vision.
             var annotations = await _unitOfWork.CaseAnnotationRepository
                 .FindIncludeAsync(a => a.Id == annotationId, a => a.Image);
 
@@ -1443,9 +1451,16 @@ public class StudentService : IStudentService
             .ToListAsync();
         var countByQuiz = questionCounts.ToDictionary(x => x.QuizId, x => x.Count);
 
+        // Lấy CreatedAt từ bảng quizzes
+        var quizzesWithCreatedAt = await _unitOfWork.Context.Quizzes
+            .Where(q => quizIds.Contains(q.Id))
+            .Select(q => new { q.Id, q.CreatedAt })
+            .ToDictionaryAsync(x => x.Id, x => x.CreatedAt);
+
         return sessions.Select(s =>
         {
             var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
+            quizzesWithCreatedAt.TryGetValue(s.QuizId, out var createdAt);
             return new QuizListItemDto
             {
                 QuizId = s.QuizId,
@@ -1458,9 +1473,14 @@ public class StudentService : IStudentService
                 PassingScore = s.PassingScore,
                 TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
-                Score = attempt?.Score
+                Score = attempt?.Score,
+                AttemptId = attempt?.Id,
+                CreatedAt = createdAt
             };
-        }).ToList();
+        })
+        .OrderByDescending(q => q.CreatedAt.HasValue)  // Items with CreatedAt come first
+        .ThenByDescending(q => q.CreatedAt)            // Within those, sort by date descending
+        .ToList();
     }
 
 
@@ -1572,7 +1592,7 @@ public class StudentService : IStudentService
                 {
                     QuestionId = q.Id,
                     QuestionText = q.QuestionText,
-                    Type = q.Type,
+                    Type = q.Type?.ToString(),
                     CaseId = q.CaseId,
                     CaseTitle = q.Case?.Title,
                     OptionA = q.OptionA,
@@ -1590,12 +1610,12 @@ public class StudentService : IStudentService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
-            TimeLimit = quiz.TimeLimit,
+            TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
             CloseTime = classSession?.CloseTime ?? quiz.CloseTime,
             Questions = questionDtos
         };
     }
-    //co 2 ham student submit question va submit quiz, ham submit question de luu tung cau hoi 1, ham submit quiz de tinh diem va ket thuc quiz
+    //Có 2 hàm student submit question và submit quiz, hàm submit question để lưu từng câu hỏi 1, hàm submit quiz để tính điểm và kết thúc quiz
 
     //===================== phan nam =====================   
 

@@ -31,6 +31,7 @@ public interface ILecturerService
 
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
     Task<bool> DeleteQuizAsync(Guid quizId);
+    Task RemoveQuizFromClassAsync(Guid classId, Guid quizId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
@@ -47,11 +48,17 @@ public interface ILecturerService
     /// <param name="creatingUserId">User id từ JWT (giảng viên) — ghi vào Quiz.CreatedByExpertId để tách quiz SV vs GV.</param>
     Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request, Guid? creatingUserId = null);
     Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
+    Task<List<QuizQuestionDto>> AddQuizQuestionsBatchAsync(Guid quizId, List<CreateQuizQuestionDto> requests);
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
     Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId);
+    Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId);
 
     Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetUnassignedLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetAllLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<MyQuizWithClassesDto>> GetMyQuizzesWithClassesAsync(Guid lecturerId);
+    Task<IReadOnlyList<AssignedQuizDto>> GetAssignedQuizzesAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
@@ -68,5 +75,8 @@ public interface ILecturerService
     Task DeleteAssignmentAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
+
+    // Expert medical case images
+    Task<bool> DeleteMedicalImageAsync(Guid imageId);
 }
 

@@ -45,6 +45,15 @@ public partial class Document
     [StringLength(32)]
     public string? PendingTargetVersion { get; set; }
 
+    [Column("total_pages")]
+    public int TotalPages { get; set; } = 0;
+
+    [Column("current_page_indexing")]
+    public int CurrentPageIndexing { get; set; }
+
+    [Column("total_chunks")]
+    public int TotalChunks { get; set; }
+
     [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
 
@@ -57,15 +66,6 @@ public partial class Document
     [Column("content_hash")]
     [StringLength(64)]
     public string? ContentHash { get; set; }
-
-    [Column("total_pages")]
-    public int TotalPages { get; set; }
-
-    [Column("total_chunks")]
-    public int TotalChunks { get; set; }
-
-    [Column("current_page_indexing")]
-    public int CurrentPageIndexing { get; set; }
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]

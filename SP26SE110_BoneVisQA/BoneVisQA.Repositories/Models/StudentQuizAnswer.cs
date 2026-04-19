@@ -23,8 +23,26 @@ public partial class StudentQuizAnswer
     [Column("student_answer")]
     public string? StudentAnswer { get; set; }
 
+    [Column("essay_answer")]
+    public string? EssayAnswer { get; set; }
+
     [Column("is_correct")]
     public bool? IsCorrect { get; set; }
+
+    [Column("score_awarded", TypeName = "decimal(5,2)")]
+    public decimal? ScoreAwarded { get; set; }
+
+    [Column("lecturer_feedback")]
+    public string? LecturerFeedback { get; set; }
+
+    [Column("graded_at")]
+    public DateTime? GradedAt { get; set; }
+
+    [Column("graded_by")]
+    public Guid? GradedBy { get; set; }
+
+    [Column("is_graded")]
+    public bool IsGraded { get; set; } = false;
 
     [ForeignKey("AttemptId")]
     [InverseProperty("StudentQuizAnswers")]
@@ -33,4 +51,8 @@ public partial class StudentQuizAnswer
     [ForeignKey("QuestionId")]
     [InverseProperty("StudentQuizAnswers")]
     public virtual QuizQuestion Question { get; set; } = null!;
+
+    [ForeignKey("GradedBy")]
+    [InverseProperty("GradedStudentQuizAnswers")]
+    public virtual User? GradedByUser { get; set; }
 }

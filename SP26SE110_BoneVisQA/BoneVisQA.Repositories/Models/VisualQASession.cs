@@ -50,6 +50,10 @@ public partial class VisualQASession
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
 
+    [ForeignKey("PromotedCaseId")]
+    [InverseProperty("PromotedFromSessions")]
+    public virtual MedicalCase? PromotedCase { get; set; }
+
     [ForeignKey("StudentId")]
     [InverseProperty("VisualQASessions")]
     public virtual User Student { get; set; } = null!;

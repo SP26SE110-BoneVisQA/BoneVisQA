@@ -27,7 +27,8 @@ public interface IEmailService
         string assignmentTitle,
         string assignmentType,
         DateTime? dueDate,
-        string? dueDateDisplay);
+        string? dueDateDisplay,
+        string? description);  // ← thêm description
 
     Task<bool> SendAssignmentUpdateEmailAsync(
         string toEmail,
@@ -45,4 +46,13 @@ public interface IEmailService
         string quizTitle,
         string className,
         string lecturerName);
+
+    // Essay submission notification email
+    Task<bool> SendEssaySubmittedNotificationAsync(
+        string toEmail,
+        string lecturerName,
+        string studentName,
+        string quizTitle,
+        string className,
+        string attemptDetailUrl);
 }

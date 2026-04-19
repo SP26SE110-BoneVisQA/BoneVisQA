@@ -347,7 +347,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<NotificationHub>("/hubs/notifications")
+   .RequireCors("AllowAll")
+   .RequireAuthorization();
 
 // Ensure uploads directory exists before using PhysicalFileProvider
 var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");

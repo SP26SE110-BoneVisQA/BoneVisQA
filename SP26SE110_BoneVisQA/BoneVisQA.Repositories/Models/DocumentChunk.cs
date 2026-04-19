@@ -23,12 +23,6 @@ public partial class DocumentChunk
     [Column("chunk_order")]
     public int ChunkOrder { get; set; }
 
-    [Column("start_page")]
-    public int StartPage { get; set; }
-
-    [Column("end_page")]
-    public int EndPage { get; set; }
-
     [Column("embedding", TypeName = "vector(768)")]
     public Pgvector.Vector? Embedding { get; set; }
 
@@ -43,6 +37,12 @@ public partial class DocumentChunk
 
     [Column("flagged_at")]
     public DateTime? FlaggedAt { get; set; }
+
+    [Column("start_page")]
+    public int? StartPage { get; set; } = 0;
+
+    [Column("end_page")]
+    public int? EndPage { get; set; } = 0;
 
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
