@@ -26,7 +26,7 @@ public class ProfileController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var profile = await _profileService.GetProfileAsync(userId.Value);
         return Ok(profile);
@@ -40,7 +40,7 @@ public class ProfileController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var profile = await _profileService.UpdateProfileAsync(userId.Value, request);
         return Ok(profile);
@@ -57,7 +57,7 @@ public class ProfileController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         if (file == null)
             return BadRequest(new { message = "Avatar file is required." });

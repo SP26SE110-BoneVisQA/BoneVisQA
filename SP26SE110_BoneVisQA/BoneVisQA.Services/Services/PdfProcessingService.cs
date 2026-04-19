@@ -50,15 +50,41 @@ public class PdfProcessingService : IPdfProcessingService
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPdfPath))
-                    File.Delete(tempPdfPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not delete temp PDF at {Path}", tempPdfPath);
-            }
+            TryDeleteTemp(tempPdfPath);
+        }
+    }
+
+    public async Task<string> DownloadPdfToTempFileAsync(string fileUrl, CancellationToken cancellationToken = default)
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        var tempPdfPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.pdf");
+
+        await using (var fileStream = new FileStream(
+                           tempPdfPath,
+                           FileMode.CreateNew,
+                           FileAccess.Write,
+                           FileShare.None,
+                           bufferSize: 81920,
+                           FileOptions.Asynchronous | FileOptions.SequentialScan))
+        {
+            await using var network = await client.GetStreamAsync(fileUrl, cancellationToken);
+            await network.CopyToAsync(fileStream, cancellationToken);
+        }
+
+        _logger.LogInformation("PDF downloaded to temp file {Path}.", tempPdfPath);
+        return tempPdfPath;
+    }
+
+    private void TryDeleteTemp(string tempPdfPath)
+    {
+        try
+        {
+            if (File.Exists(tempPdfPath))
+                File.Delete(tempPdfPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not delete temp PDF at {Path}", tempPdfPath);
         }
     }
 

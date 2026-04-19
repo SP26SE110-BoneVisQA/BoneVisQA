@@ -43,6 +43,7 @@ public class NotificationService : INotificationService
             Message = entity.Message,
             Type = entity.Type,
             TargetUrl = entity.TargetUrl,
+            Route = NotificationAppRoute.Normalize(entity.TargetUrl),
             IsRead = entity.IsRead,
             CreatedAt = entity.CreatedAt
         };

@@ -95,7 +95,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
         if (result == null)
-            return NotFound(new { message = "Không tìm thấy người dùng." });
+            return NotFound(new { message = "User not found." });
 
         return Ok(result);
     }
@@ -105,7 +105,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.AssignRoleAsync(id, role);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng hoặc role." })
+            ? NotFound(new { message = "User or role not found." })
             : Ok(new
             {
                 Message = "Assign user successfully.",
@@ -167,7 +167,7 @@ public class AdminUsersController : ControllerBase
     {
         var deleted = await _userManagementService.DeleteUserAsync(id);
         if (!deleted)
-            return NotFound(new { message = "Không tìm thấy người dùng." });
+            return NotFound(new { message = "User not found." });
 
         return Ok(new { Message = "User permanently deleted." });
     }  

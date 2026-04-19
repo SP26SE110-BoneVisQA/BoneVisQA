@@ -64,6 +64,9 @@ public class LectStudentQuestionDto
     [JsonPropertyName("answerId")]
     public Guid? AnswerId { get; set; }
 
+    /// <summary><c>CaseQA</c> (student_questions) vs <c>VisualQA</c> (visual_qa_sessions) when <c>source=all</c> or Visual QA branch.</summary>
+    public string? QuestionSource { get; set; }
+
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;

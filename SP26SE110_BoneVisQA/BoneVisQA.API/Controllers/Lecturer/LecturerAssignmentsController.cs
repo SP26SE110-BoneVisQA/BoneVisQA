@@ -24,7 +24,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -46,7 +46,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -71,7 +71,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -90,7 +90,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -110,7 +110,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -134,12 +134,12 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
             await _lecturerAssignmentService.AllowRetakeForAttemptAsync(lecturerId.Value, attemptId);
-            return Ok(new { message = "Đã cho phép sinh viên làm lại bài quiz." });
+            return Ok(new { message = "The student has been allowed to retake the quiz." });
         }
         catch (KeyNotFoundException ex)
         {
@@ -161,12 +161,12 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
             await _lecturerAssignmentService.AllowRetakeAllAsync(lecturerId.Value, classId, quizId);
-            return Ok(new { message = "Đã cho phép tất cả sinh viên trong lớp làm lại bài quiz." });
+            return Ok(new { message = "All students in the class have been allowed to retake the quiz." });
         }
         catch (KeyNotFoundException ex)
         {

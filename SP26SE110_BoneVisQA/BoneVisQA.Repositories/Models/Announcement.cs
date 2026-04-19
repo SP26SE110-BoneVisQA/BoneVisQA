@@ -24,7 +24,7 @@ public partial class Announcement
     public string Content { get; set; } = null!;
 
     [Column("send_email")]
-    public bool SendEmail { get; set; } = true;
+    public bool? SendEmail { get; set; }
 
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }

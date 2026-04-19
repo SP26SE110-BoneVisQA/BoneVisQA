@@ -25,6 +25,16 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(result);
         }
 
+        /// <summary>Single class with lecturer/expert ids, names, emails, and student enrollment count.</summary>
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetById(Guid id)
+        {
+            var result = await _classservice.GetAcademicClassByIdAsync(id);
+            if (result == null)
+                return NotFound(new { message = "Không tìm thấy lớp." });
+            return Ok(result);
+        }
+
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateClassManagementDTO dto)
         {
@@ -55,11 +65,11 @@ namespace BoneVisQA.API.Controllers.Admin
             return Ok(new { deleted = true });
         }
 
-        /// <summary>Paged list of class enrollments (student in class + class staff snapshot).</summary>
+        /// <summary>Paged list of class enrollments (student in class + class staff snapshot). Optional <paramref name="classId"/> filters to one class.</summary>
         [HttpGet("/api/admin/classes/enrollments")]
-        public async Task<IActionResult> GetEnrollments(int pageIndex = 1, int pageSize = 10)
+        public async Task<IActionResult> GetEnrollments(int pageIndex = 1, int pageSize = 10, [FromQuery] Guid? classId = null)
         {
-            var result = await _classservice.GetAssignClassAsync(pageIndex, pageSize);
+            var result = await _classservice.GetAssignClassAsync(pageIndex, pageSize, classId);
             return Ok(result);
         }
 

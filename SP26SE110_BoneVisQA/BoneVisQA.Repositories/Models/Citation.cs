@@ -8,6 +8,7 @@ namespace BoneVisQA.Repositories.Models;
 
 [Table("citations")]
 [Index("AnswerId", Name = "idx_citations_answer")]
+[Index("MessageId", Name = "idx_citations_message")]
 public partial class Citation
 {
     [Key]
@@ -15,16 +16,16 @@ public partial class Citation
     public Guid Id { get; set; }
 
     [Column("answer_id")]
-    public Guid AnswerId { get; set; }
+    public Guid? AnswerId { get; set; }
+
+    [Column("message_id")]
+    public Guid? MessageId { get; set; }
 
     [Column("chunk_id")]
     public Guid ChunkId { get; set; }
 
     [Column("similarity_score")]
     public double SimilarityScore { get; set; }
-
-    [Column("message_id")]
-    public Guid? MessageId { get; set; }
 
     [NotMapped]
     public string? ReferenceUrl { get; set; }
@@ -34,13 +35,13 @@ public partial class Citation
 
     [ForeignKey("AnswerId")]
     [InverseProperty("Citations")]
-    public virtual CaseAnswer Answer { get; set; } = null!;
-
-    [ForeignKey("ChunkId")]
-    [InverseProperty("Citations")]
-    public virtual DocumentChunk Chunk { get; set; } = null!;
+    public virtual CaseAnswer? Answer { get; set; }
 
     [ForeignKey("MessageId")]
     [InverseProperty("Citations")]
     public virtual QAMessage? Message { get; set; }
+
+    [ForeignKey("ChunkId")]
+    [InverseProperty("Citations")]
+    public virtual DocumentChunk Chunk { get; set; } = null!;
 }

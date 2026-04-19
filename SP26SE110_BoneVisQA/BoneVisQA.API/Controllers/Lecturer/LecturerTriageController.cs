@@ -32,7 +32,7 @@ public class LecturerTriageController : ControllerBase
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -50,6 +50,35 @@ public class LecturerTriageController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reject(Guid sessionId, [FromBody] RejectAnswerRequestDto request)
+    {
+        var lecturerId = GetUserIdFromClaims();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            await _lecturerTriageService.RejectAnswerAsync(lecturerId.Value, sessionId, request.Reason);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
+                ? BadRequest(new { message = ex.Message })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }
 

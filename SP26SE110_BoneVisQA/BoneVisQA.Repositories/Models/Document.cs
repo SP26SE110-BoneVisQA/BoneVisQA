@@ -19,6 +19,13 @@ public partial class Document
     [Column("file_path")]
     public string? FilePath { get; set; }
 
+    [Column("pending_reindex_path")]
+    public string? PendingReindexPath { get; set; }
+
+    [Column("pending_reindex_hash")]
+    [StringLength(64)]
+    public string? PendingReindexHash { get; set; }
+
     [Column("category_id")]
     public Guid? CategoryId { get; set; }
 
@@ -28,17 +35,24 @@ public partial class Document
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
 
+    /// <summary>Semantic version Major.Minor.Patch (e.g. 1.2.0).</summary>
     [Column("version")]
+    [StringLength(32)]
     public string Version { get; set; } = "1.0.0";
+
+    /// <summary>Version string to apply when indexing completes successfully (cleared after swap).</summary>
+    [Column("pending_target_version")]
+    [StringLength(32)]
+    public string? PendingTargetVersion { get; set; }
 
     [Column("total_pages")]
     public int TotalPages { get; set; } = 0;
 
     [Column("current_page_indexing")]
-    public int? CurrentPageIndexing { get; set; } = 0;
+    public int CurrentPageIndexing { get; set; }
 
     [Column("total_chunks")]
-    public int? TotalChunks { get; set; } = 0;
+    public int TotalChunks { get; set; }
 
     [Column("is_outdated")]
     public bool IsOutdated { get; set; } = false;
@@ -52,15 +66,6 @@ public partial class Document
     [Column("content_hash")]
     [StringLength(64)]
     public string? ContentHash { get; set; }
-
-    [Column("pending_reindex_path")]
-    public string? PendingReindexPath { get; set; }
-
-    [Column("pending_reindex_hash")]
-    public string? PendingReindexHash { get; set; }
-
-    [Column("pending_target_version")]
-    public string? PendingTargetVersion { get; set; }
 
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]

@@ -28,7 +28,7 @@ public class ProfileService : IProfileService
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            ?? throw new KeyNotFoundException("User not found.");
 
         return Map(user);
     }
@@ -36,17 +36,18 @@ public class ProfileService : IProfileService
     public async Task<StudentProfileDto> UpdateProfileAsync(Guid userId, UpdateStudentProfileRequestDto request)
     {
         if (string.IsNullOrWhiteSpace(request.FullName))
-            throw new ArgumentException("FullName là bắt buộc.");
+            throw new ArgumentException("FullName is required.");
 
         var user = await _unitOfWork.Context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            ?? throw new KeyNotFoundException("User not found.");
 
         user.FullName = request.FullName.Trim();
         user.SchoolCohort = string.IsNullOrWhiteSpace(request.SchoolCohort) ? null : request.SchoolCohort.Trim();
-        user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+            user.AvatarUrl = request.AvatarUrl.Trim();
         UserPersonalFieldsHelper.Apply(
             user,
             request.DateOfBirth,
@@ -77,7 +78,7 @@ public class ProfileService : IProfileService
             throw new ArgumentException("Only JPG, PNG, and WebP images are allowed.");
 
         var user = await _unitOfWork.Context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            ?? throw new KeyNotFoundException("User not found.");
 
         var avatarUrl = await _storageService.UploadFileAsync(file, "avatars", $"users/{user.Id}", cancellationToken);
         user.AvatarUrl = avatarUrl;

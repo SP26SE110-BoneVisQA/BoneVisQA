@@ -77,7 +77,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ToList();
 
         if (caseIds.Count == 0)
-            throw new InvalidOperationException("caseIds must contain at least one valid element.");
+            throw new InvalidOperationException("caseIds must contain at least one valid item.");
 
         var medicalCases = await _unitOfWork.Context.MedicalCases
             .Where(c => caseIds.Contains(c.Id))
@@ -86,7 +86,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         _logger.LogInformation("[AssignCases] Step2 LoadMedicalCases done in {Elapsed}s, found={Count}", elapsed2, medicalCases.Count);
 
         if (medicalCases.Count != caseIds.Count)
-            throw new KeyNotFoundException("One or more cases not found.");
+            throw new KeyNotFoundException("One or more cases were not found.");
 
         var existingAssignments = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
@@ -182,7 +182,6 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         DateTime? effectiveOpenTime = request.OpenTime;
         DateTime? effectiveCloseTime = request.CloseTime;
 
-        // If lecturer wants to use Expert's timing
         if (request.UseExpertTime)
         {
             effectiveOpenTime = quiz.OpenTime;
@@ -191,14 +190,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }
         else
         {
-            // Clamp open time: if earlier than Expert's, use Expert's time
             if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
             {
                 warnings.Add($"Quiz open time adjusted from {request.OpenTime.Value:HH:mm} to {quiz.OpenTime.Value:HH:mm} (Expert's open time).");
                 effectiveOpenTime = quiz.OpenTime;
             }
 
-            // Clamp close time: if later than Expert's, use Expert's time
             if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
             {
                 warnings.Add($"Quiz close time adjusted from {request.CloseTime.Value:HH:mm} to {quiz.CloseTime.Value:HH:mm} (Expert's close time).");
@@ -206,7 +203,6 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }
         }
 
-        // Validate openTime <= closeTime (after clamping)
         if (effectiveOpenTime.HasValue && effectiveCloseTime.HasValue && effectiveOpenTime > effectiveCloseTime)
             throw new InvalidOperationException("openTime must be less than or equal to closeTime.");
 
@@ -376,7 +372,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         var classSession = attempt.Quiz?.ClassQuizSessions?.FirstOrDefault();
         if (classSession == null)
-            throw new InvalidOperationException("This quiz is not assigned to a class.");
+            throw new InvalidOperationException("This quiz is not assigned through a class.");
 
         // Check if lecturer owns the class
         var academicClass = classSession.Class;
@@ -384,7 +380,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             throw new UnauthorizedAccessException("You do not have permission to perform this action.");
 
         if (!attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Student has not submitted. No need to enable retake.");
+            throw new InvalidOperationException("The student has not submitted yet. Retake does not need to be enabled.");
 
         // Remove old answers
         var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
@@ -413,7 +409,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
-            ?? throw new KeyNotFoundException("Quiz assignment not found for this class.");
+            ?? throw new KeyNotFoundException("Quiz assignment for this class was not found.");
 
         var completedAttempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId && a.CompletedAt.HasValue)
@@ -700,7 +696,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     {
         return await _unitOfWork.Context.AcademicClasses
             .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == lecturerId)
-            ?? throw new KeyNotFoundException("Class not found under lecturer's authority.");
+            ?? throw new KeyNotFoundException("No class under this lecturer was found.");
     }
 
     // ── Quiz Review Methods ───────────────────────────────────────────────────────
@@ -758,7 +754,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Student's quiz attempt not found.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Quiz not found.");
@@ -773,7 +769,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             QuizId = attempt.QuizId,
             QuizTitle = quiz.Title,
             StudentId = attempt.StudentId,
-            StudentName = attempt.Student?.FullName ?? "Sinh viên",
+            StudentName = attempt.Student?.FullName ?? "Student",
             Score = attempt.Score,
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
@@ -815,7 +811,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Student's quiz attempt not found.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
         // Update score if provided
         if (request.Score.HasValue)
@@ -891,7 +887,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     /// <summary>Get details for an assignment (case or quiz) by ID.</summary>
     public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
     {
-        // Try to find in ClassCases (case assignment)
+        // Try finding in ClassCases (case assignment)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -927,7 +923,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             };
         }
 
-        // Try to find in ClassQuizSessions (quiz assignment)
+        // Try finding in ClassQuizSessions (quiz assignment)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Class)
@@ -981,7 +977,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     /// <summary>Update assignment information.</summary>
     public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
     {
-        // Try to update ClassCase
+        // Try updating ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .Include(cc => cc.Class)
             .Include(cc => cc.Case)
@@ -1001,7 +997,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 await QueueAssignmentUpdateEmailsAsync(
                     classCase.ClassId,
                     classCase.Class.ClassName,
-                    classCase.Case.Title ?? "Clinical Case Assignment",
+                    classCase.Case.Title ?? "Clinical case assignment",
                     "Clinical Case",
                     classCase.DueDate);
             }
@@ -1009,7 +1005,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
-        // Try to update ClassQuizSession
+        // Try updating ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .Include(cqs => cqs.Class)
             .Include(cqs => cqs.Quiz)
@@ -1178,7 +1174,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     /// <summary>Delete an assignment.</summary>
     public async Task DeleteAssignmentAsync(Guid assignmentId)
     {
-        // Try to delete ClassCase
+        // Try deleting ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
 
@@ -1189,7 +1185,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             return;
         }
 
-        // Try to delete ClassQuizSession
+        // Try deleting ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
@@ -1200,10 +1196,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         await _unitOfWork.SaveAsync();
     }
 
-    /// <summary>Get list of submissions for an assignment.</summary>
+    /// <summary>Get submission list for an assignment.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
     {
-        // Try to get submissions from ClassCases (case)
+        // Try getting submissions from ClassCases (case)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -1233,7 +1229,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }).ToList();
         }
 
-        // Lấy submissions từ ClassQuizSessions (quiz)
+        // Get submissions from ClassQuizSessions (quiz)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
@@ -1264,7 +1260,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }).ToList();
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(
         Guid assignmentId, UpdateSubmissionsRequestDto request)
     {

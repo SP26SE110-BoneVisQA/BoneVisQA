@@ -3,6 +3,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
+using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Models.Student;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -12,6 +13,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,6 +21,7 @@ namespace BoneVisQA.Services.Services.Expert
 {
     public class MedicalCaseService : IMedicalCaseService
     {
+        private static readonly Regex SemanticVersionRegex = new(@"^\s*(\d+)\.(\d+)\.(\d+)\s*$", RegexOptions.Compiled);
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWebHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -41,7 +44,7 @@ namespace BoneVisQA.Services.Services.Expert
             var extension = Path.GetExtension(file.FileName);
             var originalName = Path.GetFileNameWithoutExtension(file.FileName);
 
-            // Rút ngắn tên nếu quá dài
+            // Shorten name if too long
             if (originalName.Length > 50)
                 originalName = originalName.Substring(0, 50);
 
@@ -190,6 +193,8 @@ namespace BoneVisQA.Services.Services.Expert
                 IsApproved = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
+                IndexingStatus = DocumentIndexingStatuses.Pending,
+                Version = SemanticDocumentVersion.Initial
             };
 
             await _unitOfWork.MedicalCaseRepository.AddAsync(medicalCase);
@@ -294,14 +299,26 @@ namespace BoneVisQA.Services.Services.Expert
         await _unitOfWork.SaveAsync();
     }
 
-        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
-        {
-            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
+    public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
+    {
+        var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
 
-            if (medicalCase == null)
-                return null;
+        if (medicalCase == null)
+            return null;
 
-            // Cập nhật các trường
+            var contentChanged =
+                !string.Equals(medicalCase.Title, request.Title, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.Description, request.Description, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.SuggestedDiagnosis, request.SuggestedDiagnosis, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.KeyFindings, request.KeyFindings, StringComparison.Ordinal);
+            var metadataChanged =
+                !string.Equals(medicalCase.Difficulty, request.Difficulty, StringComparison.Ordinal) ||
+                medicalCase.CategoryId != request.CategoryId ||
+                medicalCase.IsApproved != request.IsApproved ||
+                medicalCase.IsActive != request.IsActive ||
+                medicalCase.CreatedByExpertId != request.CreatedByExpertId;
+
+            // Update fields
             medicalCase.Title = request.Title;
             medicalCase.Description = request.Description;
             medicalCase.Difficulty = request.Difficulty;
@@ -312,11 +329,22 @@ namespace BoneVisQA.Services.Services.Expert
             medicalCase.KeyFindings = request.KeyFindings;
             medicalCase.CreatedByExpertId = request.CreatedByExpertId;
             medicalCase.UpdatedAt = DateTime.UtcNow;
+            if (contentChanged)
+            {
+                // Trigger background re-indexing whenever embedding source text changes.
+                medicalCase.IndexingStatus = DocumentIndexingStatuses.Pending;
+                medicalCase.Version = BumpVersion(medicalCase.Version, isReindexing: true);
+            }
+            else if (metadataChanged)
+            {
+                // Minor metadata edits that do not require re-indexing still advance patch for traceability.
+                medicalCase.Version = BumpVersion(medicalCase.Version, isReindexing: false);
+            }
 
             _unitOfWork.MedicalCaseRepository.Update(medicalCase);
             await _unitOfWork.SaveAsync();
 
-            // lấy thêm dữ liệu liên quan
+            // load related data
             var expert = await _unitOfWork.UserRepository
                 .GetByIdAsync(medicalCase.CreatedByExpertId ?? Guid.Empty);
 
@@ -338,6 +366,23 @@ namespace BoneVisQA.Services.Services.Expert
                 UpdatedAt = medicalCase.UpdatedAt
             };
         }
+
+        private static string BumpVersion(string? currentVersion, bool isReindexing)
+        {
+            var normalized = SemanticDocumentVersion.Normalize(currentVersion);
+            var match = SemanticVersionRegex.Match(normalized);
+            if (!match.Success)
+                return SemanticDocumentVersion.Initial;
+
+            var major = int.Parse(match.Groups[1].Value);
+            var minor = int.Parse(match.Groups[2].Value);
+            var patch = int.Parse(match.Groups[3].Value);
+
+            if (isReindexing)
+                return $"{major}.{minor + 1}.0";
+
+            return $"{major}.{minor}.{patch + 1}";
+        }
         public async Task<bool> DeleteMedicalCaseAsync(Guid id)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository
@@ -353,11 +398,11 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
-        // Thêm image cho case
+        // Add image for case
         public async Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.CaseId)
-                ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+                ?? throw new KeyNotFoundException("Medical case not found.");
 
             var imageUrl = await SaveImageAsync(dto.Image);
 
@@ -396,11 +441,11 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
-        // Thêm annotation cho image
+        // Add annotation for image
         public async Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto)
         {
             var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(dto.ImageId)
-                ?? throw new KeyNotFoundException("Không tìm thấy ảnh.");
+                ?? throw new KeyNotFoundException("Image not found.");
 
             var annotation = new CaseAnnotation
             {

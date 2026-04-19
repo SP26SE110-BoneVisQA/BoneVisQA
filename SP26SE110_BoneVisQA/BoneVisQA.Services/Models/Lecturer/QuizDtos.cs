@@ -276,7 +276,7 @@ public class CreateQuizRequestDto
     /// <summary>Quiz được tạo bởi AI hay tự tạo thủ công</summary>
     public bool IsAiGenerated { get; set; }
 
-    /// <summary>Độ khó: Easy, Medium, Hard</summary>
+    /// <summary>Difficulty: Easy, Medium, Hard</summary>
     public string? Difficulty { get; set; }
 
     /// <summary>Phân loại: Resident Year 1, Resident Year 2, Advanced Diagnostics, Continuing Med Ed</summary>

@@ -24,7 +24,7 @@ public class StudentProgressController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentLearningService.GetProgressSummaryAsync(studentId.Value);
         return Ok(result);
@@ -40,7 +40,7 @@ public class StudentProgressController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentLearningService.GetTopicStatsAsync(studentId.Value);
         return Ok(result);
@@ -56,7 +56,7 @@ public class StudentProgressController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentLearningService.GetRecentActivityAsync(studentId.Value);
         return Ok(result);

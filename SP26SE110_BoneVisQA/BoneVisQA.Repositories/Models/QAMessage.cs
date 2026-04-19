@@ -9,6 +9,7 @@ namespace BoneVisQA.Repositories.Models;
 [Table("qa_messages")]
 [Index("SessionId", "CreatedAt", Name = "idx_qa_messages_session_created_at")]
 [Index("Role", Name = "idx_qa_messages_role")]
+[Index("SessionId", "ClientRequestId", "Role", Name = "ux_qa_messages_session_client_request_role", IsUnique = true)]
 public partial class QAMessage
 {
     [Key]
@@ -28,6 +29,13 @@ public partial class QAMessage
     [Column("coordinates", TypeName = "jsonb")]
     public string? Coordinates { get; set; }
 
+    [Column("client_request_id")]
+    [MaxLength(100)]
+    public string? ClientRequestId { get; set; }
+
+    [Column("citations_json", TypeName = "jsonb")]
+    public string? CitationsJson { get; set; }
+
     [Column("suggested_diagnosis")]
     public string? SuggestedDiagnosis { get; set; }
 
@@ -43,19 +51,13 @@ public partial class QAMessage
     [Column("ai_confidence_score")]
     public double? AiConfidenceScore { get; set; }
 
-    [Column("client_request_id")]
-    public string? ClientRequestId { get; set; }
-
-    [Column("citations_json", TypeName = "jsonb")]
-    public string? CitationsJson { get; set; }
-
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [InverseProperty("Message")]
+    public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 
     [ForeignKey("SessionId")]
     [InverseProperty("Messages")]
     public virtual VisualQASession Session { get; set; } = null!;
-
-    [InverseProperty("Message")]
-    public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 }

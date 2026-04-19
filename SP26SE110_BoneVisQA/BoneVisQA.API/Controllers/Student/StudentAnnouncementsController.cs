@@ -24,7 +24,7 @@ public class StudentAnnouncementsController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetAnnouncementsAsync(studentId.Value);
         return Ok(result);

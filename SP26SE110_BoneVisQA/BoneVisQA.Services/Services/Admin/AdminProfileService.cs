@@ -35,7 +35,8 @@ public class AdminProfileService : IAdminProfileService
             throw new KeyNotFoundException("Khong tim thay ho so admin.");
 
         user.FullName = request.FullName.Trim();
-        user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+            user.AvatarUrl = request.AvatarUrl.Trim();
         UserPersonalFieldsHelper.Apply(
             user,
             request.DateOfBirth,
