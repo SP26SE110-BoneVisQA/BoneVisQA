@@ -1004,6 +1004,32 @@ public class EmailService : IEmailService
             </td>
         </tr>
     </table>
+=======
+<body>
+    <div class='container'>
+        <div class='header'>
+            <div class='announcement-badge'>New announcement</div>
+            <h1>BoneVisQA</h1>
+        </div>
+        <div class='content'>
+            <p>Hello <strong>{studentName}</strong>,</p>
+            <p>You have a new announcement from lecturer <strong>{lecturerName}</strong> in class <strong>{className}</strong>:</p>
+            <div class='announcement-card'>
+                <div class='announcement-title'>{announcementTitle}</div>
+                <div class='announcement-body'>{announcementContent}</div>
+                <div class='meta'>
+                    <strong>Lecturer:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Class:</strong> {className}
+                </div>
+            </div>
+            <p>Log in to <a href='#'>BoneVisQA</a> to view details and updates.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
+        </div>
+        <div class='footer'>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply directly to this email.</p>
+        </div>
+    </div>
+>>>>>>> 7094ca6d33dedf51b23d82ea166c2f9668505fa1
 </body>
 </html>";
 
