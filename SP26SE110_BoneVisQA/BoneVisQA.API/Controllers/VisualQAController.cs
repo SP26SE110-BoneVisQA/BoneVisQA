@@ -157,17 +157,17 @@ public class VisualQAController : ControllerBase
         {
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "The Q&A session expired due to 24 hours of inactivity."));
+                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "Phiên Visual QA đã hết hạn sau 24 giờ không hoạt động."));
             }
 
             if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "This Q&A session is view-only and cannot be continued."));
+                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "Phiên Visual QA đã được đóng. Bạn không thể gửi câu hỏi mới."));
             }
 
             if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "This chat session has reached the 3-question limit."));
+                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "Bạn đã dùng hết số lượt hỏi cho phiên Visual QA này."));
             }
 
             return BadRequest(new { message = ex.Message });
@@ -379,17 +379,17 @@ public class VisualQAController : ControllerBase
         {
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "The Q&A session expired due to 24 hours of inactivity."));
+                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED", "Phiên Visual QA đã hết hạn sau 24 giờ không hoạt động."));
             }
 
             if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "This Q&A session is view-only and cannot be continued."));
+                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY", "Phiên Visual QA đã được đóng. Bạn không thể gửi câu hỏi mới."));
             }
 
             if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
             {
-                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "This chat session has reached the 3-question limit."));
+                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED", "Bạn đã dùng hết số lượt hỏi cho phiên Visual QA này."));
             }
 
             return BadRequest(new { message = ex.Message });
@@ -560,7 +560,8 @@ public class VisualQAController : ControllerBase
             ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
             PolicyReason = response.PolicyReason,
             ClientRequestId = response.ClientRequestId,
-            ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
+            // Review workflow pending/escalated is driven by session status on GET thread, not by capabilities after a normal ask.
+            ReviewState = "none",
             LastResponderRole = "assistant",
             SystemNotice = systemNotice,
             SystemNoticeCode = capabilities.Reason,
@@ -582,7 +583,7 @@ public class VisualQAController : ControllerBase
                 CreatedAt = DateTime.UtcNow,
                 ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind,
                 PolicyReason = response.PolicyReason,
-                ReviewState = capabilities.IsReadOnly && capabilities.Reason == "SESSION_READ_ONLY" ? "pending" : "none",
+                ReviewState = "none",
                 LastResponderRole = "assistant",
                 IsReviewTarget = false
             }
@@ -663,9 +664,9 @@ public class VisualQAController : ControllerBase
     {
         return reason switch
         {
-            "TURN_LIMIT_EXCEEDED" => "You have reached the maximum number of questions for this Visual QA session.",
-            "SESSION_EXPIRED" => "This Visual QA session expired after 24 hours of inactivity.",
-            "SESSION_READ_ONLY" => "This Visual QA session is now read-only because it has entered the review workflow.",
+            "TURN_LIMIT_EXCEEDED" => "Bạn đã dùng hết số lượt hỏi cho phiên Visual QA này.",
+            "SESSION_EXPIRED" => "Phiên Visual QA đã hết hạn sau 24 giờ không hoạt động.",
+            "SESSION_READ_ONLY" => "Phiên Visual QA đã được đóng. Bạn không thể gửi câu hỏi mới.",
             _ => null
         };
     }
