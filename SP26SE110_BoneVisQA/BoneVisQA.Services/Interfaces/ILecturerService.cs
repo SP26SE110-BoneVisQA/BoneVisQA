@@ -48,6 +48,7 @@ public interface ILecturerService
     /// <param name="creatingUserId">User id từ JWT (giảng viên) — ghi vào Quiz.CreatedByExpertId để tách quiz SV vs GV.</param>
     Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request, Guid? creatingUserId = null);
     Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
+    Task<List<QuizQuestionDto>> AddQuizQuestionsBatchAsync(Guid quizId, List<CreateQuizQuestionDto> requests);
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
     Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId);
@@ -55,6 +56,7 @@ public interface ILecturerService
 
     Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetUnassignedLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetAllLecturerQuizzesAsync(Guid lecturerId);
     Task<IReadOnlyList<AssignedQuizDto>> GetAssignedQuizzesAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);

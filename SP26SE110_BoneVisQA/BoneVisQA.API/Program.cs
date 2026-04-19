@@ -313,7 +313,9 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<NotificationHub>("/hubs/notifications")
+   .RequireCors("AllowAll")
+   .RequireAuthorization();
 
 // Đảm bảo thư mục uploads tồn tại trước khi sử dụng PhysicalFileProvider
 var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");

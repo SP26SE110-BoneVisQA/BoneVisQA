@@ -186,6 +186,8 @@ public class AssignedQuizDto
     public DateTime? CloseTime { get; set; }
     public int QuestionCount { get; set; }
     public bool IsFromExpertLibrary { get; set; }
+    public string? CreatorName { get; set; }
+    public string? CreatorType { get; set; }
 }
 
 // QuizQuestionDto - For quiz questions with individual options

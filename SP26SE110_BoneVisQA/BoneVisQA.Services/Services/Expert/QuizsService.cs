@@ -3,22 +3,29 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 
 namespace BoneVisQA.Services.Services.Expert
 {
     public class QuizsService : IQuizsService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IConfiguration _configuration;
 
-        public QuizsService(IUnitOfWork unitOfWork)
+        public QuizsService(IUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
         {
             _unitOfWork = unitOfWork;
+            _httpContextAccessor = httpContextAccessor;
+            _configuration = configuration;
         }
 
         private static DateTime? ToUtc(DateTime? dt)
@@ -51,6 +58,34 @@ namespace BoneVisQA.Services.Services.Expert
         private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
         {
             return passingScore;
+        }
+
+        /// <summary>
+        /// Resolve image URL to absolute URL.
+        /// - If already absolute (http/https), return as-is.
+        /// - If relative (e.g. /uploads/images/...), prepend base URL from config.
+        /// </summary>
+        private string ResolveImageUrl(string? imageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl))
+                return string.Empty;
+
+            var url = imageUrl.Trim();
+
+            // Already absolute
+            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                return url;
+            }
+
+            // Relative path — prepend base URL from configuration
+            var baseUrl = _configuration["App:BaseUrl"] ?? "http://localhost:5046";
+            // Ensure base doesn't end with slash, path starts with slash
+            var cleanBase = baseUrl.TrimEnd('/');
+            var path = url.StartsWith('/') ? url : $"/{url}";
+            return $"{cleanBase}{path}";
         }
 
         public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
@@ -272,7 +307,7 @@ namespace BoneVisQA.Services.Services.Expert
                     OptionD = q.OptionD,
 
                     CorrectAnswer = q.CorrectAnswer,
-                    ImageUrl = q.ImageUrl  // Trả về URL ảnh
+                    ImageUrl = ResolveImageUrl(q.ImageUrl)
                 });
             }
 
@@ -326,7 +361,7 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
                 CorrectAnswer = question.CorrectAnswer,
-                ImageUrl = question.ImageUrl  // Trả về URL ảnh
+                ImageUrl = ResolveImageUrl(question.ImageUrl)
             };
         }
         public async Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update)
@@ -397,7 +432,7 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
-                ImageUrl = question.ImageUrl
+                ImageUrl = ResolveImageUrl(question.ImageUrl)
             };
         }
         public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
@@ -823,7 +858,7 @@ namespace BoneVisQA.Services.Services.Expert
                     OptionD = q.OptionD,
                     CaseTitle = caseTitle,
                     CorrectAnswer = q.CorrectAnswer,  // Đáp án đúng: A, B, C hoặc D
-                    ImageUrl = q.ImageUrl  // URL ảnh câu hỏi
+                    ImageUrl = ResolveImageUrl(q.ImageUrl)  // URL ảnh câu hỏi (absolute)
                 });
             }
 

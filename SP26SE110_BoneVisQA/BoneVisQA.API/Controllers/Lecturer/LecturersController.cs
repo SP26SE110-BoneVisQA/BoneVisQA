@@ -324,6 +324,30 @@ public class LecturersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("quizzes/{quizId:guid}/questions/batch")]
+    public async Task<IActionResult> AddQuizQuestionsBatch(Guid quizId, [FromBody] List<CreateQuizQuestionDto> requests)
+    {
+        if (requests == null || requests.Count == 0)
+            return BadRequest(new { message = "No questions provided." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var results = await _lecturerService.AddQuizQuestionsBatchAsync(quizId, requests);
+            return Ok(results);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+        }
+    }
+
     [HttpPut("quizzes/questions/{questionId:guid}")]
     public async Task<IActionResult> UpdateQuizQuestion(Guid questionId, [FromBody] UpdateQuizsQuestionRequestDto request)
     {
@@ -408,6 +432,21 @@ public class LecturersController : ControllerBase
             return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
 
         var result = await _lecturerService.GetUnassignedLecturerQuizzesAsync(lecturerId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get all quizzes available to lecturer (own quizzes + expert library quizzes),
+    /// excluding AI-generated quizzes. Used for "My Quizzes" tab with full library.
+    /// </summary>
+    [HttpGet("quizzes/all")]
+    public async Task<ActionResult<IReadOnlyList<QuizDto>>> GetAllLecturerQuizzes()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        var result = await _lecturerService.GetAllLecturerQuizzesAsync(lecturerId.Value);
         return Ok(result);
     }
 
