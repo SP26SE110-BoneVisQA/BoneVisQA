@@ -41,6 +41,25 @@ public class LecturerAssignmentsController : ControllerBase
         }
     }
 
+    /// <summary>Get all cases assigned to a specific class.</summary>
+    [HttpGet("cases")]
+    public async Task<ActionResult<IReadOnlyList<ClassCaseAssignmentDto>>> GetAssignedCases(Guid classId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _lecturerAssignmentService.GetAssignedCasesAsync(lecturerId.Value, classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("quizzes")]
     public async Task<ActionResult<ClassQuizSessionDto>> AssignQuiz(Guid classId, [FromBody] AssignQuizSessionRequestDto request)
     {

@@ -168,6 +168,45 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return result;
     }
 
+    /// <summary>
+    /// Get all cases assigned to a specific class.
+    /// </summary>
+    public async Task<IReadOnlyList<ClassCaseAssignmentDto>> GetAssignedCasesAsync(Guid lecturerId, Guid classId)
+    {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+
+        var classCases = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Where(cc => cc.ClassId == classId)
+            .OrderByDescending(cc => cc.AssignedAt)
+            .ToListAsync();
+
+        if (classCases.Count == 0)
+            return Array.Empty<ClassCaseAssignmentDto>();
+
+        var caseIds = classCases.Select(cc => cc.CaseId).ToList();
+        var casesLookup = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .Where(c => caseIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c);
+
+        return classCases
+            .Select(cc =>
+            {
+                var medicalCase = casesLookup.GetValueOrDefault(cc.CaseId);
+                return new ClassCaseAssignmentDto
+                {
+                    ClassId = classId,
+                    CaseId = cc.CaseId,
+                    CaseTitle = medicalCase?.Title ?? "Unknown Case",
+                    AssignedAt = cc.AssignedAt,
+                    DueDate = cc.DueDate,
+                    IsMandatory = cc.IsMandatory
+                };
+            })
+            .ToList();
+    }
+
     public async Task<ClassQuizSessionDto> AssignQuizSessionAsync(Guid lecturerId, Guid classId, AssignQuizSessionRequestDto request)
     {
         var academicClass = await EnsureLecturerOwnsClassAsync(lecturerId, classId);

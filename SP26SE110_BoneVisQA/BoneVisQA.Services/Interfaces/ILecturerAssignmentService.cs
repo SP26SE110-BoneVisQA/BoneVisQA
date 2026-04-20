@@ -5,6 +5,9 @@ namespace BoneVisQA.Services.Interfaces;
 public interface ILecturerAssignmentService
 {
     Task<IReadOnlyList<ClassCaseAssignmentDto>> AssignCasesAsync(Guid lecturerId, Guid classId, AssignCasesRequestDto request);
+
+    /// <summary>Get all cases assigned to a specific class.</summary>
+    Task<IReadOnlyList<ClassCaseAssignmentDto>> GetAssignedCasesAsync(Guid lecturerId, Guid classId);
     Task<ClassQuizSessionDto> AssignQuizSessionAsync(Guid lecturerId, Guid classId, AssignQuizSessionRequestDto request);
 
     // Quiz review methods
