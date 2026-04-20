@@ -31,4 +31,10 @@ public interface ILecturerAssignmentService
 
     /// <summary>Update scores for multiple submissions.</summary>
     Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
+
+    /// <summary>Export quiz results to Excel file for a specific quiz in a class.</summary>
+    Task<(byte[] FileBytes, string FileName)> ExportQuizResultsAsync(Guid lecturerId, Guid classId, Guid quizId);
+
+    /// <summary>Export all quiz results to Excel file for a specific class (all quizzes in that class).</summary>
+    Task<(byte[] FileBytes, string FileName)> ExportClassAllQuizResultsAsync(Guid lecturerId, Guid classId);
 }

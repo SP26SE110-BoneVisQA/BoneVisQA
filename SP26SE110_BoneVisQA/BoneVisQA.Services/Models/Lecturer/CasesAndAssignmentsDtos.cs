@@ -6,6 +6,17 @@ namespace BoneVisQA.Services.Models.Lecturer;
 
 // ── Announcement DTOs ──────────────────────────────────────────────────────────
 
+/// <summary>
+/// Thông tin assignment được gắn với announcement (để hiển thị badge cho sinh viên nhận biết).
+/// </summary>
+public class AnnouncementAssignmentInfoDto
+{
+    public Guid? AssignmentId { get; set; }
+    public string? AssignmentTitle { get; set; }
+    /// <summary>"case" hoặc "quiz"</summary>
+    public string? AssignmentType { get; set; }
+}
+
 public class AnnouncementDto
 {
     public Guid Id { get; set; }
@@ -15,6 +26,7 @@ public class AnnouncementDto
     public string Content { get; set; } = string.Empty;
     public bool SendEmail { get; set; } = true;
     public DateTime? CreatedAt { get; set; }
+    public AnnouncementAssignmentInfoDto? RelatedAssignment { get; set; }
 }
 
 public class CreateAnnouncementRequestDto
@@ -22,6 +34,11 @@ public class CreateAnnouncementRequestDto
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public bool SendEmail { get; set; } = true;
+    /// <summary>
+    /// ID của assignment (case hoặc quiz) liên kết với announcement.
+    /// Giúp sinh viên nhận biết có bài tập cần làm.
+    /// </summary>
+    public Guid? AssignmentId { get; set; }
 }
 
 public class UpdateAnnouncementRequestDto
@@ -30,6 +47,16 @@ public class UpdateAnnouncementRequestDto
     public string Content { get; set; } = string.Empty;
     /// <summary>Nếu true, gửi lại email cho sinh viên trong lớp (giống lúc tạo mới).</summary>
     public bool SendEmail { get; set; }
+    /// <summary>
+    /// ID của assignment (case hoặc quiz) liên kết với announcement.
+    /// Set null để xóa liên kết.
+    /// </summary>
+    public Guid? AssignmentId { get; set; }
+}
+
+public class MoveAnnouncementRequestDto
+{
+    public Guid TargetClassId { get; set; }
 }
 
 // ── Case DTOs ─────────────────────────────────────────────────────────────────

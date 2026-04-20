@@ -1354,8 +1354,10 @@ public class StudentService : IStudentService
     {
         var announcements = await _studentRepository.GetAnnouncementsForStudentAsync(studentId);
 
-        return announcements
-            .Select(a => new StudentAnnouncementDto
+        var results = new List<StudentAnnouncementDto>();
+        foreach (var a in announcements)
+        {
+            var dto = new StudentAnnouncementDto
             {
                 Id = a.Id,
                 ClassId = a.ClassId,
@@ -1363,8 +1365,57 @@ public class StudentService : IStudentService
                 Title = a.Title,
                 Content = a.Content,
                 CreatedAt = a.CreatedAt
-            })
-            .ToList();
+            };
+
+            // Get related assignment info if present
+            if (a.AssignmentId.HasValue)
+            {
+                dto.RelatedAssignment = await GetRelatedAssignmentInfoForStudentAsync(a.AssignmentId);
+            }
+
+            results.Add(dto);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Get assignment info for student announcement response (case or quiz).
+    /// </summary>
+    private async Task<Models.Student.AnnouncementAssignmentInfoDto?> GetRelatedAssignmentInfoForStudentAsync(Guid? assignmentId)
+    {
+        if (!assignmentId.HasValue)
+            return null;
+
+        // Check if it's a ClassCase
+        var classCase = await _unitOfWork.Context.ClassCases
+            .Include(cc => cc.Case)
+            .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId.Value);
+        if (classCase != null)
+        {
+            return new Models.Student.AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = classCase.CaseId,
+                AssignmentTitle = classCase.Case?.Title ?? "Case Assignment",
+                AssignmentType = "case"
+            };
+        }
+
+        // Check if it's a ClassQuizSession
+        var quizSession = await _unitOfWork.Context.ClassQuizSessions
+            .Include(qs => qs.Quiz)
+            .FirstOrDefaultAsync(qs => qs.Id == assignmentId.Value);
+        if (quizSession != null)
+        {
+            return new Models.Student.AnnouncementAssignmentInfoDto
+            {
+                AssignmentId = quizSession.Id,
+                AssignmentTitle = quizSession.Quiz?.Title ?? "Quiz Assignment",
+                AssignmentType = "quiz"
+            };
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<QuizListItemDto>> GetAvailableQuizzesAsync(Guid studentId)
@@ -1893,19 +1944,54 @@ public class StudentService : IStudentService
             })
             .ToListAsync();
 
-        // Announcements
-        var announcements = await _unitOfWork.Context.Announcements
+        // Announcements with related assignment info
+        var announcementsRaw = await _unitOfWork.Context.Announcements
             .AsNoTracking()
             .Where(a => a.ClassId == classId)
             .OrderByDescending(a => a.CreatedAt)
-            .Select(a => new ClassAnnouncementDto
+            .ToListAsync();
+
+        var announcements = new List<ClassAnnouncementDto>();
+        foreach (var a in announcementsRaw)
+        {
+            var dto = new ClassAnnouncementDto
             {
                 Id = a.Id,
                 Title = a.Title,
                 Content = a.Content,
                 CreatedAt = a.CreatedAt,
-            })
+            };
+
+            if (a.AssignmentId.HasValue)
+            {
+                dto.RelatedAssignment = await GetRelatedAssignmentInfoForStudentAsync(a.AssignmentId);
+            }
+
+            announcements.Add(dto);
+        }
+
+        // Assigned cases for this class (from ClassCases table)
+        var assignedCasesRaw = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Where(cc => cc.ClassId == classId)
+            .OrderByDescending(cc => cc.AssignedAt)
             .ToListAsync();
+
+        var assignedCaseIds = assignedCasesRaw.Select(cc => cc.CaseId).ToList();
+        var casesLookup = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .Where(c => assignedCaseIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Title);
+
+        var assignedCases = assignedCasesRaw
+            .Select(cc => new StudentCaseAssignmentDto
+            {
+                CaseId = cc.CaseId,
+                Title = casesLookup.GetValueOrDefault(cc.CaseId, "Unknown Case"),
+                DueDate = cc.DueDate,
+                IsMandatory = cc.IsMandatory
+            })
+            .ToList();
 
         return new StudentClassDetailDto
         {
@@ -1916,7 +2002,10 @@ public class StudentService : IStudentService
             LecturerName = cls.Lecturer?.FullName,
             ExpertId = cls.ExpertId,
             ExpertName = cls.Expert?.FullName,
+            ExpertEmail = cls.Expert?.Email,
+            ExpertAvatarUrl = cls.Expert?.AvatarUrl,
             EnrolledAt = enrollment.EnrolledAt,
+            AssignedCases = assignedCases,
             Quizzes = quizzes,
             Students = students,
             Announcements = announcements,
@@ -1961,17 +2050,41 @@ public class StudentService : IStudentService
         if (classSession.Count == 0)
             throw new InvalidOperationException("This quiz is not assigned through a class.");
 
-        // Send notification and email to each class lecturer
-        foreach (var session in classSession)
+        // Group sessions by LecturerId — each lecturer gets ONE notification only (avoids duplicates)
+        var lecturerGroups = classSession
+            .Where(s => s.Class!.LecturerId != null)
+            .GroupBy(s => s.Class!.LecturerId!.Value);
+
+        foreach (var group in lecturerGroups)
         {
-            var academicClass = session.Class!;
-            if (academicClass.LecturerId == null) continue;
+            var lecturerId = group.Key;
+            var classNames = group.Select(s => s.Class!.ClassName).Distinct().ToList();
+            var lecturer = await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == lecturerId);
+
+            if (lecturer == null) continue;
+
+            // Skip if this lecturer already received a retake_request notification for this quiz from this student
+            var existingNotif = await _unitOfWork.Context.Notifications
+                .AsNoTracking()
+                .AnyAsync(n => n.UserId == lecturerId
+                    && n.Type == "retake_request"
+                    && n.Message != null
+                    && n.Message.Contains(studentId.ToString())
+                    && n.Message.Contains(quizId.ToString()));
+            if (existingNotif) continue;
+
+            var classListText = classNames.Count == 1
+                ? $"\"{classNames[0]}\""
+                : $"classes [{string.Join(", ", classNames.Select(c => $"\"{c}\""))}]";
+
+            var notifTitle = $"Retake Request: {quiz.Title}";
+            var notifMsg = $"Student \"{student.FullName}\" ({studentId}) requested a retake for quiz \"{quiz.Title}\" ({quizId}) in {classListText}.";
 
             // Notification (SignalR real-time)
-            var notifTitle = $"Retake Request: {quiz.Title}";
-            var notifMsg = $"Student \"{student.FullName}\" requested a retake for quiz \"{quiz.Title}\" in class \"{academicClass.ClassName}\".";
             await _notificationService.SendNotificationToUserAsync(
-                academicClass.LecturerId.Value,
+                lecturerId,
                 notifTitle,
                 notifMsg,
                 "retake_request",
@@ -1981,16 +2094,13 @@ public class StudentService : IStudentService
             // Email (background, non-blocking on failure)
             try
             {
-                var lecturer = await _unitOfWork.Context.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Id == academicClass.LecturerId);
-                if (lecturer != null)
+                foreach (var className in classNames)
                 {
                     await _emailService.SendRetakeRequestEmailAsync(
                         lecturer.Email,
                         student.FullName,
                         quiz.Title,
-                        academicClass.ClassName,
+                        className,
                         lecturer.FullName);
                 }
             }
