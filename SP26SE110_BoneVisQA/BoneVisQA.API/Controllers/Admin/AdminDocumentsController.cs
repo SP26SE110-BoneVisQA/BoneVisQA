@@ -98,6 +98,45 @@ public class AdminDocumentsController : ControllerBase
         return Ok(new { Message = "Get documents flagged for review successfully.", result });
     }
 
+    /// <summary>
+    /// Lists document chunks flagged by experts during Visual QA (low-quality retrieval).
+    /// Duplicate route <c>/api/admin/rag/flagged-chunks</c> matches FE fallback when the primary path is used.
+    /// </summary>
+    [HttpGet("chunks/flagged")]
+    [HttpGet("~/api/admin/rag/flagged-chunks")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminFlaggedChunkListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminFlaggedChunkListItemDto>>> GetExpertFlaggedChunks(
+        CancellationToken cancellationToken)
+    {
+        var rows = await _documentQualityService.GetFlaggedDocumentChunksAsync(cancellationToken);
+        return Ok(rows);
+    }
+
+    /// <summary>Clears expert flag after admin review (<c>resolved: true</c>).</summary>
+    [HttpPatch("chunks/{chunkId:guid}/flag")]
+    [HttpPatch("~/api/admin/rag/chunks/{chunkId:guid}/flag")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResolveExpertFlaggedChunk(
+        Guid chunkId,
+        [FromBody] ChunkFlagResolutionRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Resolved != true)
+            return BadRequest(new { message = "Body must include \"resolved\": true." });
+
+        try
+        {
+            await _documentQualityService.ResolveDocumentChunkFlagAsync(chunkId, true, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("quality/outdated")]
     public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
     {
@@ -450,4 +489,9 @@ public class PendingChunkCleanupResultDto
 {
     public Guid? DocumentId { get; set; }
     public int DeletedRows { get; set; }
+}
+
+public class ChunkFlagResolutionRequestDto
+{
+    public bool Resolved { get; set; }
 }

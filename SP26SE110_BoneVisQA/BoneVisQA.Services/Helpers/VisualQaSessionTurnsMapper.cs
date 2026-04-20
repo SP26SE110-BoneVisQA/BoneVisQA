@@ -80,6 +80,20 @@ public static class VisualQaSessionTurnsMapper
     private static string TurnReviewState(string? sessionReviewState, bool isReviewTarget) =>
         isReviewTarget ? (sessionReviewState ?? "none") : "none";
 
+    /// <summary>
+    /// Raw assistant narrative from <c>qa_messages.content</c> only.
+    /// Do not merge <see cref="QAMessage.SuggestedDiagnosis"/> / findings here — those map to <see cref="VisualQaTurnDto"/> structured fields;
+    /// duplicating them into <see cref="VisualQaTurnDto.MessageText"/> causes the student UI to show the same text in Markdown and in Diagnosis/Findings cards.
+    /// </summary>
+    private static string? ResolveAssistantPlainText(QAMessage? m)
+    {
+        if (m == null)
+            return null;
+
+        var body = m.Content?.Trim();
+        return string.IsNullOrWhiteSpace(body) ? null : body;
+    }
+
     private static VisualQaTurnDto MapTurn(
         Guid sessionId,
         QAMessage userMessage,
@@ -87,6 +101,7 @@ public static class VisualQaSessionTurnsMapper
         string? reviewState,
         Guid? requestedReviewMessageId)
     {
+        var assistantPlain = ResolveAssistantPlainText(assistantMessage);
         return new VisualQaTurnDto
         {
             SessionId = sessionId,
@@ -97,7 +112,8 @@ public static class VisualQaSessionTurnsMapper
             UserMessage = userMessage.Content,
             QuestionCoordinates = userMessage.Coordinates,
             QuestionText = userMessage.Content,
-            MessageText = assistantMessage?.Content,
+            MessageText = assistantPlain,
+            AnswerText = assistantPlain,
             Diagnosis = assistantMessage?.SuggestedDiagnosis,
             Findings = SplitMultilineField(assistantMessage?.KeyImagingFindings),
             DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage?.DifferentialDiagnoses),
@@ -122,6 +138,7 @@ public static class VisualQaSessionTurnsMapper
         string? reviewState,
         Guid? requestedReviewMessageId)
     {
+        var assistantPlain = ResolveAssistantPlainText(assistantMessage);
         return new VisualQaTurnDto
         {
             SessionId = sessionId,
@@ -131,7 +148,8 @@ public static class VisualQaSessionTurnsMapper
             AssistantMessageId = assistantMessage.Id,
             UserMessage = string.Empty,
             QuestionText = null,
-            MessageText = assistantMessage.Content,
+            MessageText = assistantPlain,
+            AnswerText = assistantPlain,
             Diagnosis = assistantMessage.SuggestedDiagnosis,
             Findings = SplitMultilineField(assistantMessage.KeyImagingFindings),
             DifferentialDiagnoses = DeserializeJsonArrayToList(assistantMessage.DifferentialDiagnoses),
@@ -158,10 +176,12 @@ public static class VisualQaSessionTurnsMapper
             TurnId = message.Id.ToString(),
             ActorRole = actorRole,
             UserMessageId = Guid.Empty,
-            AssistantMessageId = targetAssistantId ?? message.Id,
+            // Must be this row's id — not the targeted AI assistant id — or clients merge with the AI turn and show wrong policyReason (e.g. medical_intent).
+            AssistantMessageId = message.Id,
             UserMessage = string.Empty,
             QuestionText = null,
             MessageText = displayContent,
+            AnswerText = displayContent,
             TargetAssistantMessageId = targetAssistantId,
             Diagnosis = message.SuggestedDiagnosis,
             Findings = SplitMultilineField(message.KeyImagingFindings),
@@ -270,9 +290,16 @@ public static class VisualQaSessionTurnsMapper
         var differentialDiagnoses = DeserializeJsonArrayToList(assistantMessage.DifferentialDiagnoses);
         var reflectiveQuestions = SplitMultilineField(assistantMessage.ReflectiveQuestions);
 
-        return findings.Count == 0 && differentialDiagnoses.Count == 0 && reflectiveQuestions.Count == 0
-            ? "clarification"
-            : "analysis";
+        // Chỉ có SuggestedDiagnosis (DTO Diagnosis) mà không có findings/differential/reflective
+        // vẫn là analysis — tránh FE nhận clarification và lệch nhánh hiển thị.
+        var hasSuggestedDiagnosis = !string.IsNullOrWhiteSpace(assistantMessage.SuggestedDiagnosis);
+        var hasClinicalListings =
+            findings.Count > 0 || differentialDiagnoses.Count > 0 || reflectiveQuestions.Count > 0;
+
+        if (hasSuggestedDiagnosis || hasClinicalListings)
+            return "analysis";
+
+        return "clarification";
     }
 
     private static string? DeterminePolicyReason(QAMessage? assistantMessage)

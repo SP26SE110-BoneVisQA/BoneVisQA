@@ -9,4 +9,7 @@ public class CaseFilter
     public string? Location { get; set; }
     public string? LesionType { get; set; }
     public string? LessonType { get; set; }
+
+    /// <summary>Optional free-text search (title + description).</summary>
+    public string? SearchText { get; set; }
 }

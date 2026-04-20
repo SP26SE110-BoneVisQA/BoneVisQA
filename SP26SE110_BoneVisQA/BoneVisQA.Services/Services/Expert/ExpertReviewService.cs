@@ -120,9 +120,12 @@ public class ExpertReviewService : IExpertReviewService
                 ClassName = enrollment?.Class?.ClassName ?? string.Empty,
                 ReviewNote = review?.ReviewNote,
                 PromotedCaseId = s.PromotedCaseId,
-                Citations = MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
+                Citations = MergeCitationsFromAssistantMessages(orderedMessages),
                 ImageUrl = ResolveSessionImageUrl(s),
-                CustomCoordinates = userMessage?.Coordinates,
+                CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                    userMessage,
+                    s.RequestedReviewMessageId,
+                    turns),
                 ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
                 RequestedReviewMessageId = s.RequestedReviewMessageId,
                 SelectedUserMessageId = userMessage?.Id,
@@ -134,6 +137,82 @@ public class ExpertReviewService : IExpertReviewService
 
     public Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId)
         => GetEscalatedAnswersAsync(expertId);
+
+    public async Task<ExpertEscalatedAnswerDto> GetEscalatedSessionDetailAsync(Guid expertId, Guid sessionId)
+    {
+        var session = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Image)
+            .Include(s => s.Messages)
+                .ThenInclude(m => m.Citations)
+                    .ThenInclude(c => c.Chunk)
+                        .ThenInclude(ch => ch.Doc)
+            .Include(s => s.ExpertReviews)
+            .FirstOrDefaultAsync(s => s.Id == sessionId)
+            ?? throw new KeyNotFoundException("Q&A session not found.");
+
+        if (!await ExpertMayActOnVisualSessionAsync(expertId, session.StudentId, session.ExpertId))
+            throw new InvalidOperationException("The expert does not have permission to view this Q&A session.");
+
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+            .Where(e => e.StudentId == session.StudentId && e.Class != null && e.Class.ExpertId == expertId)
+            .OrderByDescending(e => e.EnrolledAt)
+            .FirstOrDefaultAsync();
+
+        var review = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var turns = VisualQaSessionTurnsMapper.BuildTurns(session.Id, orderedMessages, session.Status, session.RequestedReviewMessageId);
+        var (userMessage, latestAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
+
+        return new ExpertEscalatedAnswerDto
+        {
+            AnswerId = session.Id,
+            SessionId = session.Id,
+            QuestionId = userMessage?.Id ?? Guid.Empty,
+            StudentId = session.StudentId,
+            StudentName = session.Student?.FullName ?? string.Empty,
+            StudentEmail = session.Student?.Email ?? string.Empty,
+            CaseId = session.CaseId,
+            CaseTitle = session.Case?.Title ?? string.Empty,
+            CaseDescription = session.Case?.Description,
+            CaseSuggestedDiagnosis = session.Case?.SuggestedDiagnosis,
+            CaseKeyFindings = session.Case?.KeyFindings,
+            QuestionText = userMessage?.Content ?? string.Empty,
+            CurrentAnswerText = latestAssistant?.Content,
+            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
+            DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses,
+            KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? null,
+            ReflectiveQuestions = latestAssistant?.ReflectiveQuestions ?? null,
+            Status = session.Status,
+            EscalatedById = session.LecturerId,
+            EscalatedAt = session.UpdatedAt ?? session.CreatedAt,
+            AiConfidenceScore = latestAssistant?.AiConfidenceScore,
+            ClassId = enrollment?.ClassId,
+            ClassName = enrollment?.Class?.ClassName ?? string.Empty,
+            ReviewNote = review?.ReviewNote,
+            PromotedCaseId = session.PromotedCaseId,
+            Citations = MergeCitationsFromAssistantMessages(orderedMessages),
+            ImageUrl = ResolveSessionImageUrl(session),
+            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                userMessage,
+                session.RequestedReviewMessageId,
+                turns),
+            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
+            RequestedReviewMessageId = session.RequestedReviewMessageId,
+            SelectedUserMessageId = userMessage?.Id,
+            SelectedAssistantMessageId = latestAssistant?.Id,
+            Turns = turns
+        };
+    }
 
     public async Task<ExpertVisualSessionDraftResponseDto> UpsertSessionReviewDraftAsync(Guid expertId, Guid sessionId, ExpertVisualSessionDraftRequestDto request)
     {
@@ -317,9 +396,12 @@ public class ExpertReviewService : IExpertReviewService
             ClassName = enrollment?.Class?.ClassName ?? string.Empty,
             ReviewNote = null,
             PromotedCaseId = session.PromotedCaseId,
-            Citations = new List<ExpertCitationDto>(),
+            Citations = MergeCitationsFromAssistantMessages(orderedMessages),
             ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = userMessage?.Coordinates,
+            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                userMessage,
+                session.RequestedReviewMessageId,
+                turnsAfter),
             ExpertCorrectedRoiBoundingBox = null,
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = userMessage?.Id,
@@ -358,6 +440,10 @@ public class ExpertReviewService : IExpertReviewService
             throw new InvalidOperationException("ReflectiveQuestions is required.");
 
         var now = DateTime.UtcNow;
+        var title = string.IsNullOrWhiteSpace(request.Title?.Trim())
+            ? "Clinical case from the community"
+            : request.Title.Trim();
+        var normalizedDifficulty = MedicalCaseDifficultyNormalizer.Normalize(request.Difficulty);
 
         await using var transaction =
             await _unitOfWork.Context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
@@ -379,15 +465,18 @@ public class ExpertReviewService : IExpertReviewService
             if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
                 throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
 
+            var resolvedCategoryId = await ResolvePromoteCategoryIdAsync(request);
+
             var newCase = new MedicalCase
             {
                 Id = Guid.NewGuid(),
-                Title = "Clinical case from the community",
+                Title = title,
                 Description = request.Description.Trim(),
                 SuggestedDiagnosis = request.SuggestedDiagnosis.Trim(),
                 KeyFindings = request.KeyFindings.Trim(),
                 ReflectiveQuestions = request.ReflectiveQuestions.Trim(),
-                Difficulty = "Medium",
+                Difficulty = normalizedDifficulty,
+                CategoryId = resolvedCategoryId,
                 IsApproved = true,
                 IsActive = true,
                 CreatedByExpertId = expertId,
@@ -409,28 +498,39 @@ public class ExpertReviewService : IExpertReviewService
             };
             await _unitOfWork.Context.MedicalImages.AddAsync(image);
 
-            var tag = await _unitOfWork.Context.Tags
-                .FirstOrDefaultAsync(t => t.Name == "Student Q&A");
-            if (tag == null)
+            var roiItems = (request.TurnAnnotations ?? request.ImageAnnotations ?? Enumerable.Empty<PromoteCaseAnnotationDto>())
+                .Where(a => a != null)
+                .ToList();
+            foreach (var ann in roiItems)
             {
-                tag = new Tag
+                var coords = SerializePromoteCoordinates(ann!.Coordinates);
+                var label = ResolvePromoteAnnotationLabel(ann.Label);
+                if (string.IsNullOrWhiteSpace(coords) && string.IsNullOrWhiteSpace(ann.Label?.Trim()))
+                    continue;
+
+                await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
                 {
                     Id = Guid.NewGuid(),
-                    Name = "Student Q&A",
-                    Type = "Source",
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                await _unitOfWork.Context.Tags.AddAsync(tag);
+                    ImageId = image.Id,
+                    Label = label,
+                    Coordinates = coords,
+                    CreatedAt = now
+                });
             }
 
-            var caseTag = new CaseTag
+            var sourceTagId = await GetOrCreateTagIdByNameAndTypeAsync("Student Q&A", "Source", now);
+            await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, now);
+
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Student Q&A" };
+            foreach (var raw in request.TagNames ?? Enumerable.Empty<string>())
             {
-                CaseId = newCase.Id,
-                TagId = tag.Id,
-                CreatedAt = now
-            };
-            await _unitOfWork.Context.CaseTags.AddAsync(caseTag);
+                var name = raw?.Trim();
+                if (string.IsNullOrWhiteSpace(name) || !seenNames.Add(name))
+                    continue;
+
+                var extraTagId = await GetOrCreateTagIdByNameAndTypeAsync(name, "Custom", now);
+                await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, now);
+            }
 
             session.PromotedCaseId = newCase.Id;
             await _unitOfWork.SaveAsync();
@@ -443,6 +543,75 @@ public class ExpertReviewService : IExpertReviewService
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    private async Task<Guid?> ResolvePromoteCategoryIdAsync(PromoteToLibraryRequestDto request)
+    {
+        if (request.CategoryId is { } cid && cid != Guid.Empty)
+        {
+            return await _unitOfWork.Context.Categories.AnyAsync(c => c.Id == cid)
+                ? cid
+                : null;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CategoryName))
+            return null;
+
+        var trimmed = request.CategoryName.Trim();
+        var cat = await _unitOfWork.Context.Categories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => EF.Functions.ILike(c.Name, trimmed));
+        return cat?.Id;
+    }
+
+    private static string? SerializePromoteCoordinates(JsonElement? element)
+    {
+        if (!element.HasValue)
+            return null;
+
+        var el = element.Value;
+        if (el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+
+        return el.ValueKind == JsonValueKind.String
+            ? el.GetString()
+            : el.GetRawText();
+    }
+
+    private static string ResolvePromoteAnnotationLabel(string? label) =>
+        string.IsNullOrWhiteSpace(label) ? "finding" : label.Trim();
+
+    private async Task<Guid> GetOrCreateTagIdByNameAndTypeAsync(string name, string type, DateTime now)
+    {
+        var existing = await _unitOfWork.Context.Tags
+            .FirstOrDefaultAsync(t => t.Name == name && t.Type == type);
+        if (existing != null)
+            return existing.Id;
+
+        var tag = new Tag
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Type = type,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        await _unitOfWork.Context.Tags.AddAsync(tag);
+        return tag.Id;
+    }
+
+    private async Task AddCaseTagIfMissingAsync(Guid caseId, Guid tagId, DateTime now)
+    {
+        var exists = await _unitOfWork.Context.CaseTags.AnyAsync(ct => ct.CaseId == caseId && ct.TagId == tagId);
+        if (exists)
+            return;
+
+        await _unitOfWork.Context.CaseTags.AddAsync(new CaseTag
+        {
+            CaseId = caseId,
+            TagId = tagId,
+            CreatedAt = now
+        });
     }
 
     public async Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid sessionId, ResolveEscalatedAnswerRequestDto request)
@@ -613,9 +782,12 @@ public class ExpertReviewService : IExpertReviewService
             PromotedCaseId = session.PromotedCaseId,
             Citations = isReject
                 ? new List<ExpertCitationDto>()
-                : MapCitations(latestAssistant?.Citations ?? Enumerable.Empty<Citation>()),
+                : MergeCitationsFromAssistantMessages(orderedMessages),
             ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = userMessage?.Coordinates,
+            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                userMessage,
+                session.RequestedReviewMessageId,
+                turnsResolved),
             ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(existingReview.CorrectedRoi),
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = userMessage?.Id,
@@ -812,18 +984,66 @@ public class ExpertReviewService : IExpertReviewService
         return string.IsNullOrWhiteSpace(url) ? null : url.Trim();
     }
 
+    /// <summary>Unions citations from every assistant turn, deduped by chunk and optional medical case id.</summary>
+    private static List<ExpertCitationDto> MergeCitationsFromAssistantMessages(IEnumerable<QAMessage> orderedMessages)
+    {
+        var messages = orderedMessages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var seen = new HashSet<(Guid ChunkId, Guid? MedicalCaseId)>();
+        var result = new List<ExpertCitationDto>();
+        foreach (var m in messages)
+        {
+            if (!string.Equals(m.Role, "Assistant", StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (var dto in MapCitations(m.Citations ?? Enumerable.Empty<Citation>()))
+            {
+                var key = (dto.ChunkId, dto.MedicalCaseId);
+                if (seen.Add(key))
+                    result.Add(dto);
+            }
+        }
+
+        return result;
+    }
+
     private static List<ExpertCitationDto> MapCitations(IEnumerable<Citation> citations)
     {
         return citations
             .OrderBy(c => c.Chunk?.ChunkOrder ?? int.MaxValue)
             .Select(c =>
             {
-                CitationItemDto meta = VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk);
+                var meta = VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk);
+                var sourceText = meta.SourceText ?? c.Chunk?.Content;
+                var snippet = meta.Snippet ?? VisualQaCitationMetadataBuilder.BuildSnippet(sourceText);
+
+                if (string.IsNullOrWhiteSpace(sourceText))
+                    sourceText = snippet;
+
+                if (string.IsNullOrWhiteSpace(sourceText) ||
+                    string.Equals(snippet, "Reference excerpt", StringComparison.Ordinal))
+                {
+                    var label = meta.DisplayLabel?.Trim();
+                    var page = meta.PageLabel?.Trim();
+                    var fallback = string.IsNullOrWhiteSpace(label)
+                        ? null
+                        : string.IsNullOrWhiteSpace(page)
+                            ? label
+                            : $"{label} ({page})";
+                    if (!string.IsNullOrWhiteSpace(fallback))
+                    {
+                        sourceText = fallback;
+                        snippet = VisualQaCitationMetadataBuilder.BuildSnippet(fallback);
+                    }
+                }
+
                 return new ExpertCitationDto
                 {
                     ChunkId = c.ChunkId,
+                    DocumentId = c.Chunk?.DocId,
                     MedicalCaseId = meta.MedicalCaseId,
-                    SourceText = meta.SourceText ?? c.Chunk?.Content,
+                    SourceText = sourceText,
                     ReferenceUrl = meta.ReferenceUrl,
                     Href = meta.Href ?? meta.ReferenceUrl,
                     PageNumber = meta.PageNumber,
@@ -831,7 +1051,8 @@ public class ExpertReviewService : IExpertReviewService
                     EndPage = meta.EndPage,
                     PageLabel = meta.PageLabel,
                     DisplayLabel = meta.DisplayLabel,
-                    Snippet = meta.Snippet,
+                    Snippet = snippet,
+                    Preview = snippet,
                     Kind = string.IsNullOrWhiteSpace(meta.Kind) ? "doc" : meta.Kind
                 };
             })

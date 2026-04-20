@@ -1371,14 +1371,26 @@ public class LecturerService : ILecturerService
                     .ThenInclude(c => c.MedicalImages)
                 .Include(s => s.Image)
                 .Include(s => s.Messages)
+                    .ThenInclude(m => m.Citations)
+                        .ThenInclude(c => c.Chunk)
+                            .ThenInclude(ch => ch.Doc)
                 .Where(s => studentIds.Contains(s.StudentId))
-                .Where(s => s.Status == "PendingExpertReview" || s.Status == "EscalatedToExpert")
+                .Where(s => s.Status == "PendingExpertReview")
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
 
             visualRows = sessions.Select(s =>
                 {
                     var (userMessage, assistantMessage) = ResolveRequestedReviewPair(s);
+                    var orderedMessages = s.Messages
+                        .OrderBy(m => m.CreatedAt)
+                        .ThenBy(m => m.Id)
+                        .ToList();
+                    var turns = VisualQaSessionTurnsMapper.BuildTurns(s.Id, orderedMessages, s.Status, s.RequestedReviewMessageId);
+                    var roiJson = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                        userMessage,
+                        s.RequestedReviewMessageId,
+                        turns);
                     var flatImageUrl = ResolveSessionImageUrl(s);
                     var mc = s.Case;
 
@@ -1411,12 +1423,15 @@ public class LecturerService : ILecturerService
                         ReflectiveQuestions = assistantMessage?.ReflectiveQuestions,
                         KeyImagingFindings = assistantMessage?.KeyImagingFindings,
                         DifferentialDiagnoses = assistantMessage?.DifferentialDiagnoses,
-                        CustomCoordinates = userMessage?.Coordinates,
+                        CustomCoordinates = roiJson,
+                        AnnotationCoordinates = roiJson,
+                        QuestionCoordinates = roiJson,
                         CustomImageUrl = s.CustomImageUrl,
                         RequestedReviewMessageId = s.RequestedReviewMessageId,
                         SelectedUserMessageId = userMessage?.Id,
                         SelectedAssistantMessageId = assistantMessage?.Id,
-                        Citations = ResolveLecturerCitations(assistantMessage)
+                        Citations = ResolveLecturerCitations(assistantMessage),
+                        Turns = turns
                     };
                 })
                 .ToList();

@@ -836,10 +836,10 @@ public class LecturersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            if (ex.Message.StartsWith("Cannot ", StringComparison.OrdinalIgnoreCase))
-                return Conflict(new { message = ex.Message });
-
             if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+
+            if (ex.Message.StartsWith("Cannot ", StringComparison.OrdinalIgnoreCase))
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
 
             return BadRequest(new { message = ex.Message });

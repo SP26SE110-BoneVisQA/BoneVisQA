@@ -804,25 +804,24 @@ public class GeminiService : IGeminiService
             };
         }
 
+        // Không gán AnswerText = diagnosis: SaveVisualQAMessagesAsync lưu Content = AnswerText;
+        // trùng SuggestedDiagnosis làm qa_messages.content lặp chẩn đoán → FE/streaming/request history phình token & UI trùng.
+        // Toàn bộ lâm sàng nằm ở SuggestedDiagnosis / KeyImagingFindings / …; narrative phẳng chỉ khi sau này có luồng riêng.
         return new VisualQAResponseDto
         {
-            AnswerText = canonical.Diagnosis,
+            AnswerText = string.Empty,
             SuggestedDiagnosis = canonical.Diagnosis,
             DifferentialDiagnoses = canonical.DifferentialDiagnoses.Count == 0 ? null : canonical.DifferentialDiagnoses.ToList(),
             KeyImagingFindings = canonical.Findings.Count == 0 ? null : string.Join("\n- ", canonical.Findings),
             ReflectiveQuestions = canonical.ReflectiveQuestions.Count == 0 ? null : string.Join("\n- ", canonical.ReflectiveQuestions),
             AiConfidenceScore = null,
             ErrorMessage = null,
-            ResponseKind = DetermineResponseKind(canonical.Diagnosis, canonical.Findings, canonical.DifferentialDiagnoses, canonical.ReflectiveQuestions),
+            ResponseKind = DetermineResponseKind(canonical.Diagnosis),
             Citations = canonical.Citations.ToList()
         };
     }
 
-    private static string DetermineResponseKind(
-        string diagnosis,
-        IReadOnlyList<string> findings,
-        IReadOnlyList<string> differentialDiagnoses,
-        IReadOnlyList<string> reflectiveQuestions)
+    private static string DetermineResponseKind(string diagnosis)
     {
         if (string.IsNullOrWhiteSpace(diagnosis))
             return "clarification";
@@ -835,9 +834,8 @@ public class GeminiService : IGeminiService
             string.Equals(text, FallbackNoReliableInfoAnswer, StringComparison.Ordinal))
             return "clarification";
 
-        return findings.Count == 0 && differentialDiagnoses.Count == 0 && reflectiveQuestions.Count == 0
-            ? "clarification"
-            : "analysis";
+        // Khớp VisualQaSessionTurnsMapper: có chẩn đoán lâm sàng (JSON diagnosis) là analysis, kể cả khi listings rỗng.
+        return "analysis";
     }
 
     private static VisualQaApiResponseDto ValidateAndReadCanonicalResponse(JsonElement result)

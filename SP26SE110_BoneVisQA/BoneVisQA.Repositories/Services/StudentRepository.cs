@@ -24,6 +24,8 @@ public class StudentRepository : IStudentRepository
 
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
+            .Include(c => c.CaseTags)
+                .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
@@ -68,7 +70,24 @@ public class StudentRepository : IStudentRepository
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var escaped = EscapeForILike(filter.SearchText.Trim());
+            var pattern = $"%{escaped}%";
+            query = query.Where(c =>
+                EF.Functions.ILike(c.Title, pattern) ||
+                EF.Functions.ILike(c.Description, pattern));
+        }
+
         return await query.OrderByDescending(c => c.CreatedAt).ToListAsync();
+    }
+
+    private static string EscapeForILike(string value)
+    {
+        return value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 
     public async Task<MedicalCase?> GetCaseWithImagesAsync(Guid caseId)
@@ -79,6 +98,7 @@ public class StudentRepository : IStudentRepository
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
+                .ThenInclude(mi => mi.CaseAnnotations)
             .FirstOrDefaultAsync();
     }
 

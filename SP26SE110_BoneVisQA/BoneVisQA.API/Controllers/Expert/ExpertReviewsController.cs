@@ -51,6 +51,42 @@ public class ExpertReviewsController : ControllerBase
         return Ok(result);
     }
 
+    private async Task<ActionResult<ExpertEscalatedAnswerDto>> GetEscalatedSessionDetailCore(Guid sessionId)
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _expertReviewService.GetEscalatedSessionDetailAsync(expertId.Value, sessionId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Full expert-review session (citations merged across assistant turns). FE primary detail URL.</summary>
+    [HttpGet("{sessionId:guid}")]
+    [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<ExpertEscalatedAnswerDto>> GetEscalatedSessionDetail(Guid sessionId)
+        => GetEscalatedSessionDetailCore(sessionId);
+
+    /// <summary>Alternate detail path used by some FE clients.</summary>
+    [HttpGet("{sessionId:guid}/session")]
+    [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
+    public Task<ActionResult<ExpertEscalatedAnswerDto>> GetEscalatedSessionDetailSessionAlias(Guid sessionId)
+        => GetEscalatedSessionDetailCore(sessionId);
+
     /// <summary>
     /// Resolves an escalated answer and stores the expert-reviewed outcome.
     /// </summary>

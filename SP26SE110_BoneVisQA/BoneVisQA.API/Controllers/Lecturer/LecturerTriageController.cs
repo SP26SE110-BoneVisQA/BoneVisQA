@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
@@ -53,13 +54,26 @@ public class LecturerTriageController : ControllerBase
         }
     }
 
-    [HttpPost("{sessionId:guid}/reject")]
+    /// <summary>Visual QA: <paramref name="answerId"/> is the session id (same as triage row <c>answerId</c>). Supports FE POST; <see cref="RejectPut"/> for PUT fallback.</summary>
+    [HttpPost("{answerId:guid}/reject")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Reject(Guid sessionId, [FromBody] RejectAnswerRequestDto request)
+    public Task<IActionResult> RejectPost(Guid answerId, [FromBody] RejectAnswerRequestDto request)
+        => RejectCore(answerId, request);
+
+    [HttpPut("{answerId:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> RejectPut(Guid answerId, [FromBody] RejectAnswerRequestDto request)
+        => RejectCore(answerId, request);
+
+    private async Task<IActionResult> RejectCore(Guid answerId, RejectAnswerRequestDto request)
     {
         var lecturerId = GetUserIdFromClaims();
         if (lecturerId == null)
@@ -67,7 +81,7 @@ public class LecturerTriageController : ControllerBase
 
         try
         {
-            await _lecturerTriageService.RejectAnswerAsync(lecturerId.Value, sessionId, request.Reason);
+            await _lecturerTriageService.RejectAnswerAsync(lecturerId.Value, answerId, request.Reason);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -84,7 +98,8 @@ public class LecturerTriageController : ControllerBase
 
     private Guid? GetUserIdFromClaims()
     {
-        var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        return Guid.TryParse(rawUserId, out var userId) && userId != Guid.Empty ? userId : null;
     }
 }

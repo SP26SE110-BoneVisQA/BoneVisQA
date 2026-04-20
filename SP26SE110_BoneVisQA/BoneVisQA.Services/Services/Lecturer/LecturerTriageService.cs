@@ -81,13 +81,23 @@ public class LecturerTriageService : ILecturerTriageService
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
 
-        var latestUser = session.Messages
+        await _notificationService.SendNotificationToUserAsync(
+            session.StudentId,
+            "Your Visual QA session was escalated to an expert",
+            "A lecturer escalated your session for expert review. You will be notified when the expert responds.",
+            "visual_qa",
+            $"/student/qa/image?sessionId={session.Id}");
+
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var turns = VisualQaSessionTurnsMapper.BuildTurns(session.Id, orderedMessages, session.Status, session.RequestedReviewMessageId);
+        var latestUser = orderedMessages
             .Where(m => m.Role == "User")
-            .OrderBy(m => m.CreatedAt)
             .LastOrDefault();
-        var latestAssistant = session.Messages
+        var latestAssistant = orderedMessages
             .Where(m => m.Role == "Assistant")
-            .OrderBy(m => m.CreatedAt)
             .LastOrDefault();
         var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session);
         EnsureSelectedPairConsistency(session, targetUser, targetAssistant);
@@ -113,7 +123,10 @@ public class LecturerTriageService : ILecturerTriageService
             ClassName = classEnrollment.Class?.ClassName ?? string.Empty,
             ReviewNote = request?.ReviewNote,
             ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = targetUser?.Coordinates,
+            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                targetUser,
+                session.RequestedReviewMessageId,
+                turns),
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = targetUser?.Id,
             SelectedAssistantMessageId = targetAssistant?.Id,
@@ -146,6 +159,8 @@ public class LecturerTriageService : ILecturerTriageService
         session.LecturerId = lecturerId;
         session.UpdatedAt = DateTime.UtcNow;
 
+        var (_, assistantForFeedback) = ResolveRequestedReviewPair(session);
+
         var rejectionMessage = new QAMessage
         {
             Id = Guid.NewGuid(),
@@ -153,7 +168,8 @@ public class LecturerTriageService : ILecturerTriageService
             Role = "Lecturer",
             Content = reason.Trim(),
             CreatedAt = DateTime.UtcNow,
-            TargetAssistantMessageId = session.RequestedReviewMessageId
+            // Align with escalate/triage: prefer the review target assistant when set; otherwise latest assistant turn.
+            TargetAssistantMessageId = assistantForFeedback?.Id
         };
 
         await _unitOfWork.Context.QaMessages.AddAsync(rejectionMessage);
