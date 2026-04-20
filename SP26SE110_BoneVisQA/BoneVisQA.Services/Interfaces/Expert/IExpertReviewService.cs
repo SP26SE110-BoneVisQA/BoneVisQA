@@ -11,6 +11,8 @@ public interface IExpertReviewService
     Task ApproveSessionAsync(Guid expertId, Guid sessionId);
     Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request);
     Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request);
+    Task<ExpertVisualSessionDraftResponseDto> UpsertSessionReviewDraftAsync(Guid expertId, Guid sessionId, ExpertVisualSessionDraftRequestDto request);
+    Task DeleteSessionReviewDraftAsync(Guid expertId, Guid sessionId);
 }
 
 public interface IExpertDashboardService

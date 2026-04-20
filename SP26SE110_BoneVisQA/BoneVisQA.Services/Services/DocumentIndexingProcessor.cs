@@ -101,6 +101,15 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 new object[] { documentId },
                 cancellationToken);
 
+            // Remove existing pgvector rows for this document immediately so failed runs never leave stale embeddings in RAG.
+            // Citations referencing old chunk ids cascade-delete (see citations_chunk_id_fkey). Final swap still replaces rows atomically on success.
+            await _unitOfWork.Context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM document_chunks WHERE doc_id = {0}",
+                new object[] { documentId },
+                cancellationToken);
+
+            _logger.LogInformation("[DocumentIndexing] Cleared document_chunks for doc {DocumentId} before rebuild.", documentId);
+
             SetProgress(documentId, 5, "Downloading PDF (stream to disk)...", document.TotalPages, document.TotalChunks, document.CurrentPageIndexing);
             tempPdfPath = await _pdfProcessing.DownloadPdfToTempFileAsync(sourceFilePath, cancellationToken);
 

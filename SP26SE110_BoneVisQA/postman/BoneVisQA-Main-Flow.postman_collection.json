@@ -1,0 +1,604 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-bone-vis-qa-main",
+    "name": "BoneVisQA — Main flow (Student → Lecturer → Expert)",
+    "description": "Collection UAT cho luồng Visual QA: đăng nhập 3 role, ask-json, history, request-review, triage, escalate, expert queue, respond/promote.\n\n**Trước khi chạy:** import environment `BoneVisQA Local` (đã có giá trị mẫu trong repo). Lượt đầu `Ask JSON` cần **imageUrl** trỏ tới ảnh đã có trên Supabase (cùng host cấu hình Supabase:Url).\n\n**One-click report:** Postman → Collection **⋯** → **Run collection** (hoặc Run folder `0 — Runner` → … `99 — Runner report`). Mở **View → Show Postman Console**, chạy xong request **ZZ Print E2E log** và copy khối log gửi BE.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5046"
+    },
+    {
+      "key": "__runLog",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const name = pm.info.requestName || '(unnamed)';",
+          "const method = pm.request.method;",
+          "const code = pm.response.code;",
+          "const line = `${method}\\t${code}\\t${name}`;",
+          "let prev = pm.collectionVariables.get('__runLog');",
+          "if (prev === undefined || prev === null) prev = '';",
+          "pm.collectionVariables.set('__runLog', prev + '\\n' + line);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0 — Runner (one-click)",
+      "description": "Chạy **Collection Runner** trên **toàn bộ collection** (hoặc chọn từ folder 0 → 99). Bước đầu xóa log; bước cuối in log ra **Postman Console** để copy gửi BE.",
+      "item": [
+        {
+          "name": "00 Reset run log",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('__runLog', '');"],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reset log prerequest ran', () => pm.expect(true).to.eql(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/DbHealth/check",
+            "description": "Request nhẹ (health) để kích hoạt prerequest xóa `__runLog` trước khi chạy các folder sau."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1 — Auth",
+      "item": [
+        {
+          "name": "Login Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j.token) pm.environment.set('tokenStudent', j.token);",
+                  "  pm.test('Login student 200', () => pm.response.to.have.status(200));",
+                  "} catch (e) { pm.test('JSON parse', () => pm.expect.fail(e.message)); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{studentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auths/login",
+            "description": "Lưu JWT vào biến môi trường `tokenStudent`."
+          },
+          "response": []
+        },
+        {
+          "name": "Login Lecturer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j.token) pm.environment.set('tokenLecturer', j.token);",
+                  "  pm.test('Login lecturer 200', () => pm.response.to.have.status(200));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{lecturerEmail}}\",\n  \"password\": \"{{lecturerPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auths/login"
+          },
+          "response": []
+        },
+        {
+          "name": "Login Expert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j.token) pm.environment.set('tokenExpert', j.token);",
+                  "  pm.test('Login expert 200', () => pm.response.to.have.status(200));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{expertEmail}}\",\n  \"password\": \"{{expertPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auths/login"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2 — Student Visual QA",
+      "item": [
+        {
+          "name": "Ask JSON (first turn)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const d = pm.response.json();",
+                  "  if (d.sessionId) pm.environment.set('sessionId', d.sessionId);",
+                  "  if (d.latestTurn && d.latestTurn.turnId) pm.environment.set('turnId', d.latestTurn.turnId);",
+                  "  pm.test('Ask 200', () => pm.response.to.have.status(200));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionText\": \"Describe lucent lesion pattern in the ROI for student UAT.\",\n  \"imageUrl\": \"{{supabasePublicImageUrl}}\",\n  \"language\": \"en\"\n}"
+            },
+            "url": "{{baseUrl}}/api/student/visual-qa/ask-json",
+            "description": "Cần `supabasePublicImageUrl` là URL absolute trên cùng host Supabase với backend (SSRF guard). Sau khi chạy, copy `sessionId` / `turnId` từ env nếu Tests chạy OK."
+          },
+          "response": []
+        },
+        {
+          "name": "History personal",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/student/visual-qa/history/personal?limit=20&offset=0"
+          },
+          "response": []
+        },
+        {
+          "name": "History thread by session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Thread 200', () => pm.response.to.have.status(200));",
+                  "try {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('Has image alias', () => pm.expect(!!(d.sessionImageUrl || d.imageUrl || d.studyImageUrl)).to.eql(true));",
+                  "  pm.test('Has turns', () => pm.expect(Array.isArray(d.turns)).to.eql(true));",
+                  "  pm.test('Has roi field', () => pm.expect(Object.prototype.hasOwnProperty.call(d, 'roiBoundingBox')).to.eql(true));",
+                  "} catch (e) { pm.test('Thread JSON parse', () => pm.expect.fail(e.message)); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/student/visual-qa/history/{{sessionId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Request review (selected turn)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Request review 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "try {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('Has capabilities', () => pm.expect(d).to.have.property('capabilities'));",
+                  "} catch (e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/student/visual-qa/turns/{{turnId}}/request-review?sessionId={{sessionId}}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 — Lecturer",
+      "item": [
+        {
+          "name": "Triage Visual QA only",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lecturer/triage/visual-qa?classId={{classId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Student questions (source=visual-qa)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lecturer/classes/{{classId}}/questions?source=visual-qa"
+          },
+          "response": []
+        },
+        {
+          "name": "Question detail (Visual session id)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lecturer/classes/{{classId}}/questions/{{sessionId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Respond approve_and_escalate",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answerText\": \"\",\n  \"approve\": true,\n  \"decision\": \"approve_and_escalate\"\n}"
+            },
+            "url": "{{baseUrl}}/api/lecturer/classes/{{classId}}/questions/{{sessionId}}/respond",
+            "description": "Visual QA: `questionId` trong route = **sessionId**."
+          },
+          "response": []
+        },
+        {
+          "name": "Escalate (legacy triage route)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reviewNote\": \"UAT escalate from Postman\"\n}"
+            },
+            "url": "{{baseUrl}}/api/lecturer/triage/{{sessionId}}/escalate",
+            "description": "Dự phòng nếu không dùng `respond`. `answerId` = session id cho Visual QA."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenLecturer}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Rejected in Postman UAT — insufficient clinical context.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/lecturer/triage/{{sessionId}}/reject",
+            "description": "Nhánh thay escalate — session chuyển Rejected; không chạy cùng escalate trên cùng session."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4 — Expert",
+      "item": [
+        {
+          "name": "Queue escalated",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/expert/reviews/escalated"
+          },
+          "response": []
+        },
+        {
+          "name": "Queue case-answer (alias)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/expert/reviews/case-answer"
+          },
+          "response": []
+        },
+        {
+          "name": "Respond to session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Expert guidance from Postman UAT. Follow up with clinician if pain worsens.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/expert/reviews/{{sessionId}}/respond"
+          },
+          "response": []
+        },
+        {
+          "name": "Approve session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/expert/reviews/{{sessionId}}/approve"
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve escalated (full edit)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answerText\": \"resolved answer text\",\n  \"structuredDiagnosis\": \"\",\n  \"reviewNote\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/api/expert/reviews/{{sessionId}}/resolve"
+          },
+          "response": []
+        },
+        {
+          "name": "Promote to library",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keyFindings\": \"Key findings UAT\",\n  \"reflectiveQuestions\": \"What would you rule out first?\",\n  \"suggestedDiagnosis\": \"Working diagnosis UAT\",\n  \"description\": \"Case description UAT\"\n}"
+            },
+            "url": "{{baseUrl}}/api/expert/reviews/{{sessionId}}/promote"
+          },
+          "response": []
+        },
+        {
+          "name": "Flag citation chunk",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenExpert}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Low relevance / outdated\"\n}"
+            },
+            "url": "{{baseUrl}}/api/expert/reviews/chunks/{{chunkId}}/flag",
+            "description": "Điền chunkId từ citations của assistant message (nếu có)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5 — Student verify after expert",
+      "item": [
+        {
+          "name": "History thread again",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/student/visual-qa/history/{{sessionId}}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6 — Notifications & Activity",
+      "item": [
+        {
+          "name": "Notifications (Student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Notifications 200', () => pm.response.to.have.status(200));",
+                  "try {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('Notifications list', () => pm.expect(Array.isArray(d)).to.eql(true));",
+                  "  if (Array.isArray(d) && d.length > 0) {",
+                  "    const n = d[0];",
+                  "    pm.test('Has targetUrl field', () => pm.expect(Object.prototype.hasOwnProperty.call(n, 'targetUrl')).to.eql(true));",
+                  "    pm.test('Has route field', () => pm.expect(Object.prototype.hasOwnProperty.call(n, 'route')).to.eql(true));",
+                  "  }",
+                  "} catch (e) { pm.test('Notifications JSON parse', () => pm.expect.fail(e.message)); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/notifications"
+          },
+          "response": []
+        },
+        {
+          "name": "Recent activity (Student)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Recent activity 200', () => pm.response.to.have.status(200));",
+                  "try {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('Recent activity list', () => pm.expect(Array.isArray(d)).to.eql(true));",
+                  "  const vqa = Array.isArray(d) ? d.find(x => (x.activityType || '').toLowerCase().includes('visual')) : null;",
+                  "  if (vqa) {",
+                  "    pm.test('Visual QA item has sessionId', () => pm.expect(!!vqa.sessionId).to.eql(true));",
+                  "    pm.test('Visual QA item has targetUrl', () => pm.expect(!!vqa.targetUrl).to.eql(true));",
+                  "  }",
+                  "} catch (e) { pm.test('Recent activity JSON parse', () => pm.expect.fail(e.message)); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tokenStudent}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/student/progress/recent-activity"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "99 — Runner report",
+      "description": "Sau khi Runner chạy xong các folder 1–6, chạy request này (hoặc để nó là bước cuối trong Run). Mở **View → Show Postman Console** để copy khối log.",
+      "item": [
+        {
+          "name": "ZZ Print E2E log (copy from Console)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const log = pm.collectionVariables.get('__runLog') || '';",
+                  "const block = '\\n========== BONEVISQA E2E RUN LOG ==========' + log + '\\n============================================\\n';",
+                  "console.log(block);",
+                  "if (!log || !log.trim()) {",
+                  "  console.log('(Log trống — chạy Run collection từ đầu, gồm folder 0 và các request auth/visual qa.)');",
+                  "}",
+                  "pm.test('Mở Postman Console để copy log (kể cả khi log trống)', () => pm.expect(true).to.eql(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/DbHealth/check",
+            "description": "In `__runLog` ra Console. Nếu log trống: chưa chạy đủ request trong Runner."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

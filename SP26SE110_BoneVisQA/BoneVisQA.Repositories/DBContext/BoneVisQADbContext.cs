@@ -320,6 +320,8 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
 
+            entity.HasIndex(e => e.DocId).HasDatabaseName("ix_document_chunks_doc_id");
+
             // Ensure pgvector embedding dimension matches the embedding model output.
             entity.Property(e => e.Embedding).HasColumnType("vector(768)");
             entity.HasIndex(e => e.Embedding)
