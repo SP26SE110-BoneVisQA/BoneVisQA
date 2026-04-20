@@ -30,6 +30,9 @@ public partial class ExpertReview
     [Column("action")]
     public string? Action { get; set; }
 
+    [Column("corrected_roi", TypeName = "jsonb")]
+    public string? CorrectedRoi { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

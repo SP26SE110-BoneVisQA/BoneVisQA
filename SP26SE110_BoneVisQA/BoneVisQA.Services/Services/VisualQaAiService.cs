@@ -4,8 +4,10 @@ using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
@@ -15,24 +17,26 @@ namespace BoneVisQA.Services.Services;
 public class VisualQaAiService : IVisualQaAiService
 {
     private sealed record RagContextItem(double Similarity, DocumentChunk? Chunk, MedicalCase? Case);
-    private sealed record QuestionPolicyClassification(string PolicyReason, bool AllowDiagnosticGeneration);
+
+    private sealed record PreparedGeminiPipeline(
+        string Prompt,
+        string GeminiImagePayload,
+        string? ConversationHistory,
+        bool RagContextAdequate,
+        double CalculatedScore,
+        List<CitationItemDto> CitationsFromRag);
 
     private const double MinimumRelevantSimilarity = 0.72d;
     private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
     private const string InvalidBoneXrayUserMessage =
         "The system detected that this is not a valid human bone X-ray image. Please upload a proper medical X-ray image for analysis support.";
-    // Intentionally no longer appended to answers — see Gemini RAG policy (plain Vietnamese, no boilerplate note).
+    // Response language for Gemini prompts is resolved per-request (VisualQARequestDto.Language); see AppendResponseLanguageInstruction.
     private const string TemporaryVectorSearchUnavailableAnswer =
         "Vector search is temporarily unavailable due to high network demand. Please try again later.";
     private const string TemporaryAiGenerationUnavailableAnswer =
         "AI generation service is temporarily unavailable due to high network demand. Please try again later.";
     private const string AiOverloadVietnameseMessage =
         "The AI system is overloaded. Please try again later.";
-    private const string OffTopicQuestionRefusalMessage =
-        "Tin nhắn nằm ngoài lĩnh vực y khoa cơ xương khớp. Vui lòng đặt câu hỏi chuyên môn liên quan đến hình ảnh X-quang xương/khớp hoặc chẩn đoán y khoa.";
-    private const string AmbiguousQuestionClarificationMessage =
-        "Câu hỏi chưa đủ rõ để phân tích y khoa. Vui lòng mô tả cụ thể triệu chứng hoặc dấu hiệu bạn muốn đánh giá trên ảnh X-quang.";
-
     private const int RagChunkFetch = 12;
     private const int RagCaseFetch = 12;
     private const int RagTopMerged = 5;
@@ -56,29 +60,72 @@ public class VisualQaAiService : IVisualQaAiService
 
     public async Task<VisualQAResponseDto> RunPipelineAsync(VisualQARequestDto request, CancellationToken cancellationToken = default)
     {
-        var questionPolicy = ClassifyQuestionPolicy(request.QuestionText, request.SessionId.HasValue && request.SessionId.Value != Guid.Empty);
-        if (!questionPolicy.AllowDiagnosticGeneration)
+        var (earlyExit, prepared) = await TryPrepareGeminiPipelineAsync(request, cancellationToken);
+        if (earlyExit != null)
+            return AttachVisualQaCaseContext(request, earlyExit);
+
+        VisualQAResponseDto response;
+        try
         {
-            var refusalText = string.Equals(questionPolicy.PolicyReason, "ambiguous_intent", StringComparison.Ordinal)
-                ? AmbiguousQuestionClarificationMessage
-                : OffTopicQuestionRefusalMessage;
-            return new VisualQAResponseDto
+            response = await _geminiService.GenerateMedicalAnswerAsync(
+                prepared!.Prompt,
+                prepared.GeminiImagePayload,
+                prepared.ConversationHistory,
+                prepared.RagContextAdequate,
+                cancellationToken);
+        }
+        catch (AiResponseFormatException)
+        {
+            throw;
+        }
+        catch
+        {
+            throw new InvalidOperationException(AiOverloadVietnameseMessage);
+        }
+
+        return FinalizeGeminiResponse(request, prepared!, response);
+    }
+
+    public async Task<VisualQaStreamingPipelineResult> RunStreamingPipelineAsync(
+        VisualQARequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var (earlyExit, prepared) = await TryPrepareGeminiPipelineAsync(request, cancellationToken);
+        if (earlyExit != null)
+        {
+            return new VisualQaStreamingPipelineResult
             {
-                AnswerText = refusalText,
-                SuggestedDiagnosis = refusalText,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = null,
-                ResponseKind = "refusal",
-                PolicyReason = questionPolicy.PolicyReason,
-                ClientRequestId = request.ClientRequestId,
-                Citations = new List<CitationItemDto>()
+                TextDeltas = EmptyTextDeltas(cancellationToken),
+                CompletedResponseAsync = Task.FromResult(AttachVisualQaCaseContext(request, earlyExit))
             };
         }
 
-        // Bounding-box ROI overlay when coordinates are present (single image fetch for the generation call).
+        var unavailable = _geminiService.TryGetUnavailableFallbackResponse();
+        if (unavailable != null)
+        {
+            return new VisualQaStreamingPipelineResult
+            {
+                TextDeltas = EmptyTextDeltas(cancellationToken),
+                CompletedResponseAsync = Task.FromResult(AttachVisualQaCaseContext(request, unavailable))
+            };
+        }
+
+        var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        var completion = new TaskCompletionSource<VisualQAResponseDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _ = PumpStreamingGeminiPipelineAsync(channel.Writer, completion, prepared!, request, cancellationToken);
+
+        return new VisualQaStreamingPipelineResult
+        {
+            TextDeltas = channel.Reader.ReadAllAsync(cancellationToken),
+            CompletedResponseAsync = completion.Task
+        };
+    }
+
+    private async Task<(VisualQAResponseDto? earlyExit, PreparedGeminiPipeline? prepared)> TryPrepareGeminiPipelineAsync(
+        VisualQARequestDto request,
+        CancellationToken cancellationToken)
+    {
         string? imageB64 = null;
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
         {
@@ -88,7 +135,6 @@ public class VisualQaAiService : IVisualQaAiService
                 cancellationToken);
         }
 
-        // SEPS: combine question with ROI/image context for retrieval (text embedding; vision model handles image in Gemini).
         var ragQueryText = BuildRagEmbeddingQuery(request);
         float[] embedding;
         try
@@ -149,49 +195,41 @@ public class VisualQaAiService : IVisualQaAiService
         var currentTurnNumber = existingUserTurns + 1;
         var prompt = BuildGeminiPrompt(request, ragItems, ragContextAdequate, predefinedCase, currentTurnNumber);
 
-        // GeminiService expects "imageUrl" input, but we pass Base64 for our inlineData workflow.
-        VisualQAResponseDto response;
-        try
-        {
-            response = await _geminiService.GenerateMedicalAnswerAsync(
-                prompt,
-                imageB64 ?? string.Empty,
-                conversationHistory,
-                ragContextAdequate,
-                cancellationToken);
-        }
-        catch (AiResponseFormatException)
-        {
-            throw;
-        }
-        catch
-        {
-            // Do not persist user/assistant messages when generation fails.
-            throw new InvalidOperationException(AiOverloadVietnameseMessage);
-        }
+        return (null, new PreparedGeminiPipeline(
+            prompt,
+            imageB64 ?? string.Empty,
+            conversationHistory,
+            ragContextAdequate,
+            calculatedScore,
+            citationsFromRag));
+    }
 
+    private VisualQAResponseDto FinalizeGeminiResponse(
+        VisualQARequestDto request,
+        PreparedGeminiPipeline prepared,
+        VisualQAResponseDto response)
+    {
         if (IsInvalidImageNotXrayResponse(response.AnswerText))
         {
-            return new VisualQAResponseDto
+            return AttachVisualQaCaseContext(request, new VisualQAResponseDto
             {
                 AnswerText = InvalidBoneXrayUserMessage,
                 SuggestedDiagnosis = null,
                 DifferentialDiagnoses = null,
                 KeyImagingFindings = null,
                 ReflectiveQuestions = null,
-                AiConfidenceScore = calculatedScore,
+                AiConfidenceScore = prepared.CalculatedScore,
                 ResponseKind = "refusal",
                 PolicyReason = "invalid_image",
                 ClientRequestId = request.ClientRequestId,
                 Citations = new List<CitationItemDto>()
-            };
+            });
         }
 
         var isNonMedicalRefusal = IsNonMedicalRefusalAnswer(response.AnswerText);
 
         if (isNonMedicalRefusal)
         {
-            // We cannot provide medical citations for rejected/invalid queries.
             response.Citations = new List<CitationItemDto>();
             response.SuggestedDiagnosis = null;
             response.DifferentialDiagnoses = null;
@@ -202,20 +240,19 @@ public class VisualQaAiService : IVisualQaAiService
         }
         else
         {
-            // If Gemini provided citationChunkIds, we enrich them; otherwise, we fall back to top retrieved chunks.
             if (response.Citations == null || response.Citations.Count == 0)
             {
-                response.Citations = citationsFromRag
+                response.Citations = prepared.CitationsFromRag
                     .Take(RagTopMerged)
                     .ToList();
             }
             else
             {
-                response.Citations = FilterCitationsAgainstContext(response.Citations, citationsFromRag);
-                var metaByChunkId = citationsFromRag
+                response.Citations = FilterCitationsAgainstContext(response.Citations, prepared.CitationsFromRag);
+                var metaByChunkId = prepared.CitationsFromRag
                     .Where(c => c.MedicalCaseId == null && c.ChunkId != Guid.Empty)
                     .ToDictionary(c => c.ChunkId, c => c);
-                var metaByCaseId = citationsFromRag
+                var metaByCaseId = prepared.CitationsFromRag
                     .Where(c => c.MedicalCaseId != null)
                     .ToDictionary(c => c.MedicalCaseId!.Value, c => c);
                 foreach (var citation in response.Citations)
@@ -245,12 +282,72 @@ public class VisualQaAiService : IVisualQaAiService
             }
         }
 
-        response.AiConfidenceScore = calculatedScore;
+        response.AiConfidenceScore = prepared.CalculatedScore;
         response.ClientRequestId = request.ClientRequestId;
         response.ResponseKind = string.IsNullOrWhiteSpace(response.ResponseKind) ? "analysis" : response.ResponseKind;
-        response.PolicyReason ??= questionPolicy.PolicyReason;
+        response.PolicyReason ??= "medical_intent";
 
+        return AttachVisualQaCaseContext(request, response);
+    }
+
+    private static VisualQAResponseDto AttachVisualQaCaseContext(VisualQARequestDto request, VisualQAResponseDto response)
+    {
+        response.CaseId = NormalizeVisualQaCaseId(request.CaseId);
         return response;
+    }
+
+    private static Guid? NormalizeVisualQaCaseId(Guid? caseId) =>
+        caseId.HasValue && caseId.Value != Guid.Empty ? caseId : null;
+
+    private async Task PumpStreamingGeminiPipelineAsync(
+        ChannelWriter<string> writer,
+        TaskCompletionSource<VisualQAResponseDto> completion,
+        PreparedGeminiPipeline prepared,
+        VisualQARequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sb = new StringBuilder();
+            await foreach (var delta in _geminiService.StreamMedicalAnswerRawAsync(
+                               prepared.Prompt,
+                               prepared.GeminiImagePayload,
+                               prepared.ConversationHistory,
+                               prepared.RagContextAdequate,
+                               cancellationToken))
+            {
+                sb.Append(delta);
+                await writer.WriteAsync(delta, cancellationToken).ConfigureAwait(false);
+            }
+
+            writer.TryComplete();
+
+            var raw = sb.ToString();
+            VisualQAResponseDto parsed;
+            try
+            {
+                parsed = _geminiService.ParseMedicalAnswerFromRawResponse(raw);
+            }
+            catch (AiResponseFormatException ex)
+            {
+                completion.TrySetException(ex);
+                return;
+            }
+
+            completion.TrySetResult(FinalizeGeminiResponse(request, prepared, parsed));
+        }
+        catch (Exception ex)
+        {
+            writer.TryComplete(ex);
+            completion.TrySetException(ex);
+        }
+    }
+
+    private static async IAsyncEnumerable<string> EmptyTextDeltas([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask.ConfigureAwait(false);
+        _ = cancellationToken;
+        yield break;
     }
 
     private static List<CitationItemDto> FilterCitationsAgainstContext(
@@ -394,6 +491,14 @@ public class VisualQaAiService : IVisualQaAiService
                || answerText.Contains("not related to the medical domain", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Dynamic response language for Gemini (controlled by client locale / Accept-Language).</summary>
+    private static void AppendResponseLanguageInstruction(StringBuilder sb, string instructionLanguageName)
+    {
+        sb.Append("You must reason, explain, and respond strictly in ");
+        sb.Append(instructionLanguageName);
+        sb.AppendLine(". However, you are permitted and encouraged to retain standard Latin medical terminology and specific bone disease names without forcing translation if it compromises accuracy.");
+    }
+
     private static string BuildGeminiPrompt(
         VisualQARequestDto request,
         IReadOnlyList<RagContextItem> ragItems,
@@ -509,75 +614,27 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("Never change left/right laterality unless the image, ROI, retrieved context, or previous conversation explicitly justifies the change.");
         sb.AppendLine("For follow-up questions that verify/compare with previous answers, preserve prior conclusions unless new evidence in image/ROI/context clearly contradicts them.");
         sb.AppendLine("If the user question is social/off-topic and not medical, do not analyze image content and return a refusal according to system policy.");
-        sb.AppendLine("You must reason, explain, and respond entirely in professional medical Vietnamese.");
+
+        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(request.Language);
+        AppendResponseLanguageInstruction(sb, instructionLang);
 
         sb.AppendLine();
         sb.AppendLine("Format: Strict JSON only with fields: diagnosis, findings, differential_diagnoses, reflective_questions, citations.");
         sb.AppendLine("Use this exact structure (use null for optional fields when refusing or when not applicable):");
-        sb.AppendLine(
-            """
-            {
-              "diagnosis": "Primary diagnosis in Vietnamese. Use a binary lead-in only when the question is truly binary and the evidence is decisive.",
-              "findings": ["Key imaging finding 1", "Key imaging finding 2"],
-              "differential_diagnoses": ["Differential 1", "Differential 2"],
-              "reflective_questions": ["Question 1", "Question 2"],
-              "citations": [
-                { "kind": "Doc", "id": "00000000-0000-0000-0000-000000000000" },
-                { "kind": "Case", "id": "00000000-0000-0000-0000-000000000000" }
-              ]
-            }
-            """);
+        sb.AppendLine("{");
+        sb.Append("  \"diagnosis\": \"Primary diagnosis in ").Append(instructionLang)
+            .AppendLine(". Use a binary lead-in only when the question is truly binary and the evidence is decisive.\",");
+        sb.AppendLine("  \"findings\": [\"Key imaging finding 1\", \"Key imaging finding 2\"],");
+        sb.AppendLine("  \"differential_diagnoses\": [\"Differential 1\", \"Differential 2\"],");
+        sb.AppendLine("  \"reflective_questions\": [\"Question 1\", \"Question 2\"],");
+        sb.AppendLine("  \"citations\": [");
+        sb.AppendLine("    { \"kind\": \"Doc\", \"id\": \"00000000-0000-0000-0000-000000000000\" },");
+        sb.AppendLine("    { \"kind\": \"Case\", \"id\": \"00000000-0000-0000-0000-000000000000\" }");
+        sb.AppendLine("  ]");
+        sb.AppendLine("}");
         sb.AppendLine("The \"citations\" array must list every [Doc:...] and [Case:...] marker you relied on (kind is Doc or Case; id is the UUID). Use an empty array [] when no library sources were used.");
 
         return sb.ToString();
-    }
-
-    private static QuestionPolicyClassification ClassifyQuestionPolicy(string? questionText, bool isFollowUpTurn)
-    {
-        if (string.IsNullOrWhiteSpace(questionText))
-            return new QuestionPolicyClassification("off_topic", false);
-
-        var normalized = questionText.Trim().ToLowerInvariant();
-        var tokenCount = normalized
-            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Length;
-        if (normalized.Contains("ignore previous instructions", StringComparison.Ordinal) ||
-            normalized.Contains("bypass policy", StringComparison.Ordinal) ||
-            normalized.Contains("prompt injection", StringComparison.Ordinal))
-        {
-            return new QuestionPolicyClassification("prompt_attack", false);
-        }
-
-        var medicalKeywords = new[]
-        {
-            "x-quang", "xquang", "xray", "x-ray", "roi", "xuong", "xương", "khop", "khớp",
-            "chan doan", "chẩn đoán", "gãy", "gay", "ton thuong", "tổn thương", "benh", "bệnh",
-            "chup", "chụp", "hinh anh", "hình ảnh", "vi tri", "vị trí", "lesion", "musculoskeletal"
-        };
-
-        if (medicalKeywords.Any(normalized.Contains))
-        {
-            var isConsistencyFollowUp = isFollowUpTurn && (normalized.Contains("như trước") ||
-                                                           normalized.Contains("so với") ||
-                                                           normalized.Contains("có nhất quán") ||
-                                                           normalized.Contains("consistent"));
-            return new QuestionPolicyClassification(isConsistencyFollowUp ? "follow_up_consistency" : "medical_intent", true);
-        }
-
-        // Very short, ambiguous prompts should not trigger image diagnosis.
-        if (tokenCount <= 3)
-            return new QuestionPolicyClassification("ambiguous_intent", false);
-
-        var socialOrOffTopicPrefixes = new[]
-        {
-            "hi", "hello", "hey", "xin chao", "chao", "good morning", "good evening",
-            "toi chua an", "tôi chưa ăn", "hom nay", "hôm nay", "thoi tiet", "thời tiết",
-            "gia xang", "giá xăng", "chinh tri", "chính trị", "code", "lap trinh", "lập trình"
-        };
-
-        return socialOrOffTopicPrefixes.Any(normalized.Contains)
-            ? new QuestionPolicyClassification("off_topic", false)
-            : new QuestionPolicyClassification("ambiguous_intent", false);
     }
 
     private async Task<(string? history, int userTurns)> BuildConversationHistoryAsync(Guid? sessionId, CancellationToken cancellationToken)
@@ -642,9 +699,14 @@ public class VisualQaAiService : IVisualQaAiService
         string? reflectiveQuestions)
     {
         var parts = new List<string>();
-        var normalizedDiagnosis = (diagnosis ?? content ?? string.Empty).Trim();
-        if (!string.IsNullOrWhiteSpace(normalizedDiagnosis))
+        var normalizedBody = (content ?? string.Empty).Trim();
+        var normalizedDiagnosis = (diagnosis ?? string.Empty).Trim();
+        var distinctDiagnosis = !string.IsNullOrWhiteSpace(normalizedDiagnosis)
+            && !string.Equals(normalizedDiagnosis, normalizedBody, StringComparison.Ordinal);
+        if (distinctDiagnosis)
             parts.Add($"Diagnosis: {normalizedDiagnosis}");
+        if (!string.IsNullOrWhiteSpace(normalizedBody))
+            parts.Add(distinctDiagnosis ? $"Answer: {normalizedBody}" : normalizedBody);
 
         var normalizedFindings = NormalizeMultiline(findings);
         if (!string.IsNullOrWhiteSpace(normalizedFindings))

@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;

@@ -31,6 +31,7 @@ namespace BoneVisQA.Services.Models.Expert
         public string? KeyFindings { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+        public string ThumbnailUrl { get; set; } = string.Empty;
     }
 
     /// <summary>GET <c>/api/expert/cases/{id}</c> — full case row plus images and tags for the expert UI.</summary>
@@ -54,11 +55,12 @@ namespace BoneVisQA.Services.Models.Expert
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
     }
-    /// <summary>JSON body for <c>POST /api/expert/cases</c>: case metadata plus pre-uploaded image URLs and annotations (FE uploads files to Supabase first).</summary>
+    /// <summary>JSON body for <c>POST /api/expert/cases</c>: case metadata plus pre-uploaded image URLs and optional annotations (FE uploads files to Supabase first).</summary>
     public class CreateExpertMedicalCaseJsonRequest
     {
         public string Title { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        /// <summary>Optional; normalized to <c>Easy</c>, <c>Medium</c>, or <c>Hard</c> (DB check). Omitted → <c>Medium</c>.</summary>
         public string? Difficulty { get; set; }
         public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
@@ -70,6 +72,7 @@ namespace BoneVisQA.Services.Models.Expert
     public class CreateExpertMedicalCaseImageJson
     {
         public string ImageUrl { get; set; } = string.Empty;
+        /// <summary>Optional; normalized to DB modality check: <c>X-Ray</c>, <c>CT</c>, <c>MRI</c>, <c>Ultrasound</c>, <c>Other</c>. Omitted → <c>Other</c>.</summary>
         public string? Modality { get; set; }
         public List<CreateAnnotationDTO>? Annotations { get; set; }
     }
@@ -159,13 +162,15 @@ namespace BoneVisQA.Services.Models.Expert
     }
     public class CreateAnnotationDTO
     {
-        public string Label { get; set; } = null!;
+        /// <summary>Optional; if empty BE stores <c>finding</c> (<c>case_annotations.label</c> is NOT NULL).</summary>
+        public string? Label { get; set; }
         public string? Coordinates { get; set; }
     }
     public class AddAnnotationDTOResponse
     {
         public Guid ImageId { get; set; }
-        public string Label { get; set; } = null!;
+        /// <summary>Optional; if empty BE stores <c>finding</c>.</summary>
+        public string? Label { get; set; }
         public string? Coordinates { get; set; }
     }
 

@@ -1,19 +1,21 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Models.Expert;
 
 public class ResolveEscalatedAnswerRequestDto
 {
+    public string Decision { get; set; } = "approve";
     public string AnswerText { get; set; } = string.Empty;
     public string? StructuredDiagnosis { get; set; }
-
-    /// <summary>FE may send a JSON string or a string array; stored as text on <c>case_answers</c>.</summary>
     public JsonElement? DifferentialDiagnoses { get; set; }
     public string? KeyImagingFindings { get; set; }
     public string? ReflectiveQuestions { get; set; }
     public string? ReviewNote { get; set; }
+    public double[]? CorrectedRoiBoundingBox { get; set; }
 }
 
 public class FlagChunkRequestDto
@@ -44,27 +46,45 @@ public class PromoteToLibraryRequestDto
 public class ExpertCitationDto
 {
     public Guid ChunkId { get; set; }
+    public Guid? MedicalCaseId { get; set; }
     public string? SourceText { get; set; }
     public string? ReferenceUrl { get; set; }
+    public string? Href { get; set; }
     public int? PageNumber { get; set; }
     public int? StartPage { get; set; }
     public int? EndPage { get; set; }
+    public string? PageLabel { get; set; }
+    public string? DisplayLabel { get; set; }
+    public string? Snippet { get; set; }
+    public string Kind { get; set; } = "doc";
+}
+
+public class ExpertVisualSessionDraftRequestDto
+{
+    public string? ReviewNote { get; set; }
+    public double[]? CorrectedRoiBoundingBox { get; set; }
+}
+
+public class ExpertVisualSessionDraftResponseDto
+{
+    public Guid SessionId { get; set; }
+    public Guid ReviewRowId { get; set; }
+    public string? ReviewNote { get; set; }
+    public double[]? ExpertCorrectedRoiBoundingBox { get; set; }
 }
 
 public class ExpertEscalatedAnswerDto
 {
     public Guid AnswerId { get; set; }
+    public Guid? SessionId { get; set; }
     public Guid QuestionId { get; set; }
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;
     public Guid? CaseId { get; set; }
     public string CaseTitle { get; set; } = string.Empty;
-    /// <summary>Full case description when session is case-based.</summary>
     public string? CaseDescription { get; set; }
-    /// <summary>Expert teaching diagnosis from case.</summary>
     public string? CaseSuggestedDiagnosis { get; set; }
-    /// <summary>Expert key findings from case.</summary>
     public string? CaseKeyFindings { get; set; }
     public string QuestionText { get; set; } = string.Empty;
     public string? CurrentAnswerText { get; set; }
@@ -82,17 +102,16 @@ public class ExpertEscalatedAnswerDto
     public Guid? PromotedCaseId { get; set; }
     public List<ExpertCitationDto> Citations { get; set; } = new();
 
-    /// <summary>Resolved study image (Visual QA upload or first case image).</summary>
     public string? ImageUrl { get; set; }
 
-    /// <summary>Normalized ROI JSON on <c>student_questions.custom_coordinates</c>.</summary>
     public string? CustomCoordinates { get; set; }
+    public double[]? ExpertCorrectedRoiBoundingBox { get; set; }
     public Guid? RequestedReviewMessageId { get; set; }
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
+    public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
 }
 
-// Expert Dashboard DTOs
 public class ExpertDashboardStatsDto
 {
     public int TotalCases { get; set; }

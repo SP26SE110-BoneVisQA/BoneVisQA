@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.VisualQA;
 
@@ -30,7 +32,10 @@ public class VisualQARequestDto
     /// </summary>
     public Guid? AnnotationId { get; set; }
 
-    /// <summary>Optional language hint (e.g. vi, en). Defaults to Vietnamese when null or empty.</summary>
+    /// <summary>
+    /// Optional ISO 639-1 language tag (e.g. <c>vi</c>, <c>en</c>). The API merges this with query <c>locale</c>,
+    /// multipart field <c>language</c>, <c>Accept-Language</c>, then defaults to Vietnamese.
+    /// </summary>
     public string? Language { get; set; }
 
     /// <summary>Optional existing visual QA session id. If null, backend creates/finds by context.</summary>
@@ -93,21 +98,39 @@ public class VisualQAResponseDto
     public string? PolicyReason { get; set; }
     public string? ClientRequestId { get; set; }
 
+    /// <summary>Catalog case when non-null; null or absent for personal uploads.</summary>
+    public Guid? CaseId { get; set; }
+
     public List<CitationItemDto> Citations { get; set; } = new();
+}
+
+/// <summary>Streaming Visual QA: token/text deltas plus the same finalized <see cref="VisualQAResponseDto"/> as non-streaming after the model finishes.</summary>
+public sealed class VisualQaStreamingPipelineResult
+{
+    public IAsyncEnumerable<string> TextDeltas { get; init; } = default!;
+    public Task<VisualQAResponseDto> CompletedResponseAsync { get; init; } = default!;
 }
 
 public class VisualQaCapabilitiesDto
 {
     public bool CanAskNext { get; set; }
     public bool IsReadOnly { get; set; }
+    public bool CanRequestReview { get; set; }
     public int TurnsUsed { get; set; }
     public int TurnLimit { get; set; }
+    [JsonIgnore]
     public string? Reason { get; set; }
 }
 
 public class VisualQaApiResponseDto
 {
     public Guid? SessionId { get; set; }
+
+    /// <summary>Catalog case when non-null; null for personal uploads.</summary>
+    public Guid? CaseId { get; set; }
+
+    public bool IsPersonalUpload => !CaseId.HasValue;
+
     public string Diagnosis { get; set; } = string.Empty;
     public IReadOnlyList<string> Findings { get; set; } = Array.Empty<string>();
     public IReadOnlyList<string> DifferentialDiagnoses { get; set; } = Array.Empty<string>();
@@ -120,6 +143,7 @@ public class VisualQaApiResponseDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public string? SystemNotice { get; set; }
+    [JsonIgnore]
     public string? SystemNoticeCode { get; set; }
     public VisualQaTurnDto? LatestTurn { get; set; }
 }
@@ -147,6 +171,8 @@ public class VisualQaTurnDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
+
+    public Guid? TargetAssistantMessageId { get; set; }
 }
 
 public class VisualQaThreadDto

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -75,6 +77,49 @@ public class GeminiService : IGeminiService
         _logger = logger;
     }
 
+    public VisualQAResponseDto? TryGetUnavailableFallbackResponse()
+    {
+        var apiKeys = _settings.GetResolvedApiKeys();
+        if (apiKeys.Count == 0)
+        {
+            _logger.LogWarning("Gemini API keys missing (Gemini:ApiKeys). Returning empty safe response.");
+            return BuildFallbackClarificationDto(FallbackNoReliableInfoAnswer);
+        }
+
+        var modelIds = _settings.GetResolvedModelIds();
+        if (modelIds.Count == 0)
+        {
+            _logger.LogWarning(
+                "Gemini model ids missing (configure Gemini:Models or Gemini:ModelId). Returning empty safe response.");
+            return BuildFallbackClarificationDto(FallbackNoReliableInfoAnswer);
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
+        {
+            _logger.LogWarning("Gemini base URL missing (Gemini:BaseUrl). Returning empty safe response.");
+            return BuildFallbackClarificationDto(FallbackNoReliableInfoAnswer);
+        }
+
+        return null;
+    }
+
+    public VisualQAResponseDto ParseMedicalAnswerFromRawResponse(string rawJson) =>
+        ParseGeminiResponse(rawJson);
+
+    private static VisualQAResponseDto BuildFallbackClarificationDto(string message) =>
+        new()
+        {
+            AnswerText = message,
+            SuggestedDiagnosis = null,
+            DifferentialDiagnoses = null,
+            KeyImagingFindings = null,
+            ReflectiveQuestions = null,
+            AiConfidenceScore = null,
+            ErrorMessage = message,
+            ResponseKind = "clarification",
+            Citations = new List<CitationItemDto>()
+        };
+
     public async Task<VisualQAResponseDto> GenerateMedicalAnswerAsync(
         string prompt,
         string imageUrl,
@@ -85,61 +130,13 @@ public class GeminiService : IGeminiService
         if (string.IsNullOrWhiteSpace(prompt))
             throw new ArgumentException("Prompt must not be empty.", nameof(prompt));
 
+        var unavailable = TryGetUnavailableFallbackResponse();
+        if (unavailable != null)
+            return unavailable;
+
         var apiKeys = _settings.GetResolvedApiKeys();
-        if (apiKeys.Count == 0)
-        {
-            _logger.LogWarning("Gemini API keys missing (Gemini:ApiKeys). Returning empty safe response.");
-            return new VisualQAResponseDto
-            {
-                AnswerText = FallbackNoReliableInfoAnswer,
-                SuggestedDiagnosis = null,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = FallbackNoReliableInfoAnswer,
-                ResponseKind = "clarification",
-                Citations = new List<CitationItemDto>()
-            };
-        }
-
         var modelIds = _settings.GetResolvedModelIds();
-        if (modelIds.Count == 0)
-        {
-            _logger.LogWarning(
-                "Gemini model ids missing (configure Gemini:Models or Gemini:ModelId). Returning empty safe response.");
-            return new VisualQAResponseDto
-            {
-                AnswerText = FallbackNoReliableInfoAnswer,
-                SuggestedDiagnosis = null,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = FallbackNoReliableInfoAnswer,
-                ResponseKind = "clarification",
-                Citations = new List<CitationItemDto>()
-            };
-        }
-
-        if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
-        {
-            _logger.LogWarning("Gemini base URL missing (Gemini:BaseUrl). Returning empty safe response.");
-            return new VisualQAResponseDto
-            {
-                AnswerText = FallbackNoReliableInfoAnswer,
-                SuggestedDiagnosis = null,
-                DifferentialDiagnoses = null,
-                KeyImagingFindings = null,
-                ReflectiveQuestions = null,
-                AiConfidenceScore = null,
-                ErrorMessage = FallbackNoReliableInfoAnswer,
-                ResponseKind = "clarification",
-                Citations = new List<CitationItemDto>()
-            };
-        }
-
-        var baseUrl = _settings.BaseUrl.TrimEnd('/');
+        var baseUrl = _settings.BaseUrl!.TrimEnd('/');
 
         string? base64Image = null;
         string? mimeType = null;
@@ -309,6 +306,220 @@ public class GeminiService : IGeminiService
             $"All configured Gemini keys/models failed ({apiKeys.Count} key(s), {modelIds.Count} model(s)). Summary: {string.Join(" | ", failureSummaries)}");
     }
 
+    public async IAsyncEnumerable<string> StreamMedicalAnswerRawAsync(
+        string prompt,
+        string imageUrl,
+        string? conversationHistory = null,
+        bool ragContextAdequate = true,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+            throw new ArgumentException("Prompt must not be empty.", nameof(prompt));
+
+        var unavailable = TryGetUnavailableFallbackResponse();
+        if (unavailable != null)
+            yield break;
+
+        var apiKeys = _settings.GetResolvedApiKeys();
+        var modelIds = _settings.GetResolvedModelIds();
+        var baseUrl = _settings.BaseUrl!.TrimEnd('/');
+
+        string? base64Image = null;
+        string? mimeType = null;
+
+        if (!string.IsNullOrWhiteSpace(imageUrl))
+        {
+            (base64Image, mimeType) = await ResolveImageToBase64Async(imageUrl, cancellationToken).ConfigureAwait(false);
+            if (base64Image == null)
+                yield break;
+        }
+
+        var failureSummaries = new List<string>();
+        var totalAttempts = apiKeys.Count * modelIds.Count;
+        var attemptIndex = 0;
+
+        for (var keyIndex = 0; keyIndex < apiKeys.Count; keyIndex++)
+        {
+            var apiKey = apiKeys[keyIndex];
+            var shouldAdvanceKey = false;
+            foreach (var modelId in modelIds)
+            {
+                attemptIndex++;
+                var endpoint =
+                    $"{baseUrl}/models/{modelId}:streamGenerateContent?key={Uri.EscapeDataString(apiKey)}&alt=sse";
+
+                _logger.LogInformation(
+                    "[GeminiService] streamGenerateContent attempt {AttemptIndex}/{TotalAttempts} using key #{KeyIndex} and model id \"{ModelId}\"",
+                    attemptIndex,
+                    totalAttempts,
+                    keyIndex + 1,
+                    modelId);
+
+                var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate);
+
+                using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                req.Content = new StringContent(
+                    JsonSerializer.Serialize(payload),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var client = _httpClientFactory.CreateClient(HttpClientName);
+                _logger.LogDebug("[GeminiService] POST {BaseUrl}/models/{ModelId}:streamGenerateContent?alt=sse", baseUrl, modelId);
+
+                HttpResponseMessage resp;
+                try
+                {
+                    resp = await client
+                        .SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failureSummaries.Add($"{modelId}: {ex.GetType().Name} — {ex.Message}");
+                    _logger.LogWarning(
+                        ex,
+                        "[GeminiService] Model id \"{ModelId}\" stream request failed. Trying next model or key...",
+                        modelId);
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                using (resp)
+                {
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        var raw = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        var bodySnippet = raw.Length > 500 ? raw[..500] : raw;
+                        failureSummaries.Add($"{modelId}: HTTP {(int)resp.StatusCode} — {bodySnippet}");
+
+                        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            _logger.LogWarning(
+                                "[GeminiService] Model id \"{ModelId}\" stream returned HTTP 404. Advancing to next model.",
+                                modelId);
+                            continue;
+                        }
+
+                        if (resp.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                        {
+                            shouldAdvanceKey = true;
+                            _logger.LogWarning(
+                                "[GeminiService] Key #{KeyIndex} rejected on stream with HTTP {StatusCode}. Advancing to next API key.",
+                                keyIndex + 1,
+                                (int)resp.StatusCode);
+                            break;
+                        }
+
+                        if (resp.StatusCode == (System.Net.HttpStatusCode)429)
+                        {
+                            shouldAdvanceKey = true;
+                            _logger.LogWarning(
+                                "[GeminiService] Key #{KeyIndex} rate limited on stream for model \"{ModelId}\". Advancing to next API key.",
+                                keyIndex + 1,
+                                modelId);
+                            break;
+                        }
+
+                        if (IsTransient(resp.StatusCode))
+                        {
+                            _logger.LogWarning(
+                                "[GeminiService] Stream transient HTTP {StatusCode} for model \"{ModelId}\". Retrying next model.",
+                                (int)resp.StatusCode,
+                                modelId);
+                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        _logger.LogWarning(
+                            "[GeminiService] Stream HTTP {StatusCode} for model \"{ModelId}\". Next model.",
+                            (int)resp.StatusCode,
+                            modelId);
+                        continue;
+                    }
+
+                    await using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                    await foreach (var fragment in ReadGeminiSseTextFragmentsAsync(stream, cancellationToken))
+                        yield return fragment;
+                }
+
+                _logger.LogInformation(
+                    "[GeminiService] Stream completed using key #{KeyIndex} and model id \"{ModelId}\" (attempt {AttemptIndex}/{TotalAttempts}).",
+                    keyIndex + 1,
+                    modelId,
+                    attemptIndex,
+                    totalAttempts);
+                yield break;
+            }
+
+            if (shouldAdvanceKey)
+                continue;
+        }
+
+        throw new InvalidOperationException(
+            $"All configured Gemini keys/models failed ({apiKeys.Count} key(s), {modelIds.Count} model(s)). Summary: {string.Join(" | ", failureSummaries)}");
+    }
+
+    private async IAsyncEnumerable<string> ReadGeminiSseTextFragmentsAsync(
+        Stream stream,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(stream);
+        string? line;
+        var cumulativeCandidate = "";
+        while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+                continue;
+            if (trimmed.StartsWith(':'))
+                continue;
+
+            var payload = trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                ? trimmed.Substring(5).Trim()
+                : trimmed;
+            if (payload is "[DONE]" or "\"[DONE]\"")
+                continue;
+
+            string fragment;
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                fragment = ExtractStreamingTextFragment(doc.RootElement, ref cumulativeCandidate);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            if (fragment.Length > 0)
+                yield return fragment;
+        }
+    }
+
+    /// <summary>Handles both cumulative and incremental <c>candidates[0].content.parts[0].text</c> chunks.</summary>
+    private static string ExtractStreamingTextFragment(JsonElement root, ref string cumulativeCandidateText)
+    {
+        var piece = ExtractCandidateText(root);
+        if (piece.Length == 0)
+            return string.Empty;
+
+        if (cumulativeCandidateText.Length > 0 &&
+            piece.Length >= cumulativeCandidateText.Length &&
+            piece.StartsWith(cumulativeCandidateText, StringComparison.Ordinal))
+        {
+            var delta = piece[cumulativeCandidateText.Length..];
+            cumulativeCandidateText = piece;
+            return delta;
+        }
+
+        cumulativeCandidateText += piece;
+        return piece;
+    }
+
     private static Dictionary<string, object> BuildVisionPayload(
         string prompt,
         string? conversationHistory,
@@ -432,8 +643,40 @@ public class GeminiService : IGeminiService
 
     private VisualQAResponseDto ParseGeminiResponse(string raw)
     {
-        using var doc = JsonDocument.Parse(raw);
-        var root = doc.RootElement;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _logger.LogWarning("Gemini raw response was empty (stream or generateContent assembly).");
+            return BuildFallbackClarificationDto(FallbackNoReliableInfoAnswer);
+        }
+
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(raw.Trim());
+        }
+        catch (JsonException ex)
+        {
+            var sanitized = SanitizeJsonCandidateText(raw);
+            if (string.IsNullOrWhiteSpace(sanitized))
+                throw new AiResponseFormatException("AI response was not valid JSON.", ex);
+            try
+            {
+                doc = JsonDocument.Parse(sanitized);
+            }
+            catch (JsonException ex2)
+            {
+                throw new AiResponseFormatException("AI response JSON could not be parsed after sanitize.", ex2);
+            }
+        }
+
+        using (doc)
+        {
+            return ParseGeminiResponseRoot(doc.RootElement);
+        }
+    }
+
+    private VisualQAResponseDto ParseGeminiResponseRoot(JsonElement root)
+    {
 
         // Safety filter / blocked prompts: Gemini returns promptFeedback.blockReason.
         if (root.TryGetProperty("promptFeedback", out var promptFeedback) &&
@@ -478,6 +721,13 @@ public class GeminiService : IGeminiService
                     Citations = new List<CitationItemDto>()
                 };
             }
+        }
+
+        if (root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty("diagnosis", out _) &&
+            !root.TryGetProperty("candidates", out _))
+        {
+            return BuildVisualResponseFromValidatedCanonical(root);
         }
 
         var text = ExtractCandidateText(root);
@@ -530,21 +780,42 @@ public class GeminiService : IGeminiService
 
         using (parsed)
         {
-            var result = parsed.RootElement;
-            var canonical = ValidateAndReadCanonicalResponse(result);
+            return BuildVisualResponseFromValidatedCanonical(parsed.RootElement);
+        }
+    }
+
+    private VisualQAResponseDto BuildVisualResponseFromValidatedCanonical(JsonElement canonicalRoot)
+    {
+        var canonical = ValidateAndReadCanonicalResponse(canonicalRoot);
+
+        if (string.Equals(canonical.Diagnosis.Trim(), InvalidImageNotXrayGuardrail, StringComparison.Ordinal))
+        {
             return new VisualQAResponseDto
             {
-                AnswerText = canonical.Diagnosis,
-                SuggestedDiagnosis = canonical.Diagnosis,
-                DifferentialDiagnoses = canonical.DifferentialDiagnoses.Count == 0 ? null : canonical.DifferentialDiagnoses.ToList(),
-                KeyImagingFindings = canonical.Findings.Count == 0 ? null : string.Join("\n- ", canonical.Findings),
-                ReflectiveQuestions = canonical.ReflectiveQuestions.Count == 0 ? null : string.Join("\n- ", canonical.ReflectiveQuestions),
+                AnswerText = InvalidImageNotXrayGuardrail,
+                SuggestedDiagnosis = null,
+                DifferentialDiagnoses = null,
+                KeyImagingFindings = null,
+                ReflectiveQuestions = null,
                 AiConfidenceScore = null,
                 ErrorMessage = null,
-                ResponseKind = DetermineResponseKind(canonical.Diagnosis, canonical.Findings, canonical.DifferentialDiagnoses, canonical.ReflectiveQuestions),
-                Citations = canonical.Citations.ToList()
+                ResponseKind = "refusal",
+                Citations = new List<CitationItemDto>()
             };
         }
+
+        return new VisualQAResponseDto
+        {
+            AnswerText = canonical.Diagnosis,
+            SuggestedDiagnosis = canonical.Diagnosis,
+            DifferentialDiagnoses = canonical.DifferentialDiagnoses.Count == 0 ? null : canonical.DifferentialDiagnoses.ToList(),
+            KeyImagingFindings = canonical.Findings.Count == 0 ? null : string.Join("\n- ", canonical.Findings),
+            ReflectiveQuestions = canonical.ReflectiveQuestions.Count == 0 ? null : string.Join("\n- ", canonical.ReflectiveQuestions),
+            AiConfidenceScore = null,
+            ErrorMessage = null,
+            ResponseKind = DetermineResponseKind(canonical.Diagnosis, canonical.Findings, canonical.DifferentialDiagnoses, canonical.ReflectiveQuestions),
+            Citations = canonical.Citations.ToList()
+        };
     }
 
     private static string DetermineResponseKind(
@@ -588,6 +859,7 @@ public class GeminiService : IGeminiService
 
         return new VisualQaApiResponseDto
         {
+            CaseId = null,
             Diagnosis = diagnosis,
             Findings = findings,
             DifferentialDiagnoses = differentialDiagnoses,
@@ -692,9 +964,14 @@ public class GeminiService : IGeminiService
                 parts.ValueKind == JsonValueKind.Array &&
                 parts.GetArrayLength() > 0)
             {
-                var part0 = parts[0];
-                if (part0.TryGetProperty("text", out var text))
-                    return text.GetString() ?? string.Empty;
+                var sb = new StringBuilder();
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var textEl))
+                        sb.Append(textEl.GetString() ?? string.Empty);
+                }
+
+                return sb.ToString();
             }
         }
 

@@ -214,6 +214,68 @@ public class ExpertReviewsController : ControllerBase
         }
     }
 
+    [HttpPut("{sessionId:guid}/draft")]
+    [ProducesResponseType(typeof(ExpertVisualSessionDraftResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ExpertVisualSessionDraftResponseDto>> PutDraft(Guid sessionId, [FromBody] ExpertVisualSessionDraftRequestDto request)
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _expertReviewService.UpsertSessionReviewDraftAsync(expertId.Value, sessionId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{sessionId:guid}/draft")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteDraft(Guid sessionId)
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            await _expertReviewService.DeleteSessionReviewDraftAsync(expertId.Value, sessionId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     private Guid? GetUserIdFromClaims()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);

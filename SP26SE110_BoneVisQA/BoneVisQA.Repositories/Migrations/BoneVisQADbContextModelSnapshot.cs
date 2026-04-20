@@ -86,7 +86,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("LecturerId");
 
-                    b.ToTable("academic_classes");
+                    b.ToTable("academic_classes", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Announcement", b =>
@@ -128,7 +128,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "ClassId" }, "idx_announcements_class");
 
-                    b.ToTable("announcements");
+                    b.ToTable("announcements", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseAnnotation", b =>
@@ -163,7 +163,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "ImageId" }, "idx_case_annotations_image");
 
-                    b.ToTable("case_annotations");
+                    b.ToTable("case_annotations", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseAnswer", b =>
@@ -240,7 +240,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "QuestionId" }, "idx_case_answers_question");
 
-                    b.ToTable("case_answers", t =>
+                    b.ToTable("case_answers", null, t =>
                         {
                             t.HasCheckConstraint("case_answers_status_check", "status = ANY (ARRAY['Pending'::text, 'RequiresLecturerReview'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'EscalatedToExpert'::text, 'ExpertApproved'::text, 'Revised'::text])");
                         });
@@ -269,7 +269,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "TagId" }, "idx_case_tags_tag");
 
-                    b.ToTable("case_tags");
+                    b.ToTable("case_tags", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseViewLog", b =>
@@ -311,7 +311,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "StudentId", "CaseId" }, "idx_case_view_logs_student_case");
 
-                    b.ToTable("case_view_logs");
+                    b.ToTable("case_view_logs", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Category", b =>
@@ -337,7 +337,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "Name" }, "categories_name_key")
                         .IsUnique();
 
-                    b.ToTable("categories");
+                    b.ToTable("categories", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Citation", b =>
@@ -373,7 +373,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "AnswerId" }, "idx_citations_answer");
 
-                    b.ToTable("citations");
+                    b.ToTable("citations", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassCase", b =>
@@ -407,7 +407,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("CaseId");
 
-                    b.ToTable("class_cases");
+                    b.ToTable("class_cases", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassEnrollment", b =>
@@ -444,7 +444,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "StudentId" }, "idx_class_enrollments_student");
 
-                    b.ToTable("class_enrollments");
+                    b.ToTable("class_enrollments", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassQuizSession", b =>
@@ -517,7 +517,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "ClassId", "QuizId" }, "class_quiz_sessions_class_id_quiz_id_key")
                         .IsUnique();
 
-                    b.ToTable("class_quiz_sessions");
+                    b.ToTable("class_quiz_sessions", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassTag", b =>
@@ -543,7 +543,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "TagId" }, "idx_class_tags_tag");
 
-                    b.ToTable("class_tags");
+                    b.ToTable("class_tags", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Document", b =>
@@ -640,7 +640,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasDatabaseName("ux_documents_content_hash")
                         .HasFilter("\"content_hash\" IS NOT NULL");
 
-                    b.ToTable("documents");
+                    b.ToTable("documents", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.DocumentChunk", b =>
@@ -705,7 +705,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "DocId", "ChunkOrder" }, "document_chunks_doc_id_chunk_order_key")
                         .IsUnique();
 
-                    b.ToTable("document_chunks");
+                    b.ToTable("document_chunks", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.DocumentTag", b =>
@@ -730,7 +730,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "TagId" }, "idx_document_tags_tag");
 
-                    b.ToTable("document_tags");
+                    b.ToTable("document_tags", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ExpertReview", b =>
@@ -771,7 +771,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "ExpertId", "AnswerId" }, "expert_reviews_expert_id_answer_id_key")
                         .IsUnique();
 
-                    b.ToTable("expert_reviews");
+                    b.ToTable("expert_reviews", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.LearningStatistic", b =>
@@ -824,7 +824,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "StudentId", "ClassId" }, "learning_statistics_student_id_class_id_key")
                         .IsUnique();
 
-                    b.ToTable("learning_statistics");
+                    b.ToTable("learning_statistics", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.MedicalCase", b =>
@@ -902,7 +902,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("CreatedByExpertId");
 
-                    b.ToTable("medical_cases");
+                    b.ToTable("medical_cases", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.MedicalImage", b =>
@@ -937,7 +937,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "CaseId" }, "idx_medical_images_case");
 
-                    b.ToTable("medical_images");
+                    b.ToTable("medical_images", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Notification", b =>
@@ -988,7 +988,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("notifications");
+                    b.ToTable("notifications", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.PasswordResetToken", b =>
@@ -1033,7 +1033,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("password_reset_tokens");
+                    b.ToTable("password_reset_tokens", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.QAMessage", b =>
@@ -1097,6 +1097,10 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("text")
                         .HasColumnName("suggested_diagnosis");
 
+                    b.Property<Guid?>("TargetAssistantMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_assistant_message_id");
+
                     b.HasKey("Id")
                         .HasName("qa_messages_pkey");
 
@@ -1104,7 +1108,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "SessionId", "CreatedAt" }, "idx_qa_messages_session_created_at");
 
-                    b.ToTable("qa_messages");
+                    b.ToTable("qa_messages", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Quiz", b =>
@@ -1185,7 +1189,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("CreatedByExpertId");
 
-                    b.ToTable("quizzes");
+                    b.ToTable("quizzes", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.QuizAttempt", b =>
@@ -1228,7 +1232,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "StudentId", "QuizId" }, "quiz_attempts_student_id_quiz_id_key")
                         .IsUnique();
 
-                    b.ToTable("quiz_attempts");
+                    b.ToTable("quiz_attempts", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.QuizQuestion", b =>
@@ -1297,7 +1301,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex("QuizId");
 
-                    b.ToTable("quiz_questions");
+                    b.ToTable("quiz_questions", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Role", b =>
@@ -1335,7 +1339,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "Name" }, "roles_name_key")
                         .IsUnique();
 
-                    b.ToTable("roles");
+                    b.ToTable("roles", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.StudentQuestion", b =>
@@ -1390,7 +1394,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "StudentId" }, "idx_student_questions_student");
 
-                    b.ToTable("student_questions");
+                    b.ToTable("student_questions", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.StudentQuizAnswer", b =>
@@ -1453,7 +1457,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "AttemptId", "QuestionId" }, "student_quiz_answers_attempt_id_question_id_key")
                         .IsUnique();
 
-                    b.ToTable("student_quiz_answers");
+                    b.ToTable("student_quiz_answers", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Tag", b =>
@@ -1494,7 +1498,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "Name", "Type" }, "tags_name_type_key")
                         .IsUnique();
 
-                    b.ToTable("tags");
+                    b.ToTable("tags", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.User", b =>
@@ -1639,7 +1643,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "Email" }, "users_email_key")
                         .IsUnique();
 
-                    b.ToTable("users");
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.UserRole", b =>
@@ -1674,7 +1678,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasIndex(new[] { "UserId", "RoleId" }, "user_roles_user_id_role_id_key")
                         .IsUnique();
 
-                    b.ToTable("user_roles");
+                    b.ToTable("user_roles", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.VisualQASession", b =>
@@ -1744,7 +1748,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "StudentId" }, "idx_visual_qa_sessions_student");
 
-                    b.ToTable("visual_qa_sessions");
+                    b.ToTable("visual_qa_sessions", (string)null);
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.AcademicClass", b =>

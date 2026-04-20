@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using BoneVisQA.API;
 using BoneVisQA.API.ExceptionHandling;
 using BoneVisQA.API.Hubs;
+using BoneVisQA.API.Middleware;
 using BoneVisQA.API.Policies;
 using BoneVisQA.API.Services;
 using BoneVisQA.Domain.Settings;
@@ -327,14 +328,16 @@ builder.Services.AddHostedService<MedicalCaseIndexingBackgroundService>();
 
 var app = builder.Build();
 
+// Default static files middleware expects wwwroot to exist; PhysicalFileProvider fails otherwise.
+var wwwRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+Directory.CreateDirectory(Path.Combine(wwwRootPath, "uploads", "images"));
+Directory.CreateDirectory(Path.Combine(wwwRootPath, "uploads", "dicom"));
+
 app.UseExceptionHandler();
 app.UseCors("AllowAll");
-app.Use(async (context, next) =>
-{
-    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-    context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
-    await next();
-});
+app.UseMiddleware<AcceptLanguageCaptureMiddleware>();
+// Do not send Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy from this API:
+// COEP breaks third-party scripts (e.g. Google Identity Services / postMessage); COOP is irrelevant for JSON APIs.
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();

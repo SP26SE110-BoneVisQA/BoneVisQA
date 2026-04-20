@@ -96,7 +96,13 @@ namespace BoneVisQA.Services.Services.Expert
                     SuggestedDiagnosis = x.SuggestedDiagnosis,
                     KeyFindings = x.KeyFindings,
                     CreatedAt = x.CreatedAt,
-                    UpdatedAt = x.UpdatedAt
+                    UpdatedAt = x.UpdatedAt,
+                    ThumbnailUrl = x.MedicalImages
+                        .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+                        .ThenBy(m => m.Id)
+                        .Select(m => m.ImageUrl)
+                        .FirstOrDefault()
+                        ?? string.Empty
                 })
                 .ToListAsync();
 
@@ -163,7 +169,13 @@ namespace BoneVisQA.Services.Services.Expert
                         Name = ct.Tag.Name,
                         Type = ct.Tag.Type
                     })
-                    .ToList()
+                    .ToList(),
+                ThumbnailUrl = entity.MedicalImages
+                    .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+                    .ThenBy(m => m.Id)
+                    .Select(m => m.ImageUrl)
+                    .FirstOrDefault()
+                    ?? string.Empty
             };
 
             ExpertMedicalCaseDisplayHelper.ApplyDetailDefaults(dto);
@@ -186,11 +198,11 @@ namespace BoneVisQA.Services.Services.Expert
                 CreatedByExpertId = dto.CreatedByExpertId,  
                 Title = dto.Title,
                 Description = dto.Description,
-                Difficulty = dto.Difficulty,
+                Difficulty = MedicalCaseDifficultyNormalizer.Normalize(dto.Difficulty),
                 CategoryId = dto.CategoryId,
                 SuggestedDiagnosis = dto.SuggestedDiagnosis,
                 KeyFindings = dto.KeyFindings,
-                IsApproved = true,
+                IsApproved = false,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 IndexingStatus = DocumentIndexingStatuses.Pending,
@@ -248,7 +260,7 @@ namespace BoneVisQA.Services.Services.Expert
                 Id = Guid.NewGuid(),
                 CaseId = caseId,
                 ImageUrl = img.ImageUrl.Trim(),
-                Modality = img.Modality,
+                Modality = MedicalImageModalityNormalizer.Normalize(img.Modality),
                 CreatedAt = DateTime.UtcNow
             };
             await _unitOfWork.MedicalImageRepository.AddAsync(image);
@@ -260,7 +272,7 @@ namespace BoneVisQA.Services.Services.Expert
                 {
                     Id = Guid.NewGuid(),
                     ImageId = image.Id,
-                    Label = ann.Label ?? string.Empty,
+                    Label = ResolveAnnotationLabel(ann.Label),
                     Coordinates = ann.Coordinates,
                     CreatedAt = DateTime.UtcNow
                 });
@@ -311,8 +323,9 @@ namespace BoneVisQA.Services.Services.Expert
                 !string.Equals(medicalCase.Description, request.Description, StringComparison.Ordinal) ||
                 !string.Equals(medicalCase.SuggestedDiagnosis, request.SuggestedDiagnosis, StringComparison.Ordinal) ||
                 !string.Equals(medicalCase.KeyFindings, request.KeyFindings, StringComparison.Ordinal);
+            var normalizedDifficulty = MedicalCaseDifficultyNormalizer.Normalize(request.Difficulty);
             var metadataChanged =
-                !string.Equals(medicalCase.Difficulty, request.Difficulty, StringComparison.Ordinal) ||
+                !string.Equals(medicalCase.Difficulty, normalizedDifficulty, StringComparison.Ordinal) ||
                 medicalCase.CategoryId != request.CategoryId ||
                 medicalCase.IsApproved != request.IsApproved ||
                 medicalCase.IsActive != request.IsActive ||
@@ -321,7 +334,7 @@ namespace BoneVisQA.Services.Services.Expert
             // Update fields
             medicalCase.Title = request.Title;
             medicalCase.Description = request.Description;
-            medicalCase.Difficulty = request.Difficulty;
+            medicalCase.Difficulty = normalizedDifficulty;
             medicalCase.CategoryId = request.CategoryId;
             medicalCase.IsApproved = request.IsApproved;
             medicalCase.IsActive = request.IsActive;
@@ -367,6 +380,10 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
+        /// <summary>DB <c>case_annotations.label</c> is NOT NULL; FE may omit label — store a neutral default.</summary>
+        private static string ResolveAnnotationLabel(string? label) =>
+            string.IsNullOrWhiteSpace(label) ? "finding" : label.Trim();
+
         private static string BumpVersion(string? currentVersion, bool isReindexing)
         {
             var normalized = SemanticDocumentVersion.Normalize(currentVersion);
@@ -411,7 +428,7 @@ namespace BoneVisQA.Services.Services.Expert
                 Id = Guid.NewGuid(),
                 CaseId = dto.CaseId,
                 ImageUrl = imageUrl,
-                Modality = dto.Modality,
+                Modality = MedicalImageModalityNormalizer.Normalize(dto.Modality),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -451,7 +468,7 @@ namespace BoneVisQA.Services.Services.Expert
             {
                 Id = Guid.NewGuid(),
                 ImageId = dto.ImageId,
-                Label = dto.Label,
+                Label = ResolveAnnotationLabel(dto.Label),
                 Coordinates = dto.Coordinates,
                 CreatedAt = DateTime.UtcNow
             };
