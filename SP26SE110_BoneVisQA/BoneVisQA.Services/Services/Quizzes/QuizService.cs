@@ -26,8 +26,21 @@ public class QuizService : IQuizService
         {
             DateTimeKind.Utc => dt.Value,
             DateTimeKind.Local => dt.Value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime()
+            // Unspecified: assume it's a local datetime string (e.g., from datetime-local input)
+            // Parse as Vietnam time (UTC+7) and convert to UTC
+            _ => ParseLocalToUtc(dt.Value, 7) // Treat as UTC+7 (Vietnam)
         };
+    }
+
+    /// <summary>
+    /// Parse a DateTime with Kind=Unspecified as local time in the given timezone offset hours,
+    /// then convert to UTC.
+    /// </summary>
+    private static DateTime ParseLocalToUtc(DateTime dt, int utcOffsetHours)
+    {
+        var localDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        var offset = TimeSpan.FromHours(utcOffsetHours);
+        return DateTime.SpecifyKind(localDateTime.Subtract(offset), DateTimeKind.Utc);
     }
 
     public async Task<QuizDto> CreateQuizAsync(QuizDto request)
@@ -81,13 +94,17 @@ public class QuizService : IQuizService
         if (quiz == null)
             throw new Exception("Quiz not found");
 
+        var questionType = string.IsNullOrEmpty(request.Type)
+            ? QuestionType.MultipleChoice
+            : Enum.TryParse<QuestionType>(request.Type, out var parsed) ? parsed : QuestionType.MultipleChoice;
+
         var question = new QuizQuestion
         {
             Id = Guid.NewGuid(),
             QuizId = quizId,
             CaseId = request.CaseId,
             QuestionText = request.QuestionText,
-            Type = request.Type,
+            Type = questionType,
             CorrectAnswer = request.CorrectAnswer
         };
 

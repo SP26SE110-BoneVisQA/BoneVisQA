@@ -6,8 +6,16 @@ public interface IExpertReviewService
 {
     Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId);
     Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId);
-    Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid answerId, ResolveEscalatedAnswerRequestDto request);
+
+    /// <summary>Single-session payload (aligned with queue items; citations merged across assistant turns).</summary>
+    Task<ExpertEscalatedAnswerDto> GetEscalatedSessionDetailAsync(Guid expertId, Guid sessionId);
+    Task<ExpertEscalatedAnswerDto> ResolveEscalatedAnswerAsync(Guid expertId, Guid sessionId, ResolveEscalatedAnswerRequestDto request);
+    Task<ExpertEscalatedAnswerDto> RespondToSessionAsync(Guid expertId, Guid sessionId, string content);
+    Task ApproveSessionAsync(Guid expertId, Guid sessionId);
+    Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request);
     Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request);
+    Task<ExpertVisualSessionDraftResponseDto> UpsertSessionReviewDraftAsync(Guid expertId, Guid sessionId, ExpertVisualSessionDraftRequestDto request);
+    Task DeleteSessionReviewDraftAsync(Guid expertId, Guid sessionId);
 }
 
 public interface IExpertDashboardService

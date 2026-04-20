@@ -25,13 +25,20 @@ public class StudentCasesController : ControllerBase
     [HttpGet("catalog")]
     [ProducesResponseType(typeof(IReadOnlyList<CaseListItemDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCatalog([FromQuery] string? location, [FromQuery] string? lesionType, [FromQuery] string? difficulty)
+    public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCatalog(
+        [FromQuery] string? location,
+        [FromQuery] string? lesionType,
+        [FromQuery] string? difficulty,
+        [FromQuery] string? q,
+        [FromQuery] string? search)
     {
         var filter = new CaseFilterRequestDto
         {
             Location = location,
+            LesionType = lesionType,
             LessonType = lesionType,
-            Difficulty = difficulty
+            Difficulty = difficulty,
+            Q = !string.IsNullOrWhiteSpace(q) ? q : search
         };
 
         var result = await _studentService.GetCaseCatalogAsync(filter);
@@ -50,7 +57,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetFilteredCasesAsync(studentId.Value, filter);
         return Ok(result);
@@ -66,7 +73,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetCaseHistoryAsync(studentId.Value);
         return Ok(result);
@@ -83,11 +90,11 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetCaseDetailAsync(caseId, studentId.Value);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy ca bệnh." })
+            ? NotFound(new { message = "Medical case not found." })
             : Ok(result);
     }
 
@@ -96,7 +103,7 @@ public class StudentCasesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.CreateAnnotationAsync(studentId.Value, request);
         return Ok(result);

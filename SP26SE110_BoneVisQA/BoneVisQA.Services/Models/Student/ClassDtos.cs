@@ -1,4 +1,5 @@
 using System;
+using BoneVisQA.Services.Models.Lecturer;
 
 namespace BoneVisQA.Services.Models.Student;
 
@@ -32,11 +33,25 @@ public class StudentClassDetailDto
     public string? LecturerName { get; set; }
     public Guid? ExpertId { get; set; }
     public string? ExpertName { get; set; }
+    public string? ExpertEmail { get; set; }
+    public string? ExpertAvatarUrl { get; set; }
     public DateTime? EnrolledAt { get; set; }
 
+    public List<StudentCaseAssignmentDto> AssignedCases { get; set; } = new();
     public List<ClassQuizSummaryDto> Quizzes { get; set; } = new();
     public List<ClassStudentSummaryDto> Students { get; set; } = new();
     public List<ClassAnnouncementDto> Announcements { get; set; } = new();
+}
+
+/// <summary>
+/// Case assignment được gán cho sinh viên trong một lớp học.
+/// </summary>
+public class StudentCaseAssignmentDto
+{
+    public Guid CaseId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public DateTime? DueDate { get; set; }
+    public bool IsMandatory { get; set; }
 }
 
 public class ClassQuizSummaryDto
@@ -66,4 +81,6 @@ public class ClassAnnouncementDto
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTime? CreatedAt { get; set; }
+    /// <summary>Thông tin assignment liên quan (nếu có)</summary>
+    public AnnouncementAssignmentInfoDto? RelatedAssignment { get; set; }
 }

@@ -53,6 +53,17 @@ public partial class ClassQuizSession
     [Column("retake_reset_at")]
     public DateTime? RetakeResetAt { get; set; }
 
+    /// <summary>
+    /// ID của announcement đã tạo ra quiz session này.
+    /// Dùng để liên kết 2 chiều: announcement &lt;-&gt; assignment.
+    /// </summary>
+    [Column("announcement_id")]
+    public Guid? AnnouncementId { get; set; }
+
+    [ForeignKey("AnnouncementId")]
+    [InverseProperty("ClassQuizSessions")]
+    public virtual Announcement? Announcement { get; set; }
+
     [ForeignKey("ClassId")]
     [InverseProperty("ClassQuizSessions")]
     public virtual AcademicClass Class { get; set; } = null!;

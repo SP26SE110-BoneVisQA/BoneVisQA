@@ -17,7 +17,8 @@ public interface IEmailService
     Task<bool> SendWelcomeWithRoleEmailAsync(string toEmail, string fullName, string roleName);
 
     // Announcement Emails
-    Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent);
+    Task<bool> SendAnnouncementEmailAsync(string toEmail, string studentName, string lecturerName, string className, string announcementTitle, string announcementContent,
+        string? assignmentTitle = null, string? assignmentType = null, DateTime? dueDate = null, string? dueDateDisplay = null, string? assignmentUrl = null);
 
     // Assignment notification emails
     Task<bool> SendAssignmentEmailAsync(
@@ -27,7 +28,8 @@ public interface IEmailService
         string assignmentTitle,
         string assignmentType,
         DateTime? dueDate,
-        string? dueDateDisplay);
+        string? dueDateDisplay,
+        string? description);  // ← thêm description
 
     Task<bool> SendAssignmentUpdateEmailAsync(
         string toEmail,
@@ -45,4 +47,13 @@ public interface IEmailService
         string quizTitle,
         string className,
         string lecturerName);
+
+    // Essay submission notification email
+    Task<bool> SendEssaySubmittedNotificationAsync(
+        string toEmail,
+        string lecturerName,
+        string studentName,
+        string quizTitle,
+        string className,
+        string attemptDetailUrl);
 }

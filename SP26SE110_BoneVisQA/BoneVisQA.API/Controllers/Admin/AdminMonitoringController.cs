@@ -28,7 +28,7 @@ public class AdminMonitoringController : ControllerBase
     public async Task<IActionResult> GetActivityStats([FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         if (from > to)
-            return BadRequest("Ngày bắt đầu phải nhỏ hơn ngày kết thúc.");
+            return BadRequest("Start date must be earlier than end date.");
 
         var result = await _systemMonitoringService.GetActivityStatsAsync(from, to);
         return Ok(new { Message = "Get activity stat successfully.", result });

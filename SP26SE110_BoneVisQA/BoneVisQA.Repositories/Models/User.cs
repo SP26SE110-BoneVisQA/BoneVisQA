@@ -167,4 +167,7 @@ public partial class User
 
     [InverseProperty("User")]
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+   
+    [InverseProperty("GradedByUser")]
+    public virtual ICollection<StudentQuizAnswer> GradedStudentQuizAnswers { get; set; } = new List<StudentQuizAnswer>();
 }

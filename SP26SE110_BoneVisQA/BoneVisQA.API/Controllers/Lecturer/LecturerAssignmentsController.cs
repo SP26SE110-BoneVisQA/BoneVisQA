@@ -24,7 +24,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -41,12 +41,31 @@ public class LecturerAssignmentsController : ControllerBase
         }
     }
 
+    /// <summary>Get all cases assigned to a specific class.</summary>
+    [HttpGet("cases")]
+    public async Task<ActionResult<IReadOnlyList<ClassCaseAssignmentDto>>> GetAssignedCases(Guid classId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _lecturerAssignmentService.GetAssignedCasesAsync(lecturerId.Value, classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("quizzes")]
     public async Task<ActionResult<ClassQuizSessionDto>> AssignQuiz(Guid classId, [FromBody] AssignQuizSessionRequestDto request)
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -71,7 +90,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -90,7 +109,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -110,7 +129,7 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -134,12 +153,12 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
             await _lecturerAssignmentService.AllowRetakeForAttemptAsync(lecturerId.Value, attemptId);
-            return Ok(new { message = "Đã cho phép sinh viên làm lại bài quiz." });
+            return Ok(new { message = "The student has been allowed to retake the quiz." });
         }
         catch (KeyNotFoundException ex)
         {
@@ -161,12 +180,58 @@ public class LecturerAssignmentsController : ControllerBase
     {
         var lecturerId = GetUserId();
         if (lecturerId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
             await _lecturerAssignmentService.AllowRetakeAllAsync(lecturerId.Value, classId, quizId);
-            return Ok(new { message = "Đã cho phép tất cả sinh viên trong lớp làm lại bài quiz." });
+            return Ok(new { message = "All students in the class have been allowed to retake the quiz." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Export quiz results to Excel file.</summary>
+    [HttpGet("quizzes/{quizId:guid}/export")]
+    public async Task<ActionResult> ExportQuizResults(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var (fileBytes, fileName) = await _lecturerAssignmentService.ExportQuizResultsAsync(lecturerId.Value, classId, quizId);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Export all quiz results to Excel file for a specific class.</summary>
+    [HttpGet("export-all")]
+    public async Task<ActionResult> ExportClassAllQuizResults(Guid classId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var (fileBytes, FileName) = await _lecturerAssignmentService.ExportClassAllQuizResultsAsync(lecturerId.Value, classId);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", FileName);
         }
         catch (KeyNotFoundException ex)
         {

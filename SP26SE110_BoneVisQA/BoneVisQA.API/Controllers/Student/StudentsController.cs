@@ -36,7 +36,7 @@ public class StudentsController : ControllerBase
     }
 
     private UnauthorizedObjectResult StudentIdentityRequired()
-        => Unauthorized(new { message = "Không xác định được sinh viên từ access token." });
+        => Unauthorized(new { message = "Unable to identify the student from the access token." });
 
     [HttpGet("cases")]
     public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCases()
@@ -176,7 +176,7 @@ public class StudentsController : ControllerBase
     }
 
     /// <summary>
-    /// Sinh viên tự hủy đăng ký (rời lớp).
+    /// Student tự hủy đăng ký (rời lớp).
     /// </summary>
     [HttpDelete("classes/{classId:guid}")]
     public async Task<IActionResult> LeaveEnrolledClass(Guid classId)

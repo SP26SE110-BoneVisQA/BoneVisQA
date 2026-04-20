@@ -95,7 +95,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.ToggleUserStatusAsync(id, request?.IsActive);
         if (result == null)
-            return NotFound(new { message = "Không tìm thấy người dùng." });
+            return NotFound(new { message = "User not found." });
 
         return Ok(result);
     }
@@ -105,7 +105,7 @@ public class AdminUsersController : ControllerBase
     {
         var result = await _userManagementService.AssignRoleAsync(id, role);
         return result == null
-            ? NotFound(new { message = "Không tìm thấy người dùng hoặc role." })
+            ? NotFound(new { message = "User or role not found." })
             : Ok(new
             {
                 Message = "Assign user successfully.",
@@ -167,7 +167,7 @@ public class AdminUsersController : ControllerBase
     {
         var deleted = await _userManagementService.DeleteUserAsync(id);
         if (!deleted)
-            return NotFound(new { message = "Không tìm thấy người dùng." });
+            return NotFound(new { message = "User not found." });
 
         return Ok(new { Message = "User permanently deleted." });
     }  
@@ -195,6 +195,26 @@ public class AdminUsersController : ControllerBase
         return result == null
             ? NotFound(new { message = "User not found." })
             : Ok(new { Message = request.IsApproved ? "Verification approved." : "Verification rejected.", Result = result });
+    }
+
+    // ── Bulk Import Users ─────────────────────────────────────────────────────
+
+    /// POST /api/admin/users/import  –  Import multiple users from a JSON payload
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportUsers([FromBody] BulkCreateUsersRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        if (request.Users == null || request.Users.Count == 0)
+            return BadRequest(new { message = "No users provided for import." });
+
+        var result = await _userManagementService.BulkCreateUsersAsync(request);
+        return Ok(new
+        {
+            Message = $"Import completed. {result.SuccessCount} succeeded, {result.FailureCount} failed.",
+            Result = result
+        });
     }
 }
 

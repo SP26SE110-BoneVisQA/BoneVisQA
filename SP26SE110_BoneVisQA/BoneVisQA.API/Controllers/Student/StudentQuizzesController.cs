@@ -33,7 +33,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetAvailableQuizzesAsync(studentId.Value);
         return Ok(result);
@@ -44,7 +44,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -66,7 +66,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -89,10 +89,10 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         // 1. Gọi AI tạo câu hỏi
         var generated = await _aiQuizService.GenerateQuizQuestionsAsync(
@@ -126,10 +126,10 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         if (string.IsNullOrWhiteSpace(request.Topic))
-            return BadRequest(new { message = "Topic là bắt buộc." });
+            return BadRequest(new { message = "Topic is required." });
 
         var result = await _aiQuizService.GenerateQuizQuestionsAsync(
             request.Topic,
@@ -151,7 +151,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentLearningService.GetQuizAttemptHistoryAsync(studentId.Value);
         return Ok(result);
@@ -162,7 +162,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {
@@ -184,7 +184,7 @@ public class StudentQuizzesController : ControllerBase
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         submit.StudentId = studentId.Value;
         var result = await _studentService.SubmitQuizAsync(studentId.Value, submit);
@@ -238,14 +238,14 @@ public class StudentQuizzesController : ControllerBase
     }
 
     /// <summary>
-    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer.
+    /// Student gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer.
     /// </summary>
     [HttpPost("{quizId:guid}/request-retake")]
     public async Task<ActionResult> RequestRetake(Guid quizId)
     {
         var studentId = GetUserId();
         if (studentId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         try
         {

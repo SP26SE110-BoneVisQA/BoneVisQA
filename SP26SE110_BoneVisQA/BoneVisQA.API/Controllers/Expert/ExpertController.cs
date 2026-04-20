@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
@@ -19,12 +20,18 @@ namespace BoneVisQA.API.Controllers.Expert
         private readonly IMedicalCaseService _medicalcaseService;
         private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
+        private readonly ISupabaseStorageService _storageService;
 
-        public ExpertController(IMedicalCaseService medicalService, IQuizsService quizService, ITagCaseService tagCaseService)
+        public ExpertController(
+            IMedicalCaseService medicalService,
+            IQuizsService quizService,
+            ITagCaseService tagCaseService,
+            ISupabaseStorageService storageService)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
             _tagCaseService = tagCaseService;
+            _storageService = storageService;
         }
         [HttpGet("cases")]
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
@@ -65,7 +72,7 @@ namespace BoneVisQA.API.Controllers.Expert
 
             var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!Guid.TryParse(expertIdStr, out var expertId) || expertId == Guid.Empty)
-                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
 
             var created = await _medicalcaseService.CreateMedicalCaseWithImagesJsonAsync(body, expertId, cancellationToken);
             return Ok(new
@@ -129,6 +136,51 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
+        [HttpDelete("images/{imageId:guid}")]
+        public async Task<IActionResult> DeleteImage([FromRoute] Guid imageId)
+        {
+            var deleted = await _medicalcaseService.DeleteMedicalImageAsync(imageId);
+            if (!deleted)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = "Medical image not found."
+                });
+            }
+            return Ok(new { message = "Medical image deleted successfully." });
+        }
+
+        /// <summary>Upload quiz question image to Supabase storage</summary>
+        [HttpPost("quiz-questions/upload-image")]
+        [RequestSizeLimit(10485760)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 10485760)]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadQuizQuestionImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File is required." });
+
+            if (file.Length > 10485760)
+                return BadRequest(new { message = "File size exceeds 10MB limit." });
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(extension))
+                return BadRequest(new { message = "Only JPG, PNG, GIF, WEBP files are allowed." });
+
+            try
+            {
+                var url = await _storageService.UploadFileAsync(file, "medical-cases", "expert-workbench");
+                return Ok(new { url });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Upload failed: {ex.Message}" });
+            }
+        }
+
         [HttpPost("annotations")]
         public async Task<IActionResult> AddAnnotation([FromBody] AddAnnotationDTOResponse dto)
         {
@@ -158,6 +210,14 @@ namespace BoneVisQA.API.Controllers.Expert
             {
                 return BadRequest("Invalid request");
             }
+
+            // Lấy ExpertId từ JWT token và gán vào request
+            var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(expertIdStr, out var expertId) || expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+            // Gán CreatedByExpertId để quiz được hiển thị ở phía Lecturer
+            request.CreatedByExpertId = expertId;
 
             var result = await _quizService.CreateQuizAsync(request);
 
@@ -244,6 +304,39 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+        [HttpPatch("questions")]
+        public async Task<IActionResult> PatchQuestion(UpdateQuizQuestionRequestDTO request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            var result = await _quizService.UpdateQuizQuestionAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz question updated successfully",
+                result
+            });
+        }
+        [HttpPatch("questions/{questionId}")]
+        public async Task<IActionResult> PatchQuestionById(Guid questionId, [FromBody] UpdateQuizQuestionRequestDTO request)
+        {
+            if (request == null)
+            {
+                return BadRequest("Invalid request");
+            }
+
+            request.QuestionId = questionId;
+            var result = await _quizService.UpdateQuizQuestionAsync(request);
+
+            return Ok(new
+            {
+                message = "Quiz question updated successfully",
+                result
+            });
+        }
         [HttpDelete("questions/{questionId}")]
         public async Task<IActionResult> DeleteQuestion(Guid questionId)
         {
@@ -260,6 +353,19 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
         //================================================================================================================
+        // Assign quiz to class - using /api/expert/quizzes/assign (matches frontend)
+        [HttpPost("quizzes/assign")]
+        public async Task<IActionResult> AssignToClassViaQuizzes(AssignQuizRequestDTO dto)
+        {
+            var result = await _quizService.AssignQuizToClassAsync(dto);
+            return Ok(new
+            {
+                Message = "AssignQuiz successfully.",
+                result
+            });
+        }
+
+        // Keep original /api/expert/assign for backward compatibility
         [HttpPost("assign")]
         public async Task<IActionResult> AssignToClass(AssignQuizRequestDTO dto)
         {
@@ -333,6 +439,11 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
+        /// <summary>Alias for <c>GET /api/expert/tag</c> (plural) for older FE clients.</summary>
+        [HttpGet("tags")]
+        public Task<IActionResult> GetAllTags(int pageIndex = 1, int pageSize = 10) =>
+            GetAllTag(pageIndex, pageSize);
+
         [HttpGet("image")]
         public async Task<IActionResult> GetAllImage( int pageIndex = 1,int pageSize = 10)
         {
@@ -356,5 +467,163 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
+
+        #region Expert Quiz Library - Expert xem và assign quiz từ thư viện
+
+        /// <summary>
+        /// Expert xem thư viện quiz từ tất cả Experts (bao gồm quiz của các Expert khác).
+        /// Dùng để chọn quiz để assign vào lớp học.
+        /// </summary>
+        [HttpGet("library/quizzes")]
+        public async Task<ActionResult<PagedResult<ExpertQuizForLecturerDto>>> GetExpertQuizLibrary(
+            [FromQuery] int pageIndex = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? topic = null,
+            [FromQuery] string? difficulty = null,
+            [FromQuery] string? classification = null)
+        {
+            if (pageIndex < 1) pageIndex = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 50) pageSize = 50;
+
+            var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+                pageIndex, pageSize, topic, difficulty, classification);
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Xem chi tiết một quiz trong thư viện Expert.
+        /// </summary>
+        [HttpGet("library/quizzes/{quizId:guid}")]
+        public async Task<ActionResult<ExpertQuizForLecturerDto>> GetExpertQuizFromLibrary(Guid quizId)
+        {
+            try
+            {
+                var result = await _quizService.GetExpertQuizzesForLecturerAsync(
+                    pageIndex: 1,
+                    pageSize: 1,
+                    topic: null,
+                    difficulty: null,
+                    classification: null);
+
+                var quiz = result.Items.FirstOrDefault(q => q.Id == quizId);
+                if (quiz == null)
+                    return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+                return Ok(quiz);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Xem trước câu hỏi của quiz trong thư viện Expert.
+        /// </summary>
+        [HttpGet("library/quizzes/{quizId:guid}/questions")]
+        public async Task<IActionResult> GetExpertQuizQuestionsFromLibrary(Guid quizId)
+        {
+            try
+            {
+                var result = await _quizService.GetExpertQuizQuestionsAsync(quizId);
+                return Ok(new
+                {
+                    message = "Lấy câu hỏi thành công",
+                    quizId = quizId,
+                    questionCount = result.Count,
+                    questions = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Expert gán quiz từ thư viện vào lớp học của mình.
+        /// Hệ thống tự động gán TẤT CẢ câu hỏi trong quiz đó vào lớp.
+        /// </summary>
+        [HttpPost("classes/{classId:guid}/library-quizzes/{quizId:guid}")]
+        public async Task<IActionResult> AssignExpertQuizFromLibraryToClass(
+            Guid classId,
+            Guid quizId,
+            [FromBody] AssignExpertQuizRequestDto? request = null)
+        {
+            try
+            {
+                // Verify quiz exists in library
+                var quiz = await _quizService.GetExpertQuizzesForLecturerAsync(
+                    pageIndex: 1, pageSize: 1);
+
+                var expertQuiz = quiz.Items.FirstOrDefault(q => q.Id == quizId);
+                if (expertQuiz == null)
+                    return NotFound(new { message = "Quiz không tồn tại trong thư viện Expert." });
+
+                // Convert to AssignQuizRequestDTO
+                var assignRequest = new AssignQuizRequestDTO
+                {
+                    ClassId = classId,
+                    QuizId = quizId,
+                    AssignedExpertId = null,
+                    OpenTime = request?.OpenTime,
+                    CloseTime = request?.CloseTime,
+                    PassingScore = request?.PassingScore,
+                    TimeLimitMinutes = request?.TimeLimitMinutes
+                };
+
+                var result = await _quizService.AssignQuizToClassAsync(assignRequest);
+
+                return Ok(new
+                {
+                    message = $"Đã gán quiz '{expertQuiz.Title}' vào lớp thành công.",
+                    result = result,
+                    questionCount = expertQuiz.QuestionCount,
+                    note = "Quiz này có " + expertQuiz.QuestionCount + " câu hỏi. Tất cả câu hỏi đã được gán cho lớp."
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Kiểm tra xem một quiz đã được gán vào lớp nào chưa.
+        /// Dùng để hiển thị warning cho Expert khi edit quiz.
+        /// </summary>
+        [HttpGet("quizzes/{quizId:guid}/assignment-status")]
+        public async Task<IActionResult> GetQuizAssignmentStatus(Guid quizId)
+        {
+            try
+            {
+                var (isAssigned, count) = await _quizService.IsQuizAssignedAsync(quizId);
+
+                return Ok(new
+                {
+                    isAssigned = isAssigned,
+                    assignedClassCount = count,
+                    message = isAssigned
+                        ? $"Quiz này đã được gán vào {count} lớp. Thay đổi timeLimit/score sẽ KHÔNG ảnh hưởng đến các lớp đã gán."
+                        : "Quiz chưa được gán vào lớp nào."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        #endregion
     }
 }

@@ -41,12 +41,16 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<Document> Documents { get; set; }
 
     public virtual DbSet<DocumentChunk> DocumentChunks { get; set; }
+    public virtual DbSet<PendingDocumentChunk> PendingDocumentChunks { get; set; }
 
     public virtual DbSet<DocumentTag> DocumentTags { get; set; }
 
     public virtual DbSet<ExpertReview> ExpertReviews { get; set; }
 
     public virtual DbSet<LearningStatistic> LearningStatistics { get; set; }
+
+    // PendingDocumentChunks - disabled (not used in current implementation)
+    // public virtual DbSet<PendingDocumentChunk> PendingDocumentChunks { get; set; }
 
     public virtual DbSet<MedicalCase> MedicalCases { get; set; }
 
@@ -124,6 +128,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.SendEmail).HasDefaultValueSql("true");
 
             entity.HasOne(d => d.Class).WithMany(p => p.Announcements).HasConstraintName("announcements_class_id_fkey");
+            // Note: No FK to class_cases because it uses composite key (class_id, case_id)
+            // Application validates assignmentId exists in class_cases or class_quiz_sessions
         });
 
         modelBuilder.Entity<CaseAnnotation>(entity =>
@@ -195,7 +201,13 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
 
-            entity.HasOne(d => d.Answer).WithMany(p => p.Citations).HasConstraintName("citations_answer_id_fkey");
+            entity.HasOne(d => d.Answer).WithMany(p => p.Citations)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("citations_answer_id_fkey");
+
+            entity.HasOne(d => d.Message).WithMany(p => p.Citations)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("citations_message_id_fkey");
 
             entity.HasOne(d => d.Chunk).WithMany(p => p.Citations).HasConstraintName("citations_chunk_id_fkey");
         });
@@ -271,9 +283,13 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsOutdated).HasDefaultValue(false);
-            entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.Version).HasMaxLength(32).HasDefaultValue("1.0.0");
+            entity.Property(e => e.PendingTargetVersion).HasMaxLength(32);
             entity.Property(e => e.IndexingProgress).HasDefaultValue(0);
+            entity.Property(e => e.TotalPages).HasDefaultValue(0);
+            entity.Property(e => e.CurrentPageIndexing).HasDefaultValue(0);
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -304,6 +320,8 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
 
+            entity.HasIndex(e => e.DocId).HasDatabaseName("ix_document_chunks_doc_id");
+
             // Ensure pgvector embedding dimension matches the embedding model output.
             entity.Property(e => e.Embedding).HasColumnType("vector(768)");
             entity.HasIndex(e => e.Embedding)
@@ -317,6 +335,13 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("document_chunks_flagged_by_expert_id_fkey");
         });
 
+        modelBuilder.Entity<PendingDocumentChunk>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pending_document_chunks_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.Embedding).HasColumnType("vector(768)");
+        });
+
         modelBuilder.Entity<ExpertReview>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("expert_reviews_pkey");
@@ -324,9 +349,15 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
 
-            entity.HasOne(d => d.Answer).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_answer_id_fkey");
+            entity.HasOne(d => d.Answer).WithMany(p => p.ExpertReviews)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("expert_reviews_answer_id_fkey");
 
             entity.HasOne(d => d.Expert).WithMany(p => p.ExpertReviews).HasConstraintName("expert_reviews_expert_id_fkey");
+
+            entity.HasOne(d => d.Session).WithMany(p => p.ExpertReviews)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("expert_reviews_session_id_fkey");
         });
 
         modelBuilder.Entity<LearningStatistic>(entity =>
@@ -354,6 +385,12 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsApproved).HasDefaultValue(false);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Version).HasMaxLength(32).HasDefaultValue("1.0.0");
+
+            entity.Property(e => e.Embedding).HasColumnType("vector(768)");
+            entity.HasIndex(e => e.Embedding)
+                .HasMethod("hnsw")
+                .HasOperators("vector_cosine_ops");
 
             entity.HasOne(d => d.Category).WithMany(p => p.MedicalCases)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -410,6 +447,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsAiGenerated).HasDefaultValue(false);
+            entity.Property(e => e.Mode).HasDefaultValue("'multiple_choice'::text");
 
             entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedQuizzes)
                 .HasForeignKey(d => d.CreatedByExpertId)
@@ -419,7 +457,7 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.AssignedExpert).WithMany(p => p.AssignedQuizzes)
                 .HasForeignKey(d => d.AssignedExpertId)
                 .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("quizzes_assigned_expert_id_fkey");
+                .HasConstraintName("quizzes_assigned_by_expert_id_fkey");
         });
 
         modelBuilder.Entity<QuizAttempt>(entity =>
@@ -439,18 +477,25 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("quiz_questions_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.MaxScore).HasDefaultValue(10);
 
             entity.HasOne(d => d.Case).WithMany(p => p.QuizQuestions)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("quiz_questions_case_id_fkey");
 
             entity.HasOne(d => d.Quiz).WithMany(p => p.QuizQuestions).HasConstraintName("quiz_questions_quiz_id_fkey");
+
+            // Configure QuestionType enum to be stored as integer in database
+            entity.Property(e => e.Type)
+                .HasConversion<int?>()
+                .HasColumnType("int");
         });
 
         modelBuilder.Entity<QAMessage>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("qa_messages_pkey");
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.ClientRequestId).HasMaxLength(100);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Role).HasMaxLength(20);
 
@@ -458,6 +503,15 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.SessionId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("qa_messages_session_id_fkey");
+        });
+
+        modelBuilder.Entity<VisualQASession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("visual_qa_sessions_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Status).HasMaxLength(40).HasDefaultValue("Active");
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -490,10 +544,16 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("student_quiz_answers_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.IsGraded).HasDefaultValue(false);
 
             entity.HasOne(d => d.Attempt).WithMany(p => p.StudentQuizAnswers).HasConstraintName("student_quiz_answers_attempt_id_fkey");
 
             entity.HasOne(d => d.Question).WithMany(p => p.StudentQuizAnswers).HasConstraintName("student_quiz_answers_question_id_fkey");
+
+            entity.HasOne(d => d.GradedByUser).WithMany(p => p.GradedStudentQuizAnswers)
+                .HasForeignKey(d => d.GradedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_quiz_answers_graded_by_fkey");
         });
 
         modelBuilder.Entity<Tag>(entity =>

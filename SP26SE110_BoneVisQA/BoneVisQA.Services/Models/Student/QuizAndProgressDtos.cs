@@ -17,6 +17,10 @@ public class QuizListItemDto
     public int TotalQuestions { get; set; }
     public bool IsCompleted { get; set; }
     public double? Score { get; set; }
+    /// <summary>Attempt ID của lần làm gần nhất — dùng để review.</summary>
+    public Guid? AttemptId { get; set; }
+    /// <summary>Thời gian tạo quiz — dùng để sắp xếp theo quiz mới nhất.</summary>
+    public DateTime? CreatedAt { get; set; }
 }
 
 /// <summary>
@@ -47,6 +51,8 @@ public class StudentQuizQuestionDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? ImageUrl { get; set; }
+    public int MaxScore { get; set; } = 10;
+    public string? ReferenceAnswer { get; set; } // For essay, shown only after grading if configured
 }
 
 public class QuizSessionDto
@@ -65,7 +71,8 @@ public class QuizSessionDto
 public class SubmitQuizQuestionAnswerDto
 {
     public Guid QuestionId { get; set; }
-    public string? StudentAnswer { get; set; }
+    public string? StudentAnswer { get; set; } // For MC/TF
+    public string? EssayAnswer { get; set; }   // For essay
 }
 
 public class SubmitQuizRequestDto
@@ -83,6 +90,11 @@ public class QuizResultDto
     public bool Passed { get; set; }
     public int TotalQuestions { get; set; }
     public int CorrectAnswers { get; set; }
+    /// <summary>
+    /// Số câu essay chưa được giảng viên chấm.
+    /// Nếu > 0, điểm hiện tại là điểm tạm và có thể thay đổi sau khi giảng viên chấm.
+    /// </summary>
+    public int UngradedEssayCount { get; set; }
 }
 
 public class StudentProgressDto
@@ -120,11 +132,16 @@ public class StudentTopicStatDto
 
 public class StudentRecentActivityDto
 {
+    /// <summary>Stable token for UI routing (e.g. <c>visual_qa</c> for Visual QA timeline rows).</summary>
     public string ActivityType { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string? Topic { get; set; }
     public DateTime OccurredAt { get; set; }
+    /// <summary>Visual QA session id when <see cref="ActivityType"/> is visual QA.</summary>
+    public Guid? SessionId { get; set; }
+    /// <summary>Optional deep link (relative). FE may derive from <see cref="SessionId"/> when null.</summary>
+    public string? TargetUrl { get; set; }
 }
 
 /// <summary>
@@ -172,6 +189,7 @@ public class QuizAttemptReviewDto
     public int TotalQuestions { get; set; }
     public int CorrectAnswers { get; set; }
     public bool Passed { get; set; }
+    public int? PassingScore { get; set; }
     public IReadOnlyList<QuestionReviewItemDto> Questions { get; set; } = Array.Empty<QuestionReviewItemDto>();
 }
 
@@ -179,13 +197,19 @@ public class QuestionReviewItemDto
 {
     public Guid QuestionId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
+    public string? Type { get; set; }
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public string? CorrectAnswer { get; set; }
     public bool IsCorrect { get; set; }
     public string? ImageUrl { get; set; }
     public string? CaseId { get; set; }
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool IsGraded { get; set; }
+    public int MaxScore { get; set; } = 10;
 }

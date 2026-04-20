@@ -28,7 +28,7 @@ public class NotificationsController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var list = await _unitOfWork.Context.Notifications
             .AsNoTracking()
@@ -42,6 +42,7 @@ public class NotificationsController : ControllerBase
                 Message = n.Message,
                 Type = n.Type,
                 TargetUrl = n.TargetUrl,
+                Route = NotificationAppRoute.Normalize(n.TargetUrl),
                 IsRead = n.IsRead,
                 CreatedAt = n.CreatedAt
             })
@@ -59,13 +60,13 @@ public class NotificationsController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null)
-            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var entity = await _unitOfWork.Context.Notifications
             .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId.Value);
 
         if (entity == null)
-            return NotFound(new { message = "Không tìm thấy thông báo." });
+            return NotFound(new { message = "Notification not found." });
 
         if (!entity.IsRead)
         {

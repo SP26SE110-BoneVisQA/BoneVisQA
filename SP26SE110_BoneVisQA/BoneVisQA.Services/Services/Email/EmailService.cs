@@ -64,7 +64,7 @@ public class EmailService : IEmailService
 
         try
         {
-            var subject = "Đặt lại mật khẩu - BoneVisQA";
+            var subject = "Reset Password - BoneVisQA";
             var body = $@"
 <!DOCTYPE html>
 <html>
@@ -86,23 +86,23 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Yêu cầu đặt lại mật khẩu</h2>
-            <p>Xin chào,</p>
-            <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
-            <p>Vui lòng nhấn vào nút bên dưới để đặt lại mật khẩu:</p>
+            <h2>Password Reset Request</h2>
+            <p>Hello,</p>
+            <p>We received a request to reset your account password.</p>
+            <p>Please click the button below to reset your password:</p>
             <p style='text-align: center;'>
-                <a href='{resetLink}' class='button'>Đặt lại mật khẩu</a>
+                <a href='{resetLink}' class='button'>Reset Password</a>
             </p>
-            <p>Hoặc sao chép và dán đường link sau vào trình duyệt:</p>
+            <p>Or copy and paste the following link into your browser:</p>
             <p style='word-break: break-all; color: #3498db;'>{resetLink}</p>
             <div class='warning'>
-                <strong>Lưu ý:</strong> Link đặt lại mật khẩu sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+                <strong>Note:</strong> The password reset link will expire in 1 hour. If you did not request a password reset, please ignore this email.
             </div>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -155,7 +155,7 @@ public class EmailService : IEmailService
 
         try
         {
-            var subject = "Chào mừng đến với BoneVisQA";
+            var subject = "Welcome to BoneVisQA";
             var body = $@"
 <!DOCTYPE html>
 <html>
@@ -177,19 +177,19 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Chào mừng {fullName}!</h2>
-            <p>Xin chào {fullName},</p>
-            <p>Cảm ơn bạn đã đăng ký tài khoản tại <strong>BoneVisQA</strong>.</p>
+            <h2>Welcome {fullName}!</h2>
+            <p>Hello {fullName},</p>
+            <p>Thank you for registering an account at <strong>BoneVisQA</strong>.</p>
             <div class='success'>
-                <p><strong>Tài khoản của bạn đang chờ duyệt.</strong></p>
-                <p>Vui lòng đợi admin xác nhận để có thể đăng nhập và sử dụng hệ thống.</p>
+                <p><strong>Your account is pending approval.</strong></p>
+                <p>Please wait for admin confirmation before logging in and using the system.</p>
             </div>
-            <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>If you have any questions, please contact us.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -545,7 +545,7 @@ public class EmailService : IEmailService
 
         try
         {
-            var subject = "BoneVisQA - Yêu cầu xác nhận sinh viên y khoa đã được gửi";
+            var subject = "BoneVisQA - Medical student verification request submitted";
             var body = $@"
 <!DOCTYPE html>
 <html>
@@ -566,18 +566,18 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Xin chào, {fullName}!</h2>
-            <p>Chúng tôi đã nhận được yêu cầu xác nhận <strong>sinh viên y khoa</strong> của bạn.</p>
+            <h2>Hello, {fullName}!</h2>
+            <p>We have received your <strong>medical student</strong> verification request.</p>
             <div class='status-box'>
-                <p><strong>Đang chờ duyệt</strong></p>
-                <p>Yêu cầu của bạn đang được admin xem xét.</p>
+                <p><strong>Pending review</strong></p>
+                <p>Your request is being reviewed by the admin team.</p>
             </div>
-            <p>Bạn sẽ nhận được email thông báo khi tài khoản được phê duyệt.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>You will receive an email notification when your account is approved.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -643,19 +643,19 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Xin chào, {fullName}!</h2>
-            <p>Chúc mừng! Thông tin <strong>sinh viên y khoa</strong> của bạn đã được <strong>phê duyệt</strong>.</p>
+            <h2>Hello, {fullName}!</h2>
+            <p>Congratulations! Your <strong>medical student</strong> information has been <strong>approved</strong>.</p>
             <div class='status-box'>
-                <p>✓ Xác minh sinh viên y khoa thành công</p>
-                <p>Tài khoản của bạn đã được kích hoạt.</p>
+                <p>✓ Medical student verification successful</p>
+                <p>Your account has been activated.</p>
             </div>
-            <p>Bây giờ bạn có thể đăng nhập vào BoneVisQA và truy cập các tài liệu y khoa.</p>
-            <p>Nếu bạn có câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>You can now log in to BoneVisQA and access medical learning materials.</p>
+            <p>If you have any questions, please contact us.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -699,7 +699,7 @@ public class EmailService : IEmailService
         }
 
         string reasonText = string.IsNullOrWhiteSpace(reason)
-            ? "Thông tin xác minh không hợp lệ hoặc không đầy đủ."
+            ? "Verification information is invalid or incomplete."
             : reason;
 
         try
@@ -725,18 +725,18 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Xin chào, {fullName}!</h2>
-            <p>Thông tin <strong>sinh viên y khoa</strong> của bạn đã bị <strong>từ chối</strong>.</p>
+            <h2>Hello, {fullName}!</h2>
+            <p>Your <strong>medical student</strong> information has been <strong>rejected</strong>.</p>
             <div class='status-box'>
-                <p><strong>Lý do:</strong></p>
+                <p><strong>Reason:</strong></p>
                 <p>{reasonText}</p>
             </div>
-            <p>Vui lòng liên hệ với quản trị viên để được hỗ trợ hoặc đăng ký lại với thông tin chính xác.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>Please contact an administrator for support or resubmit with accurate information.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -789,29 +789,29 @@ public class EmailService : IEmailService
         {
             case "student":
                 roleDisplayName = "Student";
-                roleDescription = "Bạn có thể truy cập thư viện ca bệnh, làm bài kiểm tra và đặt câu hỏi về các ca lâm sàng.";
+                roleDescription = "You can access the case library, take quizzes, and ask questions about clinical cases.";
                 break;
             case "lecturer":
-                roleDisplayName = "Giảng viên";
-                roleDescription = "Bạn có thể quản lý lớp học, tạo bài kiểm tra và theo dõi tiến độ học tập của sinh viên.";
+                roleDisplayName = "Lecturer";
+                roleDescription = "You can manage classes, create quizzes, and track student learning progress.";
                 break;
             case "expert":
-                roleDisplayName = "Chuyên gia";
-                roleDescription = "Bạn có thể xem xét và trả lời câu hỏi của sinh viên về các ca lâm sàng.";
+                roleDisplayName = "Expert";
+                roleDescription = "You can review and answer student questions about clinical cases.";
                 break;
             case "admin":
-                roleDisplayName = "Quản trị viên";
-                roleDescription = "Bạn có toàn quyền truy cập hệ thống quản trị, quản lý người dùng và nội dung.";
+                roleDisplayName = "Administrator";
+                roleDescription = "You have full access to the administration system, including user and content management.";
                 break;
             default:
                 roleDisplayName = roleName;
-                roleDescription = $"Vai trò của bạn là: {roleName}.";
+                roleDescription = $"Your role is: {roleName}.";
                 break;
         }
 
         try
         {
-            var subject = "BoneVisQA - Tài khoản đã được kích hoạt!";
+            var subject = "BoneVisQA - Your account has been activated!";
             var body = $@"
 <!DOCTYPE html>
 <html>
@@ -834,24 +834,24 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <h2>Xin chào, {fullName}!</h2>
-            <p>Chúc mừng! Tài khoản của bạn đã được <strong>kích hoạt</strong>.</p>
+            <h2>Hello, {fullName}!</h2>
+            <p>Congratulations! Your account has been <strong>activated</strong>.</p>
             <div class='status-box'>
-                <p>✓ Xác minh sinh viên y khoa thành công</p>
-                <p>✓ Tài khoản đã được kích hoạt</p>
+                <p>✓ Medical student verification successful</p>
+                <p>✓ Account activated</p>
             </div>
-            <p>Vai trò của bạn: <span class='role-badge'>{roleDisplayName}</span></p>
+            <p>Your role: <span class='role-badge'>{roleDisplayName}</span></p>
             <div class='features'>
-                <h3>Tính năng của bạn:</h3>
+                <h3>Your features:</h3>
                 <p>{roleDescription}</p>
             </div>
-            <p>Bây giờ bạn có thể đăng nhập vào BoneVisQA và bắt đầu sử dụng.</p>
-            <p>Nếu bạn có câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>You can now log in to BoneVisQA and start using the platform.</p>
+            <p>If you have any questions, please contact us.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Không trả lời email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply to this email.</p>
         </div>
     </div>
 </body>
@@ -892,7 +892,12 @@ public class EmailService : IEmailService
         string lecturerName,
         string className,
         string announcementTitle,
-        string announcementContent)
+        string announcementContent,
+        string? assignmentTitle = null,
+        string? assignmentType = null,
+        DateTime? dueDate = null,
+        string? dueDateDisplay = null,
+        string? assignmentUrl = null)
     {
         _logger.LogInformation("[SendAnnouncementEmailAsync] Sending announcement email to {ToEmail} from {LecturerName}", toEmail, lecturerName);
 
@@ -902,52 +907,103 @@ public class EmailService : IEmailService
             return false;
         }
 
+        // Build assignment info if provided
+        var hasAssignment = !string.IsNullOrEmpty(assignmentTitle);
+        var dueDateText = dueDate.HasValue
+            ? $"<strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : null;
+
         try
         {
             var subject = $"[BoneVisQA] Thông báo mới từ lớp {className}: {announcementTitle}";
+            
+            // Build assignment card HTML if assignment is linked
+            var assignmentCardHtml = hasAssignment ? $@"
+            <div style='margin: 20px 0; background: linear-gradient(135deg, #f8f9fa, #e8f4f8); border-left: 5px solid #1a5f7a; padding: 20px; border-radius: 0 8px 8px 0;'>
+                <p style='margin: 0 0 8px; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;'>
+                    Bài tập liên kết
+                </p>
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 12px;'>
+                    <span style='display: inline-block; background: #f39c12; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase;'>
+                        {assignmentType ?? "assignment"}
+                    </span>
+                    <strong style='font-size: 16px; color: #2c3e50;'>{assignmentTitle}</strong>
+                </div>
+                " + (dueDateText != null ? $@"
+                <div style='background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #856404;'>
+                    Hạn nộp: {dueDateText}
+                </div>" : "") + @"
+            </div>" : "";
             var body = $@"
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset='utf-8'>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background-color: #2c3e50; color: white; padding: 25px; text-align: center; }}
-        .header h1 {{ margin: 0; font-size: 22px; }}
-        .announcement-badge {{ background-color: #e74c3c; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; display: inline-block; margin-bottom: 10px; }}
-        .content {{ padding: 30px; background-color: #ffffff; }}
-        .announcement-card {{ background-color: #fef9e7; border-left: 5px solid #f39c12; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
-        .announcement-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }}
-        .announcement-body {{ font-size: 15px; color: #555; white-space: pre-wrap; line-height: 1.8; }}
-        .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
-        .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; background-color: #f5f5f5; }}
-    </style>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>{subject}</title>
 </head>
-<body>
-    <div class='container'>
-        <div class='header'>
-            <div class='announcement-badge'>Thông báo mới</div>
-            <h1>BoneVisQA</h1>
-        </div>
-        <div class='content'>
-            <p>Xin chào <strong>{studentName}</strong>,</p>
-            <p>Bạn có một thông báo mới từ giảng viên <strong>{lecturerName}</strong> trong lớp <strong>{className}</strong>:</p>
-            <div class='announcement-card'>
-                <div class='announcement-title'>{announcementTitle}</div>
-                <div class='announcement-body'>{announcementContent}</div>
-                <div class='meta'>
-                    <strong>Giảng viên:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Lớp:</strong> {className}
-                </div>
-            </div>
-            <p>Đăng nhập vào <a href='#'>BoneVisQA</a> để xem chi tiết và cập nhật.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
-        </div>
-        <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Vui lòng không trả lời trực tiếp email này.</p>
-        </div>
-    </div>
+<body style='margin:0;padding:0;background:#f4f4f4;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='background:#f4f4f4;padding:30px 0;'>
+        <tr>
+            <td align='center'>
+                <table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);'>
+                    <!-- Header -->
+                    <tr>
+                        <td style='background:linear-gradient(135deg,#1a5f7a,#2c3e50);padding:30px 40px;text-align:center;'>
+                            <div style='display:inline-block;background:#e74c3c;color:white;padding:4px 16px;border-radius:20px;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;'>
+                                Thông báo mới
+                            </div>
+                            <h1 style='color:#ffffff;margin:10px 0 0;font-size:24px;'>BoneVisQA</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style='padding:35px 40px;'>
+                            <p style='margin:0 0 20px;font-size:16px;color:#333;'>
+                                Xin chào <strong>{studentName}</strong>,
+                            </p>
+                            <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
+                                Bạn có một thông báo mới từ giảng viên <strong>{lecturerName}</strong> trong lớp <strong>{className}</strong>:
+                            </p>
+                            
+                            <!-- Announcement Card -->
+                            <div style='background:#fef9e7;border-left:5px solid #f39c12;padding:20px;border-radius:0 8px 8px 0;margin:20px 0;'>
+                                <h2 style='margin:0 0 10px;font-size:18px;font-weight:bold;color:#2c3e50;'>{announcementTitle}</h2>
+                                <p style='margin:0;font-size:15px;color:#555;line-height:1.8;white-space:pre-wrap;'>{announcementContent}</p>
+                            </div>
+                            
+                            {assignmentCardHtml}
+                            
+                            <!-- Meta Info -->
+                            <div style='margin-top:25px;padding-top:20px;border-top:1px solid #eee;color:#888;font-size:13px;'>
+                                <strong>Giảng viên:</strong> {lecturerName} &nbsp;|&nbsp; <strong>Lớp:</strong> {className}
+                            </div>
+                            
+                            <!-- CTA Button -->
+                            <div style='margin-top:25px;text-align:center;'>
+                                <a href='{_appUrl}' target='_blank' style='display:inline-block;background:linear-gradient(135deg,#1a5f7a,#2980b9);color:white !important;padding:14px 35px;border-radius:25px;text-decoration:none;font-weight:bold;font-size:15px;'>
+                                    Mở BoneVisQA
+                                </a>
+                            </div>
+                            
+                            <p style='margin:25px 0 0;font-size:14px;color:#555;line-height:1.7;'>
+                                Trân trọng,<br><strong>Đội ngũ BoneVisQA</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style='background:#f8f9fa;padding:20px 40px;border-top:1px solid #eee;'>
+                            <p style='margin:0;font-size:12px;color:#aaa;text-align:center;'>
+                                Email này được gửi tự động từ BoneVisQA — Radiology Education Platform.<br>
+                                Vui lòng không trả lời trực tiếp email này.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>";
 
@@ -989,7 +1045,8 @@ public class EmailService : IEmailService
         string assignmentTitle,
         string assignmentType,
         DateTime? dueDate,
-        string? dueDateDisplay)
+        string? dueDateDisplay,
+        string? description)  // ← thêm parameter
     {
         _logger.LogInformation("[SendAssignmentEmailAsync] Sending assignment email to {ToEmail} - {Title}", toEmail, assignmentTitle);
 
@@ -1000,10 +1057,10 @@ public class EmailService : IEmailService
         }
 
         var dueDateText = dueDate.HasValue
-            ? $"Hạn nộp: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
-            : "Không có hạn nộp cụ thể";
+            ? $"Due date: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : "No specific due date";
 
-        var subject = $"[BoneVisQA] Bài tập mới: {assignmentTitle} ({assignmentType})";
+        var subject = $"[BoneVisQA] New assignment: {assignmentTitle} ({assignmentType})";
         var body = $@"
 <!DOCTYPE html>
 <html>
@@ -1019,6 +1076,7 @@ public class EmailService : IEmailService
         .assignment-card {{ background: linear-gradient(135deg, #f8f9fa, #e8f4f8); border-left: 5px solid #1a5f7a; padding: 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
         .assignment-title {{ font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }}
         .assignment-type {{ font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }}
+        .assignment-description {{ font-size: 14px; color: #555; line-height: 1.6; margin-top: 12px; padding: 12px; background: #f8f9fa; border-left: 3px solid #1a5f7a; }}
         .due-date {{ background-color: #fff3cd; border: 1px solid #ffc107; padding: 10px 15px; border-radius: 6px; margin: 15px 0; font-size: 14px; color: #856404; }}
         .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1a5f7a, #2980b9); color: white !important; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: bold; margin: 15px 0; }}
         .meta {{ color: #888; font-size: 13px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }}
@@ -1032,19 +1090,22 @@ public class EmailService : IEmailService
             <h1>BoneVisQA</h1>
         </div>
         <div class='content'>
-            <p>Xin chào <strong>{studentName}</strong>,</p>
-            <p>Giảng viên vừa giao một bài tập mới cho lớp <strong>{className}</strong>:</p>
+            <p>Hello <strong>{studentName}</strong>,</p>
+            <p>A lecturer has assigned a new task to class <strong>{className}</strong>:</p>
             <div class='assignment-card'>
                 <div class='assignment-type'>{assignmentType}</div>
                 <div class='assignment-title'>{assignmentTitle}</div>
+                {(string.IsNullOrEmpty(description) ? "" : $@"
+                <div class='assignment-description'>{description}</div>
+                ")}
                 <div class='due-date'>⏰ {dueDateText}</div>
             </div>
-            <p>Đăng nhập vào <strong>BoneVisQA</strong> để xem chi tiết và làm bài.</p>
-            <p>Trân trọng,<br>Đội ngũ BoneVisQA</p>
+            <p>Log in to <strong>BoneVisQA</strong> to view details and complete the assignment.</p>
+            <p>Best regards,<br>The BoneVisQA Team</p>
         </div>
         <div class='footer'>
-            <p>Email này được gửi tự động từ hệ thống BoneVisQA.</p>
-            <p>Vui lòng không trả lời trực tiếp email này.</p>
+            <p>This email was sent automatically by the BoneVisQA system.</p>
+            <p>Please do not reply directly to this email.</p>
         </div>
     </div>
 </body>
@@ -1097,13 +1158,13 @@ public class EmailService : IEmailService
         }
 
         var dueDateText = dueDate.HasValue
-            ? $"Hạn nộp: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
-            : "Không có hạn nộp cụ thể";
+            ? $"Due date: <strong>{dueDateDisplay ?? dueDate.Value.ToString("dd/MM/yyyy HH:mm")}</strong>"
+            : "No specific due date";
 
-        var subject = $"[BoneVisQA] Cập nhật bài tập: {assignmentTitle} ({assignmentType})";
+        var subject = $"[BoneVisQA] Assignment update: {assignmentTitle} ({assignmentType})";
         var body = $@"
 <!DOCTYPE html>
-<html lang='vi'>
+<html lang='en'>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
@@ -1116,32 +1177,32 @@ public class EmailService : IEmailService
                 <table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);'>
                     <tr>
                         <td style='background:linear-gradient(135deg,#e74c3c,#c0392b);padding:30px 40px;text-align:center;'>
-                            <h1 style='color:#ffffff;margin:0;font-size:24px;'>🔔 Cập Nhật Bài Tập</h1>
-                            <p style='color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;'>Thông tin bài tập đã được thay đổi</p>
+                            <h1 style='color:#ffffff;margin:0;font-size:24px;'>🔔 Assignment Updated</h1>
+                            <p style='color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;'>Assignment details have been updated</p>
                         </td>
                     </tr>
                     <tr>
                         <td style='padding:35px 40px;'>
                             <p style='margin:0 0 20px;font-size:16px;color:#333;'>
-                                Xin chào <strong>{studentName}</strong>,
+                                Hello <strong>{studentName}</strong>,
                             </p>
                             <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
-                                Giảng viên đã <strong style='color:#e74c3c;'>cập nhật thông tin</strong> bài tập dưới đây trong lớp <strong>{className}</strong>. Vui lòng kiểm tra lại.
+                                A lecturer has <strong style='color:#e74c3c;'>updated</strong> the assignment below in class <strong>{className}</strong>. Please review the changes.
                             </p>
                             <div style='background:#f8f9fa;border-left:4px solid #e74c3c;padding:20px;border-radius:0 8px 8px 0;margin:0 0 25px;'>
                                 <h2 style='margin:0 0 12px;font-size:18px;color:#2c3e50;'>{assignmentTitle}</h2>
-                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Loại:</strong> {assignmentType}</p>
-                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Lớp:</strong> {className}</p>
+                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Type:</strong> {assignmentType}</p>
+                                <p style='margin:4px 0;font-size:13px;color:#555;'><strong>Class:</strong> {className}</p>
                                 <p style='margin:4px 0;font-size:13px;color:#555;'>{dueDateText}</p>
                             </div>
                             <p style='margin:0 0 25px;font-size:14px;color:#555;line-height:1.7;'>
-                                Đăng nhập BoneVisQA để xem chi tiết và làm bài tập.
+                                Log in to BoneVisQA to view details and complete the assignment.
                             </p>
                             <table cellpadding='0' cellspacing='0'>
                                 <tr>
                                     <td style='background:linear-gradient(135deg,#e74c3c,#c0392b);border-radius:8px;'>
                                         <a href='{_appUrl}' target='_blank' style='display:inline-block;padding:14px 35px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:8px;'>
-                                            Mở BoneVisQA →
+                                            Open BoneVisQA →
                                         </a>
                                     </td>
                                 </tr>
@@ -1151,8 +1212,8 @@ public class EmailService : IEmailService
                     <tr>
                         <td style='background:#f8f9fa;padding:20px 40px;border-top:1px solid #eee;'>
                             <p style='margin:0;font-size:12px;color:#aaa;text-align:center;'>
-                                Email này được gửi tự động từ BoneVisQA — Radiology Education Platform.<br>
-                                Vui lòng không trả lời trực tiếp email này.
+                                This email was sent automatically by BoneVisQA — Radiology Education Platform.<br>
+                                Please do not reply directly to this email.
                             </p>
                         </td>
                     </tr>
@@ -1283,6 +1344,108 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SendRetakeRequestEmailAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
+            return false;
+        }
+    }
+
+    // ── Essay Submission Notification ──────────────────────────────────────────────
+
+    public async Task<bool> SendEssaySubmittedNotificationAsync(
+        string toEmail,
+        string lecturerName,
+        string studentName,
+        string quizTitle,
+        string className,
+        string attemptDetailUrl)
+    {
+        _logger.LogInformation("[SendEssaySubmittedNotificationAsync] Sending to {ToEmail}", toEmail);
+
+        if (string.IsNullOrEmpty(_smtpUsername) || string.IsNullOrEmpty(_smtpPassword))
+        {
+            _logger.LogError("[SendEssaySubmittedNotificationAsync] FAIL: SMTP credentials not configured.");
+            return false;
+        }
+
+        var subject = $"[BoneVisQA] Essay Submission Pending — {quizTitle}";
+
+        var body = $@"
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>{subject}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden;
+                     box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 24px 32px; }}
+        .header h1 {{ margin: 0; font-size: 20px; }}
+        .content {{ padding: 24px 32px; color: #333; }}
+        .content p {{ margin: 0 0 14px; line-height: 1.6; }}
+        .highlight {{ background: #fff3cd; border-left: 4px solid #ffc107;
+                     padding: 12px 16px; border-radius: 6px; margin: 16px 0; }}
+        .highlight strong {{ color: #856404; }}
+        .action-btn {{ display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2);
+                       color: white !important; padding: 12px 28px; border-radius: 8px;
+                       text-decoration: none; font-weight: bold; margin-top: 8px; }}
+        .footer {{ padding: 16px 32px; background: #f9f9f9; color: #888; font-size: 12px;
+                   text-align: center; border-top: 1px solid #eee; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>📝 Essay Submission Requires Grading</h1>
+        </div>
+        <div class='content'>
+            <p>Dear <strong>{lecturerName}</strong>,</p>
+            <p>Student <strong>{studentName}</strong> has submitted an essay answer for the quiz <strong>{quizTitle}</strong> in class <strong>{className}</strong>.</p>
+            <p>The essay requires your review and grading.</p>
+
+            <div class='highlight'>
+                <p><strong>Quiz:</strong> {quizTitle}</p>
+                <p><strong>Class:</strong> {className}</p>
+                <p><strong>Student:</strong> {studentName}</p>
+            </div>
+
+            <p>Please log in to BoneVisQA to grade the essay submission:</p>
+            <p>
+                <a href='{attemptDetailUrl}' class='action-btn'>Grade Essay Submission</a>
+            </p>
+        </div>
+        <div class='footer'>
+            <p>This is an automated email from BoneVisQA — please do not reply to this message.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        try
+        {
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                Timeout = 15000
+            };
+
+            var message = new MailMessage
+            {
+                From = new MailAddress(_fromEmail, _fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = true
+            };
+            message.To.Add(toEmail);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[SendEssaySubmittedNotificationAsync] SUCCESS: sent to {ToEmail}", toEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SendEssaySubmittedNotificationAsync] ERROR sending to {ToEmail}: {Message}", toEmail, ex.Message);
             return false;
         }
     }

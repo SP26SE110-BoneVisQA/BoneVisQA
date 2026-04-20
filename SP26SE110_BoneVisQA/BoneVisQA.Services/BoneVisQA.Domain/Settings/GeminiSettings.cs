@@ -6,7 +6,7 @@ public class GeminiSettings
 {
     public const string SectionName = "Gemini";
 
-    public string ApiKey { get; set; } = string.Empty;
+    public List<string>? ApiKeys { get; set; }
 
     /// <summary>
     /// Prioritized model ids bound from <c>Gemini:Models</c>. The API client should try each id in order and advance on 429 / transient failures.
@@ -22,6 +22,24 @@ public class GeminiSettings
 
     /// <summary>Google Generative Language API base URL; set in <c>Gemini:BaseUrl</c>.</summary>
     public string BaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Embedding model id for <c>:embedContent</c> (default <c>text-embedding-004</c>).</summary>
+    public string EmbeddingModelId { get; set; } = "text-embedding-004";
+
+    public IReadOnlyList<string> GetResolvedApiKeys()
+    {
+        var list = new List<string>();
+        if (ApiKeys != null)
+        {
+            foreach (var key in ApiKeys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    list.Add(key.Trim());
+            }
+        }
+
+        return list;
+    }
 
     /// <summary>Ordered, non-empty model ids: <see cref="Models"/> first, else <see cref="ModelId"/>.</summary>
     public IReadOnlyList<string> GetResolvedModelIds()

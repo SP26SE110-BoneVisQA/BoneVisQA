@@ -1,0 +1,682 @@
+{
+  "info": {
+    "_postman_id": "4f0d0d96-0f5f-40a3-8bb8-529a1c2d15ef",
+    "name": "BoneVisQA Demo Seed (One Click)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "One-click setup for demo data on 21/04/2026. Run in order with Collection Runner."
+  },
+  "item": [
+    {
+      "name": "00 - Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/DbHealth/check",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "DbHealth", "check"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Health endpoint is reachable', function () {",
+              "  pm.expect(pm.response.code).to.be.oneOf([200]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Admin Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auths/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auths", "login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const res = pm.response.json();",
+              "pm.test('Admin login succeeds', function () {",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(res.success).to.eql(true);",
+              "  pm.expect(res.token).to.be.a('string');",
+              "});",
+              "pm.environment.set('adminToken', res.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Ensure Demo Student User",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{seedStudentEmail}}\",\n  \"fullName\": \"Demo Student 21Apr\",\n  \"password\": \"{{seedStudentPassword}}\",\n  \"schoolCohort\": \"SE110-SP26\",\n  \"role\": \"Student\",\n  \"sendWelcomeEmail\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const email = pm.environment.get('seedStudentEmail');",
+              "function saveUserIdFromList(items, envKey) {",
+              "  const user = (items || []).find(u => String(u.email || '').toLowerCase() === String(email).toLowerCase());",
+              "  if (user && user.id) pm.environment.set(envKey, user.id);",
+              "}",
+              "if (pm.response.code === 201 || pm.response.code === 200) {",
+              "  const created = pm.response.json();",
+              "  const id = created?.result?.id || created?.Result?.id || created?.id;",
+              "  if (id) pm.environment.set('seedStudentId', id);",
+              "}",
+              "pm.sendRequest({",
+              "  url: pm.environment.get('baseUrl') + '/api/admin/users?page=1&pageSize=200',",
+              "  method: 'GET',",
+              "  header: { Authorization: 'Bearer ' + pm.environment.get('adminToken') }",
+              "}, function (err, resp) {",
+              "  if (err || !resp) return;",
+              "  const body = resp.json();",
+              "  saveUserIdFromList(body.items || body.result || body.Result || [], 'seedStudentId');",
+              "});",
+              "pm.test('Student ensure request accepted', function () {",
+              "  pm.expect([200, 201, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02b - Optional Upload Demo PDF (fills documents/document_chunks)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "Title", "value": "Demo Bone Oncology Reference", "type": "text" },
+            { "key": "File", "type": "file", "src": "{{seedPdfPath}}" }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/documents/upload",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "documents", "upload"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Document upload request accepted or intentionally skipped', function () {",
+              "  pm.expect([200, 201, 400, 404]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Ensure Demo Lecturer User",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{seedLecturerEmail}}\",\n  \"fullName\": \"Demo Lecturer 21Apr\",\n  \"password\": \"{{seedLecturerPassword}}\",\n  \"schoolCohort\": \"SE110-SP26\",\n  \"role\": \"Lecturer\",\n  \"sendWelcomeEmail\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const targetEmail = pm.environment.get('seedLecturerEmail');",
+              "if (pm.response.code === 201 || pm.response.code === 200) {",
+              "  const created = pm.response.json();",
+              "  const id = created?.result?.id || created?.Result?.id || created?.id;",
+              "  if (id) pm.environment.set('seedLecturerId', id);",
+              "}",
+              "pm.sendRequest({",
+              "  url: pm.environment.get('baseUrl') + '/api/admin/users?page=1&pageSize=200',",
+              "  method: 'GET',",
+              "  header: { Authorization: 'Bearer ' + pm.environment.get('adminToken') }",
+              "}, function (err, resp) {",
+              "  if (err || !resp) return;",
+              "  const body = resp.json();",
+              "  const list = body.items || body.result || body.Result || [];",
+              "  const row = (list || []).find(u => String(u.email || '').toLowerCase() === String(targetEmail).toLowerCase());",
+              "  if (row && row.id) pm.environment.set('seedLecturerId', row.id);",
+              "});",
+              "pm.test('Lecturer ensure request accepted', function () {",
+              "  pm.expect([200, 201, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Ensure Demo Expert User",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{seedExpertEmail}}\",\n  \"fullName\": \"Demo Expert 21Apr\",\n  \"password\": \"{{seedExpertPassword}}\",\n  \"schoolCohort\": \"SE110-SP26\",\n  \"role\": \"Expert\",\n  \"sendWelcomeEmail\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const targetEmail = pm.environment.get('seedExpertEmail');",
+              "if (pm.response.code === 201 || pm.response.code === 200) {",
+              "  const created = pm.response.json();",
+              "  const id = created?.result?.id || created?.Result?.id || created?.id;",
+              "  if (id) pm.environment.set('seedExpertId', id);",
+              "}",
+              "pm.sendRequest({",
+              "  url: pm.environment.get('baseUrl') + '/api/admin/users?page=1&pageSize=200',",
+              "  method: 'GET',",
+              "  header: { Authorization: 'Bearer ' + pm.environment.get('adminToken') }",
+              "}, function (err, resp) {",
+              "  if (err || !resp) return;",
+              "  const body = resp.json();",
+              "  const list = body.items || body.result || body.Result || [];",
+              "  const row = (list || []).find(u => String(u.email || '').toLowerCase() === String(targetEmail).toLowerCase());",
+              "  if (row && row.id) pm.environment.set('seedExpertId', row.id);",
+              "});",
+              "pm.test('Expert ensure request accepted', function () {",
+              "  pm.expect([200, 201, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Activate Seed Users",
+      "item": [
+        {
+          "name": "Activate Student",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{seedStudentId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{seedStudentId}}", "activate"]
+            }
+          }
+        },
+        {
+          "name": "Activate Lecturer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{seedLecturerId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{seedLecturerId}}", "activate"]
+            }
+          }
+        },
+        {
+          "name": "Activate Expert",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{seedExpertId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "users", "{{seedExpertId}}", "activate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Ensure Demo Class",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"{{$guid}}\",\n  \"className\": \"{{seedClassName}}\",\n  \"semester\": \"{{seedSemester}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/classes",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "classes"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const targetName = pm.environment.get('seedClassName');",
+              "const maybe = pm.response.json();",
+              "const id = maybe?.id || maybe?.result?.id || maybe?.Result?.id;",
+              "if (id) pm.environment.set('seedClassId', id);",
+              "pm.sendRequest({",
+              "  url: pm.environment.get('baseUrl') + '/api/admin/classes?pageIndex=1&pageSize=200',",
+              "  method: 'GET',",
+              "  header: { Authorization: 'Bearer ' + pm.environment.get('adminToken') }",
+              "}, function (err, resp) {",
+              "  if (err || !resp) return;",
+              "  const body = resp.json();",
+              "  const list = body.items || body.result || body.Result || body || [];",
+              "  const row = (list || []).find(c => String(c.className || '').toLowerCase() === String(targetName).toLowerCase());",
+              "  if (row && row.id) pm.environment.set('seedClassId', row.id);",
+              "});",
+              "pm.test('Class ensure request accepted', function () {",
+              "  pm.expect([200, 201, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Assign Class Staff and Student",
+      "item": [
+        {
+          "name": "Assign Lecturer to Class",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classId\": \"{{seedClassId}}\",\n  \"lecturerId\": \"{{seedLecturerId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/classes/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "classes", "enrollments"]
+            }
+          }
+        },
+        {
+          "name": "Assign Expert to Class",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classId\": \"{{seedClassId}}\",\n  \"expertId\": \"{{seedExpertId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/classes/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "classes", "enrollments"]
+            }
+          }
+        },
+        {
+          "name": "Enroll Student to Class",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classId\": \"{{seedClassId}}\",\n  \"studentId\": \"{{seedStudentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/classes/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "classes", "enrollments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Login as Seed Roles",
+      "item": [
+        {
+          "name": "Student Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{seedStudentEmail}}\",\n  \"password\": \"{{seedStudentPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auths/login", "host": ["{{baseUrl}}"], "path": ["api", "auths", "login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const r=pm.response.json(); if(r.token){pm.environment.set('studentToken',r.token);}"] } }]
+        },
+        {
+          "name": "Lecturer Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{seedLecturerEmail}}\",\n  \"password\": \"{{seedLecturerPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auths/login", "host": ["{{baseUrl}}"], "path": ["api", "auths", "login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const r=pm.response.json(); if(r.token){pm.environment.set('lecturerToken',r.token);}"] } }]
+        },
+        {
+          "name": "Expert Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{seedExpertEmail}}\",\n  \"password\": \"{{seedExpertPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auths/login", "host": ["{{baseUrl}}"], "path": ["api", "auths", "login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const r=pm.response.json(); if(r.token){pm.environment.set('expertToken',r.token);}"] } }]
+        }
+      ]
+    },
+    {
+      "name": "09 - Seed Case + Legacy Question + Visual QA",
+      "item": [
+        {
+          "name": "Create Expert Case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{expertToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Demo Case - Osteolytic Lesion 21Apr\",\n  \"description\": \"Demo case for lecturer-expert review workflow.\",\n  \"difficulty\": \"Intermediate\",\n  \"suggestedDiagnosis\": \"Osteosarcoma\",\n  \"keyFindings\": \"Aggressive periosteal reaction and mixed lytic-sclerotic pattern.\",\n  \"medicalImages\": [\n    {\n      \"imageUrl\": \"{{seedCaseImagePublicUrl}}\",\n      \"modality\": \"X-Ray\",\n      \"annotations\": [\n        {\n          \"label\": \"suspected-lesion\",\n          \"coordinates\": \"{\\\"x\\\":0.33,\\\"y\\\":0.21,\\\"width\\\":0.24,\\\"height\\\":0.27}\"\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/expert/cases", "host": ["{{baseUrl}}"], "path": ["api", "expert", "cases"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "const caseId = r?.id || r?.result?.id || r?.Result?.id;",
+                  "if (caseId) pm.environment.set('seedCaseId', caseId);",
+                  "const img = (r?.medicalImages || r?.result?.medicalImages || [])[0];",
+                  "if (img && img.id) pm.environment.set('seedImageId', img.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Legacy Student Question (fills student_questions)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"caseId\": \"{{seedCaseId}}\",\n  \"questionText\": \"Legacy flow question for dashboard compatibility.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/student/questions", "host": ["{{baseUrl}}"], "path": ["api", "student", "questions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  const id = r?.id || r?.result?.id || r?.Result?.id;",
+                  "  if (id) pm.environment.set('seedLegacyQuestionId', id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ask Visual QA (ask-json)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionText\": \"{{seedQuestionText}}\",\n  \"imageUrl\": \"{{seedCaseImagePublicUrl}}\",\n  \"caseId\": \"{{seedCaseId}}\",\n  \"imageId\": \"{{seedImageId}}\",\n  \"coordinates\": \"{\\\"x\\\":0.34,\\\"y\\\":0.22,\\\"width\\\":0.21,\\\"height\\\":0.23}\",\n  \"clientRequestId\": \"seed-{{$timestamp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/student/visual-qa/ask-json", "host": ["{{baseUrl}}"], "path": ["api", "student", "visual-qa", "ask-json"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const r = pm.response.json();",
+                  "const sid = r?.sessionId || r?.latestTurn?.sessionId;",
+                  "const tid = r?.latestTurn?.turnId || r?.turnId;",
+                  "if (sid) pm.environment.set('seedSessionId', sid);",
+                  "if (tid) pm.environment.set('seedTurnId', tid);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request Lecturer Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/visual-qa/turns/{{seedTurnId}}/request-review",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student", "visual-qa", "turns", "{{seedTurnId}}", "request-review"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Lecturer Escalate to Expert",
+      "item": [
+        {
+          "name": "Lecturer Create Announcement (fills announcements)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{lecturerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Review Session Notice\",\n  \"content\": \"Live lecturer review rehearsal for 21/04/2026 is ready.\",\n  \"targetRole\": \"Student\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lecturer/classes/{{seedClassId}}/announcements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "lecturer", "classes", "{{seedClassId}}", "announcements"]
+            }
+          }
+        },
+        {
+          "name": "Escalate Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{lecturerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reviewNote\": \"Please provide specialist confirmation before classroom discussion.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lecturer/triage/{{seedSessionId}}/escalate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "lecturer", "triage", "{{seedSessionId}}", "escalate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Expert Resolve Escalation (fills expert_reviews)",
+      "item": [
+        {
+          "name": "Get Escalated Queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{expertToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/expert/reviews/escalated",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expert", "reviews", "escalated"]
+            }
+          }
+        },
+        {
+          "name": "Resolve Escalated Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{expertToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answerText\": \"Expert review completed. Findings are consistent with an aggressive malignant primary bone tumor; biopsy confirmation is recommended.\",\n  \"structuredDiagnosis\": \"High suspicion of osteosarcoma\",\n  \"differentialDiagnoses\": [\"Ewing sarcoma\", \"Metastatic lesion\"],\n  \"keyImagingFindings\": \"Cortical destruction, periosteal reaction, and mixed matrix.\",\n  \"reflectiveQuestions\": \"Which radiographic signs increase concern for malignancy?\",\n  \"reviewNote\": \"Reviewed for Tuesday demo scenario.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/expert/reviews/{{seedSessionId}}/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "expert", "reviews", "{{seedSessionId}}", "resolve"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Notifications Verify + Mark Read",
+      "item": [
+        {
+          "name": "Get Student Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rows = pm.response.json() || [];",
+                  "const unread = rows.find(x => x && x.isRead === false);",
+                  "if (unread && unread.id) pm.environment.set('seedUnreadNotificationId', unread.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark One Notification Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{seedUnreadNotificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "{{seedUnreadNotificationId}}", "read"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [],
+  "variable": []
+}

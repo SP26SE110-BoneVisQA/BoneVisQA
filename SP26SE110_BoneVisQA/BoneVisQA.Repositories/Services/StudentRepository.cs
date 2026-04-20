@@ -24,6 +24,8 @@ public class StudentRepository : IStudentRepository
 
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
             .Include(c => c.Category)
+            .Include(c => c.CaseTags)
+                .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
@@ -50,16 +52,42 @@ public class StudentRepository : IStudentRepository
             query = query.Where(c => c.Difficulty == filter.Difficulty);
         }
 
-        if (!string.IsNullOrEmpty(filter.Location) || !string.IsNullOrEmpty(filter.LessonType))
+        var lesionType = filter.LesionType ?? filter.LessonType;
+        if (!string.IsNullOrEmpty(filter.Location) || !string.IsNullOrEmpty(lesionType))
         {
-            var tagTypes = new List<string>();
-            if (!string.IsNullOrEmpty(filter.Location)) tagTypes.Add(filter.Location);
-            if (!string.IsNullOrEmpty(filter.LessonType)) tagTypes.Add(filter.LessonType);
+            if (!string.IsNullOrEmpty(filter.Location))
+            {
+                query = query.Where(c => c.CaseTags.Any(ct =>
+                    ct.Tag.Type == "Location" &&
+                    ct.Tag.Name == filter.Location));
+            }
 
-            query = query.Where(c => c.CaseTags.Any(ct => tagTypes.Contains(ct.Tag.Type)));
+            if (!string.IsNullOrEmpty(lesionType))
+            {
+                query = query.Where(c => c.CaseTags.Any(ct =>
+                    (ct.Tag.Type == "Lesion Type" || ct.Tag.Type == "Lesion") &&
+                    ct.Tag.Name == lesionType));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var escaped = EscapeForILike(filter.SearchText.Trim());
+            var pattern = $"%{escaped}%";
+            query = query.Where(c =>
+                EF.Functions.ILike(c.Title, pattern) ||
+                EF.Functions.ILike(c.Description, pattern));
         }
 
         return await query.OrderByDescending(c => c.CreatedAt).ToListAsync();
+    }
+
+    private static string EscapeForILike(string value)
+    {
+        return value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 
     public async Task<MedicalCase?> GetCaseWithImagesAsync(Guid caseId)
@@ -70,6 +98,7 @@ public class StudentRepository : IStudentRepository
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
+                .ThenInclude(mi => mi.CaseAnnotations)
             .FirstOrDefaultAsync();
     }
 
@@ -161,15 +190,16 @@ public class StudentRepository : IStudentRepository
         if (classIds.Count == 0)
             return new List<BoneVisQA.Repositories.Models.QuizSessionInfoDto>();
 
+        // QUAN TRỌNG: Quiz luôn hiển thị cho student nếu:
+        // 1. Student đã enroll vào lớp có quiz
+        // 2. Không kiểm tra OpenTime/CloseTime ở đây vì việc kiểm tra này đã làm ở StartQuiz
+        // 3. Nếu Quiz được gán (ClassQuizSession tồn tại) -> Student phải thấy
         return await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .Include(cqs => cqs.Class)
             .Where(cqs => classIds.Contains(cqs.ClassId))
-            .Where(cqs =>
-                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
-                && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
-                    || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) > utcNow))
+            // BỎ filter OpenTime/CloseTime ở đây - chỉ kiểm tra khi student bắt đầu làm quiz
             .Select(cqs => new BoneVisQA.Repositories.Models.QuizSessionInfoDto
             {
                 QuizId = cqs.QuizId,

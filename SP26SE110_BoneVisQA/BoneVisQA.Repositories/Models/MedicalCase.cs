@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
+using Pgvector;
 
 namespace BoneVisQA.Repositories.Models;
 
@@ -50,6 +51,21 @@ public partial class MedicalCase
     [Column("key_findings")]
     public string? KeyFindings { get; set; }
 
+    [Column("reflective_questions")]
+    public string? ReflectiveQuestions { get; set; }
+
+    /// <summary>Semantic embedding for RAG (768-dim Gemini); populated by background indexer.</summary>
+    [Column("embedding", TypeName = "vector(768)")]
+    public Vector? Embedding { get; set; }
+
+    /// <summary>Pipeline state: Pending, Processing, Completed, Failed.</summary>
+    [Column("indexing_status")]
+    public string IndexingStatus { get; set; } = "Pending";
+
+    /// <summary>Semantic version (Major.Minor.Patch) for case content/index refreshes.</summary>
+    [Column("version")]
+    public string? Version { get; set; } = "1.0.0";
+
     [InverseProperty("Case")]
     public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
 
@@ -82,4 +98,7 @@ public partial class MedicalCase
 
     [InverseProperty("Case")]
     public virtual ICollection<VisualQASession> VisualQASessions { get; set; } = new List<VisualQASession>();
+
+    [InverseProperty("PromotedCase")]
+    public virtual ICollection<VisualQASession> PromotedFromSessions { get; set; } = new List<VisualQASession>();
 }

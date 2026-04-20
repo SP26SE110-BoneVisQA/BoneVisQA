@@ -85,6 +85,9 @@ CopilotIndices/
 dataset/
 dataset.rar
 
+# Uploaded files (user uploads, images, etc.)
+wwwroot/uploads/
+
 # -----------------------------------------------------------------------------
 # Configuration: tracked vs ignored (explicit)
 # -----------------------------------------------------------------------------
@@ -102,3 +105,16 @@ dataset.rar
 
 # Never ignore launch profiles (URLs, env for local run) — explicit allow.
 !**/Properties/launchSettings.json
+_build_*/
+
+# -----------------------------------------------------------------------------
+# Local-only / không đưa lên GitHub (điều chỉnh nếu team muốn track README hoặc docs)
+# -----------------------------------------------------------------------------
+/README.md
+SP26SE110_BoneVisQA/README.md
+SP26SE110_BoneVisQA/.cursorrules
+SP26SE110_BoneVisQA/docs/**/*.md
+.postman/
+
+# Postman globals cục bộ (thường chứa biến môi trường); collection trong repo có thể add tay
+postman/globals/

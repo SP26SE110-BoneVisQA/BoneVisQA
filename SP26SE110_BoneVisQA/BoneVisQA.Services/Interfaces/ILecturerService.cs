@@ -31,14 +31,15 @@ public interface ILecturerService
 
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
     Task<bool> DeleteQuizAsync(Guid quizId);
+    Task RemoveQuizFromClassAsync(Guid classId, Guid quizId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
-    Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid classId);
-    Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid classId, Guid questionId);
-    Task<LecturerAnswerDto> RespondToQuestionAsync(Guid classId, Guid questionId, RespondToQuestionRequestDto request);
+    Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null);
+    Task<LectStudentQuestionDetailDto?> GetQuestionDetailAsync(Guid lecturerId, Guid classId, Guid questionId);
+    Task<LecturerAnswerDto> RespondToQuestionAsync(Guid lecturerId, Guid classId, Guid questionId, RespondToQuestionRequestDto request);
     Task<IReadOnlyList<ClassStudentProgressDto>> GetClassStudentProgressAsync(Guid classId);
-    Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid classId, Guid? caseId, Guid? studentId);
+    Task<IReadOnlyList<LectStudentQuestionDto>> GetStudentQuestionsAsync(Guid lecturerId, Guid classId, Guid? caseId, Guid? studentId, string? source = null);
     Task<IReadOnlyList<AnnouncementDto>> GetClassAnnouncementsAsync(Guid classId);
     Task<List<ClassAssignmentDto>> GetClassAssignmentsAsync(Guid classId);
     Task<List<ClassAssignmentDto>> GetAllAssignmentsForLecturerAsync(Guid lecturerId);
@@ -47,11 +48,17 @@ public interface ILecturerService
     /// <param name="creatingUserId">User id từ JWT (giảng viên) — ghi vào Quiz.CreatedByExpertId để tách quiz SV vs GV.</param>
     Task<QuizDto> CreateQuizAsync(CreateQuizRequestDto request, Guid? creatingUserId = null);
     Task<QuizQuestionDto> AddQuizQuestionAsync(Guid quizId, CreateQuizQuestionDto request);
+    Task<List<QuizQuestionDto>> AddQuizQuestionsBatchAsync(Guid quizId, List<CreateQuizQuestionDto> requests);
     Task<UpdateQuizsQuestionResponseDto> UpdateQuizQuestionAsync(Guid questionId, UpdateQuizsQuestionRequestDto request);
     Task<List<QuizQuestionDto>> GetQuizQuestionsAsync(Guid quizId);
     Task<QuizQuestionDto?> GetQuizQuestionByIdAsync(Guid questionId);
+    Task<QuizWithQuestionsDto> GetQuizWithQuestionsAsync(Guid quizId);
 
     Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetUnassignedLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<QuizDto>> GetAllLecturerQuizzesAsync(Guid lecturerId);
+    Task<IReadOnlyList<MyQuizWithClassesDto>> GetMyQuizzesWithClassesAsync(Guid lecturerId);
+    Task<IReadOnlyList<AssignedQuizDto>> GetAssignedQuizzesAsync(Guid lecturerId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesForClassAsync(Guid classId);
     Task<QuizDto?> GetQuizByIdAsync(Guid quizId);
     Task<IReadOnlyList<QuizDto>> GetQuizzesByIdsAsync(IReadOnlyList<Guid> quizIds);
@@ -68,5 +75,14 @@ public interface ILecturerService
     Task DeleteAssignmentAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId);
     Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(Guid assignmentId, UpdateSubmissionsRequestDto request);
+
+    // Expert medical case images
+    Task<bool> DeleteMedicalImageAsync(Guid imageId);
+
+    /// <summary>Move an announcement to a different class.</summary>
+    Task<AnnouncementDto> MoveAnnouncementAsync(Guid lecturerId, Guid announcementId, Guid targetClassId);
+
+    /// <summary>Export all quiz results for a lecturer into a single Excel file with multiple sheets.</summary>
+    Task<(byte[] FileBytes, string FileName)> ExportAllQuizResultsAsync(Guid lecturerId);
 }
 

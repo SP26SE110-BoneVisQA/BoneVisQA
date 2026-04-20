@@ -43,7 +43,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Email đã được sử dụng."
+                Message = "Email is already in use."
             };
         }
 
@@ -56,7 +56,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Role mặc định 'Guest' chưa được cấu hình trong hệ thống."
+                Message = "Default role 'Guest' is not configured in the system."
             };
         }
 
@@ -95,7 +95,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Đăng ký thành công. Vui lòng chờ admin kích hoạt tài khoản.",
+            Message = "Registration successful. Please wait for admin account activation.",
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email
@@ -115,7 +115,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Email hoặc mật khẩu không đúng."
+                Message = "Incorrect email or password."
             };
         }
 
@@ -125,7 +125,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Email hoặc mật khẩu không đúng."
+                Message = "Incorrect email or password."
             };
         }
 
@@ -134,7 +134,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
+                Message = "Account is not activated yet. Please wait for admin approval."
             };
         }
 
@@ -144,7 +144,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được gán vai trò, liên hệ admin để được hỗ trợ."
+                Message = "Account has not been assigned a role. Please contact admin for support."
             };
         }
 
@@ -158,7 +158,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Đăng nhập thành công.",
+            Message = "Login successful.",
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email,
@@ -184,7 +184,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = true,
-                Message = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi."
+                Message = "If the email exists in the system, password reset instructions will be sent."
             };
         }
 
@@ -229,19 +229,19 @@ public class AuthService : IAuthService
         if (!emailSent)
         {
             var devMessage = _env.IsDevelopment()
-                ? $"Email gửi thất bại. Token dev: {resetToken.Token}"
-                : "Không thể gửi email. Vui lòng thử lại sau.";
+                ? $"Failed to send email. Dev token: {resetToken.Token}"
+                : "Unable to send email. Please try again later.";
             return new AuthResultDto
             {
                 Success = true, // vẫn true để UI không hiện "lỗi" rõ ràng
-                Message = $"Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi.\n[Dev: {devMessage}]"
+                Message = $"If the email exists, password reset instructions will be sent.\n[Dev: {devMessage}]"
             };
         }
 
         return new AuthResultDto
         {
             Success = true,
-            Message = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi."
+            Message = "If the email exists in the system, password reset instructions will be sent."
         };
     }
 
@@ -252,14 +252,14 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Mật khẩu mới phải có ít nhất 6 ký tự."
+                Message = "New password must be at least 6 characters."
             };
         }
 
         var token = request.Token?.Trim() ?? "";
         if (string.IsNullOrEmpty(token))
         {
-            return new AuthResultDto { Success = false, Message = "Token là bắt buộc." };
+            return new AuthResultDto { Success = false, Message = "Token is required." };
         }
 
         var resetToken = await _unitOfWork.PasswordResetTokenRepository
@@ -278,14 +278,14 @@ public class AuthService : IAuthService
                 {
                     Success = false,
                     Message = expiredToken.IsUsed
-                        ? "Token đã được sử dụng. Vui lòng yêu cầu đặt lại mật khẩu mới."
-                        : "Token đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu mới."
+                        ? "Token has already been used. Please request a new password reset."
+                        : "Token has expired. Please request a new password reset."
                 };
             }
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Token không hợp lệ hoặc không tồn tại. Vui lòng dùng link mới từ email."
+                Message = "Token is invalid or does not exist. Please use a new link from the email."
             };
         }
 
@@ -294,7 +294,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Token đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu mới."
+                Message = "Token has expired. Please request a new password reset."
             };
         }
 
@@ -309,7 +309,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Đặt lại mật khẩu thành công. Bạn có thể đăng nhập với mật khẩu mới."
+            Message = "Password reset successful. You can now log in with your new password."
         };
     }
 
@@ -328,7 +328,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Google ID Token là bắt buộc."
+                Message = "Google ID Token is required."
             };
         }
 
@@ -346,7 +346,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Token Google không hợp lệ."
+                Message = "Google token is invalid."
             };
         }
 
@@ -355,7 +355,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản Google không cung cấp email."
+                Message = "Google account did not provide an email."
             };
         }
 
@@ -368,7 +368,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Email đã được đăng ký. Vui lòng đăng nhập."
+                Message = "Email is already registered. Please log in."
             };
         }
 
@@ -381,7 +381,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Role mặc định 'Guest' chưa được cấu hình trong hệ thống."
+                Message = "Default role 'Guest' is not configured in the system."
             };
         }
 
@@ -417,7 +417,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Đăng ký thành công. Vui lòng chờ admin kích hoạt và gán vai trò. Kiểm tra email chào mừng.",
+            Message = "Registration successful. Please wait for admin activation and role assignment. Check your welcome email.",
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email
@@ -431,7 +431,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Google ID Token là bắt buộc."
+                Message = "Google ID Token is required."
             };
         }
 
@@ -449,7 +449,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Token Google không hợp lệ."
+                Message = "Google token is invalid."
             };
         }
 
@@ -488,7 +488,7 @@ public class AuthService : IAuthService
                     return new AuthResultDto
                     {
                         Success = false,
-                        Message = "Role 'Guest' chưa được cấu hình trong hệ thống."
+                        Message = "Role 'Guest' is not configured in the system."
                     };
                 }
 
@@ -524,7 +524,7 @@ public class AuthService : IAuthService
                 return new AuthResultDto
                 {
                     Success = true,
-                    Message = "Đăng nhập Google thành công. Vui lòng xác nhận thông tin y khoa để hoàn tất đăng ký.",
+                    Message = "Google login successful. Please verify medical information to complete registration.",
                     UserId = user.Id,
                     FullName = user.FullName,
                     Email = user.Email,
@@ -544,7 +544,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Tài khoản chưa được kích hoạt. Vui lòng chờ admin phê duyệt."
+                Message = "Account is not activated yet. Please wait for admin approval."
             };
         }
 
@@ -554,7 +554,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = true,
-                Message = "Tài khoản đang chờ xác minh y khoa. Vui lòng hoàn tất thông tin.",
+                Message = "Account is pending medical verification. Please complete your information.",
                 UserId = user.Id,
                 RequiresMedicalVerification = true
             };
@@ -570,7 +570,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Đăng nhập Google thành công.",
+            Message = "Google login successful.",
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email,
@@ -589,7 +589,7 @@ public class AuthService : IAuthService
             return new AuthResultDto
             {
                 Success = false,
-                Message = "Không tìm thấy người dùng."
+                Message = "User not found."
             };
         }
 
@@ -606,7 +606,7 @@ public class AuthService : IAuthService
         return new AuthResultDto
         {
             Success = true,
-            Message = "Yêu cầu xác nhận sinh viên y khoa đã được gửi. Vui lòng chờ admin duyệt."
+            Message = "Medical student verification request has been submitted. Please wait for admin approval."
         };
     }
 }

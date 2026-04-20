@@ -1,26 +1,24 @@
+using System.Globalization;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
-namespace BoneVisQA.Services.Services.Admin
+namespace BoneVisQA.Services.Services.Admin;
+
+public class DocumentQualityService : IDocumentQualityService
 {
-    public class DocumentQualityService : IDocumentQualityService
+    public readonly IUnitOfWork _unitOfWork;
+
+    public DocumentQualityService(IUnitOfWork unitOfWork)
     {
-        public readonly IUnitOfWork _unitOfWork;
+        _unitOfWork = unitOfWork;
+    }
 
-        public DocumentQualityService(IUnitOfWork unitOfWork)
-        {
-            _unitOfWork = unitOfWork;
-        }
-
-        // ── Helper: build DocumentQualityDTO từ Document ────
-        private async Task<DocumentQualityDTO> BuildDTOAsync(Document doc)
+    // ── Helper: build DocumentQualityDTO từ Document ────
+    private async Task<DocumentQualityDTO> BuildDTOAsync(Document doc)
         {
             var chunks = await _unitOfWork.DocumentChunkRepository
                 .FindAsync(c => c.DocId == doc.Id);
@@ -44,17 +42,22 @@ namespace BoneVisQA.Services.Services.Admin
                 DocumentId = doc.Id,
                 Title = doc.Title,
                 FilePath = doc.FilePath,
-                CreatedAt = doc.CreatedAt,
-                Version = doc.Version,
+                CreatedAt = doc.CreatedAt.HasValue
+                    ? doc.CreatedAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                    : null,
+                UpdatedAt = doc.UpdatedAt.HasValue
+                    ? doc.UpdatedAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                    : null,
+                Version = SemanticDocumentVersion.Normalize(doc.Version),
                 CitationCount = citationCount,
                 NegativeReviewCount = negativeReviewCount,
                 IsOutdated = doc.IsOutdated,
                 RequiresReview = requiresReview
             };
-        }
+    }
 
-        // ── Top tài liệu được trích dẫn nhiều nhất ──────────
-        public async Task<List<DocumentQualityDTO>> GetMostReferencedDocumentsAsync(int top = 10)
+    // ── Top tài liệu được trích dẫn nhiều nhất ──────────
+    public async Task<List<DocumentQualityDTO>> GetMostReferencedDocumentsAsync(int top = 10)
         {
             var allDocs = await _unitOfWork.DocumentRepository.GetAllAsync();
             var dtos = new List<DocumentQualityDTO>();
@@ -62,13 +65,13 @@ namespace BoneVisQA.Services.Services.Admin
             foreach (var doc in allDocs)
                 dtos.Add(await BuildDTOAsync(doc));
 
-            return dtos.OrderByDescending(d => d.CitationCount)
-                       .Take(top)
-                       .ToList();
-        }
+        return dtos.OrderByDescending(d => d.CitationCount)
+                   .Take(top)
+                   .ToList();
+    }
 
-        // ── Tài liệu có expert review tiêu cực ──────────────
-        public async Task<List<DocumentQualityDTO>> GetDocumentsWithNegativeExpertReviewsAsync()
+    // ── Tài liệu có expert review tiêu cực ──────────────
+    public async Task<List<DocumentQualityDTO>> GetDocumentsWithNegativeExpertReviewsAsync()
         {
             var allDocs = await _unitOfWork.DocumentRepository.GetAllAsync();
             var dtos = new List<DocumentQualityDTO>();
@@ -80,11 +83,11 @@ namespace BoneVisQA.Services.Services.Admin
                     dtos.Add(dto);
             }
 
-            return dtos.OrderByDescending(d => d.NegativeReviewCount).ToList();
-        }
+        return dtos.OrderByDescending(d => d.NegativeReviewCount).ToList();
+    }
 
-        // ── Tài liệu lỗi thời ───────────────────────────────
-        public async Task<List<DocumentQualityDTO>> GetOutdatedDocumentsAsync(int yearsThreshold = 2)
+    // ── Tài liệu lỗi thời ───────────────────────────────
+    public async Task<List<DocumentQualityDTO>> GetOutdatedDocumentsAsync(int yearsThreshold = 2)
         {
             var cutoff = DateTime.UtcNow.AddYears(-yearsThreshold);
             var outdatedDocs = await _unitOfWork.DocumentRepository
@@ -95,10 +98,10 @@ namespace BoneVisQA.Services.Services.Admin
             foreach (var doc in outdatedDocs)
                 dtos.Add(await BuildDTOAsync(doc));
 
-            return dtos.OrderByDescending(d => d.CreatedAt ?? DateTime.MinValue).ToList();
-        }
+        return dtos.OrderByDescending(d => d.CreatedAt ?? string.Empty).ToList();
+    }
 
-        public async Task<List<DocumentQualityDTO>> GetDocumentsFlaggedForReviewAsync()
+    public async Task<List<DocumentQualityDTO>> GetDocumentsFlaggedForReviewAsync()
         {
             var allDocs = await _unitOfWork.DocumentRepository.GetAllAsync();
             var dtos = new List<DocumentQualityDTO>();
@@ -110,9 +113,60 @@ namespace BoneVisQA.Services.Services.Admin
                     dtos.Add(dto);
             }
 
-            return dtos.OrderByDescending(d => d.NegativeReviewCount)
-                       .ThenByDescending(d => d.CreatedAt ?? DateTime.MinValue)
-                       .ToList();
-        }
+        return dtos.OrderByDescending(d => d.NegativeReviewCount)
+                   .ThenByDescending(d => d.CreatedAt ?? string.Empty)
+                   .ToList();
+    }
+
+    private const int FlaggedChunkPreviewMaxChars = 600;
+
+    public async Task<IReadOnlyList<AdminFlaggedChunkListItemDto>> GetFlaggedDocumentChunksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _unitOfWork.Context.DocumentChunks
+            .AsNoTracking()
+            .Where(c => c.IsFlagged)
+            .Include(c => c.Doc)
+            .Include(c => c.FlaggedByExpert)
+            .OrderByDescending(c => c.FlaggedAt ?? DateTime.MinValue)
+            .ThenBy(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(c =>
+        {
+            var raw = c.Content ?? string.Empty;
+            var preview = raw.Length <= FlaggedChunkPreviewMaxChars
+                ? raw
+                : raw[..FlaggedChunkPreviewMaxChars].TrimEnd() + "…";
+            return new AdminFlaggedChunkListItemDto
+            {
+                ChunkId = c.Id,
+                DocumentId = c.DocId,
+                DocumentTitle = c.Doc?.Title ?? string.Empty,
+                Preview = string.IsNullOrWhiteSpace(preview) ? null : preview,
+                Snippet = string.IsNullOrWhiteSpace(preview) ? null : preview,
+                Reason = c.FlagReason,
+                FlaggedAt = c.FlaggedAt,
+                FlaggedByExpertId = c.FlaggedByExpertId,
+                FlaggedBy = c.FlaggedByExpert?.FullName
+            };
+        }).ToList();
+    }
+
+    public async Task ResolveDocumentChunkFlagAsync(Guid chunkId, bool resolved, CancellationToken cancellationToken = default)
+    {
+        if (!resolved)
+            return;
+
+        var chunk = await _unitOfWork.Context.DocumentChunks
+            .FirstOrDefaultAsync(c => c.Id == chunkId, cancellationToken)
+            ?? throw new KeyNotFoundException("Document chunk not found.");
+
+        chunk.IsFlagged = false;
+        chunk.FlagReason = null;
+        chunk.FlaggedByExpertId = null;
+        chunk.FlaggedAt = null;
+        await _unitOfWork.DocumentChunkRepository.UpdateAsync(chunk);
+        await _unitOfWork.SaveAsync();
     }
 }

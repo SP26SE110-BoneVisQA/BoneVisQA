@@ -30,7 +30,7 @@ public partial class VisualQASession
 
     [Column("status")]
     [MaxLength(40)]
-    public string Status { get; set; } = "PendingLecturerReview";
+    public string Status { get; set; } = "Active";
 
     [Column("lecturer_id")]
     public Guid? LecturerId { get; set; }
@@ -38,11 +38,21 @@ public partial class VisualQASession
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    [Column("promoted_case_id")]
+    public Guid? PromotedCaseId { get; set; }
+
+    [Column("requested_review_message_id")]
+    public Guid? RequestedReviewMessageId { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
+
+    [ForeignKey("PromotedCaseId")]
+    [InverseProperty("PromotedFromSessions")]
+    public virtual MedicalCase? PromotedCase { get; set; }
 
     [ForeignKey("StudentId")]
     [InverseProperty("VisualQASessions")]
@@ -58,4 +68,7 @@ public partial class VisualQASession
 
     [InverseProperty("Session")]
     public virtual ICollection<QAMessage> Messages { get; set; } = new List<QAMessage>();
+
+    [InverseProperty("Session")]
+    public virtual ICollection<ExpertReview> ExpertReviews { get; set; } = new List<ExpertReview>();
 }

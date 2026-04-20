@@ -1,56 +1,131 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Test Google Login - BoneVisQA</title>
+  <meta charset="utf-8">
+  <title>BoneVisQA — Google sign-in (local test)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    .note { background: #f4f6f8; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-size: 0.9rem; }
+    .err { color: #b00020; }
+    .ok { color: #0d6b2d; }
+    pre { background: #f4f6f8; padding: 1rem; overflow: auto; font-size: 12px; border-radius: 6px; }
+    code { background: #eee; padding: 2px 6px; border-radius: 4px; }
+  </style>
 </head>
 <body>
-    <h2>Test Google Login (BE only)</h2>
-    <p>Mở file này từ <strong>http://localhost:3000</strong> hoặc serve bằng Live Server.</p>
-    <div id="buttonDiv"></div>
-    <pre id="result" style="background:#f5f5f5;padding:10px;margin-top:10px;max-width:600px;overflow:auto;word-break:break-all;"></pre>
+  <h1>Google sign-in test (API only)</h1>
+  <p>This page calls <code>POST /api/auths/google-login</code> with the Google ID token. Use the same OAuth <strong>Web client ID</strong> as in your backend <code>Google:ClientId</code> (User Secrets / environment).</p>
 
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script>
-        const API_URL = "http://localhost:5046";
-        const CLIENT_ID = "460789969186-if6h5nar0bsno6rr5vpn4q7ovgie77be.apps.googleusercontent.com";
+  <div class="note">
+    <strong>Google Cloud Console</strong> → Credentials → your OAuth 2.0 Client ID → <strong>Authorized JavaScript origins</strong> must include your site origin exactly (e.g. <code>http://localhost:3000</code>, your Vercel URL). If you see “The given origin is not allowed for the given client ID”, add the missing origin here.<br><br>
+    <strong>CORS:</strong> That origin must also appear under <code>Cors:AllowedOrigins</code> in API appsettings / secrets so the browser can call the API with credentials if needed.
+  </div>
 
-        function handleCredential(response) {
-            const idToken = response.credential;
-            document.getElementById("result").textContent = "ID Token (đã copy vào clipboard):\n" + idToken;
+  <p>
+    Optional URL params: <code>?api=http://localhost:5046&amp;clientId=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</code>
+  </p>
 
-            navigator.clipboard?.writeText(idToken);
-            alert("ID Token đã copy! Đang gửi lên API...");
+  <div id="buttonDiv"></div>
 
-            fetch(API_URL + "/api/auths/google-login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ idToken })
-            })
-            .then(r => r.json())
-            .then(data => {
-                const msg = data.success 
-                    ? "Đăng nhập thành công!\nToken JWT: " + (data.token || "").substring(0, 50) + "..."
-                    : "Lỗi: " + data.message;
-                document.getElementById("result").textContent += "\n\n--- API Response ---\n" + JSON.stringify(data, null, 2);
-                alert(msg);
-            })
-            .catch(err => {
-                document.getElementById("result").textContent += "\n\nLỗi: " + err.message;
-                alert("Lỗi gọi API: " + err.message + "\n\nKiểm tra API đang chạy tại " + API_URL);
-            });
+  <p id="status"></p>
+  <pre id="result"></pre>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const API_URL = (params.get('api') || 'http://localhost:5046').replace(/\/$/, '');
+      const CLIENT_ID = params.get('clientId') || '';
+
+      const statusEl = document.getElementById('status');
+      const resultEl = document.getElementById('result');
+
+      function setStatus(msg, isError) {
+        statusEl.textContent = msg;
+        statusEl.className = isError ? 'err' : 'ok';
+      }
+
+      function friendlyFetchError(err, response) {
+        if (response && response.status === 403)
+          return 'Access was denied (403). Check Google OAuth origins and API CORS.';
+        if (response && response.status === 401)
+          return 'Sign-in was rejected. Your Google token may be invalid or your account may need activation.';
+        if (response && response.status >= 500)
+          return 'The server could not complete sign-in. Please try again later.';
+        if (err && err.message === 'Failed to fetch')
+          return 'Cannot reach the API. Confirm the backend URL and that it is running.';
+        return err ? String(err.message || err) : 'Something went wrong.';
+      }
+
+      async function handleCredential(response) {
+        const idToken = response.credential;
+        resultEl.textContent = '';
+        setStatus('Sending token to API…', false);
+
+        try {
+          const res = await fetch(API_URL + '/api/auths/google-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ idToken })
+          });
+
+          let data = {};
+          try {
+            data = await res.json();
+          } catch (_) {
+            data = {};
+          }
+
+          if (!res.ok) {
+            var apiMsg = data.message || data.title || data.detail || '';
+            var hint = friendlyFetchError(null, res);
+            setStatus(apiMsg ? hint + ' ' + apiMsg : hint, true);
+            resultEl.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+
+          if (data.success === false) {
+            setStatus(data.message || 'Sign-in failed.', true);
+            resultEl.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+
+          setStatus('Signed in successfully.', false);
+          resultEl.textContent = JSON.stringify({
+            success: data.success,
+            message: data.message,
+            tokenPreview: data.token ? (data.token.substring(0, 36) + '…') : null
+          }, null, 2);
+        } catch (e) {
+          setStatus(friendlyFetchError(e, null), true);
+          resultEl.textContent = '';
+        }
+      }
+
+      window.onload = function () {
+        if (!CLIENT_ID) {
+          setStatus('Missing Web Client ID. Open this page with ?clientId=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', true);
+          return;
         }
 
-        window.onload = function() {
-            google.accounts.id.initialize({
-                client_id: CLIENT_ID,
-                callback: handleCredential
-            });
-            google.accounts.id.renderButton(
-                document.getElementById("buttonDiv"),
-                { theme: "outline", size: "large", text: "signin_with", shape: "rectangular" }
-            );
-        };
-    </script>
+        try {
+          google.accounts.id.initialize({
+            client_id: CLIENT_ID,
+            callback: handleCredential,
+            ux_mode: 'popup',
+            auto_select: false
+          });
+          google.accounts.id.renderButton(
+            document.getElementById('buttonDiv'),
+            { theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular' }
+          );
+          setStatus('Choose “Sign in with Google”.', false);
+        } catch (e) {
+          setStatus('Google Identity Services failed to load. Check network or ad blockers.', true);
+        }
+      };
+    })();
+  </script>
 </body>
 </html>

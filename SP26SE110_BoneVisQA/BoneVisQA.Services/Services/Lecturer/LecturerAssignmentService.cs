@@ -13,6 +13,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LecturerAssignmentService> _logger;
+    private readonly INotificationService _notificationService;
 
     private static DateTime? ToUtc(DateTime? dt)
     {
@@ -21,18 +22,44 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             DateTimeKind.Utc => dt.Value,
             DateTimeKind.Local => dt.Value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(dt.Value, DateTimeKind.Local).ToUniversalTime()
+            // Unspecified: assume it's a local datetime string (e.g., from datetime-local input)
+            // Parse as Vietnam time (UTC+7) and convert to UTC
+            _ => ParseLocalToUtc(dt.Value, 7) // Treat as UTC+7 (Vietnam)
         };
+    }
+
+    /// <summary>
+    /// Parse a DateTime with Kind=Unspecified as local time in the given timezone offset hours,
+    /// then convert to UTC.
+    /// </summary>
+    private static DateTime ParseLocalToUtc(DateTime dt, int utcOffsetHours)
+    {
+        // Create a DateTime in the specified timezone offset
+        var localDateTime = DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        // Treat as local time in UTC+offset timezone
+        var offset = TimeSpan.FromHours(utcOffsetHours);
+        // Convert: subtract offset to get UTC
+        return DateTime.SpecifyKind(localDateTime.Subtract(offset), DateTimeKind.Utc);
     }
 
     public LecturerAssignmentService(
         IUnitOfWork unitOfWork,
         IServiceScopeFactory scopeFactory,
-        ILogger<LecturerAssignmentService> logger)
+        ILogger<LecturerAssignmentService> logger,
+        INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _notificationService = notificationService;
+    }
+
+    /// <summary>
+    /// Passing score is always on a 100-point scale (0-100). Identity function.
+    /// </summary>
+    private static int? NormalizePassingScore(int? passingScore, bool isAiGenerated)
+    {
+        return passingScore;
     }
 
     public async Task<IReadOnlyList<ClassCaseAssignmentDto>> AssignCasesAsync(Guid lecturerId, Guid classId, AssignCasesRequestDto request)
@@ -50,7 +77,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ToList();
 
         if (caseIds.Count == 0)
-            throw new InvalidOperationException("caseIds phải chứa ít nhất một phần tử hợp lệ.");
+            throw new InvalidOperationException("caseIds must contain at least one valid item.");
 
         var medicalCases = await _unitOfWork.Context.MedicalCases
             .Where(c => caseIds.Contains(c.Id))
@@ -59,7 +86,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         _logger.LogInformation("[AssignCases] Step2 LoadMedicalCases done in {Elapsed}s, found={Count}", elapsed2, medicalCases.Count);
 
         if (medicalCases.Count != caseIds.Count)
-            throw new KeyNotFoundException("Một hoặc nhiều case không tồn tại.");
+            throw new KeyNotFoundException("One or more cases were not found.");
 
         var existingAssignments = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
@@ -90,16 +117,35 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var elapsed4 = (DateTime.UtcNow - t0).TotalSeconds;
         _logger.LogInformation("[AssignCases] Step4 SaveAsync done in {Elapsed}s", elapsed4);
 
-        // Phải await phần đọc DB (DbContext scoped); SMTP vẫn chạy nền bên trong QueueAssignmentEmailsAsync
-        await QueueAssignmentEmailsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            "Case Assignment",
-            "Medical Case",
-            request.DueDate);
+        // =========================================================
+        // COMMENTED OUT: Auto-send email/notification when assigning case
+        // Email and notification should only be sent when manually creating assignment
+        // from /lecturer/assignments/create page
+        // foreach (var medicalCase in medicalCases)
+        // {
+        //     await QueueAssignmentEmailsAsync(
+        //         academicClass.Id,
+        //         academicClass.ClassName,
+        //         medicalCase.Title,
+        //         "Medical Case",
+        //         request.DueDate,
+        //         medicalCase.Description);
+        // }
+        //
+        // // Send SignalR notification to students
+        // await QueueAssignmentNotificationsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     "Case Assignment",
+        //     "Clinical Case",
+        //     "/student/cases");
+        // =========================================================
 
-        var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
-        _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
+        // =========================================================
+        // LOG COMMENTED: Email/notification disabled for auto-assign
+        // var elapsed5 = (DateTime.UtcNow - t0).TotalSeconds;
+        // _logger.LogInformation("[AssignCases] Step5 QueueEmails fired in {Elapsed}s", elapsed5);
+        // =========================================================
 
         var result = medicalCases
             .OrderBy(c => c.Title)
@@ -122,18 +168,82 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return result;
     }
 
+    /// <summary>
+    /// Get all cases assigned to a specific class.
+    /// </summary>
+    public async Task<IReadOnlyList<ClassCaseAssignmentDto>> GetAssignedCasesAsync(Guid lecturerId, Guid classId)
+    {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+
+        var classCases = await _unitOfWork.Context.ClassCases
+            .AsNoTracking()
+            .Where(cc => cc.ClassId == classId)
+            .OrderByDescending(cc => cc.AssignedAt)
+            .ToListAsync();
+
+        if (classCases.Count == 0)
+            return Array.Empty<ClassCaseAssignmentDto>();
+
+        var caseIds = classCases.Select(cc => cc.CaseId).ToList();
+        var casesLookup = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .Where(c => caseIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c);
+
+        return classCases
+            .Select(cc =>
+            {
+                var medicalCase = casesLookup.GetValueOrDefault(cc.CaseId);
+                return new ClassCaseAssignmentDto
+                {
+                    ClassId = classId,
+                    CaseId = cc.CaseId,
+                    CaseTitle = medicalCase?.Title ?? "Unknown Case",
+                    AssignedAt = cc.AssignedAt,
+                    DueDate = cc.DueDate,
+                    IsMandatory = cc.IsMandatory
+                };
+            })
+            .ToList();
+    }
+
     public async Task<ClassQuizSessionDto> AssignQuizSessionAsync(Guid lecturerId, Guid classId, AssignQuizSessionRequestDto request)
     {
         var academicClass = await EnsureLecturerOwnsClassAsync(lecturerId, classId);
 
         if (request.QuizId == Guid.Empty)
-            throw new InvalidOperationException("quizId là bắt buộc.");
-
-        if (request.OpenTime.HasValue && request.CloseTime.HasValue && request.OpenTime > request.CloseTime)
-            throw new InvalidOperationException("openTime phải nhỏ hơn hoặc bằng closeTime.");
+            throw new InvalidOperationException("quizId is required.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var warnings = new List<string>();
+        DateTime? effectiveOpenTime = request.OpenTime;
+        DateTime? effectiveCloseTime = request.CloseTime;
+
+        if (request.UseExpertTime)
+        {
+            effectiveOpenTime = quiz.OpenTime;
+            effectiveCloseTime = quiz.CloseTime;
+            warnings.Add("Using Expert's open/close time.");
+        }
+        else
+        {
+            if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
+            {
+                warnings.Add($"Quiz open time adjusted from {request.OpenTime.Value:HH:mm} to {quiz.OpenTime.Value:HH:mm} (Expert's open time).");
+                effectiveOpenTime = quiz.OpenTime;
+            }
+
+            if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
+            {
+                warnings.Add($"Quiz close time adjusted from {request.CloseTime.Value:HH:mm} to {quiz.CloseTime.Value:HH:mm} (Expert's close time).");
+                effectiveCloseTime = quiz.CloseTime;
+            }
+        }
+
+        if (effectiveOpenTime.HasValue && effectiveCloseTime.HasValue && effectiveOpenTime > effectiveCloseTime)
+            throw new InvalidOperationException("openTime must be less than or equal to closeTime.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(x => x.ClassId == classId && x.QuizId == request.QuizId);
@@ -150,10 +260,95 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
         }
 
-        session.OpenTime = ToUtc(request.OpenTime);
-        session.CloseTime = ToUtc(request.CloseTime);
-        session.TimeLimitMinutes = request.TimeLimitMinutes;
-        session.PassingScore = request.PassingScore;
+        // ============================================
+        // TIME LIMIT & PASSING SCORE CLAMP LOGIC
+        // ============================================
+        // Expert đặt giá trị gốc trên Quiz. Lecturer có thể điều chỉnh nhưng bị giới hạn:
+        // - TimeLimit: ±50% so với Expert (min 5, max 180)
+        // - PassingScore: ±10% so với Expert (min 0, max 100)
+        // Nếu Lecturer để trống → dùng giá trị Expert
+        // ============================================
+
+        // TIME LIMIT CLAMP
+        int? effectiveTimeLimit = request.TimeLimitMinutes;
+        if (quiz.TimeLimit.HasValue)
+        {
+            var expertTimeLimit = quiz.TimeLimit.Value;
+            var minTimeLimit = Math.Max(5, (int)(expertTimeLimit * 0.5));
+            var maxTimeLimit = Math.Min(180, (int)(expertTimeLimit * 1.5));
+
+            if (request.TimeLimitMinutes.HasValue)
+            {
+                // Lecturer đã nhập giá trị → clamp vào khoảng cho phép
+                if (request.TimeLimitMinutes.Value < minTimeLimit)
+                {
+                    effectiveTimeLimit = minTimeLimit;
+                    warnings.Add($"Time limit adjusted to {minTimeLimit} min (minimum allowed for this quiz).");
+                }
+                else if (request.TimeLimitMinutes.Value > maxTimeLimit)
+                {
+                    effectiveTimeLimit = maxTimeLimit;
+                    warnings.Add($"Time limit adjusted to {maxTimeLimit} min (maximum allowed for this quiz).");
+                }
+                else
+                {
+                    effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                }
+            }
+            else
+            {
+                // Lecturer không nhập → dùng giá trị Expert
+                effectiveTimeLimit = expertTimeLimit;
+            }
+        }
+        else
+        {
+            // Quiz không có TimeLimit từ Expert → dùng giá trị Lecturer (hoặc default 30)
+            effectiveTimeLimit = request.TimeLimitMinutes ?? 30;
+        }
+
+        // PASSING SCORE CLAMP
+        int? effectivePassingScore = request.PassingScore;
+        if (quiz.PassingScore.HasValue)
+        {
+            var expertPassingScore = quiz.PassingScore.Value;
+            var minPassingScore = Math.Max(0, expertPassingScore - 10);
+            var maxPassingScore = Math.Min(100, expertPassingScore + 10);
+
+            if (request.PassingScore.HasValue)
+            {
+                // Lecturer đã nhập giá trị → clamp vào khoảng cho phép
+                if (request.PassingScore.Value < minPassingScore)
+                {
+                    effectivePassingScore = minPassingScore;
+                    warnings.Add($"Passing score adjusted to {minPassingScore}% (minimum allowed for this quiz).");
+                }
+                else if (request.PassingScore.Value > maxPassingScore)
+                {
+                    effectivePassingScore = maxPassingScore;
+                    warnings.Add($"Passing score adjusted to {maxPassingScore}% (maximum allowed for this quiz).");
+                }
+                else
+                {
+                    effectivePassingScore = request.PassingScore.Value;
+                }
+            }
+            else
+            {
+                // Lecturer không nhập → dùng giá trị Expert
+                effectivePassingScore = expertPassingScore;
+            }
+        }
+        else
+        {
+            // Quiz không có PassingScore từ Expert → dùng giá trị Lecturer (hoặc default 70)
+            effectivePassingScore = request.PassingScore ?? 70;
+        }
+
+        session.OpenTime = ToUtc(effectiveOpenTime);
+        session.CloseTime = ToUtc(effectiveCloseTime);
+        session.TimeLimitMinutes = effectiveTimeLimit;
+        session.PassingScore = effectivePassingScore;
         session.ShuffleQuestions = request.ShuffleQuestions;
         session.AllowRetake = request.AllowRetake;
         session.AllowLate = request.AllowLate;
@@ -161,12 +356,26 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         await _unitOfWork.SaveAsync();
 
-        await QueueAssignmentEmailsAsync(
-            academicClass.Id,
-            academicClass.ClassName,
-            quiz.Title,
-            "Quiz",
-            request.CloseTime);
+        // =========================================================
+        // COMMENTED OUT: Auto-send email/notification when assigning quiz
+        // Email and notification should only be sent when manually creating assignment
+        // from /lecturer/assignments/create page
+        // await QueueAssignmentEmailsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     quiz.Title,
+        //     "Quiz",
+        //     request.CloseTime,
+        //     quiz.Topic);
+        //
+        // // Send SignalR notification to students
+        // await QueueAssignmentNotificationsAsync(
+        //     academicClass.Id,
+        //     academicClass.ClassName,
+        //     quiz.Title,
+        //     "Quiz",
+        //     "/student/quizzes");
+        // =========================================================
 
         return new ClassQuizSessionDto
         {
@@ -183,12 +392,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             AllowRetake = session.AllowRetake,
             AllowLate = session.AllowLate,
             ShowResultsAfterSubmission = session.ShowResultsAfterSubmission,
-            RetakeResetAt = session.RetakeResetAt
+            RetakeResetAt = session.RetakeResetAt,
+            Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
         };
     }
 
     /// <summary>
-    /// Bật retake cho một attempt cụ thể — reset trạng thái để sinh viên làm lại.
+    /// Enable retake for a specific attempt — reset state to allow student to retake.
     /// </summary>
     public async Task AllowRetakeForAttemptAsync(Guid lecturerId, Guid attemptId)
     {
@@ -197,21 +407,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 .ThenInclude(q => q!.ClassQuizSessions)
                     .ThenInclude(cqs => cqs.Class)
             .FirstOrDefaultAsync(a => a.Id == attemptId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+            ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         var classSession = attempt.Quiz?.ClassQuizSessions?.FirstOrDefault();
         if (classSession == null)
-            throw new InvalidOperationException("Quiz này không được gán qua lớp học.");
+            throw new InvalidOperationException("This quiz is not assigned through a class.");
 
-        // Kiểm tra lecturer sở hữu lớp
+        // Check if lecturer owns the class
         var academicClass = classSession.Class;
         if (academicClass == null || academicClass.LecturerId != lecturerId)
-            throw new UnauthorizedAccessException("Bạn không có quyền thực hiện thao tác này.");
+            throw new UnauthorizedAccessException("You do not have permission to perform this action.");
 
         if (!attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("Sinh viên chưa nộp bài. Không cần bật retake.");
+            throw new InvalidOperationException("The student has not submitted yet. Retake does not need to be enabled.");
 
-        // Xóa đáp án cũ
+        // Remove old answers
         var oldAnswers = await _unitOfWork.Context.StudentQuizAnswers
             .Where(a => a.AttemptId == attempt.Id)
             .ToListAsync();
@@ -222,7 +432,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         attempt.Score = null;
         attempt.StartedAt = DateTime.UtcNow;
 
-        // Đánh dấu retake đã được bật
+        // Mark retake as enabled
         classSession.RetakeResetAt = DateTime.UtcNow;
 
         await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
@@ -230,7 +440,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Bật retake cho toàn bộ sinh viên trong một lớp đã nộp quiz này.
+    /// Enable retake for all students in a class who have submitted this quiz.
     /// </summary>
     public async Task AllowRetakeAllAsync(Guid lecturerId, Guid classId, Guid quizId)
     {
@@ -238,7 +448,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy phân công quiz cho lớp này.");
+            ?? throw new KeyNotFoundException("Quiz assignment for this class was not found.");
 
         var completedAttempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizId && a.CompletedAt.HasValue)
@@ -258,15 +468,16 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     }
 
     /// <summary>
-    /// Đọc danh sách email trong request (DbContext còn sống), rồi gửi SMTP ở background để API trả 200 ngay.
-    /// Cấu hình SMTP là <c>Email:Username</c>/<c>Email:Password</c> (Gmail App Password, v.v.) — không liên quan Google OAuth Console.
+    /// Read email list from request (DbContext still alive), then send SMTP in background so API returns 200 immediately.
+    /// SMTP configuration is <c>Email:Username</c>/<c>Email:Password</c> (Gmail App Password, etc.) — unrelated to Google OAuth Console.
     /// </summary>
     private async Task QueueAssignmentEmailsAsync(
         Guid classId,
         string className,
         string assignmentTitle,
         string assignmentType,
-        DateTime? dueDate)
+        DateTime? dueDate,
+        string? description)  // ← thêm parameter
     {
         _logger.LogInformation("[AssignmentEmail] Queue started for class {ClassId}", classId);
 
@@ -281,7 +492,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentEmail] Loaded {Count} recipients for class {ClassId} — firing background send", items.Count, classId);
@@ -307,6 +518,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var typeCopy = assignmentType;
         var dueCopy = dueDate;
         var dueDisplayCopy = dueDateDisplay;
+        var descriptionCopy = description;  // ← thêm này
         var log = _logger;
 
         _ = Task.Run(async () =>
@@ -326,7 +538,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                             titleCopy,
                             typeCopy,
                             dueCopy,
-                            dueDisplayCopy);
+                            dueDisplayCopy,
+                            descriptionCopy);  // ← truyền description
                         if (!sent)
                             log.LogWarning("[AssignmentEmail] SMTP returned false for {Email}", email);
                     }
@@ -368,7 +581,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
             items = rows
                 .Where(x => !string.IsNullOrWhiteSpace(x.Email))
-                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Sinh viên" : x.FullName!.Trim()))
+                .Select(x => (x.Email!.Trim(), string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
                 .ToList();
 
             _logger.LogInformation("[AssignmentUpdateEmail] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
@@ -433,16 +646,101 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         });
     }
 
+    /// <summary>
+    /// Send SignalR notification to all students in the class about newly assigned assignment.
+    /// </summary>
+    private async Task QueueAssignmentNotificationsAsync(
+        Guid classId,
+        string className,
+        string assignmentTitle,
+        string assignmentType,
+        string targetUrl)
+    {
+        _logger.LogInformation("[AssignmentNotification] Queue started for class {ClassId}", classId);
+
+        List<(Guid UserId, string Name)> items;
+        try
+        {
+            var rows = await _unitOfWork.Context.ClassEnrollments
+                .AsNoTracking()
+                .Where(e => e.ClassId == classId)
+                .Select(e => new { e.StudentId, e.Student!.FullName })
+                .ToListAsync();
+
+            items = rows
+                .Where(x => x.StudentId != Guid.Empty)
+                .Select(x => (x.StudentId, string.IsNullOrWhiteSpace(x.FullName) ? "Student" : x.FullName!.Trim()))
+                .ToList();
+
+            _logger.LogInformation("[AssignmentNotification] Loaded {Count} recipients for class {ClassId}", items.Count, classId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AssignmentNotification] Failed to load recipients for class {ClassId}", classId);
+            return;
+        }
+
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("[AssignmentNotification] No student for class {ClassId}", classId);
+            return;
+        }
+
+        var nameCopy = className;
+        var titleCopy = assignmentTitle;
+        var typeCopy = assignmentType;
+        var urlCopy = targetUrl;
+        var log = _logger;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                var notificationTitle = $"New Assignment: {titleCopy}";
+                var notificationMessage = $"Lecturer just assigned new {typeCopy} to class {nameCopy}";
+
+                foreach (var (userId, studentName) in items)
+                {
+                    try
+                    {
+                        await notificationService.SendNotificationToUserAsync(
+                            userId,
+                            notificationTitle,
+                            notificationMessage,
+                            "assignment",
+                            urlCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogError(ex, "[AssignmentNotification] Error sending to user {UserId}", userId);
+                    }
+                }
+
+                log.LogInformation(
+                    "[AssignmentNotification] Background send finished for class {ClassName}, {Count} recipients",
+                    nameCopy,
+                    items.Count);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[AssignmentNotification] Background task failed for class {ClassId}", classId);
+            }
+        });
+    }
+
     private async Task<AcademicClass> EnsureLecturerOwnsClassAsync(Guid lecturerId, Guid classId)
     {
         return await _unitOfWork.Context.AcademicClasses
             .FirstOrDefaultAsync(c => c.Id == classId && c.LecturerId == lecturerId)
-            ?? throw new KeyNotFoundException("Không tìm thấy lớp học thuộc quyền giảng viên.");
+            ?? throw new KeyNotFoundException("No class under this lecturer was found.");
     }
 
     // ── Quiz Review Methods ───────────────────────────────────────────────────────
 
-    /// <summary>Lấy danh sách tất cả bài quiz attempts của sinh viên trong một class + quiz cụ thể.</summary>
+    /// <summary>Get list of all quiz attempts for students in a class + specific quiz.</summary>
     public async Task<IReadOnlyList<StudentQuizAttemptDto>> GetClassQuizAttemptsAsync(
         Guid lecturerId, Guid classId, Guid quizId)
     {
@@ -470,7 +768,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             AttemptId = a.Id,
             StudentId = a.StudentId,
-            StudentName = a.Student.FullName ?? "Sinh viên",
+            StudentName = a.Student.FullName ?? "Student",
             StudentEmail = a.Student.Email ?? "",
             Score = a.Score,
             StartedAt = a.StartedAt,
@@ -483,7 +781,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }).ToList();
     }
 
-    /// <summary>Lấy chi tiết 1 bài quiz: câu hỏi + câu trả lời sinh viên.</summary>
+    /// <summary>Get details for 1 quiz: questions + student answers.</summary>
     public async Task<QuizAttemptDetailDto> GetQuizAttemptDetailAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId)
     {
@@ -495,10 +793,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
-            ?? throw new KeyNotFoundException("Không tìm thấy quiz.");
+            ?? throw new KeyNotFoundException("Quiz not found.");
 
         var session = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
@@ -510,31 +808,38 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             QuizId = attempt.QuizId,
             QuizTitle = quiz.Title,
             StudentId = attempt.StudentId,
-            StudentName = attempt.Student.FullName ?? "Sinh viên",
+            StudentName = attempt.Student?.FullName ?? "Student",
             Score = attempt.Score,
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
-            PassingScore = session?.PassingScore,
+            PassingScore = NormalizePassingScore(session?.PassingScore, quiz.IsAiGenerated),
             Questions = attempt.StudentQuizAnswers
                 .OrderBy(sa => sa.Question.QuestionText)
                 .Select(sa => new QuestionWithAnswerDto
                 {
                     QuestionId = sa.QuestionId,
                     QuestionText = sa.Question.QuestionText,
-                    Type = sa.Question.Type,
+                    Type = sa.Question.Type?.ToString(),
                     OptionA = sa.Question.OptionA,
                     OptionB = sa.Question.OptionB,
                     OptionC = sa.Question.OptionC,
                     OptionD = sa.Question.OptionD,
                     CorrectAnswer = sa.Question.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
+                    EssayAnswer = sa.EssayAnswer,
                     IsCorrect = sa.Question != null && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer),
-                    AnswerId = sa.Id
+                    AnswerId = sa.Id,
+                    MaxScore = sa.Question.MaxScore,
+                    ScoreAwarded = sa.ScoreAwarded,
+                    LecturerFeedback = sa.LecturerFeedback,
+                    IsGraded = sa.IsGraded,
+                    ReferenceAnswer = sa.Question.ReferenceAnswer,
+                    ImageUrl = sa.Question.ImageUrl
                 }).ToList()
         };
     }
 
-    /// <summary>Lecturer chỉnh sửa điểm / câu trả lời của 1 quiz attempt.</summary>
+    /// <summary>Lecturer edits score / answers for a quiz attempt.</summary>
     public async Task<QuizAttemptDetailDto> UpdateQuizAttemptAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId, UpdateQuizAttemptRequestDto request)
     {
@@ -545,13 +850,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException("Không tìm thấy bài làm của sinh viên.");
+            ?? throw new KeyNotFoundException("Student submission not found.");
 
-        // Cập nhật điểm nếu có
+        // Update score if provided
         if (request.Score.HasValue)
             attempt.Score = request.Score.Value;
 
-        // Cập nhật câu trả lời nếu có
+        // Update answers if provided
         if (request.Answers.Count > 0)
         {
             var answerMap = attempt.StudentQuizAnswers.ToDictionary(a => a.Id);
@@ -559,12 +864,36 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             {
                 if (answerMap.TryGetValue(update.AnswerId, out var answer))
                 {
+                    // Allow updating StudentAnswer, EssayAnswer, ScoreAwarded, LecturerFeedback, IsGraded
                     if (update.StudentAnswer != null)
                         answer.StudentAnswer = update.StudentAnswer;
+                    if (update.EssayAnswer != null)
+                        answer.EssayAnswer = update.EssayAnswer;
                     if (update.IsCorrect.HasValue)
                         answer.IsCorrect = update.IsCorrect.Value;
+                    if (update.ScoreAwarded.HasValue)
+                    {
+                        answer.ScoreAwarded = update.ScoreAwarded.Value;
+                        answer.IsGraded = true;
+                        answer.GradedAt = DateTime.UtcNow;
+                    }
+                    if (update.LecturerFeedback != null)
+                        answer.LecturerFeedback = update.LecturerFeedback;
+                    if (update.IsGraded.HasValue)
+                    {
+                        answer.IsGraded = update.IsGraded.Value;
+                        if (update.IsGraded.Value && answer.GradedAt == null)
+                            answer.GradedAt = DateTime.UtcNow;
+                    }
                 }
             }
+
+            // Recalculate attempt score based on updated essay scores
+            var totalMaxScore = attempt.StudentQuizAnswers.Sum(a => a.Question.MaxScore);
+            var totalScoreAwarded = attempt.StudentQuizAnswers
+                .Where(a => a.ScoreAwarded.HasValue)
+                .Sum(a => a.ScoreAwarded.Value);
+            attempt.Score = totalMaxScore == 0 ? 0 : (double)(totalScoreAwarded * 100 / totalMaxScore);
         }
 
         await _unitOfWork.SaveAsync();
@@ -581,7 +910,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
         if (session == null)
-            throw new KeyNotFoundException("Quiz này chưa được gắn cho lớp học.");
+            throw new KeyNotFoundException("This quiz has not been assigned to a class.");
     }
 
     private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
@@ -594,10 +923,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
     // ── Assignment CRUD Methods ─────────────────────────────────────────────────
 
-    /// <summary>Lấy chi tiết một assignment (case hoặc quiz) theo ID.</summary>
+    /// <summary>Get details for an assignment (case or quiz) by ID.</summary>
     public async Task<AssignmentDetailDto> GetAssignmentByIdAsync(Guid assignmentId)
     {
-        // Thử tìm trong ClassCases (case assignment)
+        // Try finding in ClassCases (case assignment)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -627,13 +956,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 AssignedAt = classCase.AssignedAt,
                 TotalStudents = totalStudents,
                 SubmittedCount = submittedCount,
-                GradedCount = 0, // Case không có chấm điểm
+                GradedCount = 0, // Case is not graded
                 AllowLate = false,
                 CreatedAt = classCase.AssignedAt
             };
         }
 
-        // Thử tìm trong ClassQuizSessions (quiz assignment)
+        // Try finding in ClassQuizSessions (quiz assignment)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Class)
@@ -641,7 +970,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         var quizTotalStudents = await _unitOfWork.Context.ClassEnrollments
             .CountAsync(e => e.ClassId == quizSession.ClassId);
@@ -684,10 +1013,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         };
     }
 
-    /// <summary>Cập nhật thông tin assignment.</summary>
+    /// <summary>Update assignment information.</summary>
     public async Task<AssignmentDetailDto> UpdateAssignmentAsync(Guid assignmentId, UpdateAssignmentRequestDto request)
     {
-        // Thử cập nhật ClassCase
+        // Try updating ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .Include(cc => cc.Class)
             .Include(cc => cc.Case)
@@ -707,31 +1036,130 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 await QueueAssignmentUpdateEmailsAsync(
                     classCase.ClassId,
                     classCase.Class.ClassName,
-                    classCase.Case.Title ?? "Bài tập ca lâm sàng",
-                    "Ca Lâm Sàng",
+                    classCase.Case.Title ?? "Clinical case assignment",
+                    "Clinical Case",
                     classCase.DueDate);
             }
 
             return await GetAssignmentByIdAsync(assignmentId);
         }
 
-        // Thử cập nhật ClassQuizSession
+        // Try updating ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .Include(cqs => cqs.Class)
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
-        if (request.DueDate.HasValue)
-            quizSession.CloseTime = ToUtc(request.DueDate);
-        if (request.OpenDate.HasValue)
-            quizSession.OpenTime = ToUtc(request.OpenDate);
-        if (request.PassingScore.HasValue)
-            quizSession.PassingScore = request.PassingScore.Value;
-        if (request.TimeLimitMinutes.HasValue)
-            quizSession.TimeLimitMinutes = request.TimeLimitMinutes.Value;
+        var warnings = new List<string>();
+        DateTime? effectiveOpenDate = request.OpenDate;
+        DateTime? effectiveDueDate = request.DueDate;
+
+        // If lecturer wants to use Expert's timing
+        if (request.UseExpertTime)
+        {
+            effectiveOpenDate = quizSession.Quiz?.OpenTime;
+            effectiveDueDate = quizSession.Quiz?.CloseTime;
+            warnings.Add("Using Expert's open/close time.");
+        }
+        else
+        {
+            // Clamp thời gian mở: nếu sớm hơn Expert thì lấy thời gian Expert
+            if (request.OpenDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.OpenTime.HasValue && request.OpenDate.Value < quizSession.Quiz.OpenTime.Value)
+            {
+                warnings.Add($"Thời gian mở quiz đã được điều chỉnh từ {request.OpenDate.Value:HH:mm} lên {quizSession.Quiz.OpenTime.Value:HH:mm} (thời gian mở của Expert).");
+                effectiveOpenDate = quizSession.Quiz.OpenTime;
+            }
+
+            // Clamp thời gian đóng: nếu muộn hơn Expert thì lấy thời gian Expert
+            if (request.DueDate.HasValue && quizSession.Quiz != null && quizSession.Quiz.CloseTime.HasValue && request.DueDate.Value > quizSession.Quiz.CloseTime.Value)
+            {
+                warnings.Add($"Thời gian đóng quiz đã được điều chỉnh từ {request.DueDate.Value:HH:mm} xuống {quizSession.Quiz.CloseTime.Value:HH:mm} (thời gian đóng của Expert).");
+                effectiveDueDate = quizSession.Quiz.CloseTime;
+            }
+        }
+
+        if (effectiveDueDate.HasValue)
+            quizSession.CloseTime = ToUtc(effectiveDueDate);
+        if (effectiveOpenDate.HasValue)
+            quizSession.OpenTime = ToUtc(effectiveOpenDate);
+
+        // ============================================
+        // TIME LIMIT & PASSING SCORE CLAMP LOGIC (same as AssignQuizSessionAsync)
+        // ============================================
+        if (request.PassingScore.HasValue || request.TimeLimitMinutes.HasValue)
+        {
+            // Get expert values from Quiz
+            var expertTimeLimit = quizSession.Quiz?.TimeLimit;
+            var expertPassingScore = quizSession.Quiz?.PassingScore;
+
+            // CLAMP TIME LIMIT
+            if (request.TimeLimitMinutes.HasValue)
+            {
+                int effectiveTimeLimit;
+                if (expertTimeLimit.HasValue)
+                {
+                    var minTimeLimit = Math.Max(5, (int)(expertTimeLimit.Value * 0.5));
+                    var maxTimeLimit = Math.Min(180, (int)(expertTimeLimit.Value * 1.5));
+
+                    if (request.TimeLimitMinutes.Value < minTimeLimit)
+                    {
+                        effectiveTimeLimit = minTimeLimit;
+                        warnings.Add($"Time limit adjusted to {minTimeLimit} min (minimum allowed for this quiz).");
+                    }
+                    else if (request.TimeLimitMinutes.Value > maxTimeLimit)
+                    {
+                        effectiveTimeLimit = maxTimeLimit;
+                        warnings.Add($"Time limit adjusted to {maxTimeLimit} min (maximum allowed for this quiz).");
+                    }
+                    else
+                    {
+                        effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                    }
+                }
+                else
+                {
+                    // Quiz không có TimeLimit từ Expert → dùng giá trị Lecturer
+                    effectiveTimeLimit = request.TimeLimitMinutes.Value;
+                }
+                quizSession.TimeLimitMinutes = effectiveTimeLimit;
+            }
+
+            // CLAMP PASSING SCORE
+            if (request.PassingScore.HasValue)
+            {
+                int effectivePassingScore;
+                if (expertPassingScore.HasValue)
+                {
+                    var minPassingScore = Math.Max(0, expertPassingScore.Value - 10);
+                    var maxPassingScore = Math.Min(100, expertPassingScore.Value + 10);
+
+                    if (request.PassingScore.Value < minPassingScore)
+                    {
+                        effectivePassingScore = minPassingScore;
+                        warnings.Add($"Passing score adjusted to {minPassingScore}% (minimum allowed for this quiz).");
+                    }
+                    else if (request.PassingScore.Value > maxPassingScore)
+                    {
+                        effectivePassingScore = maxPassingScore;
+                        warnings.Add($"Passing score adjusted to {maxPassingScore}% (maximum allowed for this quiz).");
+                    }
+                    else
+                    {
+                        effectivePassingScore = request.PassingScore.Value;
+                    }
+                }
+                else
+                {
+                    // Quiz không có PassingScore từ Expert → dùng giá trị Lecturer
+                    effectivePassingScore = request.PassingScore.Value;
+                }
+                quizSession.PassingScore = effectivePassingScore;
+            }
+        }
+
         if (request.AllowRetake.HasValue)
             quizSession.AllowRetake = request.AllowRetake.Value;
         if (request.AllowLate.HasValue)
@@ -751,13 +1179,41 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 quizSession.CloseTime);
         }
 
-        return await GetAssignmentByIdAsync(assignmentId);
+        var detail = new AssignmentDetailDto
+        {
+            Id = quizSession.Id,
+            ClassId = quizSession.ClassId,
+            ClassName = quizSession.Class?.ClassName ?? "",
+            ClassCode = null,
+            Type = "quiz",
+            Title = quizSession.Quiz?.Title ?? "Untitled Quiz",
+            Description = null,
+            Instructions = null,
+            DueDate = quizSession.CloseTime,
+            OpenDate = quizSession.OpenTime,
+            IsMandatory = false,
+            AssignedAt = quizSession.CreatedAt,
+            TotalStudents = await _unitOfWork.Context.ClassEnrollments.CountAsync(e => e.ClassId == quizSession.ClassId),
+            SubmittedCount = await _unitOfWork.Context.QuizAttempts.CountAsync(a => a.QuizId == quizSession.QuizId && a.CompletedAt.HasValue),
+            GradedCount = await _unitOfWork.Context.QuizAttempts.CountAsync(a => a.QuizId == quizSession.QuizId && a.Score.HasValue),
+            MaxScore = 100,
+            PassingScore = quizSession.PassingScore,
+            TimeLimitMinutes = quizSession.TimeLimitMinutes,
+            AllowLate = quizSession.AllowLate,
+            AllowRetake = quizSession.AllowRetake,
+            ShowResultsAfterSubmission = quizSession.ShowResultsAfterSubmission,
+            AvgScore = await _unitOfWork.Context.QuizAttempts.Where(a => a.QuizId == quizSession.QuizId && a.Score.HasValue).AverageAsync(a => (double?)a.Score) ?? null,
+            CreatedAt = quizSession.CreatedAt,
+            Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
+        };
+
+        return detail;
     }
 
-    /// <summary>Xóa một assignment.</summary>
+    /// <summary>Delete an assignment.</summary>
     public async Task DeleteAssignmentAsync(Guid assignmentId)
     {
-        // Thử xóa ClassCase
+        // Try deleting ClassCase
         var classCase = await _unitOfWork.Context.ClassCases
             .FirstOrDefaultAsync(cc => cc.CaseId == assignmentId);
 
@@ -768,21 +1224,21 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             return;
         }
 
-        // Thử xóa ClassQuizSession
+        // Try deleting ClassQuizSession
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId);
 
         if (quizSession == null)
-            throw new KeyNotFoundException("Không tìm thấy assignment.");
+            throw new KeyNotFoundException("Assignment not found.");
 
         _unitOfWork.Context.ClassQuizSessions.Remove(quizSession);
         await _unitOfWork.SaveAsync();
     }
 
-    /// <summary>Lấy danh sách submissions của một assignment.</summary>
+    /// <summary>Get submission list for an assignment.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> GetAssignmentSubmissionsAsync(Guid assignmentId)
     {
-        // Thử lấy submissions từ ClassCases (case)
+        // Try getting submissions from ClassCases (case)
         var classCase = await _unitOfWork.Context.ClassCases
             .AsNoTracking()
             .Include(cc => cc.Class)
@@ -812,12 +1268,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }).ToList();
         }
 
-        // Lấy submissions từ ClassQuizSessions (quiz)
+        // Get submissions from ClassQuizSessions (quiz)
         var quizSession = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var quizEnrollments = await _unitOfWork.Context.ClassEnrollments
             .AsNoTracking()
@@ -843,7 +1299,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         }).ToList();
     }
 
-    /// <summary>Cập nhật điểm cho nhiều submissions.</summary>
+    /// <summary>Update scores for multiple submissions.</summary>
     public async Task<IReadOnlyList<AssignmentSubmissionDto>> UpdateAssignmentSubmissionsAsync(
         Guid assignmentId, UpdateSubmissionsRequestDto request)
     {
@@ -851,7 +1307,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .AsNoTracking()
             .Include(cqs => cqs.Quiz)
             .FirstOrDefaultAsync(cqs => cqs.Id == assignmentId)
-            ?? throw new KeyNotFoundException("Không tìm thấy assignment.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
 
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
@@ -868,5 +1324,589 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         await _unitOfWork.SaveAsync();
         return await GetAssignmentSubmissionsAsync(assignmentId);
+    }
+
+    /// <summary>
+    /// Tạo Assignment THỦ CÔNG (không auto gửi email notification).
+    /// </summary>
+    public async Task<CreateAssignmentManualResponseDto> CreateAssignmentManualAsync(
+        Guid lecturerId,
+        CreateAssignmentManualRequestDto request)
+    {
+        var results = new List<ManualAssignmentResultDto>();
+
+        if (request.ClassIds.Count == 0)
+            throw new InvalidOperationException("Phải chọn ít nhất một lớp học.");
+
+        if (string.IsNullOrEmpty(request.AssignmentType))
+            throw new InvalidOperationException("Phải chọn loại assignment (case hoặc quiz).");
+
+        if (request.AssignmentType.ToLower() == "quiz" && request.QuizId == Guid.Empty)
+            throw new InvalidOperationException("Phải chọn quiz khi tạo assignment loại quiz.");
+
+        if (request.AssignmentType.ToLower() == "case" && request.CaseId == Guid.Empty)
+            throw new InvalidOperationException("Phải chọn case khi tạo assignment loại case.");
+
+        // Validate từng lớp học
+        var classes = await _unitOfWork.Context.AcademicClasses
+            .Where(c => request.ClassIds.Contains(c.Id) && c.LecturerId == lecturerId)
+            .ToListAsync();
+
+        if (classes.Count != request.ClassIds.Count)
+            throw new KeyNotFoundException("Một hoặc nhiều lớp học không thuộc quyền quản lý của bạn.");
+
+        foreach (var academicClass in classes)
+        {
+            try
+            {
+                Guid assignmentId;
+                string title;
+                string description = null!;
+
+                if (request.AssignmentType.ToLower() == "quiz")
+                {
+                    var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(request.QuizId.Value)
+                        ?? throw new KeyNotFoundException($"Quiz không tìm thấy.");
+
+                    // Kiểm tra đã tồn tại chưa
+                    var existing = await _unitOfWork.Context.ClassQuizSessions
+                        .FirstOrDefaultAsync(cqs => cqs.ClassId == academicClass.Id && cqs.QuizId == request.QuizId.Value);
+
+                    if (existing != null)
+                    {
+                        results.Add(new ManualAssignmentResultDto
+                        {
+                            ClassId = academicClass.Id,
+                            ClassName = academicClass.ClassName,
+                            AssignmentId = existing.Id,
+                            Success = false,
+                            Message = "Quiz đã được gán cho lớp này rồi."
+                        });
+                        continue;
+                    }
+
+                    // Xử lý thời gian
+                    DateTime? effectiveOpenTime = request.OpenTime;
+                    DateTime? effectiveCloseTime = request.CloseTime;
+
+                    if (request.UseExpertTime)
+                    {
+                        effectiveOpenTime = quiz.OpenTime;
+                        effectiveCloseTime = quiz.CloseTime;
+                    }
+                    else
+                    {
+                        if (request.OpenTime.HasValue && quiz.OpenTime.HasValue && request.OpenTime.Value < quiz.OpenTime.Value)
+                            effectiveOpenTime = quiz.OpenTime;
+                        if (request.CloseTime.HasValue && quiz.CloseTime.HasValue && request.CloseTime.Value > quiz.CloseTime.Value)
+                            effectiveCloseTime = quiz.CloseTime;
+                    }
+
+                    // Clamp time limit và passing score
+                    int? effectiveTimeLimit = request.TimeLimitMinutes ?? quiz.TimeLimit ?? 30;
+                    int? effectivePassingScore = request.PassingScore ?? quiz.PassingScore ?? 70;
+
+                    if (quiz.TimeLimit.HasValue)
+                    {
+                        var minTime = Math.Max(5, (int)(quiz.TimeLimit.Value * 0.5));
+                        var maxTime = Math.Min(180, (int)(quiz.TimeLimit.Value * 1.5));
+                        if (effectiveTimeLimit < minTime) effectiveTimeLimit = minTime;
+                        if (effectiveTimeLimit > maxTime) effectiveTimeLimit = maxTime;
+                    }
+
+                    if (quiz.PassingScore.HasValue)
+                    {
+                        var minScore = Math.Max(0, quiz.PassingScore.Value - 10);
+                        var maxScore = Math.Min(100, quiz.PassingScore.Value + 10);
+                        if (effectivePassingScore < minScore) effectivePassingScore = minScore;
+                        if (effectivePassingScore > maxScore) effectivePassingScore = maxScore;
+                    }
+
+                    var session = new ClassQuizSession
+                    {
+                        Id = Guid.NewGuid(),
+                        ClassId = academicClass.Id,
+                        QuizId = request.QuizId.Value,
+                        OpenTime = ToUtc(effectiveOpenTime),
+                        CloseTime = ToUtc(effectiveCloseTime),
+                        TimeLimitMinutes = effectiveTimeLimit,
+                        PassingScore = effectivePassingScore,
+                        ShuffleQuestions = request.ShuffleQuestions,
+                        AllowRetake = request.AllowRetake,
+                        AllowLate = request.AllowLate,
+                        ShowResultsAfterSubmission = request.ShowResultsAfterSubmission,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
+                    assignmentId = session.Id;
+                    title = quiz.Title;
+                    description = quiz.Topic;
+                }
+                else // case
+                {
+                    var medicalCase = await _unitOfWork.Context.MedicalCases
+                        .FirstOrDefaultAsync(c => c.Id == request.CaseId)
+                        ?? throw new KeyNotFoundException($"Case không tìm thấy.");
+
+                    // Kiểm tra đã tồn tại chưa
+                    var existing = await _unitOfWork.Context.ClassCases
+                        .FirstOrDefaultAsync(cc => cc.ClassId == academicClass.Id && cc.CaseId == request.CaseId);
+
+                    if (existing != null)
+                    {
+                        results.Add(new ManualAssignmentResultDto
+                        {
+                            ClassId = academicClass.Id,
+                            ClassName = academicClass.ClassName,
+                            AssignmentId = existing.CaseId,
+                            Success = false,
+                            Message = "Case đã được gán cho lớp này rồi."
+                        });
+                        continue;
+                    }
+
+                    var classCase = new ClassCase
+                    {
+                        ClassId = academicClass.Id,
+                        CaseId = request.CaseId.Value,
+                        AssignedAt = DateTime.UtcNow,
+                        DueDate = ToUtc(request.DueDate),
+                        IsMandatory = request.IsMandatory
+                    };
+
+                    await _unitOfWork.ClassCaseRepository.AddAsync(classCase);
+                    assignmentId = classCase.CaseId;
+                    title = medicalCase.Title;
+                    description = medicalCase.Description;
+                }
+
+                await _unitOfWork.SaveAsync();
+
+                // Gửi email notification nếu được yêu cầu
+                if (request.SendNotification)
+                {
+                    if (request.AssignmentType.ToLower() == "quiz")
+                    {
+                        await QueueAssignmentEmailsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Quiz",
+                            request.CloseTime ?? request.DueDate,
+                            description);
+
+                        await QueueAssignmentNotificationsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Quiz",
+                            "/student/quizzes");
+                    }
+                    else
+                    {
+                        await QueueAssignmentEmailsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            title,
+                            "Medical Case",
+                            request.DueDate,
+                            description);
+
+                        await QueueAssignmentNotificationsAsync(
+                            academicClass.Id,
+                            academicClass.ClassName,
+                            "Case Assignment",
+                            "Clinical Case",
+                            "/student/cases");
+                    }
+                }
+
+                results.Add(new ManualAssignmentResultDto
+                {
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    AssignmentId = assignmentId,
+                    Success = true,
+                    Message = "Tạo assignment thành công."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CreateAssignmentManual] Lỗi khi tạo assignment cho lớp {ClassId}", academicClass.Id);
+                results.Add(new ManualAssignmentResultDto
+                {
+                    ClassId = academicClass.Id,
+                    ClassName = academicClass.ClassName,
+                    AssignmentId = Guid.Empty,
+                    Success = false,
+                    Message = $"Lỗi: {ex.Message}"
+                });
+            }
+        }
+
+        return new CreateAssignmentManualResponseDto { Results = results };
+    }
+
+    /// <summary>
+    /// Export quiz results to an Excel file.
+    /// Creates a workbook with:
+    /// - Sheet "Summary": Quiz info, class name, export date, total students
+    /// - Sheet "Results": Student name, email, score, max score, percentage, pass/fail status, submitted time, time taken
+    /// </summary>
+    public async Task<(byte[] FileBytes, string FileName)> ExportQuizResultsAsync(
+        Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+
+        // Get quiz and class info
+        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+            ?? throw new KeyNotFoundException("Quiz not found.");
+
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == classId)
+            ?? throw new KeyNotFoundException("Class not found.");
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
+
+        // Get all attempts with student info
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Where(a => a.QuizId == quizId)
+            .Include(a => a.Student)
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
+            .OrderBy(a => a.Student.FullName)
+            .ThenBy(a => a.StartedAt)
+            .ToListAsync();
+
+        var questionCounts = await _unitOfWork.Context.QuizQuestions
+            .Where(q => q.QuizId == quizId)
+            .GroupBy(_ => 1)
+            .Select(g => new { Count = g.Count() })
+            .FirstOrDefaultAsync();
+
+        var totalQuestions = questionCounts?.Count ?? 0;
+        var maxScore = totalQuestions * 1.0; // Each question is 1 point
+        var passingScore = session?.PassingScore ?? 50.0;
+
+        using var memoryStream = new MemoryStream();
+        var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // =============================================
+        // Sheet 1: Summary
+        // =============================================
+        var summarySheet = workbook.Worksheets.Add("Summary");
+        summarySheet.Cell(1, 1).Value = "Quiz Results Export";
+        summarySheet.Cell(1, 1).Style.Font.Bold = true;
+        summarySheet.Cell(1, 1).Style.Font.FontSize = 14;
+        summarySheet.Range(1, 1, 1, 2).Merge();
+
+        summarySheet.Cell(3, 1).Value = "Quiz Name:";
+        summarySheet.Cell(3, 1).Style.Font.Bold = true;
+        summarySheet.Cell(3, 2).Value = quiz.Title ?? "Untitled Quiz";
+
+        summarySheet.Cell(4, 1).Value = "Class Name:";
+        summarySheet.Cell(4, 1).Style.Font.Bold = true;
+        summarySheet.Cell(4, 2).Value = academicClass.ClassName ?? "Unknown Class";
+
+        summarySheet.Cell(5, 1).Value = "Total Questions:";
+        summarySheet.Cell(5, 1).Style.Font.Bold = true;
+        summarySheet.Cell(5, 2).Value = totalQuestions;
+
+        summarySheet.Cell(6, 1).Value = "Passing Score:";
+        summarySheet.Cell(6, 1).Style.Font.Bold = true;
+        summarySheet.Cell(6, 2).Value = $"{passingScore}%";
+
+        summarySheet.Cell(7, 1).Value = "Total Students Attempted:";
+        summarySheet.Cell(7, 1).Style.Font.Bold = true;
+        summarySheet.Cell(7, 2).Value = attempts.Count;
+
+        summarySheet.Cell(8, 1).Value = "Export Date:";
+        summarySheet.Cell(8, 1).Style.Font.Bold = true;
+        summarySheet.Cell(8, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+        // Auto-fit columns
+        summarySheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet 2: Results
+        // =============================================
+        var resultsSheet = workbook.Worksheets.Add("Results");
+
+        // Headers
+        var headers = new[] { "STT", "Student Name", "Email", "Score", "Max Score", "Percentage", "Pass/Fail", "Started At", "Completed At", "Time Taken (min)" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            resultsSheet.Cell(1, i + 1).Value = headers[i];
+            resultsSheet.Cell(1, i + 1).Style.Font.Bold = true;
+            resultsSheet.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        // Data rows
+        int row = 2;
+        int stt = 1;
+        foreach (var attempt in attempts)
+        {
+            var percentage = maxScore > 0 && attempt.Score.HasValue
+                ? (attempt.Score.Value / maxScore) * 100
+                : 0;
+            var isPass = percentage >= passingScore;
+            var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
+                ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
+                : (double?)null;
+
+            resultsSheet.Cell(row, 1).Value = stt++;
+            resultsSheet.Cell(row, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
+            resultsSheet.Cell(row, 3).Value = attempt.Student?.Email ?? "";
+            resultsSheet.Cell(row, 4).Value = attempt.Score ?? 0;
+            resultsSheet.Cell(row, 5).Value = maxScore;
+            resultsSheet.Cell(row, 6).Value = Math.Round(percentage, 1);
+            resultsSheet.Cell(row, 7).Value = isPass ? "Pass" : "Fail";
+            resultsSheet.Cell(row, 7).Style.Font.Bold = true;
+            resultsSheet.Cell(row, 7).Style.Font.FontColor = isPass
+                ? ClosedXML.Excel.XLColor.Green
+                : ClosedXML.Excel.XLColor.Red;
+            resultsSheet.Cell(row, 8).Value = attempt.StartedAt.HasValue
+                ? attempt.StartedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                : "-";
+            resultsSheet.Cell(row, 9).Value = attempt.CompletedAt.HasValue
+                ? attempt.CompletedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                : "In Progress";
+            resultsSheet.Cell(row, 10).Value = timeTaken.HasValue ? timeTaken.Value : 0;
+
+            row++;
+        }
+
+        // Auto-fit columns
+        resultsSheet.Columns().AdjustToContents();
+
+        workbook.SaveAs(memoryStream);
+        memoryStream.Position = 0;
+
+        var fileName = $"QuizResults_{quiz.Title?.Replace(" ", "_") ?? "Export"}_{academicClass.ClassName?.Replace(" ", "_") ?? "Class"}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        return (memoryStream.ToArray(), fileName);
+    }
+
+    /// <summary>
+    /// Export all quiz results for a specific class to Excel.
+    /// - Sheet "Summary": Class overview info
+    /// - Sheet "Quiz Overview": Summary of all quizzes with question type breakdown
+    /// - Sheet per quiz: Detailed student results
+    /// </summary>
+    public async Task<(byte[] FileBytes, string FileName)> ExportClassAllQuizResultsAsync(
+        Guid lecturerId, Guid classId)
+    {
+        // 1. Verify class exists and lecturer owns it
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == classId)
+            ?? throw new KeyNotFoundException("Class not found.");
+
+        if (academicClass.LecturerId != lecturerId)
+            throw new UnauthorizedAccessException("You do not have permission to export this class.");
+
+        // 2. Get all quiz sessions for this class
+        var quizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(qs => qs.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
+            .Where(qs => qs.ClassId == classId)
+            .ToListAsync();
+
+        if (!quizSessions.Any())
+            throw new KeyNotFoundException("No quizzes found for this class.");
+
+        using var memoryStream = new MemoryStream();
+        var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // =============================================
+        // Sheet 1: Summary
+        // =============================================
+        var summarySheet = workbook.Worksheets.Add("Summary");
+
+        summarySheet.Cell(1, 1).Value = "Class Quiz Results Export";
+        summarySheet.Cell(1, 1).Style.Font.Bold = true;
+        summarySheet.Cell(1, 1).Style.Font.FontSize = 14;
+        summarySheet.Range(1, 1, 1, 2).Merge();
+
+        summarySheet.Cell(3, 1).Value = "Class Name:";
+        summarySheet.Cell(3, 1).Style.Font.Bold = true;
+        summarySheet.Cell(3, 2).Value = academicClass.ClassName ?? "Unknown Class";
+
+        summarySheet.Cell(4, 1).Value = "Total Quizzes:";
+        summarySheet.Cell(4, 1).Style.Font.Bold = true;
+        summarySheet.Cell(4, 2).Value = quizSessions.Count;
+
+        summarySheet.Cell(5, 1).Value = "Total Students in Class:";
+        summarySheet.Cell(5, 1).Style.Font.Bold = true;
+        summarySheet.Cell(5, 2).Value = academicClass.ClassEnrollments?.Count ?? 0;
+
+        summarySheet.Cell(6, 1).Value = "Export Date:";
+        summarySheet.Cell(6, 1).Style.Font.Bold = true;
+        summarySheet.Cell(6, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+        summarySheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet 2: Quiz Overview
+        // =============================================
+        var overviewSheet = workbook.Worksheets.Add("Quiz Overview");
+
+        var overviewHeaders = new[] { "STT", "Quiz Name", "Total Questions", "MC Count", "Essay Count", "Total Attempts", "Avg Score", "Pass Rate (%)" };
+        for (int i = 0; i < overviewHeaders.Length; i++)
+        {
+            overviewSheet.Cell(1, i + 1).Value = overviewHeaders[i];
+            overviewSheet.Cell(1, i + 1).Style.Font.Bold = true;
+            overviewSheet.Cell(1, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        int overviewRow = 2;
+        int stt = 1;
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
+            var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
+            var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
+            var totalQuestions = questions.Count;
+
+            // Get all attempts for this quiz
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Where(a => a.QuizId == session.QuizId)
+                .ToListAsync();
+
+            var totalAttempts = attempts.Count;
+            var avgScore = attempts.Any() && attempts.Any(a => a.Score.HasValue)
+                ? attempts.Where(a => a.Score.HasValue).Average(a => a.Score!.Value)
+                : 0;
+
+            // Calculate pass rate
+            var passingScore = session.PassingScore ?? 50.0;
+            var passCount = attempts.Count(a => a.Score.HasValue && a.Score.Value >= passingScore);
+            var passRate = totalAttempts > 0 ? (passCount * 100.0 / totalAttempts) : 0;
+
+            overviewSheet.Cell(overviewRow, 1).Value = stt++;
+            overviewSheet.Cell(overviewRow, 2).Value = quiz?.Title ?? "Unknown Quiz";
+            overviewSheet.Cell(overviewRow, 3).Value = totalQuestions;
+            overviewSheet.Cell(overviewRow, 4).Value = mcCount;
+            overviewSheet.Cell(overviewRow, 5).Value = essayCount;
+            overviewSheet.Cell(overviewRow, 6).Value = totalAttempts;
+            overviewSheet.Cell(overviewRow, 7).Value = Math.Round(avgScore, 1);
+            overviewSheet.Cell(overviewRow, 8).Value = Math.Round(passRate, 1);
+
+            overviewRow++;
+        }
+
+        overviewSheet.Columns().AdjustToContents();
+
+        // =============================================
+        // Sheet per Quiz (Detail)
+        // =============================================
+        foreach (var session in quizSessions)
+        {
+            var quiz = session.Quiz;
+            var className = academicClass.ClassName ?? "Unknown";
+
+            // Sanitize sheet name (max 31 chars, no special chars)
+            var safeQuizName = (quiz?.Title ?? "Quiz")
+                .Replace(":", "")
+                .Replace("\\", "")
+                .Replace("/", "")
+                .Replace("?", "")
+                .Replace("*", "")
+                .Replace("[", "")
+                .Replace("]", "");
+            if (safeQuizName.Length > 28) safeQuizName = safeQuizName.Substring(0, 28);
+            var sheetName = $"{safeQuizName}_{className}".Length > 31
+                ? safeQuizName.Substring(0, 31 - className.Length - 1) + "_" + className
+                : $"{safeQuizName}_{className}";
+
+            var detailSheet = workbook.Worksheets.Add(sheetName);
+
+            // Quiz info header
+            detailSheet.Cell(1, 1).Value = "Quiz:";
+            detailSheet.Cell(1, 1).Style.Font.Bold = true;
+            detailSheet.Cell(1, 2).Value = quiz?.Title ?? "Unknown Quiz";
+            detailSheet.Cell(2, 1).Value = "Class:";
+            detailSheet.Cell(2, 1).Style.Font.Bold = true;
+            detailSheet.Cell(2, 2).Value = className;
+            detailSheet.Cell(3, 1).Value = "Export Date:";
+            detailSheet.Cell(3, 1).Style.Font.Bold = true;
+            detailSheet.Cell(3, 2).Value = DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd HH:mm:ss");
+
+            // Get attempts with student info
+            var attempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Student)
+                .Where(a => a.QuizId == session.QuizId)
+                .OrderBy(a => a.Student != null ? a.Student.FullName : "")
+                .ThenBy(a => a.StartedAt)
+                .ToListAsync();
+
+            // Headers
+            var headers = new[] { "STT", "Student Name", "Email", "Score", "Max Score", "Percentage", "Pass/Fail", "Started At", "Completed At", "Time Taken (min)" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                detailSheet.Cell(5, i + 1).Value = headers[i];
+                detailSheet.Cell(5, i + 1).Style.Font.Bold = true;
+                detailSheet.Cell(5, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+            }
+
+            // Data rows
+            int dataRow = 6;
+            int rowStt = 1;
+            var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
+            var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
+            var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
+            var maxScore = questions.Sum(q => q.MaxScore);
+            var passingScore = session.PassingScore ?? 50.0;
+
+            foreach (var attempt in attempts)
+            {
+                var percentage = maxScore > 0 && attempt.Score.HasValue
+                    ? (attempt.Score.Value / maxScore) * 100
+                    : 0;
+                var isPass = percentage >= passingScore;
+                var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
+                    ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
+                    : (double?)null;
+
+                detailSheet.Cell(dataRow, 1).Value = rowStt++;
+                detailSheet.Cell(dataRow, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
+                detailSheet.Cell(dataRow, 3).Value = attempt.Student?.Email ?? "";
+                detailSheet.Cell(dataRow, 4).Value = attempt.Score ?? 0;
+                detailSheet.Cell(dataRow, 5).Value = maxScore;
+                detailSheet.Cell(dataRow, 6).Value = Math.Round(percentage, 1);
+                detailSheet.Cell(dataRow, 7).Value = isPass ? "Pass" : "Fail";
+                detailSheet.Cell(dataRow, 7).Style.Font.Bold = true;
+                detailSheet.Cell(dataRow, 7).Style.Font.FontColor = isPass
+                    ? ClosedXML.Excel.XLColor.Green
+                    : ClosedXML.Excel.XLColor.Red;
+                detailSheet.Cell(dataRow, 8).Value = attempt.StartedAt.HasValue
+                    ? attempt.StartedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "-";
+                detailSheet.Cell(dataRow, 9).Value = attempt.CompletedAt.HasValue
+                    ? attempt.CompletedAt.Value.AddHours(7).ToString("yyyy-MM-dd HH:mm")
+                    : "In Progress";
+                detailSheet.Cell(dataRow, 10).Value = timeTaken.HasValue ? timeTaken.Value : 0;
+
+                dataRow++;
+            }
+
+            detailSheet.Columns().AdjustToContents();
+        }
+
+        workbook.SaveAs(memoryStream);
+        memoryStream.Position = 0;
+
+        var fileName = $"ClassQuizResults_{academicClass.ClassName?.Replace(" ", "_") ?? "Export"}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        return (memoryStream.ToArray(), fileName);
     }
 }

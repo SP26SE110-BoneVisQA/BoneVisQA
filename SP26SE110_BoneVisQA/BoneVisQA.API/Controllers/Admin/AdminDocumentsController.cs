@@ -4,6 +4,7 @@ using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BoneVisQA.API.Controllers.Admin;
 
@@ -13,7 +14,7 @@ namespace BoneVisQA.API.Controllers.Admin;
 [Tags("Admin - Documents")]
 public class AdminDocumentsController : ControllerBase
 {
-    private const long MaxDocumentUploadBytes = 100 * 1024 * 1024;
+    private const long MaxDocumentUploadBytes = 50 * 1024 * 1024;
     private readonly IDocumentManagementService _documentManagementService;
     private readonly IDocumentQualityService _documentQualityService;
     private readonly IDocumentService _documentService;
@@ -97,11 +98,142 @@ public class AdminDocumentsController : ControllerBase
         return Ok(new { Message = "Get documents flagged for review successfully.", result });
     }
 
+    /// <summary>
+    /// Lists document chunks flagged by experts during Visual QA (low-quality retrieval).
+    /// Duplicate route <c>/api/admin/rag/flagged-chunks</c> matches FE fallback when the primary path is used.
+    /// </summary>
+    [HttpGet("chunks/flagged")]
+    [HttpGet("~/api/admin/rag/flagged-chunks")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminFlaggedChunkListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminFlaggedChunkListItemDto>>> GetExpertFlaggedChunks(
+        CancellationToken cancellationToken)
+    {
+        var rows = await _documentQualityService.GetFlaggedDocumentChunksAsync(cancellationToken);
+        return Ok(rows);
+    }
+
+    /// <summary>Clears expert flag after admin review (<c>resolved: true</c>).</summary>
+    [HttpPatch("chunks/{chunkId:guid}/flag")]
+    [HttpPatch("~/api/admin/rag/chunks/{chunkId:guid}/flag")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResolveExpertFlaggedChunk(
+        Guid chunkId,
+        [FromBody] ChunkFlagResolutionRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        if (request?.Resolved != true)
+            return BadRequest(new { message = "Body must include \"resolved\": true." });
+
+        try
+        {
+            await _documentQualityService.ResolveDocumentChunkFlagAsync(chunkId, true, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("quality/outdated")]
     public async Task<IActionResult> GetOutdated([FromQuery] int yearsThreshold = 2)
     {
         var result = await _documentQualityService.GetOutdatedDocumentsAsync(yearsThreshold);
         return Ok(new { Message = "Get outdated document successfully.", result });
+    }
+
+    /// <summary>
+    /// Lightweight operational endpoint to inspect rows stuck in pending_document_chunks.
+    /// </summary>
+    [HttpGet("ops/pending-chunks")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingChunkInspectionItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PendingChunkInspectionItemDto>>> InspectPendingChunks(
+        [FromQuery] Guid? documentId = null,
+        [FromQuery] int top = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var safeTop = Math.Clamp(top, 1, 500);
+        var rows = await _unitOfWork.Context.Documents
+            .AsNoTracking()
+            .Where(d => !documentId.HasValue || d.Id == documentId.Value)
+            .Where(d => _unitOfWork.Context.PendingDocumentChunks.Any(p => p.DocId == d.Id))
+            .Select(d => new PendingChunkInspectionItemDto
+            {
+                DocumentId = d.Id,
+                IndexingStatus = d.IndexingStatus,
+                PendingChunkCount = _unitOfWork.Context.PendingDocumentChunks.Count(p => p.DocId == d.Id),
+                MinChunkOrder = _unitOfWork.Context.PendingDocumentChunks
+                    .Where(p => p.DocId == d.Id)
+                    .Min(p => p.ChunkOrder),
+                MaxChunkOrder = _unitOfWork.Context.PendingDocumentChunks
+                    .Where(p => p.DocId == d.Id)
+                    .Max(p => p.ChunkOrder)
+            })
+            .OrderByDescending(x => x.PendingChunkCount)
+            .Take(safeTop)
+            .ToListAsync(cancellationToken);
+
+        if (!documentId.HasValue)
+        {
+            var orphanRows = await _unitOfWork.Context.PendingDocumentChunks
+                .AsNoTracking()
+                .Where(p => !_unitOfWork.Context.Documents.Any(d => d.Id == p.DocId))
+                .GroupBy(p => p.DocId)
+                .Select(g => new PendingChunkInspectionItemDto
+                {
+                    DocumentId = g.Key,
+                    IndexingStatus = "Missing",
+                    PendingChunkCount = g.Count(),
+                    MinChunkOrder = g.Min(p => p.ChunkOrder),
+                    MaxChunkOrder = g.Max(p => p.ChunkOrder)
+                })
+                .OrderByDescending(x => x.PendingChunkCount)
+                .Take(safeTop)
+                .ToListAsync(cancellationToken);
+
+            rows.AddRange(orphanRows);
+            rows = rows
+                .OrderByDescending(x => x.PendingChunkCount)
+                .Take(safeTop)
+                .ToList();
+        }
+
+        return Ok(rows);
+    }
+
+    /// <summary>
+    /// Lightweight operational endpoint to clean stuck rows from pending_document_chunks.
+    /// If documentId is omitted, all pending rows are removed.
+    /// </summary>
+    [HttpDelete("ops/pending-chunks")]
+    [ProducesResponseType(typeof(PendingChunkCleanupResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PendingChunkCleanupResultDto>> CleanupPendingChunks(
+        [FromQuery] Guid? documentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var activeStatuses = new[]
+        {
+            "Reindexing",
+            "Indexing",
+            "Pending",
+            "Processing"
+        };
+
+        var query = _unitOfWork.Context.PendingDocumentChunks
+            .Where(pc => !_unitOfWork.Context.Documents.Any(d =>
+                d.Id == pc.DocId && activeStatuses.Contains(d.IndexingStatus)));
+
+        if (documentId.HasValue)
+            query = query.Where(x => x.DocId == documentId.Value);
+
+        var deletedRows = await query.ExecuteDeleteAsync(cancellationToken);
+        return Ok(new PendingChunkCleanupResultDto
+        {
+            DocumentId = documentId,
+            DeletedRows = deletedRows
+        });
     }
 
     [HttpPut("{id:guid}/tags")]
@@ -158,7 +290,7 @@ public class AdminDocumentsController : ControllerBase
                 {
                     Title = "Invalid request",
                     Status = StatusCodes.Status400BadRequest,
-                    Detail = $"File '{file.FileName}' vượt quá giới hạn 100MB.",
+                    Detail = $"File '{file.FileName}' exceeds the 50MB limit.",
                     Instance = HttpContext.Request.Path
                 });
             }
@@ -224,13 +356,78 @@ public class AdminDocumentsController : ControllerBase
         return success ? NoContent() : NotFound(new { message = "Document not found." });
     }
 
-    [HttpPost("{id:guid}/reindex")]
-    public async Task<IActionResult> Reindex(Guid id)
+    /// <summary>
+    /// Upload a new PDF for an existing document. If the SHA-256 content hash changes, old vectors are removed and the document is queued for re-indexing.
+    /// </summary>
+    [HttpPut("{id:guid}/file")]
+    [RequestSizeLimit(MaxDocumentUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxDocumentUploadBytes)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(DocumentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateDocumentFile(Guid id, [FromForm] DocumentFileUpdateRequest request, CancellationToken cancellationToken)
     {
-        var success = await _documentService.TriggerReindexAsync(id);
-        return success
-            ? Ok(new { message = "Reindexing started." })
-            : NotFound(new { message = "Document not found or has no file path." });
+        if (request.File == null || request.File.Length == 0)
+            return BadRequest(new { message = "A PDF file is required." });
+
+        if (request.File.Length > MaxDocumentUploadBytes)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "File exceeds the 50MB limit.",
+                Instance = HttpContext.Request.Path
+            });
+        }
+
+        var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
+        if (extension != ".pdf")
+            return BadRequest(new { message = $"Only PDF files are allowed ({request.File.FileName})." });
+
+        try
+        {
+            var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, isNewFile: true, cancellationToken);
+            return Ok(new { message = "Document updated.", document });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Document not found." });
+        }
+    }
+
+    [HttpPost("{id:guid}/reindex")]
+    public async Task<IActionResult> Reindex(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var document = await _documentService.UpdateDocumentVersionAsync(id, file: null, isNewFile: false, cancellationToken);
+            return Ok(new { message = "Re-indexing queued (same file, patch version).", document });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Document not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("analytics/chunk-citation-frequency")]
+    [ProducesResponseType(typeof(IReadOnlyList<DocumentChunkCitationFrequencyDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<DocumentChunkCitationFrequencyDto>>> GetChunkCitationFrequency(
+        [FromQuery] Guid? documentId = null,
+        [FromQuery] int top = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _documentService.GetChunkCitationFrequencyAsync(documentId, top, cancellationToken);
+        return Ok(rows);
     }
 
     [HttpPatch("{id:guid}/status")]
@@ -268,4 +465,33 @@ public class DocumentUploadRequest
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
     public List<Guid> TagIds { get; set; } = new();
+}
+
+/// <summary>Multipart body for <c>PUT /api/admin/documents/{id}/file</c>.</summary>
+public class DocumentFileUpdateRequest
+{
+    public IFormFile File { get; set; } = null!;
+    public string? Title { get; set; }
+    public Guid? CategoryId { get; set; }
+    public List<Guid>? TagIds { get; set; }
+}
+
+public class PendingChunkInspectionItemDto
+{
+    public Guid DocumentId { get; set; }
+    public int PendingChunkCount { get; set; }
+    public int MinChunkOrder { get; set; }
+    public int MaxChunkOrder { get; set; }
+    public string IndexingStatus { get; set; } = "Unknown";
+}
+
+public class PendingChunkCleanupResultDto
+{
+    public Guid? DocumentId { get; set; }
+    public int DeletedRows { get; set; }
+}
+
+public class ChunkFlagResolutionRequestDto
+{
+    public bool Resolved { get; set; }
 }

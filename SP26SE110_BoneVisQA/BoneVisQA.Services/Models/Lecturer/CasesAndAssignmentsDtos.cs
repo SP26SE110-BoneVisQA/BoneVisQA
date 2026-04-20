@@ -6,6 +6,17 @@ namespace BoneVisQA.Services.Models.Lecturer;
 
 // ── Announcement DTOs ──────────────────────────────────────────────────────────
 
+/// <summary>
+/// Thông tin assignment được gắn với announcement (để hiển thị badge cho sinh viên nhận biết).
+/// </summary>
+public class AnnouncementAssignmentInfoDto
+{
+    public Guid? AssignmentId { get; set; }
+    public string? AssignmentTitle { get; set; }
+    /// <summary>"case" hoặc "quiz"</summary>
+    public string? AssignmentType { get; set; }
+}
+
 public class AnnouncementDto
 {
     public Guid Id { get; set; }
@@ -15,6 +26,7 @@ public class AnnouncementDto
     public string Content { get; set; } = string.Empty;
     public bool SendEmail { get; set; } = true;
     public DateTime? CreatedAt { get; set; }
+    public AnnouncementAssignmentInfoDto? RelatedAssignment { get; set; }
 }
 
 public class CreateAnnouncementRequestDto
@@ -22,6 +34,11 @@ public class CreateAnnouncementRequestDto
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public bool SendEmail { get; set; } = true;
+    /// <summary>
+    /// ID của assignment (case hoặc quiz) liên kết với announcement.
+    /// Giúp sinh viên nhận biết có bài tập cần làm.
+    /// </summary>
+    public Guid? AssignmentId { get; set; }
 }
 
 public class UpdateAnnouncementRequestDto
@@ -30,6 +47,16 @@ public class UpdateAnnouncementRequestDto
     public string Content { get; set; } = string.Empty;
     /// <summary>Nếu true, gửi lại email cho sinh viên trong lớp (giống lúc tạo mới).</summary>
     public bool SendEmail { get; set; }
+    /// <summary>
+    /// ID của assignment (case hoặc quiz) liên kết với announcement.
+    /// Set null để xóa liên kết.
+    /// </summary>
+    public Guid? AssignmentId { get; set; }
+}
+
+public class MoveAnnouncementRequestDto
+{
+    public Guid TargetClassId { get; set; }
 }
 
 // ── Case DTOs ─────────────────────────────────────────────────────────────────
@@ -64,6 +91,9 @@ public class LectStudentQuestionDto
     [JsonPropertyName("answerId")]
     public Guid? AnswerId { get; set; }
 
+    /// <summary><c>CaseQA</c> (student_questions) vs <c>VisualQA</c> (visual_qa_sessions) when <c>source=all</c> or Visual QA branch.</summary>
+    public string? QuestionSource { get; set; }
+
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string StudentEmail { get; set; } = string.Empty;
@@ -97,6 +127,62 @@ public class AssignQuizSessionRequestDto
     public bool AllowRetake { get; set; }
     public bool AllowLate { get; set; }
     public bool ShowResultsAfterSubmission { get; set; } = true;
+    /// <summary>Nếu true, sử dụng thời gian mở/đóng từ Expert thay vì thời gian của Lecturer.</summary>
+    public bool UseExpertTime { get; set; }
+}
+
+/// <summary>
+/// Request để tạo Assignment THỦ CÔNG (không auto gửi email notification).
+/// Dùng khi Lecturer muốn tạo assignment card trước rồi gửi thông báo sau.
+/// </summary>
+public class CreateAssignmentManualRequestDto
+{
+    /// <summary>"case" hoặc "quiz"</summary>
+    public string AssignmentType { get; set; } = string.Empty;
+    
+    /// <summary>Danh sách lớp học được gán assignment này</summary>
+    public List<Guid> ClassIds { get; set; } = new();
+    
+    /// <summary>ID của Case (nếu type = "case")</summary>
+    public Guid? CaseId { get; set; }
+    
+    /// <summary>ID của Quiz (nếu type = "quiz")</summary>
+    public Guid? QuizId { get; set; }
+    
+    public DateTime? OpenTime { get; set; }
+    public DateTime? CloseTime { get; set; }
+    public int? TimeLimitMinutes { get; set; }
+    public int? PassingScore { get; set; }
+    public bool ShuffleQuestions { get; set; }
+    public bool AllowRetake { get; set; }
+    public bool AllowLate { get; set; }
+    public bool ShowResultsAfterSubmission { get; set; } = true;
+    public bool UseExpertTime { get; set; }
+    public DateTime? DueDate { get; set; }
+    public bool IsMandatory { get; set; } = true;
+    
+    /// <summary>
+    /// Nếu true, gửi email notification cho sinh viên ngay lập tức.
+    /// Nếu false, chỉ tạo assignment card mà không gửi email.
+    /// </summary>
+    public bool SendNotification { get; set; } = false;
+}
+
+/// <summary>
+/// Response trả về sau khi tạo assignment thủ công
+/// </summary>
+public class CreateAssignmentManualResponseDto
+{
+    public List<ManualAssignmentResultDto> Results { get; set; } = new();
+}
+
+public class ManualAssignmentResultDto
+{
+    public Guid ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public Guid AssignmentId { get; set; }
+    public bool Success { get; set; }
+    public string? Message { get; set; }
 }
 
 /// <summary>Yêu cầu bật retake cho một attempt cụ thể của sinh viên.</summary>
@@ -138,6 +224,8 @@ public class ClassQuizSessionDto
     public bool AllowLate { get; set; }
     public bool ShowResultsAfterSubmission { get; set; }
     public DateTime? RetakeResetAt { get; set; }
+    /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
+    public string? Warning { get; set; }
 }
 
 /// <summary>1 assignment entry gộp case + quiz assignment để FE dùng chung card.</summary>
@@ -204,8 +292,15 @@ public class QuestionWithAnswerDto
     public string? OptionD { get; set; }
     public string? CorrectAnswer { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public bool? IsCorrect { get; set; }
     public Guid AnswerId { get; set; }
+    public int MaxScore { get; set; } = 10;
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool IsGraded { get; set; } = false;
+    public string? ReferenceAnswer { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 /// <summary>Request chỉnh sửa điểm / câu trả lời của một quiz attempt.</summary>
@@ -218,12 +313,16 @@ public class UpdateQuizAttemptRequestDto
     public List<UpdateAnswerDto> Answers { get; set; } = new();
 }
 
-/// <summary>Cập nhật 1 câu trả lời cụ thể.</summary>
+/// <summary>Cap nhat 1 cau tra loi cu the.</summary>
 public class UpdateAnswerDto
 {
     public Guid AnswerId { get; set; }
     public string? StudentAnswer { get; set; }
+    public string? EssayAnswer { get; set; }
     public bool? IsCorrect { get; set; }
+    public decimal? ScoreAwarded { get; set; }
+    public string? LecturerFeedback { get; set; }
+    public bool? IsGraded { get; set; }
 }
 
 // ── Assignment CRUD DTOs ───────────────────────────────────────────────────────
@@ -255,6 +354,8 @@ public class AssignmentDetailDto
     public bool ShowResultsAfterSubmission { get; set; }
     public double? AvgScore { get; set; }
     public DateTime? CreatedAt { get; set; }
+    /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
+    public string? Warning { get; set; }
 }
 
 /// <summary>Yêu cầu cập nhật thông tin assignment.</summary>
@@ -274,6 +375,8 @@ public class UpdateAssignmentRequestDto
     public bool? ShowResultsAfterSubmission { get; set; }
     /// <summary>Gửi email thông báo cập nhật cho sinh viên.</summary>
     public bool SendEmailUpdate { get; set; } = true;
+    /// <summary>Nếu true, sử dụng thời gian mở/đóng từ Expert thay vì thời gian của Lecturer.</summary>
+    public bool UseExpertTime { get; set; }
 }
 
 /// <summary>Thông tin submission của một sinh viên.</summary>

@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace BoneVisQA.API.Hubs;
 
-[Authorize]
 public class NotificationHub : Hub
 {
     private readonly ILogger<NotificationHub> _logger;

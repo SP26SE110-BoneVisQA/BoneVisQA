@@ -3,6 +3,7 @@ using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Interfaces;
@@ -10,6 +11,7 @@ namespace BoneVisQA.Services.Interfaces;
 public interface IStudentService
 {
     Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null);
+    Task<CaseCatalogFiltersDto> GetCaseCatalogFiltersAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CaseListItemDto>> GetCasesAsync(Guid studentId);
 
     Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter);
@@ -25,6 +27,46 @@ public interface IStudentService
     Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
     Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
+    Task<VisualQAResponseDto?> GetExistingVisualQaResponseAsync(
+        Guid studentId,
+        Guid sessionId,
+        string clientRequestId,
+        CancellationToken cancellationToken = default);
+    Task<VisualQARequestDto> HydrateVisualQaFollowUpContextAsync(
+        Guid studentId,
+        Guid sessionId,
+        VisualQARequestDto request,
+        CancellationToken cancellationToken = default);
+    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
+
+    Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null);
+    Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default);
+
+    /// <summary>Visual QA sessions for the student, newest first.</summary>
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaPersonalHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<PagedResultDto<VisualQaSessionHistoryItemDto>> GetVisualQaCaseHistoryAsync(
+        Guid studentId,
+        int limit = 20,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+    Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
+        Guid studentId,
+        Guid sessionId,
+        int maxUserQuestions = 3,
+        CancellationToken cancellationToken = default);
+    Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
+        Guid studentId,
+        Guid sessionId,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<StudentQuestionHistoryItemDto>> GetQuestionHistoryAsync(Guid studentId);
 
@@ -41,7 +83,7 @@ public interface IStudentService
     Task<StudentSubmitQuestionResponseDto> SubmitQuizAsync(Guid studentid, StudentSubmitQuestionDto submit);
 
     /// <summary>
-    /// Trả về danh sách lớp học mà sinh viên đã đăng ký.
+    /// Return the list of classes the student has enrolled in.
     /// </summary>
     Task<IReadOnlyList<StudentClassDto>> GetEnrolledClassesAsync(Guid studentId);
 
@@ -51,12 +93,12 @@ public interface IStudentService
     Task<StudentClassDetailDto> GetClassDetailAsync(Guid studentId, Guid classId);
 
     /// <summary>
-    /// Sinh viên tự rời lớp (xóa ClassEnrollment của chính mình).
+    /// Student tự rời lớp (xóa ClassEnrollment của chính mình).
     /// </summary>
     Task LeaveEnrolledClassAsync(Guid studentId, Guid classId);
 
     /// <summary>
-    /// Sinh viên gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer của lớp gán quiz.
+    /// Student gửi yêu cầu làm lại quiz — tạo notification + email cho lecturer của lớp gán quiz.
     /// </summary>
     Task RequestRetakeAsync(Guid studentId, Guid quizId);
 }

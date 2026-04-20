@@ -1,4 +1,4 @@
-﻿using BoneVisQA.Repositories.Models;
+using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
@@ -47,29 +47,29 @@ namespace BoneVisQA.Services.Services.Expert
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.MedicalCaseId)
-               ?? throw new KeyNotFoundException("Không tìm thấy ca bệnh.");
+               ?? throw new KeyNotFoundException("Medical case not found.");
 
             var tageCase = await _unitOfWork.TagRepository.GetByIdAsync(dto.TagId)
-               ?? throw new KeyNotFoundException("Không tìm thấy tag.");
+               ?? throw new KeyNotFoundException("Tag not found.");
 
 
             // Check case tồn tại
             var caseExists = await _unitOfWork.MedicalCaseRepository
                 .ExistsAsync(x => x.Id == dto.MedicalCaseId);
             if (!caseExists)
-                throw new KeyNotFoundException("Không tìm thấy medical case.");
+                throw new KeyNotFoundException("Medical case not found.");
 
             // Check tag tồn tại
             var tagExists = await _unitOfWork.TagRepository
                 .ExistsAsync(x => x.Id == dto.TagId);
             if (!tagExists)
-                throw new KeyNotFoundException("Không tìm thấy tag.");
+                throw new KeyNotFoundException("Tag not found.");
 
             // Check đã gắn chưa
             var exists = await _unitOfWork.CaseTagRepository
                 .ExistsAsync(x => x.CaseId == dto.MedicalCaseId && x.TagId == dto.TagId);
             if (exists)
-                throw new InvalidOperationException("Tag đã được gắn vào case này rồi.");
+                throw new InvalidOperationException("This tag has already been assigned to this case.");
 
             var caseTag = new CaseTag
             {

@@ -29,6 +29,9 @@ public class ExpertDashboardService : IExpertDashboardService
                     e.StudentId == a.Question.StudentId &&
                     e.Class!.ExpertId == expertId));
 
+    private IQueryable<VisualQASession> ExpertVisualQaEscalatedQueue(Guid expertId) =>
+        ExpertReviewService.QueryExpertScopedEscalatedQueue(_unitOfWork, expertId);
+
     public async Task<ExpertDashboardStatsDto> GetDashboardStatsAsync(Guid expertId)
     {
         var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -41,7 +44,9 @@ public class ExpertDashboardService : IExpertDashboardService
             .AsNoTracking()
             .CountAsync(r => r.ExpertId == expertId);
 
-        var pendingReviews = await ExpertEscalatedQueue(expertId).CountAsync();
+        var pendingReviews =
+            await ExpertEscalatedQueue(expertId).CountAsync()
+            + await ExpertVisualQaEscalatedQueue(expertId).CountAsync();
 
         var approvedThisMonth = await _unitOfWork.Context.ExpertReviews
             .AsNoTracking()
@@ -69,7 +74,7 @@ public class ExpertDashboardService : IExpertDashboardService
 
     public async Task<IReadOnlyList<ExpertDashboardPendingReviewDto>> GetPendingReviewsAsync(Guid expertId)
     {
-        var escalated = await ExpertEscalatedQueue(expertId)
+        var caseAnswers = await ExpertEscalatedQueue(expertId)
             .Include(a => a.Question)
                 .ThenInclude(q => q.Student)
             .Include(a => a.Question)
@@ -77,24 +82,72 @@ public class ExpertDashboardService : IExpertDashboardService
                     .ThenInclude(mc => mc!.Category)
             .Include(a => a.ExpertReviews)
             .OrderByDescending(a => a.EscalatedAt ?? a.Question.CreatedAt)
-            .Take(5)
+            .Take(12)
             .ToListAsync();
 
-        return escalated.Select(a => new ExpertDashboardPendingReviewDto
+        var visualSessions = await ExpertVisualQaEscalatedQueue(expertId)
+            .Include(s => s.Student)
+            .Include(s => s.Case!)
+                .ThenInclude(mc => mc.Category)
+            .Include(s => s.Messages)
+            .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt)
+            .Take(12)
+            .ToListAsync();
+
+        var caseDtoList = caseAnswers.Select(a =>
         {
-            Id = a.Id,
-            StudentName = a.Question.Student?.FullName ?? "Unknown",
-            CaseTitle = a.Question.Case?.Title ?? "Unknown Case",
-            QuestionSnippet = a.Question.QuestionText.Length > 100
-                ? a.Question.QuestionText[..100] + "..."
-                : a.Question.QuestionText,
-            AiAnswerSnippet = a.AnswerText?.Length > 100 == true
-                ? a.AnswerText[..100] + "..."
-                : a.AnswerText ?? "",
-            SubmittedAt = a.EscalatedAt ?? a.Question.CreatedAt ?? DateTime.UtcNow,
-            Priority = a.AiConfidenceScore.HasValue && a.AiConfidenceScore < 0.5 ? "high" : "normal",
-            Category = a.Question.Case?.Category?.Name ?? "General"
+            var qtext = a.Question.QuestionText ?? string.Empty;
+            var atext = a.AnswerText ?? "";
+            return new ExpertDashboardPendingReviewDto
+            {
+                Id = a.Id,
+                StudentName = a.Question.Student?.FullName ?? "Unknown",
+                CaseTitle = a.Question.Case?.Title ?? "Unknown Case",
+                QuestionSnippet = qtext.Length > 100 ? qtext[..100] + "..." : qtext,
+                AiAnswerSnippet = atext.Length > 100 ? atext[..100] + "..." : atext,
+                SubmittedAt = a.EscalatedAt ?? a.Question.CreatedAt ?? DateTime.UtcNow,
+                Priority = a.AiConfidenceScore.HasValue && a.AiConfidenceScore < 0.5 ? "high" : "normal",
+                Category = a.Question.Case?.Category?.Name ?? "General"
+            };
+        }).Select(d => (dto: d, sort: d.SubmittedAt)).ToList();
+
+        var visualDtoList = visualSessions.Select(s =>
+        {
+            var firstUser = s.Messages
+                .Where(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id)
+                .FirstOrDefault();
+            var latestAssistant = s.Messages
+                .Where(m => string.Equals(m.Role, "Assistant", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .FirstOrDefault();
+            var qtext = firstUser?.Content ?? "";
+            var atext = latestAssistant?.Content ?? "";
+            var submitted = s.UpdatedAt ?? s.CreatedAt;
+            var priority = latestAssistant?.AiConfidenceScore is { } sc && sc < 0.5 ? "high" : "normal";
+            return (
+                dto: new ExpertDashboardPendingReviewDto
+                {
+                    Id = s.Id,
+                    StudentName = s.Student?.FullName ?? "Unknown",
+                    CaseTitle = s.Case?.Title ?? (s.CaseId.HasValue ? "Unknown Case" : "Personal Visual QA"),
+                    QuestionSnippet = qtext.Length > 100 ? qtext[..100] + "..." : qtext,
+                    AiAnswerSnippet = atext.Length > 100 ? atext[..100] + "..." : atext,
+                    SubmittedAt = submitted,
+                    Priority = priority,
+                    Category = s.Case?.Category?.Name ?? "General"
+                },
+                sort: submitted);
         }).ToList();
+
+        return caseDtoList
+            .Concat(visualDtoList)
+            .OrderByDescending(x => x.sort)
+            .Take(5)
+            .Select(x => x.dto)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<ExpertDashboardRecentCaseDto>> GetRecentCasesAsync(Guid expertId)
