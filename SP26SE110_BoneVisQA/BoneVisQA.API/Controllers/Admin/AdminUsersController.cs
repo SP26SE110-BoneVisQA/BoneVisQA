@@ -196,6 +196,26 @@ public class AdminUsersController : ControllerBase
             ? NotFound(new { message = "User not found." })
             : Ok(new { Message = request.IsApproved ? "Verification approved." : "Verification rejected.", Result = result });
     }
+
+    // ── Bulk Import Users ─────────────────────────────────────────────────────
+
+    /// POST /api/admin/users/import  –  Import multiple users from a JSON payload
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportUsers([FromBody] BulkCreateUsersRequestDto request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new { message = "Invalid request data.", errors = ModelState });
+
+        if (request.Users == null || request.Users.Count == 0)
+            return BadRequest(new { message = "No users provided for import." });
+
+        var result = await _userManagementService.BulkCreateUsersAsync(request);
+        return Ok(new
+        {
+            Message = $"Import completed. {result.SuccessCount} succeeded, {result.FailureCount} failed.",
+            Result = result
+        });
+    }
 }
 
 public class ToggleUserStatusRequestDto

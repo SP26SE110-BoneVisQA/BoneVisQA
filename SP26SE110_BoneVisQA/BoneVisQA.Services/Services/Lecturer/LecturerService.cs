@@ -2648,6 +2648,9 @@ public class LecturerService : ILecturerService
         quiz.CloseTime = ToUtc(request.CloseTime);
         quiz.TimeLimit = request.TimeLimit;
         quiz.PassingScore = request.PassingScore;
+        quiz.Topic = request.Topic;
+        quiz.Difficulty = request.Difficulty;
+        quiz.Classification = request.Classification;
 
         _unitOfWork.QuizRepository.Update(quiz);
         await _unitOfWork.SaveAsync();

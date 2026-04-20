@@ -56,6 +56,15 @@ public class UpdateQuizRequestDto
 
     [JsonPropertyName("passingScore")]
     public int? PassingScore { get; set; }
+
+    [JsonPropertyName("topic")]
+    public string? Topic { get; set; }
+
+    [JsonPropertyName("difficulty")]
+    public string? Difficulty { get; set; }
+
+    [JsonPropertyName("classification")]
+    public string? Classification { get; set; }
 }
 
 public class UpdateQuizQuestionRequestDto

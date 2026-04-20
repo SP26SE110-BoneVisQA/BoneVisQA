@@ -27,6 +27,9 @@ namespace BoneVisQA.Services.Interfaces.Admin
         Task<UserManagementDTO?> UpdateUserAsync(Guid userId, UpdateUserRequestDto request);
         Task<bool> DeleteUserAsync(Guid userId);
 
+        // ── Bulk Import Users ─────────────────────────────────────────────────────
+        Task<BulkCreateUsersResultDto> BulkCreateUsersAsync(BulkCreateUsersRequestDto request);
+
       
         // ── Medical Student Verification ─────────────────────────────────────────
         Task<List<PendingVerificationDto>> GetPendingVerificationsAsync();

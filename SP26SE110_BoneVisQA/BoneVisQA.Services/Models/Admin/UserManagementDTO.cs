@@ -68,6 +68,64 @@ namespace BoneVisQA.Services.Models.Admin
         public string? SchoolCohort { get; set; }
     }
 
+    // ── Bulk Import Users ───────────────────────────────────────────────────────
+
+    /// <summary>Request payload for importing multiple users from a file.</summary>
+    public class BulkCreateUsersRequestDto
+    {
+        [Required]
+        [MinLength(1)]
+        public List<ImportUserItemDto> Users { get; set; } = new();
+    }
+
+    /// <summary>Single user record within the bulk import request.</summary>
+    public class ImportUserItemDto
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = null!;
+
+        [Required]
+        [MinLength(2)]
+        public string FullName { get; set; } = null!;
+
+        [Required]
+        [MinLength(6)]
+        public string Password { get; set; } = null!;
+
+        public string? SchoolCohort { get; set; }
+
+        [Required]
+        public string Role { get; set; } = null!;
+
+        public bool SendWelcomeEmail { get; set; } = true;
+    }
+
+    /// <summary>Result of a bulk import operation.</summary>
+    public class BulkCreateUsersResultDto
+    {
+        public int TotalRequested { get; set; }
+        public int SuccessCount { get; set; }
+        public int FailureCount { get; set; }
+        public List<ImportUserSuccessDto> Successes { get; set; } = new();
+        public List<ImportUserErrorDto> Errors { get; set; } = new();
+    }
+
+    public class ImportUserSuccessDto
+    {
+        public string Email { get; set; } = null!;
+        public string FullName { get; set; } = null!;
+        public string Role { get; set; } = null!;
+    }
+
+    public class ImportUserErrorDto
+    {
+        public string Email { get; set; } = null!;
+        public string? FullName { get; set; }
+        public string Error { get; set; } = null!;
+        public int Row { get; set; }
+    }
+
     
     
     

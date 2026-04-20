@@ -662,6 +662,145 @@ namespace BoneVisQA.Services.Services.Admin
             return MapUser(user);
         }
 
+        // ── Bulk Import Users ─────────────────────────────────────────────────────
+
+        public async Task<BulkCreateUsersResultDto> BulkCreateUsersAsync(BulkCreateUsersRequestDto request)
+        {
+            var result = new BulkCreateUsersResultDto
+            {
+                TotalRequested = request.Users.Count,
+                Successes = new List<ImportUserSuccessDto>(),
+                Errors = new List<ImportUserErrorDto>()
+            };
+
+            var validRolesSet = new HashSet<string>(_validRoles, StringComparer.OrdinalIgnoreCase);
+            var allExistingEmails = await _unitOfWork.Context.Users
+                .AsNoTracking()
+                .Select(u => u.Email.ToLower())
+                .ToListAsync();
+            var existingEmails = new HashSet<string>(allExistingEmails, StringComparer.OrdinalIgnoreCase);
+
+            var rolesCache = await _unitOfWork.Context.Roles
+                .AsNoTracking()
+                .ToDictionaryAsync(r => r.Name, StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < request.Users.Count; i++)
+            {
+                var item = request.Users[i];
+                var rowNumber = i + 1;
+
+                if (!validRolesSet.Contains(item.Role))
+                {
+                    result.Errors.Add(new ImportUserErrorDto
+                    {
+                        Email = item.Email,
+                        FullName = item.FullName,
+                        Error = $"Invalid role '{item.Role}'. Valid roles: {string.Join(", ", _validRoles)}.",
+                        Row = rowNumber
+                    });
+                    continue;
+                }
+
+                if (existingEmails.Contains(item.Email))
+                {
+                    result.Errors.Add(new ImportUserErrorDto
+                    {
+                        Email = item.Email,
+                        FullName = item.FullName,
+                        Error = $"Email '{item.Email}' is already in use.",
+                        Row = rowNumber
+                    });
+                    continue;
+                }
+
+                if (!rolesCache.TryGetValue(item.Role, out var role))
+                {
+                    result.Errors.Add(new ImportUserErrorDto
+                    {
+                        Email = item.Email,
+                        FullName = item.FullName,
+                        Error = $"Role '{item.Role}' not found in database.",
+                        Row = rowNumber
+                    });
+                    continue;
+                }
+
+                try
+                {
+                    var now = DateTime.UtcNow;
+                    var user = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        FullName = item.FullName,
+                        Email = item.Email,
+                        Password = HashPassword(item.Password),
+                        SchoolCohort = item.SchoolCohort,
+                        IsActive = true,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+
+                    var userRole = new UserRole
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        RoleId = role.Id,
+                        AssignedAt = now
+                    };
+
+                    await _unitOfWork.UserRepository.AddAsync(user);
+                    await _unitOfWork.UserRoleRepository.AddAsync(userRole);
+                    await _unitOfWork.SaveAsync();
+
+                    existingEmails.Add(item.Email);
+
+                    _logger.LogInformation("[BulkCreateUsersAsync] User {Email} created with role {Role} (row {Row}).",
+                        user.Email, item.Role, rowNumber);
+
+                    result.Successes.Add(new ImportUserSuccessDto
+                    {
+                        Email = user.Email,
+                        FullName = user.FullName,
+                        Role = item.Role
+                    });
+
+                    if (item.SendWelcomeEmail)
+                    {
+                        var emailForMail = user.Email;
+                        var fullNameForMail = user.FullName;
+                        var roleForMail = item.Role;
+
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _emailService.SendRoleAssignedEmailAsync(emailForMail, fullNameForMail, roleForMail, true);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "[BulkCreateUsersAsync] Failed to send welcome email to {Email}", emailForMail);
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[BulkCreateUsersAsync] Failed to create user {Email} (row {Row}).", item.Email, rowNumber);
+                    result.Errors.Add(new ImportUserErrorDto
+                    {
+                        Email = item.Email,
+                        FullName = item.FullName,
+                        Error = $"Failed to create user: {ex.Message}",
+                        Row = rowNumber
+                    });
+                }
+            }
+
+            result.SuccessCount = result.Successes.Count;
+            result.FailureCount = result.Errors.Count;
+            return result;
+        }
+
         // ── Hash helper ─────────────────────────────────────────────────────────
         private static string HashPassword(string password)
         {
