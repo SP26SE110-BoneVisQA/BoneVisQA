@@ -85,19 +85,15 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null)
     {
-        if (filter == null)
-        {
-            var allCases = await _studentRepository.GetAllCasesAsync();
-            return MapCaseList(allCases);
-        }
-
+        filter ??= new CaseFilterRequestDto();
         var repoFilter = new CaseFilter
         {
             CategoryId = filter.CategoryId,
             Difficulty = filter.Difficulty,
             Location = filter.Location,
             LesionType = filter.LesionType ?? filter.LessonType,
-            LessonType = filter.LessonType
+            LessonType = filter.LessonType,
+            SearchText = string.IsNullOrWhiteSpace(filter.Q) ? null : filter.Q.Trim()
         };
         var filteredCases = await _studentRepository.GetFilteredCasesAsync(repoFilter);
         return MapCaseList(filteredCases);
@@ -115,10 +111,23 @@ public class StudentService : IStudentService
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
                 IsApproved = c.IsApproved ?? false,
-                ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
-                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
+                ThumbnailImageUrl = c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id)
+                    .Select(m => m.ImageUrl)
+                    .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
+                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
+                CreatedAt = c.CreatedAt,
+                CaseOrigin = ResolveStudentCaseOrigin(c)
             })
             .ToList();
+    }
+
+    private static string ResolveStudentCaseOrigin(MedicalCase c)
+    {
+        var hasCommunityTag = c.CaseTags?.Any(ct =>
+            string.Equals(ct.Tag?.Name, "Student Q&A", StringComparison.Ordinal)) == true;
+        return hasCommunityTag
+            ? StudentCaseOriginValues.FromCommunityRequest
+            : StudentCaseOriginValues.CreatedByExpert;
     }
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter)
@@ -142,8 +151,12 @@ public class StudentService : IStudentService
                 Difficulty = c.Difficulty,
                 CategoryName = c.Category?.Name,
                 IsApproved = c.IsApproved ?? false,
-                ThumbnailImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl,
-                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList()
+                ThumbnailImageUrl = c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id)
+                    .Select(m => m.ImageUrl)
+                    .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
+                Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
+                CreatedAt = c.CreatedAt,
+                CaseOrigin = ResolveStudentCaseOrigin(c)
             })
             .ToList();
     }
@@ -181,13 +194,20 @@ public class StudentService : IStudentService
                 .Select(i => i.ImageUrl)
                 .FirstOrDefault(),
             IsApproved = entity.IsApproved ?? false,
+            CreatedAt = entity.CreatedAt,
+            CaseOrigin = ResolveStudentCaseOrigin(entity),
             Images = entity.MedicalImages
                 .OrderBy(i => i.CreatedAt)
                 .Select(i => new MedicalImageDto
                 {
                     Id = i.Id,
                     ImageUrl = i.ImageUrl,
-                    Modality = i.Modality
+                    Modality = i.Modality,
+                    RoiBoundingBox = i.CaseAnnotations?
+                        .OrderBy(a => a.CreatedAt ?? DateTime.MinValue)
+                        .ThenBy(a => a.Id)
+                        .Select(a => a.Coordinates)
+                        .FirstOrDefault(coords => !string.IsNullOrWhiteSpace(coords))
                 })
                 .ToList()
         };
@@ -694,6 +714,11 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId)
             ?? throw new KeyNotFoundException("Q&A session not found.");
 
+        if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(session.Status, "ExpertApproved", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(session.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cannot request lecturer review for this session in its current state.");
+
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
         var inactiveTime = DateTime.UtcNow - lastActivity;
         if (inactiveTime.TotalHours >= 24)
@@ -1046,6 +1071,20 @@ public class StudentService : IStudentService
             .ThenByDescending(m => m.Id)
             .FirstOrDefault();
 
+        string? rejectionReason = null;
+        if (string.Equals(session.Status, "Rejected", StringComparison.Ordinal))
+        {
+            var rr = messages
+                .Where(m =>
+                    string.Equals(m.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(m.Role, "Expert", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(m => m.CreatedAt)
+                .ThenByDescending(m => m.Id)
+                .Select(m => (m.Content ?? string.Empty).Trim())
+                .FirstOrDefault(t => t.Length > 0);
+            rejectionReason = string.IsNullOrWhiteSpace(rr) ? null : rr;
+        }
+
         return new VisualQaThreadDto
         {
             SessionId = sessionId,
@@ -1059,7 +1098,8 @@ public class StudentService : IStudentService
             Capabilities = capabilities,
             ReviewState = reviewState,
             LastResponderRole = ResolveLastResponderRole(messages, capabilities.Reason),
-            BlockingNotice = blockingNotice
+            BlockingNotice = blockingNotice,
+            RejectionReason = rejectionReason
         };
     }
 

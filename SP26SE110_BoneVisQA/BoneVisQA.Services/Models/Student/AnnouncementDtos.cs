@@ -10,6 +10,9 @@ public class CaseFilterRequestDto
     public string? Location { get; set; }
     public string? LesionType { get; set; }
     public string? LessonType { get; set; }
+
+    /// <summary>Case-insensitive search on title and description (PostgreSQL ILIKE).</summary>
+    public string? Q { get; set; }
 }
 
 /// <summary>

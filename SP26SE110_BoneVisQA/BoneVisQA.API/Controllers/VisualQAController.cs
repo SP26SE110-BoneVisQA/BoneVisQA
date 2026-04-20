@@ -685,6 +685,7 @@ public class VisualQAController : ControllerBase
     [HttpPost("turns/{turnId:guid}/request-review")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RequestReview(Guid turnId, [FromQuery] Guid sessionId, CancellationToken cancellationToken)
@@ -716,13 +717,22 @@ public class VisualQAController : ControllerBase
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
                 _logger.LogWarning("Visual QA RequestReview: SESSION_EXPIRED");
-                return BadRequest(new
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {
-                    message = "This Visual QA session expired after 24 hours of inactivity."
+                    Title = "Session inactive",
+                    Detail = "This Visual QA session expired after 24 hours of inactivity.",
+                    Status = StatusCodes.Status403Forbidden,
+                    Instance = HttpContext.Request.Path.Value
                 });
             }
 
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Title = "Cannot request review",
+                Detail = ex.Message,
+                Status = StatusCodes.Status403Forbidden,
+                Instance = HttpContext.Request.Path.Value
+            });
         }
         catch (ConflictException ex)
         {
@@ -808,6 +818,7 @@ public class VisualQAController : ControllerBase
                 UserMessage = userMessage,
                 QuestionText = userMessage,
                 MessageText = response.AnswerText,
+                AnswerText = response.AnswerText,
                 Diagnosis = (response.SuggestedDiagnosis ?? response.AnswerText ?? string.Empty).Trim(),
                 Findings = SplitMultilineField(response.KeyImagingFindings),
                 DifferentialDiagnoses = response.DifferentialDiagnoses?.ToList() ?? new List<string>(),

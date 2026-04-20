@@ -50,11 +50,16 @@ public class LecturerTriageRowDto
     public string? AnnotationLabel { get; set; }
     public string? AnnotationCoordinates { get; set; }
     public string? CustomCoordinates { get; set; }
+    /// <summary>Same ROI JSON as <see cref="CustomCoordinates"/> (normalized or percent per client).</summary>
+    public string? QuestionCoordinates { get; set; }
     public string? CustomImageUrl { get; set; }
     public Guid? RequestedReviewMessageId { get; set; }
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
     public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
+
+    /// <summary>Same shape as student Visual QA thread turns (per-turn ROI in <see cref="VisualQaTurnDto.QuestionCoordinates"/>).</summary>
+    public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
 }
 
 /// <summary>Full detail of a single student question for the lectuer to view and respond.</summary>
@@ -148,6 +153,8 @@ public class EscalateAnswerRequestDto
 
 public class RejectAnswerRequestDto
 {
+    /// <summary>JSON body uses <c>reason</c> (camelCase); casing-insensitive binders accept it.</summary>
+    [JsonPropertyName("reason")]
     public string Reason { get; set; } = string.Empty;
 }
 

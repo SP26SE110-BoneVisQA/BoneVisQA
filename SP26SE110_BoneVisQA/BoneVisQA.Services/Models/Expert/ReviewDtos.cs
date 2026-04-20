@@ -28,8 +28,32 @@ public class ExpertRespondRequestDto
     public string Content { get; set; } = string.Empty;
 }
 
+/// <summary>ROI payload for promote-to-library; stored in <c>case_annotations.coordinates</c> (JSON text).</summary>
+public class PromoteCaseAnnotationDto
+{
+    public string? Label { get; set; }
+
+    /// <summary>BBox / polygon / normalized ROI from FE (object or primitive JSON).</summary>
+    public JsonElement? Coordinates { get; set; }
+}
+
 public class PromoteToLibraryRequestDto
 {
+    /// <summary>Optional; when empty a default community title is used.</summary>
+    public string? Title { get; set; }
+
+    public Guid? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
+
+    public string? Difficulty { get; set; }
+
+    public List<string>? TagNames { get; set; }
+
+    public List<PromoteCaseAnnotationDto>? TurnAnnotations { get; set; }
+
+    public List<PromoteCaseAnnotationDto>? ImageAnnotations { get; set; }
+
     [Required]
     public string KeyFindings { get; set; } = string.Empty;
 
@@ -46,6 +70,10 @@ public class PromoteToLibraryRequestDto
 public class ExpertCitationDto
 {
     public Guid ChunkId { get; set; }
+    /// <summary>Same as <see cref="ChunkId"/> (FE merge / flag APIs).</summary>
+    public Guid DocumentChunkId => ChunkId;
+    /// <summary>RAG library document (<c>documents.id</c>).</summary>
+    public Guid? DocumentId { get; set; }
     public Guid? MedicalCaseId { get; set; }
     public string? SourceText { get; set; }
     public string? ReferenceUrl { get; set; }
@@ -56,6 +84,8 @@ public class ExpertCitationDto
     public string? PageLabel { get; set; }
     public string? DisplayLabel { get; set; }
     public string? Snippet { get; set; }
+    /// <summary>Same excerpt as <see cref="Snippet"/> (many clients bind <c>preview</c>).</summary>
+    public string? Preview { get; set; }
     public string Kind { get; set; } = "doc";
 }
 

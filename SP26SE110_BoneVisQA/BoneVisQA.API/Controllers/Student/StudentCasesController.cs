@@ -25,14 +25,20 @@ public class StudentCasesController : ControllerBase
     [HttpGet("catalog")]
     [ProducesResponseType(typeof(IReadOnlyList<CaseListItemDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCatalog([FromQuery] string? location, [FromQuery] string? lesionType, [FromQuery] string? difficulty)
+    public async Task<ActionResult<IReadOnlyList<CaseListItemDto>>> GetCatalog(
+        [FromQuery] string? location,
+        [FromQuery] string? lesionType,
+        [FromQuery] string? difficulty,
+        [FromQuery] string? q,
+        [FromQuery] string? search)
     {
         var filter = new CaseFilterRequestDto
         {
             Location = location,
             LesionType = lesionType,
             LessonType = lesionType,
-            Difficulty = difficulty
+            Difficulty = difficulty,
+            Q = !string.IsNullOrWhiteSpace(q) ? q : search
         };
 
         var result = await _studentService.GetCaseCatalogAsync(filter);

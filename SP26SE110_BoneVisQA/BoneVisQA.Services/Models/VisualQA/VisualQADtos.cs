@@ -160,6 +160,8 @@ public class VisualQaTurnDto
     public string? QuestionCoordinates { get; set; }
     public string? QuestionText { get; set; }
     public string? MessageText { get; set; }
+    /// <summary>Same as <see cref="MessageText"/>; many triage UIs expect a flat <c>answerText</c> on each turn.</summary>
+    public string? AnswerText { get; set; }
     public string? Diagnosis { get; set; }
     public IReadOnlyList<string> Findings { get; set; } = Array.Empty<string>();
     public IReadOnlyList<string> DifferentialDiagnoses { get; set; } = Array.Empty<string>();
@@ -172,6 +174,7 @@ public class VisualQaTurnDto
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
 
+    [JsonPropertyName("target_assistant_message_id")]
     public Guid? TargetAssistantMessageId { get; set; }
 }
 
@@ -193,6 +196,9 @@ public class VisualQaThreadDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public string? BlockingNotice { get; set; }
+
+    /// <summary>When session is <c>Rejected</c>, lecturer/expert rejection text (same source as history <see cref="VisualQaSessionHistoryItemDto.RejectionReason"/>).</summary>
+    public string? RejectionReason { get; set; }
 }
 
 /// <summary>Summary row for Visual QA session history (student).</summary>
