@@ -334,7 +334,7 @@ public class LecturerService : ILecturerService
             ClassId = entity.ClassId,
             Title = entity.Title,
             Content = entity.Content,
-            SendEmail = entity.SendEmail,
+            SendEmail = entity.SendEmail ?? false,
             CreatedAt = entity.CreatedAt,
             RelatedAssignment = relatedAssignment
         };
@@ -388,7 +388,7 @@ public class LecturerService : ILecturerService
             ClassName = entity.Class?.ClassName,
             Title = entity.Title,
             Content = entity.Content,
-            SendEmail = entity.SendEmail,
+            SendEmail = entity.SendEmail ?? false,
             CreatedAt = entity.CreatedAt,
             RelatedAssignment = relatedAssignment
         };
@@ -454,7 +454,7 @@ public class LecturerService : ILecturerService
             ClassName = targetClass?.ClassName ?? entity.Class?.ClassName,
             Title = entity.Title,
             Content = entity.Content,
-            SendEmail = entity.SendEmail,
+            SendEmail = entity.SendEmail ?? false,
             CreatedAt = entity.CreatedAt,
             RelatedAssignment = null // Assignment cleared when moving to different class
         };
