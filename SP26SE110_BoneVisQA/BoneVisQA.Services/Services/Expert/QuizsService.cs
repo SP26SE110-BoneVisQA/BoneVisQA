@@ -928,7 +928,7 @@ namespace BoneVisQA.Services.Services.Expert
             var newQuiz = new Quiz
             {
                 Id = Guid.NewGuid(),
-                Title = string.IsNullOrWhiteSpace(newTitle) ? $"Copy of {originalQuiz.Title}" : newTitle,
+                Title = string.IsNullOrWhiteSpace(newTitle) ? originalQuiz.Title : newTitle,
                 Topic = originalQuiz.Topic,
                 Difficulty = originalQuiz.Difficulty,
                 Classification = originalQuiz.Classification,

@@ -708,7 +708,7 @@ public class LecturerService : ILecturerService
             Classification = request.Classification,
             IsAiGenerated = request.IsAiGenerated,
             IsVerifiedCurriculum = request.IsVerifiedCurriculum,
-            CreatedByExpertId = creatingUserId,
+            CreatedByExpertId = null, // Lecturer tạo quiz, không phải Expert
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
@@ -2198,6 +2198,11 @@ public class LecturerService : ILecturerService
 
     public async Task<IReadOnlyList<ClassQuizDto>> GetQuizzesByLecturerAsync(Guid lecturerId)
     {
+        // Get lecturer info for displaying their actual name
+        var lecturer = await _unitOfWork.UserRepository
+            .GetByIdAsync(lecturerId);
+        var lecturerName = lecturer?.FullName ?? "You";
+
         // Get all classes owned by this lecturer
         var classIds = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.LecturerId == lecturerId)
@@ -2207,7 +2212,7 @@ public class LecturerService : ILecturerService
         // Get all quizzes assigned to these classes (existing behavior)
         var classQuizzes = await _unitOfWork.Context.ClassQuizSessions
             .Where(cqs => classIds.Contains(cqs.ClassId))
-            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Quiz).ThenInclude(q => q!.CreatedByExpert)
             .Include(cqs => cqs.Class)
             .OrderByDescending(cqs => cqs.CreatedAt)
             .ToListAsync();
@@ -2221,10 +2226,13 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Only unassigned quizzes belonging to the lecturer (or legacy null). Student AI quizzes have CreatedByExpertId = studentId — do not display here.
+        // Only unassigned quizzes NOT created by Expert and NOT AI-generated
+        // My Quizzes = quizzes created by lecturer manually (not from Expert Library, not AI)
         var unassignedQuizzes = await _unitOfWork.Context.Quizzes
+            .Include(q => q.CreatedByExpert)
             .Where(q => !unassignedQuizIds.Contains(q.Id)
-                && (!q.CreatedByExpertId.HasValue || q.CreatedByExpertId == lecturerId))
+                && q.CreatedByExpertId == null
+                && q.IsAiGenerated == false)
             .OrderByDescending(q => q.CreatedAt)
             .ToListAsync();
 
@@ -2244,17 +2252,25 @@ public class LecturerService : ILecturerService
 
         // Build result list: assigned quizzes + unassigned quizzes (only from lecturer or legacy CreatedByExpertId null)
         var results = classQuizzes
-            .Select(cq => new ClassQuizDto
+            .Select(cq =>
             {
-                ClassId = cq.ClassId,
-                QuizId = cq.QuizId,
-                QuizName = cq.Quiz?.Title,
-                ClassName = cq.Class?.ClassName,
-                Topic = cq.Quiz?.Topic,
-                AssignedAt = cq.CreatedAt,
-                OpenTime = cq.Quiz?.OpenTime,
-                CloseTime = cq.Quiz?.CloseTime,
-                QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId),
+                var quiz = cq.Quiz;
+                var creatorName = quiz?.CreatedByExpert?.FullName ?? lecturerName;
+                var creatorType = quiz?.CreatedByExpertId.HasValue == true ? "Expert" : "Lecturer";
+                return new ClassQuizDto
+                {
+                    ClassId = cq.ClassId,
+                    QuizId = cq.QuizId,
+                    QuizName = quiz?.Title,
+                    ClassName = cq.Class?.ClassName,
+                    Topic = quiz?.Topic,
+                    AssignedAt = cq.CreatedAt,
+                    OpenTime = quiz?.OpenTime,
+                    CloseTime = quiz?.CloseTime,
+                    QuestionCount = questionCounts.GetValueOrDefault(cq.QuizId),
+                    CreatorName = creatorName,
+                    CreatorType = creatorType
+                };
             })
             .ToList();
 
@@ -2272,6 +2288,8 @@ public class LecturerService : ILecturerService
                 OpenTime = quiz.OpenTime,
                 CloseTime = quiz.CloseTime,
                 QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
+                CreatorName = lecturerName,
+                CreatorType = "Lecturer"
             });
         }
 
@@ -2343,13 +2361,14 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Get quizzes that are either:
-        // 1. Created by this lecturer (not from Expert Library, not AI-generated)
-        // 2. From Expert Library (CreatedByExpertId != null), not AI-generated
+        // Get quizzes NOT created by Expert (CreatedByExpertId = null)
+        // My Quizzes = quizzes created by lecturer directly (not from Expert Library)
         var quizzes = await _unitOfWork.Context.Quizzes
             .Where(q =>
                 // Not AI-generated
                 !q.IsAiGenerated &&
+                // Not created by Expert
+                q.CreatedByExpertId == null &&
                 // Not assigned to any class yet
                 !assignedQuizIds.Contains(q.Id)
             )
@@ -2462,6 +2481,11 @@ public class LecturerService : ILecturerService
 
     public async Task<IReadOnlyList<MyQuizWithClassesDto>> GetMyQuizzesWithClassesAsync(Guid lecturerId)
     {
+        // Get lecturer info for displaying "You" as their actual name
+        var lecturer = await _unitOfWork.UserRepository
+            .GetByIdAsync(lecturerId);
+        var lecturerName = lecturer?.FullName ?? "You";
+
         var classIds = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.LecturerId == lecturerId)
             .Select(c => c.Id)
@@ -2469,7 +2493,7 @@ public class LecturerService : ILecturerService
 
         var sessions = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
-            .Include(cqs => cqs.Quiz)
+            .Include(cqs => cqs.Quiz).ThenInclude(q => q!.CreatedByExpert)
             .Include(cqs => cqs.Class)
             .Where(cqs => classIds.Contains(cqs.ClassId))
             .OrderByDescending(cqs => cqs.CreatedAt)
@@ -2499,6 +2523,9 @@ public class LecturerService : ILecturerService
                     AssignmentId = s.Id
                 }).ToList();
 
+                var creatorName = quiz?.CreatedByExpert?.FullName ?? lecturerName;
+                var creatorType = quiz?.CreatedByExpertId.HasValue == true ? "Expert" : "Lecturer";
+
                 return new MyQuizWithClassesDto
                 {
                     QuizId = quiz!.Id,
@@ -2513,6 +2540,8 @@ public class LecturerService : ILecturerService
                     IsAiGenerated = quiz.IsAiGenerated,
                     IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,
                     Difficulty = quiz.Difficulty,
+                    CreatorName = creatorName,
+                    CreatorType = creatorType,
                     Classes = classes
                 };
             })

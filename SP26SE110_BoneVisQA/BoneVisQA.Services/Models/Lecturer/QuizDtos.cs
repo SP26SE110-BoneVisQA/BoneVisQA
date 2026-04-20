@@ -352,6 +352,10 @@ public class MyQuizWithClassesDto
     public bool IsAiGenerated { get; set; }
     public bool IsFromExpertLibrary { get; set; }
     public string? Difficulty { get; set; }
+    /// <summary>Tên người tạo quiz: "You" nếu do lecturer tạo, tên Expert nếu từ Expert Library.</summary>
+    public string? CreatorName { get; set; }
+    /// <summary>Loại người tạo: "Lecturer" hoặc "Expert"</summary>
+    public string? CreatorType { get; set; }
     /// <summary>Danh sách lớp đã gán quiz này</summary>
     public List<MyQuizClassInfoDto> Classes { get; set; } = new();
 }
