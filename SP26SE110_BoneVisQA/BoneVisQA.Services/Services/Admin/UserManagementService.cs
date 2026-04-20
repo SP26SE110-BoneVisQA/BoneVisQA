@@ -4,6 +4,7 @@ using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -20,12 +21,18 @@ namespace BoneVisQA.Services.Services.Admin
     {
         public readonly IUnitOfWork _unitOfWork;
         private readonly IEmailService _emailService;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<UserManagementService> _logger;
 
-        public UserManagementService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<UserManagementService> logger)
+        public UserManagementService(
+            IUnitOfWork unitOfWork,
+            IEmailService emailService,
+            IServiceScopeFactory scopeFactory,
+            ILogger<UserManagementService> logger)
         {
             _unitOfWork = unitOfWork;
             _emailService = emailService;
+            _scopeFactory = scopeFactory;
             _logger = logger;
         }
 
@@ -634,22 +641,30 @@ namespace BoneVisQA.Services.Services.Admin
             await _unitOfWork.UserRepository.UpdateAsync(user);
             await _unitOfWork.SaveAsync();
 
+            // EF không tự load Role cho UserRole vừa Add — MapUser(user) sẽ NRE tại r.Role.Name nếu không reload.
+            var refreshed = await GetUserWithRolesAsync(userId);
+            if (refreshed == null)
+                return null;
+
             // Không dùng DbContext trong Task.Run — capture dữ liệu trước
-            var emailForMail = user.Email ?? string.Empty;
-            var fullNameForMail = user.FullName ?? string.Empty;
+            var emailForMail = refreshed.Email ?? string.Empty;
+            var fullNameForMail = refreshed.FullName ?? string.Empty;
 
             _ = Task.Run(async () =>
             {
                 try
                 {
+                    using var scope = _scopeFactory.CreateScope();
+                    var scopedEmailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+
                     if (isApproved)
                     {
-                        await _emailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, "Student");
+                        await scopedEmailService.SendWelcomeWithRoleEmailAsync(emailForMail, fullNameForMail, "Student");
                         _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification approved. Welcome email sent to {Email}.", emailForMail);
                     }
                     else
                     {
-                        await _emailService.SendMedicalVerificationRejectedEmailAsync(emailForMail, fullNameForMail, notes);
+                        await scopedEmailService.SendMedicalVerificationRejectedEmailAsync(emailForMail, fullNameForMail, notes);
                         _logger.LogInformation("[ApproveMedicalVerificationAsync] Verification rejected for {Email}.", emailForMail);
                     }
                 }
@@ -659,7 +674,7 @@ namespace BoneVisQA.Services.Services.Admin
                 }
             });
 
-            return MapUser(user);
+            return MapUser(refreshed);
         }
 
         // ── Bulk Import Users ─────────────────────────────────────────────────────

@@ -29,6 +29,9 @@ public partial class QAMessage
     [Column("coordinates", TypeName = "jsonb")]
     public string? Coordinates { get; set; }
 
+    [Column("target_assistant_message_id")]
+    public Guid? TargetAssistantMessageId { get; set; }
+
     [Column("client_request_id")]
     [MaxLength(100)]
     public string? ClientRequestId { get; set; }

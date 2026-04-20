@@ -439,6 +439,11 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
+        /// <summary>Alias for <c>GET /api/expert/tag</c> (plural) for older FE clients.</summary>
+        [HttpGet("tags")]
+        public Task<IActionResult> GetAllTags(int pageIndex = 1, int pageSize = 10) =>
+            GetAllTag(pageIndex, pageSize);
+
         [HttpGet("image")]
         public async Task<IActionResult> GetAllImage( int pageIndex = 1,int pageSize = 10)
         {

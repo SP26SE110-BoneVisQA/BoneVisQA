@@ -1185,14 +1185,14 @@ public class LecturerService : ILecturerService
         if (studentIds.Count == 0 || quizIds.Count == 0)
             return null;
 
-        var scores = await _unitOfWork.QuizAttemptRepository
-            .FindByCondition(a =>
-                studentIds.Contains(a.StudentId)
+                var scores = await _unitOfWork.QuizAttemptRepository
+                    .FindByCondition(a =>
+                        studentIds.Contains(a.StudentId)
                 && quizIds.Contains(a.QuizId)
-                && a.Score.HasValue
-                && a.CompletedAt.HasValue)
-            .Select(a => a.Score!.Value)
-            .ToListAsync();
+                        && a.Score.HasValue
+                        && a.CompletedAt.HasValue)
+                    .Select(a => a.Score!.Value)
+                    .ToListAsync();
 
         return scores.Count > 0 ? scores.Average() : null;
     }
@@ -1213,7 +1213,7 @@ public class LecturerService : ILecturerService
         var existing = await _unitOfWork.Context.ClassCases
             .Where(cc => cc.ClassId == classId && caseIds.Contains(cc.CaseId))
             .Select(cc => cc.CaseId)
-            .ToListAsync();
+                .ToListAsync();
 
         var toAdd = caseIds
             .Except(existing)
@@ -1238,7 +1238,7 @@ public class LecturerService : ILecturerService
             .Select(cc => cc.Case)
             .Include(c => c.Category)
             .OrderByDescending(c => c.CreatedAt)
-            .ToListAsync();
+                .ToListAsync();
 
         return assignedCases.Select(c => new CaseDto
         {
@@ -1600,7 +1600,8 @@ public class LecturerService : ILecturerService
             Content = request.AnswerText,
             SuggestedDiagnosis = request.StructuredDiagnosis,
             DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            TargetAssistantMessageId = session.RequestedReviewMessageId
         };
         await _unitOfWork.Context.QaMessages.AddAsync(answer);
 
@@ -1917,18 +1918,18 @@ public class LecturerService : ILecturerService
                     .FirstOrDefault();
 
                 return new LectStudentQuestionDto
-                {
-                    Id = q.Id,
+            {
+                Id = q.Id,
                     AnswerId = latestAnswer?.Id,
                     QuestionSource = questionSourceTag,
-                    StudentId = q.StudentId,
-                    StudentName = q.Student?.FullName ?? string.Empty,
-                    StudentEmail = q.Student?.Email ?? string.Empty,
-                    CaseId = q.CaseId ?? Guid.Empty,
-                    CaseTitle = q.Case?.Title ?? string.Empty,
-                    QuestionText = q.QuestionText,
-                    Language = q.Language,
-                    CreatedAt = q.CreatedAt,
+                StudentId = q.StudentId,
+                StudentName = q.Student?.FullName ?? string.Empty,
+                StudentEmail = q.Student?.Email ?? string.Empty,
+                CaseId = q.CaseId ?? Guid.Empty,
+                CaseTitle = q.Case?.Title ?? string.Empty,
+                QuestionText = q.QuestionText,
+                Language = q.Language,
+                CreatedAt = q.CreatedAt,
                     AnswerText = latestAnswer?.AnswerText,
                     AnswerStatus = latestAnswer?.Status,
                     EscalatedById = latestAnswer?.EscalatedById,
@@ -2782,7 +2783,7 @@ public class LecturerService : ILecturerService
             .FirstOrDefaultAsync(cq => cq.ClassId == classId && cq.QuizId == quizId);
 
             // Idempotent: Save from FE may be called again when quiz is already assigned (avoid 409 Conflict).
-            if (existing != null)
+        if (existing != null)
         {
             var existingQuestionCount = await _unitOfWork.Context.QuizQuestions
                 .AsNoTracking()

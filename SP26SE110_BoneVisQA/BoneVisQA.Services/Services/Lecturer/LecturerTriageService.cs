@@ -34,17 +34,41 @@ public class LecturerTriageService : ILecturerTriageService
             .FirstOrDefaultAsync(s => s.Id == sessionId)
             ?? throw new KeyNotFoundException("The Q&A session to escalate was not found.");
 
-        var classEnrollment = await _unitOfWork.Context.ClassEnrollments
+        var enrollments = await _unitOfWork.Context.ClassEnrollments
             .Include(e => e.Class)
-            .FirstOrDefaultAsync(e =>
+            .Where(e =>
                 e.StudentId == session.StudentId &&
-                e.Class.LecturerId == lecturerId);
+                e.Class != null &&
+                e.Class.LecturerId == lecturerId)
+            .ToListAsync();
 
-        if (classEnrollment == null)
+        if (enrollments.Count == 0)
             throw new InvalidOperationException("The lecturer does not have permission to escalate this answer.");
 
-        if (!classEnrollment.Class.ExpertId.HasValue)
+        var withExpert = enrollments
+            .Where(e => e.Class != null && e.Class.ExpertId.HasValue)
+            .ToList();
+        if (withExpert.Count == 0)
             throw new InvalidOperationException("This class has not been assigned an expert for escalation yet.");
+
+        ClassEnrollment classEnrollment;
+        if (session.CaseId.HasValue && session.CaseId.Value != Guid.Empty)
+        {
+            var caseClassIds = await _unitOfWork.Context.ClassCases
+                .AsNoTracking()
+                .Where(cc => cc.CaseId == session.CaseId.Value)
+                .Select(cc => cc.ClassId)
+                .ToListAsync();
+
+            var preferred = caseClassIds.Count > 0
+                ? withExpert.FirstOrDefault(e => caseClassIds.Contains(e.ClassId))
+                : null;
+            classEnrollment = preferred ?? withExpert.First();
+        }
+        else
+        {
+            classEnrollment = withExpert.First();
+        }
 
         if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
             throw new ConflictException("This Q&A session has already been escalated.");
@@ -52,7 +76,7 @@ public class LecturerTriageService : ILecturerTriageService
             throw new ConflictException($"Cannot escalate a session from status '{session.Status}'.");
 
         session.Status = "EscalatedToExpert";
-        session.ExpertId = classEnrollment.Class.ExpertId.Value;
+        session.ExpertId = classEnrollment.Class!.ExpertId!.Value;
         session.LecturerId = lecturerId;
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
@@ -128,7 +152,8 @@ public class LecturerTriageService : ILecturerTriageService
             SessionId = session.Id,
             Role = "Lecturer",
             Content = reason.Trim(),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            TargetAssistantMessageId = session.RequestedReviewMessageId
         };
 
         await _unitOfWork.Context.QaMessages.AddAsync(rejectionMessage);
@@ -227,8 +252,10 @@ public class LecturerTriageService : ILecturerTriageService
     {
         if (string.Equals(targetStatus, "EscalatedToExpert", StringComparison.Ordinal))
         {
+            // Keep in sync with LecturerService.CanTransitionFrom (Visual QA triage / respond flows).
             return string.Equals(currentStatus, "PendingExpertReview", StringComparison.Ordinal)
-                   || string.Equals(currentStatus, "Active", StringComparison.Ordinal);
+                   || string.Equals(currentStatus, "Active", StringComparison.Ordinal)
+                   || string.Equals(currentStatus, "LecturerApproved", StringComparison.Ordinal);
         }
 
         if (string.Equals(targetStatus, "Rejected", StringComparison.Ordinal))
