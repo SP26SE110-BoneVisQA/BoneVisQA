@@ -394,7 +394,7 @@ public class VisualQAController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = MaxVisualImageBytes)]
     [Consumes("multipart/form-data")]
     [EnableRateLimiting("AiInteractionLimit")]
-    [Produces("text/event-stream")]
+    [Produces("text/event-stream", "application/json", "application/problem+json", "text/plain")]
     public async Task<IActionResult> AskStream(
         [FromForm] VisualQAFileUploadRequest formRequest,
         [FromQuery] string? locale,
