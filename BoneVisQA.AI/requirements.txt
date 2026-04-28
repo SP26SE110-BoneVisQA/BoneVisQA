@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+httpx
+pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+numpy
+sentence-transformers
+transformers
+torch
+Pillow
+psycopg2-binary
+pgvector
+pydantic
