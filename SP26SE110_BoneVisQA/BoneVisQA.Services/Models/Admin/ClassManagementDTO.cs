@@ -37,6 +37,11 @@ namespace BoneVisQA.Services.Models.Admin
 
         /// <summary>Number of student enrollment rows for this class.</summary>
         public int StudentCount { get; set; }
+
+        /// <summary>FK to <c>bone_specialties</c>; routes experts by medical focus (e.g. Spine, Trauma).</summary>
+        public Guid? ClassSpecialtyId { get; set; }
+
+        public string? ClassSpecialtyName { get; set; }
     }
     public class CreateClassManagementDTO
     {
@@ -47,6 +52,9 @@ namespace BoneVisQA.Services.Models.Admin
         public string Semester { get; set; } = null!;
 
         public DateTime? CreatedAt { get; set; }
+
+        /// <summary>Required: class medical specialty for expert routing.</summary>
+        public Guid ClassSpecialtyId { get; set; }
     }
     public class UpdateClassManagementDTO
     {
@@ -57,6 +65,9 @@ namespace BoneVisQA.Services.Models.Admin
         public string Semester { get; set; } = null!;
 
         public DateTime? UpdatedAt { get; set; }
+
+        /// <summary>Required: class medical specialty for expert routing.</summary>
+        public Guid ClassSpecialtyId { get; set; }
     }
 
     //=======================================================  ASSIGN CLASS  ===================================================

@@ -48,7 +48,9 @@ namespace BoneVisQA.Services.Services.Admin
                     ExpertName = x.Expert != null ? x.Expert.FullName : null,
                     LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
                     ExpertEmail = x.Expert != null ? x.Expert.Email : null,
-                    StudentCount = x.ClassEnrollments.Count
+                    StudentCount = x.ClassEnrollments.Count,
+                    ClassSpecialtyId = x.ClassSpecialtyId,
+                    ClassSpecialtyName = x.ClassSpecialty != null ? x.ClassSpecialty.Name : null
                 })
                 .ToListAsync();
 
@@ -79,19 +81,29 @@ namespace BoneVisQA.Services.Services.Admin
                     ExpertName = x.Expert != null ? x.Expert.FullName : null,
                     LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
                     ExpertEmail = x.Expert != null ? x.Expert.Email : null,
-                    StudentCount = x.ClassEnrollments.Count
+                    StudentCount = x.ClassEnrollments.Count,
+                    ClassSpecialtyId = x.ClassSpecialtyId,
+                    ClassSpecialtyName = x.ClassSpecialty != null ? x.ClassSpecialty.Name : null
                 })
                 .FirstOrDefaultAsync();
         }
 
         public async Task<CreateClassManagementDTO> CreateAcademicClassAsync(CreateClassManagementDTO dto)
-        {         
+        {
+            if (dto.ClassSpecialtyId == Guid.Empty)
+                throw new InvalidOperationException("ClassSpecialtyId is required.");
+
+            var specialtyExists = await _unitOfWork.Context.BoneSpecialties
+                .AnyAsync(b => b.Id == dto.ClassSpecialtyId);
+            if (!specialtyExists)
+                throw new InvalidOperationException("Invalid ClassSpecialtyId.");
 
             var entity = new AcademicClass
             {
                 Id = Guid.NewGuid(),
                 ClassName = dto.ClassName,
                 Semester = dto.Semester,
+                ClassSpecialtyId = dto.ClassSpecialtyId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -110,8 +122,17 @@ namespace BoneVisQA.Services.Services.Admin
             if (entity == null)
                 throw new Exception("Academic class not found");
 
+            if (dto.ClassSpecialtyId == Guid.Empty)
+                throw new InvalidOperationException("ClassSpecialtyId is required.");
+
+            var specialtyExists = await _unitOfWork.Context.BoneSpecialties
+                .AnyAsync(b => b.Id == dto.ClassSpecialtyId);
+            if (!specialtyExists)
+                throw new InvalidOperationException("Invalid ClassSpecialtyId.");
+
             entity.ClassName = dto.ClassName;
             entity.Semester = dto.Semester;
+            entity.ClassSpecialtyId = dto.ClassSpecialtyId;
             entity.UpdatedAt = DateTime.UtcNow;
 
             _unitOfWork.AcademicClassRepository.Update(entity);
@@ -219,6 +240,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ?? throw new InvalidOperationException("Expert not found.");
                 if (!HasRole(expert, "Expert"))
                     throw new InvalidOperationException("User is not Expert.");
+                if (!classEntity.ClassSpecialtyId.HasValue)
+                    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
+                var expertMatchesClassFocus = await _unitOfWork.Context.ExpertSpecialties
+                    .AnyAsync(es =>
+                        es.ExpertId == dto.ExpertId.Value &&
+                        es.BoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                if (!expertMatchesClassFocus)
+                    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;
             }
 
@@ -312,6 +341,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ?? throw new InvalidOperationException("Expert not found.");
                 if (!HasRole(expert, "Expert"))
                     throw new InvalidOperationException("User is not Expert.");
+                if (!classEntity.ClassSpecialtyId.HasValue)
+                    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
+                var expertMatchesClassFocus = await _unitOfWork.Context.ExpertSpecialties
+                    .AnyAsync(es =>
+                        es.ExpertId == dto.ExpertId.Value &&
+                        es.BoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                if (!expertMatchesClassFocus)
+                    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;
             }
 

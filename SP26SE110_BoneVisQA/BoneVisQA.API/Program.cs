@@ -270,14 +270,21 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
     // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
     client.Timeout = TimeSpan.FromMinutes(60);
 });
-builder.Services.AddHttpClient(HuggingFaceEmbeddingService.HttpClientName, client =>
+builder.Services.AddHttpClient<IPythonAiConnectorService, PythonAiConnectorService>((sp, client) =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = cfg["AiMicroservice:BaseUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+        baseUrl = "http://localhost:8000";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
+
+builder.Services.AddHttpClient("VisualQaImageFetch", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
-
-builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
+});
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
-builder.Services.Configure<HuggingFaceSettings>(builder.Configuration.GetSection(HuggingFaceSettings.SectionName));
 builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
@@ -288,7 +295,6 @@ builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 builder.Services.AddSingleton<IIndexingExecutionGate, IndexingExecutionGate>();
 builder.Services.AddScoped<IGeminiService, GeminiService>();
-builder.Services.AddScoped<IEmbeddingService, HuggingFaceEmbeddingService>();
 builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
 builder.Services.AddScoped<IMedicalCaseIndexingProcessor, MedicalCaseIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();

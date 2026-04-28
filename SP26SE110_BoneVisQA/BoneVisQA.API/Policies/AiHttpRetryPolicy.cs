@@ -5,7 +5,7 @@ using Polly.Extensions.Http;
 
 namespace BoneVisQA.API.Policies;
 
-/// <summary>Exponential backoff for Gemini / HuggingFace HTTP calls (429, 5xx, transient failures).</summary>
+/// <summary>Exponential backoff for Gemini / external AI HTTP calls (429, 5xx, transient failures).</summary>
 public static class AiHttpRetryPolicy
 {
     /// <summary>3 retries with waits 2s, 4s, 8s.</summary>

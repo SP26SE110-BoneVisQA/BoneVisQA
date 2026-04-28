@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.Json;
@@ -12,6 +13,7 @@ using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.VisualQA;
 using BoneVisQA.Services.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BoneVisQA.Services.Services.Expert;
 
@@ -20,6 +22,8 @@ public class ExpertReviewService : IExpertReviewService
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
     private readonly IRagExpertAnswerIndexingSignal _ragExpertAnswerIndexingSignal;
+    private readonly IPythonAiConnectorService _pythonAiConnector;
+    private readonly ILogger<ExpertReviewService> _logger;
 
     public static IQueryable<VisualQASession> QueryExpertScopedEscalatedQueue(IUnitOfWork uow, Guid expertId) =>
         uow.Context.VisualQaSessions
@@ -47,11 +51,15 @@ public class ExpertReviewService : IExpertReviewService
     public ExpertReviewService(
         IUnitOfWork unitOfWork,
         INotificationService notificationService,
-        IRagExpertAnswerIndexingSignal ragExpertAnswerIndexingSignal)
+        IRagExpertAnswerIndexingSignal ragExpertAnswerIndexingSignal,
+        IPythonAiConnectorService pythonAiConnector,
+        ILogger<ExpertReviewService> logger)
     {
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
         _ragExpertAnswerIndexingSignal = ragExpertAnswerIndexingSignal;
+        _pythonAiConnector = pythonAiConnector;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId)
@@ -426,6 +434,8 @@ public class ExpertReviewService : IExpertReviewService
         session.ExpertId = expertId;
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
+
+        await TryIngestGoldenChunkAfterSimpleApproveAsync(sessionId);
     }
 
     public async Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request)
@@ -450,6 +460,9 @@ public class ExpertReviewService : IExpertReviewService
         try
         {
             var session = await _unitOfWork.Context.VisualQaSessions
+                .Include(s => s.Case!).ThenInclude(c => c!.Category)
+                .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
+                .Include(s => s.Image)
                 .FirstOrDefaultAsync(s => s.Id == sessionId)
                 ?? throw new KeyNotFoundException("Q&A session not found.");
 
@@ -535,6 +548,15 @@ public class ExpertReviewService : IExpertReviewService
             session.PromotedCaseId = newCase.Id;
             await _unitOfWork.SaveAsync();
             await transaction.CommitAsync();
+
+            try
+            {
+                await TryIngestGoldenChunkAfterPromoteAsync(session, request);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Golden chunk ingest failed after promote-to-library for session {SessionId}.", sessionId);
+            }
 
             return newCase.Id;
         }
@@ -726,6 +748,12 @@ public class ExpertReviewService : IExpertReviewService
         }
 
         await RemoveStaleDraftExpertReviewsAsync(session.Id, expertId);
+
+        if (!isReject)
+        {
+            var goldenCore = BuildExpertApprovedGoldenCore(expertMessage);
+            await TryIngestGoldenChunkWithCoreAsync(session.Id, goldenCore);
+        }
 
         if (isReject)
         {
@@ -1069,5 +1097,128 @@ public class ExpertReviewService : IExpertReviewService
                    || string.Equals(currentStatus, "ExpertApproved", StringComparison.Ordinal);
 
         return true;
+    }
+
+    private static string BuildExpertApprovedGoldenCore(QAMessage expertMessage)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(expertMessage.SuggestedDiagnosis))
+            parts.Add($"Structured diagnosis: {expertMessage.SuggestedDiagnosis.Trim()}");
+        if (!string.IsNullOrWhiteSpace(expertMessage.KeyImagingFindings))
+            parts.Add($"Key imaging findings: {expertMessage.KeyImagingFindings.Trim()}");
+        if (!string.IsNullOrWhiteSpace(expertMessage.Content))
+            parts.Add(expertMessage.Content.Trim());
+        return parts.Count > 0 ? string.Join("\n\n", parts) : string.Empty;
+    }
+
+    private static string BuildGoldenChunkDiagnosisText(string modality, string anatomy, string pathologyGroup, string coreAnswer) =>
+        $"Modality: {modality}\nAnatomy focus: {anatomy}\nPathology group / case context: {pathologyGroup}\n\nExpert-approved content:\n{coreAnswer}";
+
+    private async Task TryIngestGoldenChunkAfterSimpleApproveAsync(Guid sessionId)
+    {
+        try
+        {
+            var session = await _unitOfWork.Context.VisualQaSessions
+                .AsNoTracking()
+                .Include(s => s.Case!).ThenInclude(c => c!.Category)
+                .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
+                .Include(s => s.Image)
+                .Include(s => s.Messages)
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+            if (session == null)
+                return;
+
+            var ordered = session.Messages.OrderBy(m => m.CreatedAt).ThenBy(m => m.Id).ToList();
+            var pair = ResolveRequestedReviewPair(session, ordered);
+            var coreParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(pair.Assistant?.SuggestedDiagnosis))
+                coreParts.Add(pair.Assistant.SuggestedDiagnosis.Trim());
+            if (!string.IsNullOrWhiteSpace(pair.Assistant?.Content))
+                coreParts.Add(pair.Assistant.Content.Trim());
+            if (coreParts.Count == 0)
+                return;
+
+            await IngestInternalAsync(session, string.Join("\n\n", coreParts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Golden chunk ingest failed after simple approve for session {SessionId}.", sessionId);
+        }
+    }
+
+    private async Task TryIngestGoldenChunkWithCoreAsync(Guid sessionId, string coreDiagnosisText)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(coreDiagnosisText))
+                return;
+
+            var session = await _unitOfWork.Context.VisualQaSessions
+                .AsNoTracking()
+                .Include(s => s.Case!).ThenInclude(c => c!.Category)
+                .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
+                .Include(s => s.Image)
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+            if (session == null)
+                return;
+
+            await IngestInternalAsync(session, coreDiagnosisText.Trim());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Golden chunk ingest failed for session {SessionId}.", sessionId);
+        }
+    }
+
+    private async Task TryIngestGoldenChunkAfterPromoteAsync(VisualQASession session, PromoteToLibraryRequestDto request)
+    {
+        var core = new List<string>
+        {
+            $"Suggested diagnosis: {request.SuggestedDiagnosis.Trim()}",
+            $"Key findings: {request.KeyFindings.Trim()}",
+            request.Description.Trim(),
+            $"Reflective questions: {request.ReflectiveQuestions.Trim()}"
+        };
+        await IngestInternalAsync(session, string.Join("\n\n", core));
+    }
+
+    private async Task IngestInternalAsync(VisualQASession session, string coreDiagnosisText)
+    {
+        var imagePathOrUrl = ResolveSessionImageUrl(session);
+        if (string.IsNullOrWhiteSpace(imagePathOrUrl))
+        {
+            _logger.LogWarning("Golden chunk ingest skipped: no image URL for session {SessionId}.", session.Id);
+            return;
+        }
+
+        var modality = session.Image?.Modality;
+        if (string.IsNullOrWhiteSpace(modality) && session.Case?.MedicalImages is { Count: > 0 } images)
+        {
+            modality = images
+                .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+                .ThenBy(m => m.Id)
+                .Select(m => m.Modality)
+                .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
+        }
+
+        modality = string.IsNullOrWhiteSpace(modality) ? "Unknown" : modality.Trim();
+
+        var anatomy = session.Case?.Category?.Name;
+        if (string.IsNullOrWhiteSpace(anatomy))
+            anatomy = "Unknown";
+
+        var pathologyGroup = session.Case?.SuggestedDiagnosis;
+        if (string.IsNullOrWhiteSpace(pathologyGroup))
+            pathologyGroup = session.Case?.Category?.Description;
+        if (string.IsNullOrWhiteSpace(pathologyGroup))
+            pathologyGroup = "Unspecified";
+
+        var bundle = BuildGoldenChunkDiagnosisText(modality, anatomy.Trim(), pathologyGroup.Trim(), coreDiagnosisText);
+        var ok = await _pythonAiConnector.TriggerIngestAsync(
+            imagePathOrUrl.Trim(),
+            session.StudentId.ToString("D"),
+            bundle);
+        if (!ok)
+            _logger.LogWarning("Python AI ingest returned false for golden chunk session {SessionId}.", session.Id);
     }
 }
