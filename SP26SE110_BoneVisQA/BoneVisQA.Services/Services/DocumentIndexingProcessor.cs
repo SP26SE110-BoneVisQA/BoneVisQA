@@ -1,22 +1,18 @@
 using System.Text;
-using BoneVisQA.Domain.Settings;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Repositories.UnitOfWork;
-using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Pgvector;
 using UglyToad.PdfPig;
 
 namespace BoneVisQA.Services.Services;
 
 /// <summary>
-/// Consumer-side RAG indexing: stream PDF to disk, page-by-page extraction with progress, sliding-window chunking, HuggingFace embeddings.
+/// Consumer-side indexing: PDF extraction + chunking. Vector generation is delegated to BoneVisQA.AI (chunks stored with null embeddings until backfilled).
 /// </summary>
 public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
 {
@@ -25,7 +21,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
 
     private const int ChunkSize = 1000;
     private const int ChunkOverlap = 200;
-    private const int DefaultEmbeddingBatchSize = 50;
+    private const int PendingChunkInsertBatchSize = 50;
     private const int SaveProgressEveryPages = 5;
     private const int MaxExtractedCharacters = 50_000_000;
 
@@ -35,22 +31,18 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPdfProcessingService _pdfProcessing;
     private readonly ISupabaseStorageService _storageService;
-    private readonly IEmbeddingService _embeddingService;
     private readonly IIndexingExecutionGate _indexingExecutionGate;
     private readonly IDocumentIndexingProgressNotifier _progressNotifier;
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentIndexingProcessor> _logger;
-    private readonly int _embeddingBatchSize;
 
     public DocumentIndexingProcessor(
         IUnitOfWork unitOfWork,
         IPdfProcessingService pdfProcessing,
         ISupabaseStorageService storageService,
-        IEmbeddingService embeddingService,
         IIndexingExecutionGate indexingExecutionGate,
         IDocumentIndexingProgressNotifier progressNotifier,
-        IOptions<HuggingFaceSettings> huggingFaceOptions,
         IMemoryCache memoryCache,
         IServiceScopeFactory scopeFactory,
         ILogger<DocumentIndexingProcessor> logger)
@@ -58,15 +50,11 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         _unitOfWork = unitOfWork;
         _pdfProcessing = pdfProcessing;
         _storageService = storageService;
-        _embeddingService = embeddingService;
         _indexingExecutionGate = indexingExecutionGate;
         _progressNotifier = progressNotifier;
         _memoryCache = memoryCache;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _embeddingBatchSize = huggingFaceOptions.Value.BatchSize > 0
-            ? huggingFaceOptions.Value.BatchSize
-            : DefaultEmbeddingBatchSize;
     }
 
     public async Task ProcessDocumentAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -200,7 +188,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
             }
 
             _logger.LogInformation(
-                "[DocumentIndexing] Extracted {ChunkCount} chunks for document {DocumentId}. Embedding...",
+                "[DocumentIndexing] Extracted {ChunkCount} chunks for document {DocumentId}. Persisting chunks (vectors deferred / Python)...",
                 chunkPayload.Count,
                 documentId);
             docTracked.TotalChunks = chunkPayload.Count;
@@ -211,27 +199,17 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 docTracked.TotalChunks,
                 docTracked.CurrentPageIndexing,
                 docTracked.IndexingProgress,
-                "Chunking completed. Starting embedding batches.",
+                "Chunking completed. Persisting chunks...",
                 cancellationToken);
-            var estimatedRequests = (int)Math.Ceiling(chunkPayload.Count / (double)_embeddingBatchSize);
-            _logger.LogInformation(
-                "[Queue] Starting indexing for Document {Id}. Estimated requests: {Count}",
-                documentId,
-                estimatedRequests);
 
             var processedChunks = 0;
-            for (var batchStart = 0; batchStart < chunkPayload.Count; batchStart += _embeddingBatchSize)
+            for (var batchStart = 0; batchStart < chunkPayload.Count; batchStart += PendingChunkInsertBatchSize)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var take = Math.Min(_embeddingBatchSize, chunkPayload.Count - batchStart);
-                var batchChunks = chunkPayload.GetRange(batchStart, take);
-                var batchTexts = batchChunks.Select(x => x.Content).ToList();
+                var take = Math.Min(PendingChunkInsertBatchSize, chunkPayload.Count - batchStart);
                 _logger.LogInformation(
-                    "[BatchEmbed] Sending batch of {Count} chunks using HuggingFace embedding service.",
-                    batchTexts.Count);
-                var vectors = await _embeddingService.BatchEmbedContentsAsync(batchTexts, cancellationToken);
-                if (vectors.Count != batchTexts.Count)
-                    throw new EmbeddingFailedException($"Batch embedding result size mismatch. Expected {batchTexts.Count}, got {vectors.Count}.");
+                    "[BatchPersist] Saving {Count} pending chunks without C# embeddings.",
+                    take);
 
                 var pendingBatch = new List<PendingDocumentChunk>(take);
                 for (var offset = 0; offset < take; offset++)
@@ -245,7 +223,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                         ChunkOrder = chunkIndex,
                         StartPage = chunkPayload[chunkIndex].StartPage,
                         EndPage = chunkPayload[chunkIndex].EndPage,
-                        Embedding = new Vector(vectors[offset]),
+                        Embedding = null,
                     });
                 }
                 await _unitOfWork.Context.PendingDocumentChunks.AddRangeAsync(pendingBatch, cancellationToken);
@@ -263,7 +241,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 SetProgress(
                     documentId,
                     progress,
-                    $"Vectorizing chunk {processedChunks} of {chunkPayload.Count}...",
+                    $"Saving chunk {processedChunks} of {chunkPayload.Count}...",
                     docTracked.TotalPages,
                     docTracked.TotalChunks,
                     docTracked.CurrentPageIndexing);
@@ -273,7 +251,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     docTracked.TotalChunks,
                     docTracked.CurrentPageIndexing,
                     progress,
-                    $"Vectorizing chunk {processedChunks} of {chunkPayload.Count}...",
+                    $"Saving chunk {processedChunks} of {chunkPayload.Count}...",
                     cancellationToken);
             }
             await using var swapTransaction = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
@@ -406,12 +384,6 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
             await MarkFailedAsync(documentId, CancellationToken.None);
             failoverMarked = true;
             throw;
-        }
-        catch (EmbeddingFailedException ex)
-        {
-            _logger.LogError(ex, "[DocumentIndexing] Embedding pipeline failed for {DocumentId}.", documentId);
-            await MarkFailedAsync(documentId, cancellationToken);
-            failoverMarked = true;
         }
         catch (Exception ex)
         {

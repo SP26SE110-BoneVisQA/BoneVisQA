@@ -3,26 +3,24 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Pgvector;
 
 namespace BoneVisQA.Services.Services;
 
+/// <summary>
+/// Marks catalog cases as indexed without generating vectors in C# (embeddings live in Python / DB pipelines).
+/// </summary>
 public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
 {
-    private const int EmbeddingBatchSize = 100;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmbeddingService _embeddingService;
     private readonly IIndexingExecutionGate _indexingExecutionGate;
     private readonly ILogger<MedicalCaseIndexingProcessor> _logger;
 
     public MedicalCaseIndexingProcessor(
         IUnitOfWork unitOfWork,
-        IEmbeddingService embeddingService,
         IIndexingExecutionGate indexingExecutionGate,
         ILogger<MedicalCaseIndexingProcessor> logger)
     {
         _unitOfWork = unitOfWork;
-        _embeddingService = embeddingService;
         _indexingExecutionGate = indexingExecutionGate;
         _logger = logger;
     }
@@ -35,7 +33,7 @@ public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
         try
         {
             mc = await _unitOfWork.Context.MedicalCases
-                .FirstOrDefaultAsync(x => x.Id == medicalCaseId, cancellationToken)
+                    .FirstOrDefaultAsync(x => x.Id == medicalCaseId, cancellationToken)
                 ?? throw new InvalidOperationException($"Medical case {medicalCaseId} not found.");
 
             var text = BuildIndexingText(mc);
@@ -45,17 +43,8 @@ public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
                 return;
             }
 
-            var estimatedRequests = (int)Math.Ceiling(1d / EmbeddingBatchSize);
-            _logger.LogInformation(
-                "[Queue] Starting indexing for MedicalCase {Id}. Estimated requests: {Count}",
-                medicalCaseId,
-                estimatedRequests);
+            _logger.LogInformation("[MedicalCaseIndexing] Completing case {CaseId} without C# embedding generation.", medicalCaseId);
 
-            var embeddings = await _embeddingService.BatchEmbedContentsAsync(new[] { text }, cancellationToken);
-            if (embeddings.Count == 0)
-                throw new InvalidOperationException("Batch embedding returned no vectors for medical case.");
-
-            mc.Embedding = new Vector(embeddings[0]);
             mc.IndexingStatus = DocumentIndexingStatuses.Completed;
             await _unitOfWork.SaveAsync();
             completed = true;
@@ -67,7 +56,7 @@ public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[MedicalCaseIndexing] Embedding API failed for case {CaseId}.", medicalCaseId);
+            _logger.LogError(ex, "[MedicalCaseIndexing] Failed for case {CaseId}.", medicalCaseId);
         }
         finally
         {
@@ -95,7 +84,7 @@ public sealed class MedicalCaseIndexingProcessor : IMedicalCaseIndexingProcessor
         }
     }
 
-    /// <summary>Matches RAG retrieval text: title, description, suggested diagnosis, key findings.</summary>
+    /// <summary>Matches legacy RAG indexing text: title, description, suggested diagnosis, key findings.</summary>
     public static string BuildIndexingText(MedicalCase mc)
     {
         var parts = new List<string>(4);

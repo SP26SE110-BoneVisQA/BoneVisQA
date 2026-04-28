@@ -595,7 +595,7 @@ public class GeminiService : IGeminiService
 
     private async Task<(string? base64, string? mimeType)> ResolveImageToBase64Async(string imageUrlOrBase64, CancellationToken ct)
     {
-        // Accept raw base64 (our ImageProcessingService output) OR an HTTP(s) URL.
+        // Accept raw base64 or an HTTP(s) URL.
         if (imageUrlOrBase64.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             imageUrlOrBase64.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
