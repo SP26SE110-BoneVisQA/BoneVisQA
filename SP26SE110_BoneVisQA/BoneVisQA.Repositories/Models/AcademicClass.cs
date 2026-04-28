@@ -25,6 +25,10 @@ public partial class AcademicClass
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    /// <summary>Medical specialty focus for routing experts (Spine, Trauma, …).</summary>
+    [Column("class_specialty_id")]
+    public Guid? ClassSpecialtyId { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -53,6 +57,10 @@ public partial class AcademicClass
     [ForeignKey("ExpertId")]
     [InverseProperty("ExpertAcademicClasses")]
     public virtual User? Expert { get; set; }
+
+    [ForeignKey("ClassSpecialtyId")]
+    [InverseProperty("AcademicClasses")]
+    public virtual BoneSpecialty? ClassSpecialty { get; set; }
 
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();

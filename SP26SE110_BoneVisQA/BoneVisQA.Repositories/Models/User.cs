@@ -120,6 +120,9 @@ public partial class User
     [InverseProperty("Expert")]
     public virtual ICollection<AcademicClass> ExpertAcademicClasses { get; set; } = new List<AcademicClass>();
 
+    [InverseProperty("Expert")]
+    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
+
     [InverseProperty("CreatedByExpert")]
     public virtual ICollection<MedicalCase> CreatedMedicalCases { get; set; } = new List<MedicalCase>();
 

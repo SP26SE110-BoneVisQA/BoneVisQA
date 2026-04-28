@@ -18,6 +18,10 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<AcademicClass> AcademicClasses { get; set; }
 
+    public virtual DbSet<BoneSpecialty> BoneSpecialties { get; set; }
+
+    public virtual DbSet<ExpertSpecialty> ExpertSpecialties { get; set; }
+
     public virtual DbSet<Announcement> Announcements { get; set; }
 
     public virtual DbSet<CaseAnnotation> CaseAnnotations { get; set; }
@@ -117,6 +121,36 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Expert).WithMany(p => p.ExpertAcademicClasses)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("academic_classes_expert_id_fkey");
+
+            entity.HasOne(d => d.ClassSpecialty).WithMany(p => p.AcademicClasses)
+                .HasForeignKey(d => d.ClassSpecialtyId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("academic_classes_class_specialty_id_fkey");
+        });
+
+        modelBuilder.Entity<BoneSpecialty>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("bone_specialties_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.Name).HasMaxLength(256);
+
+            entity.HasIndex(e => e.Name, "bone_specialties_name_key").IsUnique();
+        });
+
+        modelBuilder.Entity<ExpertSpecialty>(entity =>
+        {
+            entity.HasKey(e => new { e.ExpertId, e.BoneSpecialtyId }).HasName("expert_specialties_pkey");
+
+            entity.HasOne(d => d.Expert).WithMany(p => p.ExpertSpecialties)
+                .HasForeignKey(d => d.ExpertId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("expert_specialties_expert_id_fkey");
+
+            entity.HasOne(d => d.BoneSpecialty).WithMany(p => p.ExpertSpecialties)
+                .HasForeignKey(d => d.BoneSpecialtyId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("expert_specialties_bone_specialty_id_fkey");
         });
 
         modelBuilder.Entity<Announcement>(entity =>
