@@ -46,6 +46,12 @@ const long maxUploadBodyBytes = 104857600; // 100 MB
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+
+    // HTTPS on localhost:5047 using ASP.NET Core dev certificate
+    options.ListenLocalhost(5047, listenOptions =>
+    {
+        listenOptions.UseHttps();
+    });
 });
 
 builder.Services.Configure<FormOptions>(options =>
@@ -75,7 +81,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
@@ -88,7 +94,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
@@ -313,6 +319,7 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
+builder.Services.AddScoped<IClassExpertAssignmentService, ClassExpertAssignmentService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
@@ -322,10 +329,12 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
     client.Timeout = TimeSpan.FromMinutes(60);
 });
 
+builder.Services.AddScoped<ISystemLogService, SystemLogService>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+builder.Services.AddScoped<IExpertSpecialtyService, ExpertSpecialtyService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
@@ -334,6 +343,8 @@ builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IBoneSpecialtyService, BoneSpecialtyService>();
+builder.Services.AddScoped<IPathologyCategoryService, PathologyCategoryService>();
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();

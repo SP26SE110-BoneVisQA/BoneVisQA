@@ -444,6 +444,38 @@ namespace BoneVisQA.API.Controllers.Expert
         public Task<IActionResult> GetAllTags(int pageIndex = 1, int pageSize = 10) =>
             GetAllTag(pageIndex, pageSize);
 
+        //================================================================================================================
+        // Deep Classification - Lấy dữ liệu cho dropdown trong Create/Edit Quiz
+        //================================================================================================================
+
+        [HttpGet("bone-specialties/tree")]
+        public async Task<IActionResult> GetBoneSpecialtiesTree()
+        {
+            try
+            {
+                var result = await _quizService.GetBoneSpecialtiesTreeAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("pathology-categories")]
+        public async Task<IActionResult> GetPathologyCategories()
+        {
+            try
+            {
+                var result = await _quizService.GetPathologyCategoriesAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpGet("image")]
         public async Task<IActionResult> GetAllImage( int pageIndex = 1,int pageSize = 10)
         {

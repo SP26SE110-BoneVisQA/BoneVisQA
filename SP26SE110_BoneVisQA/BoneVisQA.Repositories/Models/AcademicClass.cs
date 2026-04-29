@@ -25,6 +25,16 @@ public partial class AcademicClass
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    [Column("class_specialty_id")]
+    public Guid? ClassSpecialtyId { get; set; }
+
+    [Column("focus_level")]
+    [MaxLength(50)]
+    public string? FocusLevel { get; set; } = "Basic";
+
+    [Column("teaching_objectives", TypeName = "jsonb")]
+    public string? TeachingObjectives { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -54,7 +64,14 @@ public partial class AcademicClass
     [InverseProperty("ExpertAcademicClasses")]
     public virtual User? Expert { get; set; }
 
+    [ForeignKey("ClassSpecialtyId")]
+    [InverseProperty("AcademicClasses")]
+    public virtual BoneSpecialty? ClassSpecialty { get; set; }
+
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
+
+    [InverseProperty("Class")]
+    public virtual ICollection<ClassExpertAssignment> ClassExpertAssignments { get; set; } = new List<ClassExpertAssignment>();
 
 }

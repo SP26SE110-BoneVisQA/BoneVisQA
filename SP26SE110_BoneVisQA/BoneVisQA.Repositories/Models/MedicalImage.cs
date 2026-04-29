@@ -23,6 +23,24 @@ public partial class MedicalImage
     [Column("modality")]
     public string? Modality { get; set; }
 
+    [Column("view_type")]
+    [MaxLength(50)]
+    public string? ViewType { get; set; }
+
+    [Column("body_part")]
+    [MaxLength(50)]
+    public string? BodyPart { get; set; }
+
+    [Column("contrast_used")]
+    public bool? ContrastUsed { get; set; } = false;
+
+    [Column("image_quality")]
+    [MaxLength(50)]
+    public string? ImageQuality { get; set; }
+
+    [Column("clinical_notes")]
+    public string? ClinicalNotes { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

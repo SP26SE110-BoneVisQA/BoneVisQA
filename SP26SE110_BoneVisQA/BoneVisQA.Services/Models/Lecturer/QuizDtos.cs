@@ -37,6 +37,18 @@ public class QuizDto
     /// Lecturer có thể xem và gán vào lớp, nhưng KHÔNG được sửa/xóa câu hỏi.
     /// </summary>
     public bool IsFromExpertLibrary { get; set; }
+
+    /// <summary>Deep classification - Bone Specialty ID</summary>
+    public Guid? BoneSpecialtyId { get; set; }
+
+    /// <summary>Deep classification - Bone Specialty Name</summary>
+    public string? BoneSpecialtyName { get; set; }
+
+    /// <summary>Deep classification - Pathology Category ID</summary>
+    public Guid? PathologyCategoryId { get; set; }
+
+    /// <summary>Deep classification - Pathology Category Name</summary>
+    public string? PathologyCategoryName { get; set; }
 }
 
 // Update Quiz Request Dto — dùng JsonPropertyName để nhận cả PascalCase (BE) lẫn camelCase (FE)
@@ -65,6 +77,14 @@ public class UpdateQuizRequestDto
 
     [JsonPropertyName("classification")]
     public string? Classification { get; set; }
+
+    /// <summary>Deep classification - Bone Specialty ID</summary>
+    [JsonPropertyName("boneSpecialtyId")]
+    public Guid? BoneSpecialtyId { get; set; }
+
+    /// <summary>Deep classification - Pathology Category ID</summary>
+    [JsonPropertyName("pathologyCategoryId")]
+    public Guid? PathologyCategoryId { get; set; }
 }
 
 public class UpdateQuizQuestionRequestDto
@@ -301,6 +321,14 @@ public class CreateQuizRequestDto
 
     /// <summary>Lớp cần gán quiz (optional). Để trống / Guid.Empty nếu chỉ tạo quiz chưa gán lớp.</summary>
     public Guid ClassId { get; set; }
+
+    /// <summary>Deep classification - Bone Specialty ID</summary>
+    [JsonPropertyName("boneSpecialtyId")]
+    public Guid? BoneSpecialtyId { get; set; }
+
+    /// <summary>Deep classification - Pathology Category ID</summary>
+    [JsonPropertyName("pathologyCategoryId")]
+    public Guid? PathologyCategoryId { get; set; }
 }
 
 /// <summary>

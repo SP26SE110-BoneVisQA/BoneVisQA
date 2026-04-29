@@ -22,7 +22,7 @@ public partial class ClassEnrollment
     public Guid StudentId { get; set; }
 
     [Column("class_name")]
-    public string? ClassName { get; set; }
+    public string ClassName { get; set; } = null!;
 
     [Column("enrolled_at")]
     public DateTime? EnrolledAt { get; set; }

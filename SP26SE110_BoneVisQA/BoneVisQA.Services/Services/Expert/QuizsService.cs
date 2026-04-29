@@ -114,7 +114,10 @@ namespace BoneVisQA.Services.Services.Expert
                     IsAiGenerated = q.IsAiGenerated,
                     Difficulty = q.Difficulty,
                     Classification = q.Classification,
-                    CreatedAt = q.CreatedAt
+                    CreatedAt = q.CreatedAt,
+                    // Deep classification
+                    BoneSpecialtyId = q.BoneSpecialtyId,
+                    PathologyCategoryId = q.PathologyCategoryId
                 })
                 .ToList();
 
@@ -149,7 +152,11 @@ namespace BoneVisQA.Services.Services.Expert
                 Difficulty = request.Difficulty,
                 Classification = request.Classification,
 
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+
+                // Deep classification
+                BoneSpecialtyId = request.BoneSpecialtyId,
+                PathologyCategoryId = request.PathologyCategoryId
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -162,6 +169,22 @@ namespace BoneVisQA.Services.Services.Expert
                 var expert = await _unitOfWork.UserRepository.GetByIdAsync(request.CreatedByExpertId.Value);
 
                 expertName = expert?.FullName;
+            }
+
+            // Get bone specialty name
+            string? boneSpecialtyName = null;
+            if (quiz.BoneSpecialtyId.HasValue)
+            {
+                var boneSpec = await _unitOfWork.Context.BoneSpecialties.FindAsync(quiz.BoneSpecialtyId.Value);
+                boneSpecialtyName = boneSpec?.Name;
+            }
+
+            // Get pathology category name
+            string? pathologyCategoryName = null;
+            if (quiz.PathologyCategoryId.HasValue)
+            {
+                var pathCat = await _unitOfWork.Context.PathologyCategories.FindAsync(quiz.PathologyCategoryId.Value);
+                pathologyCategoryName = pathCat?.Name;
             }
 
             return new CreateQuizResponseDTO
@@ -182,7 +205,13 @@ namespace BoneVisQA.Services.Services.Expert
                 Difficulty = quiz.Difficulty,
                 Classification = quiz.Classification,
 
-                CreatedAt = quiz.CreatedAt
+                CreatedAt = quiz.CreatedAt,
+
+                // Deep classification
+                BoneSpecialtyId = quiz.BoneSpecialtyId,
+                BoneSpecialtyName = boneSpecialtyName,
+                PathologyCategoryId = quiz.PathologyCategoryId,
+                PathologyCategoryName = pathologyCategoryName
             };
         }
         public async Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update)
@@ -208,9 +237,29 @@ namespace BoneVisQA.Services.Services.Expert
 
             quiz.Classification = update.Classification;
 
+            // Deep classification
+            quiz.BoneSpecialtyId = update.BoneSpecialtyId;
+            quiz.PathologyCategoryId = update.PathologyCategoryId;
+
             await _unitOfWork.QuizRepository.UpdateAsync(quiz);
 
             await _unitOfWork.SaveAsync();
+
+            // Get bone specialty name
+            string? boneSpecialtyName = null;
+            if (quiz.BoneSpecialtyId.HasValue)
+            {
+                var boneSpec = await _unitOfWork.Context.BoneSpecialties.FindAsync(quiz.BoneSpecialtyId.Value);
+                boneSpecialtyName = boneSpec?.Name;
+            }
+
+            // Get pathology category name
+            string? pathologyCategoryName = null;
+            if (quiz.PathologyCategoryId.HasValue)
+            {
+                var pathCat = await _unitOfWork.Context.PathologyCategories.FindAsync(quiz.PathologyCategoryId.Value);
+                pathologyCategoryName = pathCat?.Name;
+            }
 
             return new UpdateQuizResponseDTO
             {
@@ -222,7 +271,12 @@ namespace BoneVisQA.Services.Services.Expert
                 PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
                 Difficulty = quiz.Difficulty,
                 Classification = quiz.Classification,
-                CreatedAt = quiz.CreatedAt
+                CreatedAt = quiz.CreatedAt,
+                // Deep classification
+                BoneSpecialtyId = quiz.BoneSpecialtyId,
+                BoneSpecialtyName = boneSpecialtyName,
+                PathologyCategoryId = quiz.PathologyCategoryId,
+                PathologyCategoryName = pathologyCategoryName
             };
         }
         public async Task<bool> DeleteQuizAsync(Guid quizId)
@@ -983,6 +1037,76 @@ namespace BoneVisQA.Services.Services.Expert
                 QuestionCount = originalQuestions.Count,
                 CreatedAt = now
             };
+        }
+
+        //================================================================================================================
+        // Deep Classification - Lấy dữ liệu cho dropdown trong Create/Edit Quiz
+        //================================================================================================================
+
+        /// <summary>
+        /// Lấy danh sách Bone Specialty dạng tree (hierarchical) để hiển thị dropdown.
+        /// </summary>
+        public async Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesTreeAsync()
+        {
+            var all = await _unitOfWork.Context.BoneSpecialties
+                .Where(bs => bs.IsActive)
+                .OrderBy(bs => bs.DisplayOrder)
+                .ThenBy(bs => bs.Name)
+                .ToListAsync();
+
+            return BuildBoneSpecialtyTree(all, null, 0);
+        }
+
+        private List<BoneSpecialtyTreeDto> BuildBoneSpecialtyTree(List<Repositories.Models.BoneSpecialty> all, Guid? parentId, int level)
+        {
+            var result = new List<BoneSpecialtyTreeDto>();
+
+            var children = all.Where(bs => bs.ParentId == parentId).ToList();
+
+            foreach (var item in children)
+            {
+                var dto = new BoneSpecialtyTreeDto
+                {
+                    Id = item.Id,
+                    Code = item.Code,
+                    Name = item.Name,
+                    ParentId = item.ParentId,
+                    ParentName = item.Parent?.Name,
+                    Description = item.Description,
+                    DisplayOrder = item.DisplayOrder,
+                    IsActive = item.IsActive,
+                    Level = level,
+                    Children = BuildBoneSpecialtyTree(all, item.Id, level + 1)
+                };
+                result.Add(dto);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Lấy danh sách Pathology Category dạng flat list để hiển thị dropdown.
+        /// </summary>
+        public async Task<List<PathologyCategorySimpleDto>> GetPathologyCategoriesAsync()
+        {
+            var categories = await _unitOfWork.Context.PathologyCategories
+                .Include(pc => pc.BoneSpecialty)
+                .Where(pc => pc.IsActive)
+                .OrderBy(pc => pc.DisplayOrder)
+                .ThenBy(pc => pc.Name)
+                .ToListAsync();
+
+            return categories.Select(pc => new PathologyCategorySimpleDto
+            {
+                Id = pc.Id,
+                Code = pc.Code,
+                Name = pc.Name,
+                BoneSpecialtyId = pc.BoneSpecialtyId,
+                BoneSpecialtyName = pc.BoneSpecialty?.Name,
+                Description = pc.Description,
+                DisplayOrder = pc.DisplayOrder,
+                IsActive = pc.IsActive
+            }).ToList();
         }
     }
 }

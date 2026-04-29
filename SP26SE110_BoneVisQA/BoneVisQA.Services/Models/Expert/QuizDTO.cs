@@ -24,15 +24,20 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
         public DateTime? CreatedAt { get; set; }
-    }   
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
+    }
     public class CreateQuizRequestDTO
     {
         public Guid Id { get; set; }
 
         public string Title { get; set; } = null!;
-       
+
         public Guid? CreatedByExpertId { get; set; }
-       
+
         public string? Topic { get; set; }
 
         public DateTime? OpenTime { get; set; }
@@ -41,7 +46,7 @@ namespace BoneVisQA.Services.Models.Expert
 
         public int? TimeLimit { get; set; }
 
-        public int? PassingScore { get; set; }    
+        public int? PassingScore { get; set; }
 
         public bool IsAiGenerated { get; set; }
 
@@ -50,6 +55,10 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Classification { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
     }
     public class CreateQuizResponseDTO
     {
@@ -76,6 +85,12 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Classification { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
     }
     public class UpdateQuizRequestDTO
     {
@@ -88,6 +103,9 @@ namespace BoneVisQA.Services.Models.Expert
         public int? PassingScore { get; set; }
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
     }
 
     public class UpdateQuizResponseDTO
@@ -101,6 +119,11 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
         public DateTime? CreatedAt { get; set; }
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
     }
 
 
@@ -350,5 +373,41 @@ namespace BoneVisQA.Services.Models.Expert
         public DateTime? CloseTime { get; set; }                              // Thời gian đóng quiz (override)
         public int? PassingScore { get; set; }                                 // Điểm đạt (override)
         public int? TimeLimitMinutes { get; set; }                            // Thời gian làm bài (override)
+    }
+
+    //================================================================================================================
+    // Deep Classification DTOs - Dùng cho dropdown trong Create/Edit Quiz
+    //================================================================================================================
+
+    /// <summary>
+    /// DTO for Bone Specialty tree (hierarchical structure)
+    /// </summary>
+    public class BoneSpecialtyTreeDto
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public Guid? ParentId { get; set; }
+        public string? ParentName { get; set; }
+        public string? Description { get; set; }
+        public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; }
+        public int Level { get; set; }
+        public List<BoneSpecialtyTreeDto> Children { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Simplified DTO for Pathology Category (flat list)
+    /// </summary>
+    public class PathologyCategorySimpleDto
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public string? Description { get; set; }
+        public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; }
     }
 }

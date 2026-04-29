@@ -52,6 +52,18 @@ public partial class Quiz
     [Column("mode")]
     public string? Mode { get; set; } = "multiple_choice";
 
+    [Column("bone_specialty_id")]
+    public Guid? BoneSpecialtyId { get; set; }
+
+    [Column("pathology_category_id")]
+    public Guid? PathologyCategoryId { get; set; }
+
+    [Column("teaching_points")]
+    public int? TeachingPoints { get; set; } = 0;
+
+    [Column("learning_objectives", TypeName = "jsonb")]
+    public string? LearningObjectives { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -70,4 +82,12 @@ public partial class Quiz
     [ForeignKey("AssignedExpertId")]
     [InverseProperty("AssignedQuizzes")]
     public virtual User? AssignedExpert { get; set; }
+
+    [ForeignKey("BoneSpecialtyId")]
+    [InverseProperty("Quizzes")]
+    public virtual BoneSpecialty? BoneSpecialty { get; set; }
+
+    [ForeignKey("PathologyCategoryId")]
+    [InverseProperty("Quizzes")]
+    public virtual PathologyCategory? PathologyCategory { get; set; }
 }

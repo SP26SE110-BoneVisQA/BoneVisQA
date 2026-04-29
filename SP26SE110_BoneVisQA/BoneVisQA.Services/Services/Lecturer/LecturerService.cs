@@ -713,7 +713,10 @@ public class LecturerService : ILecturerService
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore, // Lecturer quiz uses 100-point scale directly
-            CreatedAt = now
+            CreatedAt = now,
+            // Deep classification fields
+            BoneSpecialtyId = request.BoneSpecialtyId,
+            PathologyCategoryId = request.PathologyCategoryId
         };
 
         await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -750,7 +753,9 @@ public class LecturerService : ILecturerService
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
-            CreatedAt = quiz.CreatedAt
+            CreatedAt = quiz.CreatedAt,
+            BoneSpecialtyId = quiz.BoneSpecialtyId,
+            PathologyCategoryId = quiz.PathologyCategoryId
         };
     }
 
@@ -2361,6 +2366,8 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
+                BoneSpecialtyId = q.BoneSpecialtyId,
+                PathologyCategoryId = q.PathologyCategoryId,
             })
             .ToList();
     }
@@ -2419,6 +2426,8 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
+                BoneSpecialtyId = q.BoneSpecialtyId,
+                PathologyCategoryId = q.PathologyCategoryId,
             })
             .ToList();
     }
@@ -2620,7 +2629,9 @@ public class LecturerService : ILecturerService
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
-            IsFromExpertLibrary = isFromExpertLibrary
+            IsFromExpertLibrary = isFromExpertLibrary,
+            BoneSpecialtyId = quiz.BoneSpecialtyId,
+            PathologyCategoryId = quiz.PathologyCategoryId
         };
     }
 
@@ -2696,6 +2707,9 @@ public class LecturerService : ILecturerService
         quiz.Topic = request.Topic;
         quiz.Difficulty = request.Difficulty;
         quiz.Classification = request.Classification;
+        // Deep classification fields
+        quiz.BoneSpecialtyId = request.BoneSpecialtyId;
+        quiz.PathologyCategoryId = request.PathologyCategoryId;
 
         _unitOfWork.QuizRepository.Update(quiz);
         await _unitOfWork.SaveAsync();
@@ -2737,7 +2751,9 @@ public class LecturerService : ILecturerService
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
-            CreatedAt = quiz.CreatedAt
+            CreatedAt = quiz.CreatedAt,
+            BoneSpecialtyId = quiz.BoneSpecialtyId,
+            PathologyCategoryId = quiz.PathologyCategoryId
         };
     }
 
@@ -2778,7 +2794,9 @@ public class LecturerService : ILecturerService
                     CloseTime = q.CloseTime,
                     TimeLimit = q.TimeLimit,
                     PassingScore = q.PassingScore,
-                    CreatedAt = q.CreatedAt
+                    CreatedAt = q.CreatedAt,
+                    BoneSpecialtyId = q.BoneSpecialtyId,
+                    PathologyCategoryId = q.PathologyCategoryId
                 };
             })
             .ToList();
