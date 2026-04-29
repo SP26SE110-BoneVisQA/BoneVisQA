@@ -185,6 +185,36 @@ public class BoneSpecialtyService : IBoneSpecialtyService
         return true;
     }
 
+    public async Task<bool> ReorderAsync(Guid id, bool moveUp)
+    {
+        var specialty = await _unitOfWork.Context.BoneSpecialties
+            .FirstOrDefaultAsync(bs => bs.Id == id);
+
+        if (specialty == null)
+            return false;
+
+        var siblings = await _unitOfWork.Context.BoneSpecialties
+            .Where(bs => bs.ParentId == specialty.ParentId)
+            .OrderBy(bs => bs.DisplayOrder)
+            .ToListAsync();
+
+        var currentIndex = siblings.FindIndex(s => s.Id == id);
+        if (currentIndex < 0)
+            return false;
+
+        var targetIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= siblings.Count)
+            return false;
+
+        var targetItem = siblings[targetIndex];
+        var tempOrder = specialty.DisplayOrder;
+        specialty.DisplayOrder = targetItem.DisplayOrder;
+        targetItem.DisplayOrder = tempOrder;
+
+        await _unitOfWork.Context.SaveChangesAsync();
+        return true;
+    }
+
     private List<BoneSpecialtyDto> BuildHierarchy(List<BoneSpecialty> all)
     {
         var lookup = all.ToLookup(bs => bs.ParentId);

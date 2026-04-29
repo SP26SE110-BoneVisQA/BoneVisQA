@@ -151,4 +151,17 @@ public class AdminBoneSpecialtiesController : ControllerBase
             return NotFound(new { message = "Bone specialty not found." });
         return NoContent();
     }
+
+    /// <summary>Reorder a bone specialty (move up or down)</summary>
+    [HttpPatch("{id:guid}/reorder")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reorder(Guid id, [FromQuery] bool moveUp = true)
+    {
+        var result = await _boneSpecialtyService.ReorderAsync(id, moveUp);
+        if (!result)
+            return NotFound(new { message = "Bone specialty not found or cannot reorder (at boundary)." });
+        return NoContent();
+    }
 }

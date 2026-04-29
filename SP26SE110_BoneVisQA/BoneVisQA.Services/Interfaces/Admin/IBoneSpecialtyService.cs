@@ -11,4 +11,5 @@ public interface IBoneSpecialtyService
     Task<BoneSpecialtyDto?> UpdateAsync(BoneSpecialtyUpdateDto dto);
     Task<bool> DeleteAsync(Guid id);
     Task<bool> ToggleActiveAsync(Guid id, bool isActive);
+    Task<bool> ReorderAsync(Guid id, bool moveUp);
 }
