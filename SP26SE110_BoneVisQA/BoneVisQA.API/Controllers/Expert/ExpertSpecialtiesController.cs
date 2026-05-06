@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert;
 
-[Authorize(Roles = "Expert")]
+[Authorize(Roles = "Expert,Admin")]
 [ApiController]
 [Route("api/expert-specialties")]
 [Tags("Expert Specialties")]
@@ -34,6 +34,16 @@ public class ExpertSpecialtiesController : ControllerBase
     {
         var expertId = GetCurrentExpertId();
         var result = await _expertSpecialtyService.GetMySpecialtiesAsync(expertId);
+        return Ok(result);
+    }
+
+    /// <summary>Get all specialties of all experts (for Admin)</summary>
+    [HttpGet("all")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(List<ExpertSpecialtyDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllSpecialties()
+    {
+        var result = await _expertSpecialtyService.GetAllSpecialtiesAsync();
         return Ok(result);
     }
 

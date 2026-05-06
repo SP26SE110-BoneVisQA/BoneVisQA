@@ -5,8 +5,10 @@ public class ExpertSpecialtyDto
     public Guid Id { get; set; }
     public Guid ExpertId { get; set; }
     public string? ExpertName { get; set; }
+    public string? ExpertEmail { get; set; }
     public Guid BoneSpecialtyId { get; set; }
     public string? BoneSpecialtyName { get; set; }
+    public string? BoneSpecialtyCode { get; set; }
     public Guid? PathologyCategoryId { get; set; }
     public string? PathologyCategoryName { get; set; }
     public int ProficiencyLevel { get; set; }

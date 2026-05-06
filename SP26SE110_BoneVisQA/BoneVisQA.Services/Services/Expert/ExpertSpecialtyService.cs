@@ -29,6 +29,21 @@ public class ExpertSpecialtyService : IExpertSpecialtyService
         return specialties.Select(MapToDto).ToList();
     }
 
+    public async Task<List<ExpertSpecialtyDto>> GetAllSpecialtiesAsync()
+    {
+        var specialties = await _unitOfWork.Context.ExpertSpecialties
+            .Include(es => es.Expert)
+            .Include(es => es.BoneSpecialty)
+            .Include(es => es.PathologyCategory)
+            .Where(es => es.IsActive)
+            .OrderByDescending(es => es.Expert!.FullName)
+            .ThenByDescending(es => es.IsPrimary)
+            .ThenByDescending(es => es.ProficiencyLevel)
+            .ToListAsync();
+
+        return specialties.Select(MapToDto).ToList();
+    }
+
     public async Task<ExpertSpecialtyDto?> GetByIdAsync(Guid id)
     {
         var specialty = await _unitOfWork.Context.ExpertSpecialties
@@ -158,7 +173,6 @@ public class ExpertSpecialtyService : IExpertSpecialtyService
 
         specialty.UpdatedAt = DateTime.UtcNow;
 
-        _unitOfWork.Context.Entry(specialty).State = EntityState.Modified;
         await _unitOfWork.SaveAsync();
 
         return MapToDto(specialty);
@@ -221,8 +235,10 @@ public class ExpertSpecialtyService : IExpertSpecialtyService
             Id = specialty.Id,
             ExpertId = specialty.ExpertId,
             ExpertName = specialty.Expert?.FullName,
+            ExpertEmail = specialty.Expert?.Email,
             BoneSpecialtyId = specialty.BoneSpecialtyId,
             BoneSpecialtyName = specialty.BoneSpecialty?.Name,
+            BoneSpecialtyCode = specialty.BoneSpecialty?.Code,
             PathologyCategoryId = specialty.PathologyCategoryId,
             PathologyCategoryName = specialty.PathologyCategory?.Name,
             ProficiencyLevel = specialty.ProficiencyLevel,

@@ -5,6 +5,7 @@ namespace BoneVisQA.Services.Interfaces.Expert;
 public interface IExpertSpecialtyService
 {
     Task<List<ExpertSpecialtyDto>> GetMySpecialtiesAsync(Guid expertId);
+    Task<List<ExpertSpecialtyDto>> GetAllSpecialtiesAsync();
     Task<ExpertSpecialtyDto?> GetByIdAsync(Guid id);
     Task<ExpertSpecialtyDto> CreateAsync(Guid expertId, ExpertSpecialtyCreateDto dto);
     Task<ExpertSpecialtyDto?> UpdateAsync(Guid expertId, ExpertSpecialtyUpdateDto dto);

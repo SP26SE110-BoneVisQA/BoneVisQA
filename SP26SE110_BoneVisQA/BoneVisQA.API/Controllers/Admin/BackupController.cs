@@ -90,10 +90,18 @@ public class BackupController : ControllerBase
     [HttpGet("storage")]
     public ActionResult GetStorage()
     {
-        var usedBytes = 
-            (_context.Backups.Sum(b => b.Size != null ? ParseSizeToBytes(b.Size) : 0)) +
-            (_context.DataExports.Sum(e => e.FilePath != null ? ParseSizeToBytes("10 MB") : 0));
+        var backupSizes = _context.Backups
+            .Where(b => b.Size != null)
+            .Select(b => b.Size)
+            .ToList();
 
+        var exportCount = _context.DataExports
+            .Count(e => e.FilePath != null);
+
+        var backupBytes = backupSizes.Sum(size => ParseSizeToBytes(size!));
+        var exportBytes = (long)exportCount * 10 * 1024 * 1024;
+
+        var usedBytes = backupBytes + exportBytes;
         var used = Math.Max(usedBytes, 12800000000L);
         var total = 50000000000L;
 
