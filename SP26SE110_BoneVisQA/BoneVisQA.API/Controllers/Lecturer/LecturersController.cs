@@ -1,4 +1,5 @@
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Interfaces.Expert;
@@ -666,6 +667,19 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CaseDto>>> GetAllCases()
     {
         var result = await _lecturerService.GetAllCasesAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("cases/paged")]
+    public async Task<ActionResult<PagedResultDTO<CaseDto>>> GetAllCasesPaged(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        if (pageIndex < 1) pageIndex = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _lecturerService.GetAllCasesPagedAsync(pageIndex, pageSize);
         return Ok(result);
     }
 

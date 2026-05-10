@@ -5,6 +5,7 @@ using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -1148,6 +1149,47 @@ public class LecturerService : ILecturerService
                 CreatedAt = c.CreatedAt
             })
             .ToList();
+    }
+
+    public async Task<PagedResultDTO<CaseDto>> GetAllCasesPagedAsync(int pageIndex, int pageSize)
+    {
+        var query = _unitOfWork.MedicalCaseRepository
+            .FindByCondition(c => true)
+            .Include(c => c.Category)
+            .OrderByDescending(c => c.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        
+        if (pageIndex > totalPages && totalPages > 0)
+            pageIndex = totalPages;
+
+        var cases = await query
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var items = cases
+            .Select(c => new CaseDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Description = c.Description,
+                Difficulty = c.Difficulty,
+                CategoryName = c.Category?.Name,
+                IsApproved = c.IsApproved ?? false,
+                IsActive = c.IsActive ?? false,
+                CreatedAt = c.CreatedAt
+            })
+            .ToList();
+
+        return new PagedResultDTO<CaseDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            PageIndex = pageIndex,
+            PageSize = pageSize
+        };
     }
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
