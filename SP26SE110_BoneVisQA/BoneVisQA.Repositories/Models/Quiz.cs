@@ -31,6 +31,9 @@ public partial class Quiz
     [Column("created_by_expert_id")]
     public Guid? CreatedByExpertId { get; set; }
 
+    [Column("created_by_lecturer_id")]
+    public Guid? CreatedByLecturerId { get; set; }
+
     [Column("assigned_expert_id")]
     public Guid? AssignedExpertId { get; set; }
 
@@ -82,6 +85,10 @@ public partial class Quiz
     [ForeignKey("CreatedByExpertId")]
     [InverseProperty("CreatedQuizzes")]
     public virtual User? CreatedByExpert { get; set; }
+
+    [ForeignKey("CreatedByLecturerId")]
+    [InverseProperty("CreatedLecturerQuizzes")]
+    public virtual User? CreatedByLecturer { get; set; }
 
     [ForeignKey("AssignedExpertId")]
     [InverseProperty("AssignedQuizzes")]

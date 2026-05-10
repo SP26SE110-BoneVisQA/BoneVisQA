@@ -1019,6 +1019,7 @@ namespace BoneVisQA.Services.Services.Expert
                 throw new InvalidOperationException("Chỉ có thể copy quiz từ thư viện Expert.");
 
             // Tạo quiz mới (không có CreatedByExpertId để có thể edit)
+            // Set CreatedByLecturerId để track lecturer nào đã copy quiz này
             var newQuiz = new Quiz
             {
                 Id = Guid.NewGuid(),
@@ -1029,6 +1030,7 @@ namespace BoneVisQA.Services.Services.Expert
                 IsAiGenerated = false,
                 IsVerifiedCurriculum = false,
                 CreatedByExpertId = null, // Quan trọng: Lecturer có thể edit
+                CreatedByLecturerId = lecturerId, // Track lecturer đã copy quiz
                 OpenTime = null,
                 CloseTime = null,
                 TimeLimit = originalQuiz.TimeLimit,

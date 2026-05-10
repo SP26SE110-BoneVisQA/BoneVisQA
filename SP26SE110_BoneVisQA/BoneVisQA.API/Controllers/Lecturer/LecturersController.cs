@@ -412,7 +412,7 @@ public class LecturersController : ControllerBase
             if (lecturerId == null)
                 return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-            var deleted = await _lecturerService.DeleteQuizAsync(quizId);
+            var deleted = await _lecturerService.DeleteQuizAsync(quizId, lecturerId.Value);
             if (!deleted)
                 return NotFound(new { message = "Quiz does not exist." });
             return NoContent();

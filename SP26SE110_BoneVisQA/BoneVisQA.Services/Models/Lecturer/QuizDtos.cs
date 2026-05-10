@@ -38,6 +38,9 @@ public class QuizDto
     /// </summary>
     public bool IsFromExpertLibrary { get; set; }
 
+    /// <summary>ID của lecturer đã tạo quiz này. Null nếu quiz từ Expert Library.</summary>
+    public Guid? CreatedByLecturerId { get; set; }
+
     /// <summary>Deep classification - Bone Specialty ID</summary>
     public Guid? BoneSpecialtyId { get; set; }
 

@@ -136,6 +136,9 @@ public partial class User
     [InverseProperty("CreatedByExpert")]
     public virtual ICollection<Quiz> CreatedQuizzes { get; set; } = new List<Quiz>();
 
+    [InverseProperty("CreatedByLecturer")]
+    public virtual ICollection<Quiz> CreatedLecturerQuizzes { get; set; } = new List<Quiz>();
+
     [InverseProperty("AssignedExpert")]
     public virtual ICollection<Quiz> AssignedQuizzes { get; set; } = new List<Quiz>();
 

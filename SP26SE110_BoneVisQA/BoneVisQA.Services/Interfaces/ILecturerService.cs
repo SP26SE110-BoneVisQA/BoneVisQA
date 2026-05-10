@@ -30,9 +30,10 @@ public interface ILecturerService
 
 
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
-    Task<bool> DeleteQuizAsync(Guid quizId);
+    Task<bool> DeleteQuizAsync(Guid quizId, Guid lecturerId);
     Task RemoveQuizFromClassAsync(Guid classId, Guid quizId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
+    Task<PagedResultDTO<CaseDto>> GetAllCasesPagedAsync(int pageIndex, int pageSize);
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
     Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null);

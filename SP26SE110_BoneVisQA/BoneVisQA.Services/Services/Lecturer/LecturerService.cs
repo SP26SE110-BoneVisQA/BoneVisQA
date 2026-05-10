@@ -709,6 +709,7 @@ public class LecturerService : ILecturerService
             IsAiGenerated = request.IsAiGenerated,
             IsVerifiedCurriculum = request.IsVerifiedCurriculum,
             CreatedByExpertId = null, // Lecturer tạo quiz, không phải Expert
+            CreatedByLecturerId = creatingUserId, // Lưu lecturer đã tạo quiz
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
@@ -755,24 +756,41 @@ public class LecturerService : ILecturerService
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
             BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId
+            PathologyCategoryId = quiz.PathologyCategoryId,
+            CreatedByLecturerId = quiz.CreatedByLecturerId
         };
     }
 
-    public async Task<bool> DeleteQuizAsync(Guid quizId)
+    public async Task<bool> DeleteQuizAsync(Guid quizId, Guid lecturerId)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
         if (quiz == null)
             return false;
 
         // ============================================================
-        // IMPORTANT: Only delete the original Quiz if it belongs to the lecturer
+        // IMPORTANT: Only delete the quiz if it belongs to the lecturer
         // - Expert quizzes (CreatedByExpertId != null) must be kept in Expert Library
-        // - Only remove the class link (ClassQuizSession) and attempt history for expert quizzes
-        // - For lecturer-owned quizzes (CreatedByExpertId == null), delete everything including the quiz itself
+        // - Lecturer-owned quizzes (CreatedByLecturerId == lecturerId) can be deleted
+        // - Legacy quizzes (CreatedByLecturerId == null) can be deleted by any lecturer for backwards compatibility
         // ============================================================
 
         var isExpertQuiz = quiz.CreatedByExpertId.HasValue;
+        var isOwnQuiz = quiz.CreatedByLecturerId == lecturerId;
+        var isLegacyQuiz = quiz.CreatedByLecturerId == null && quiz.CreatedByExpertId == null;
+
+        // Security check: Only allow deletion if:
+        // 1. It's an expert quiz (must not be deleted, only removed from classes)
+        // 2. It's the lecturer's own quiz
+        // 3. It's a legacy quiz (backwards compatibility)
+        if (isExpertQuiz)
+        {
+            throw new InvalidOperationException("Không thể xóa quiz từ thư viện Expert.");
+        }
+
+        if (!isOwnQuiz && !isLegacyQuiz)
+        {
+            throw new InvalidOperationException("Bạn không có quyền xóa quiz này.");
+        }
 
         // 1. Check if quiz is assigned to any class - block deletion if so
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
@@ -792,22 +810,16 @@ public class LecturerService : ILecturerService
         foreach (var attempt in attempts)
             _unitOfWork.Context.QuizAttempts.Remove(attempt);
 
-        // 3. Remove quiz questions (only if we're deleting the quiz itself)
-        if (!isExpertQuiz)
-        {
-            var questions = await _unitOfWork.Context.QuizQuestions
-                .Where(q => q.QuizId == quizId)
-                .ToListAsync();
+        // 3. Remove quiz questions
+        var questions = await _unitOfWork.Context.QuizQuestions
+            .Where(q => q.QuizId == quizId)
+            .ToListAsync();
 
-            foreach (var question in questions)
-                _unitOfWork.Context.QuizQuestions.Remove(question);
-        }
+        foreach (var question in questions)
+            _unitOfWork.Context.QuizQuestions.Remove(question);
 
-        // 4. Delete the original Quiz only if it's NOT an expert quiz
-        if (!isExpertQuiz)
-        {
-            _unitOfWork.Context.Quizzes.Remove(quiz);
-        }
+        // 4. Delete the quiz
+        _unitOfWork.Context.Quizzes.Remove(quiz);
 
         await _unitOfWork.SaveAsync();
 
@@ -2247,13 +2259,14 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Only unassigned quizzes NOT created by Expert and NOT AI-generated
+        // Only unassigned quizzes created by THIS specific lecturer
         // My Quizzes = quizzes created by lecturer manually (not from Expert Library, not AI)
         var unassignedQuizzes = await _unitOfWork.Context.Quizzes
             .Include(q => q.CreatedByExpert)
             .Where(q => !unassignedQuizIds.Contains(q.Id)
-                && q.CreatedByExpertId == null
-                && q.IsAiGenerated == false)
+                && q.CreatedByLecturerId == lecturerId  // Filter by specific lecturer
+                && q.CreatedByExpertId == null          // Not from Expert Library
+                && q.IsAiGenerated == false)            // Not AI-generated
             .OrderByDescending(q => q.CreatedAt)
             .ToListAsync();
 
@@ -2331,7 +2344,9 @@ public class LecturerService : ILecturerService
         // Get unassigned quizzes created by this lecturer
         var quizzes = await _unitOfWork.Context.Quizzes
             .Where(q =>
-                // Quiz created by this lecturer (not from Expert Library)
+                // Quiz created by this specific lecturer
+                q.CreatedByLecturerId == lecturerId &&
+                // Quiz is not from Expert Library (CreatedByExpertId should be null for lecturer-created quizzes)
                 q.CreatedByExpertId == null &&
                 // Not assigned to any class yet
                 !assignedQuizIds.Contains(q.Id)
@@ -2368,6 +2383,7 @@ public class LecturerService : ILecturerService
                 CreatedAt = q.CreatedAt,
                 BoneSpecialtyId = q.BoneSpecialtyId,
                 PathologyCategoryId = q.PathologyCategoryId,
+                CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
     }
@@ -2384,13 +2400,15 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Get quizzes NOT created by Expert (CreatedByExpertId = null)
+        // Get quizzes created by this specific lecturer
         // My Quizzes = quizzes created by lecturer directly (not from Expert Library)
         var quizzes = await _unitOfWork.Context.Quizzes
             .Where(q =>
+                // Created by this specific lecturer
+                q.CreatedByLecturerId == lecturerId &&
                 // Not AI-generated
                 !q.IsAiGenerated &&
-                // Not created by Expert
+                // Not created by Expert (should be null for lecturer-created quizzes)
                 q.CreatedByExpertId == null &&
                 // Not assigned to any class yet
                 !assignedQuizIds.Contains(q.Id)
@@ -2428,6 +2446,7 @@ public class LecturerService : ILecturerService
                 CreatedAt = q.CreatedAt,
                 BoneSpecialtyId = q.BoneSpecialtyId,
                 PathologyCategoryId = q.PathologyCategoryId,
+                CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
     }
@@ -2563,7 +2582,7 @@ public class LecturerService : ILecturerService
                     CreatedAt = quiz.CreatedAt,
                     QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
                     IsAiGenerated = quiz.IsAiGenerated,
-                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,
+                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,  // True if from Expert Library
                     Difficulty = quiz.Difficulty,
                     CreatorName = creatorName,
                     CreatorType = creatorType,
@@ -2631,7 +2650,8 @@ public class LecturerService : ILecturerService
             CreatedAt = quiz.CreatedAt,
             IsFromExpertLibrary = isFromExpertLibrary,
             BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId
+            PathologyCategoryId = quiz.PathologyCategoryId,
+            CreatedByLecturerId = quiz.CreatedByLecturerId
         };
     }
 
@@ -2753,7 +2773,8 @@ public class LecturerService : ILecturerService
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
             BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId
+            PathologyCategoryId = quiz.PathologyCategoryId,
+            CreatedByLecturerId = quiz.CreatedByLecturerId
         };
     }
 
@@ -2796,7 +2817,8 @@ public class LecturerService : ILecturerService
                     PassingScore = q.PassingScore,
                     CreatedAt = q.CreatedAt,
                     BoneSpecialtyId = q.BoneSpecialtyId,
-                    PathologyCategoryId = q.PathologyCategoryId
+                    PathologyCategoryId = q.PathologyCategoryId,
+                    CreatedByLecturerId = q.CreatedByLecturerId
                 };
             })
             .ToList();
