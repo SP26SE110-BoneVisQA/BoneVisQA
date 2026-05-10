@@ -16,6 +16,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
@@ -321,6 +322,9 @@ builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
 builder.Services.AddScoped<IClassExpertAssignmentService, ClassExpertAssignmentService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
+builder.Services.AddScoped<IAdminClassDashboardService, AdminClassDashboardService>();
+builder.Services.AddScoped<IClassificationAnalyticsService, ClassificationAnalyticsService>();
+builder.Services.AddScoped<IClassClassificationService, ClassClassificationService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>

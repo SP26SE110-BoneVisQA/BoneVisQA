@@ -117,9 +117,28 @@ namespace BoneVisQA.Services.Services.Expert
                     CreatedAt = q.CreatedAt,
                     // Deep classification
                     BoneSpecialtyId = q.BoneSpecialtyId,
-                    PathologyCategoryId = q.PathologyCategoryId
+                    PathologyCategoryId = q.PathologyCategoryId,
+                    // Extended classification
+                    TeachingPoints = q.TeachingPoints,
+                    TargetStudentLevel = q.TargetStudentLevel,
+                    // LearningObjectives stored as JSON string - will be parsed in response
+                    LearningObjectives = null // Parsed separately to avoid LINQ to Entities issues
                 })
                 .ToList();
+
+            // Parse LearningObjectives for each quiz
+            foreach (var quiz in quizzes)
+            {
+                var quizEntity = query.FirstOrDefault(q => q.Id == quiz.Id);
+                if (quizEntity != null && !string.IsNullOrEmpty(quizEntity.LearningObjectives))
+                {
+                    try
+                    {
+                        quiz.LearningObjectives = System.Text.Json.JsonSerializer.Deserialize<List<string>>(quizEntity.LearningObjectives);
+                    }
+                    catch { }
+                }
+            }
 
             return new PagedResult<GetQuizDTO>
             {
@@ -156,7 +175,14 @@ namespace BoneVisQA.Services.Services.Expert
 
                 // Deep classification
                 BoneSpecialtyId = request.BoneSpecialtyId,
-                PathologyCategoryId = request.PathologyCategoryId
+                PathologyCategoryId = request.PathologyCategoryId,
+
+                // Extended classification
+                TeachingPoints = request.TeachingPoints ?? 0,
+                LearningObjectives = request.LearningObjectives != null
+                    ? System.Text.Json.JsonSerializer.Serialize(request.LearningObjectives)
+                    : null,
+                TargetStudentLevel = request.TargetStudentLevel
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -211,7 +237,14 @@ namespace BoneVisQA.Services.Services.Expert
                 BoneSpecialtyId = quiz.BoneSpecialtyId,
                 BoneSpecialtyName = boneSpecialtyName,
                 PathologyCategoryId = quiz.PathologyCategoryId,
-                PathologyCategoryName = pathologyCategoryName
+                PathologyCategoryName = pathologyCategoryName,
+
+                // Extended classification
+                TeachingPoints = quiz.TeachingPoints,
+                LearningObjectives = !string.IsNullOrEmpty(quiz.LearningObjectives)
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(quiz.LearningObjectives)
+                    : null,
+                TargetStudentLevel = quiz.TargetStudentLevel
             };
         }
         public async Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update)
@@ -240,6 +273,13 @@ namespace BoneVisQA.Services.Services.Expert
             // Deep classification
             quiz.BoneSpecialtyId = update.BoneSpecialtyId;
             quiz.PathologyCategoryId = update.PathologyCategoryId;
+
+            // Extended classification
+            quiz.TeachingPoints = update.TeachingPoints ?? 0;
+            quiz.LearningObjectives = update.LearningObjectives != null
+                ? System.Text.Json.JsonSerializer.Serialize(update.LearningObjectives)
+                : null;
+            quiz.TargetStudentLevel = update.TargetStudentLevel;
 
             await _unitOfWork.QuizRepository.UpdateAsync(quiz);
 

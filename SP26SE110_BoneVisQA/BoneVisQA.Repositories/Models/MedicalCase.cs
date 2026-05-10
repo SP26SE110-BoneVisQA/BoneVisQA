@@ -84,6 +84,10 @@ public partial class MedicalCase
     [MaxLength(50)]
     public string? EmergencyLevel { get; set; } = "Low";
 
+    [Column("body_region")]
+    [MaxLength(50)]
+    public string? BodyRegion { get; set; }
+
     [InverseProperty("Case")]
     public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
 

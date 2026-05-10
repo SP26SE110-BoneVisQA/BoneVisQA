@@ -40,6 +40,9 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<Tag> TagRepository { get; }
         GenericRepository<DocumentTag> DocumentTagRepository { get; }
         GenericRepository<PasswordResetToken> PasswordResetTokenRepository { get; }
+        GenericRepository<BoneSpecialty> BoneSpecialtyRepository { get; }
+        GenericRepository<PathologyCategory> PathologyCategoryRepository { get; }
+        GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository { get; }
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();

@@ -64,6 +64,10 @@ public partial class Quiz
     [Column("learning_objectives", TypeName = "jsonb")]
     public string? LearningObjectives { get; set; }
 
+    [Column("target_student_level")]
+    [MaxLength(50)]
+    public string? TargetStudentLevel { get; set; }
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

@@ -29,6 +29,10 @@ namespace BoneVisQA.Services.Models.Expert
         public string? BoneSpecialtyName { get; set; }
         public Guid? PathologyCategoryId { get; set; }
         public string? PathologyCategoryName { get; set; }
+        // Classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
     }
     public class CreateQuizRequestDTO
     {
@@ -59,6 +63,11 @@ namespace BoneVisQA.Services.Models.Expert
         // Deep classification
         public Guid? BoneSpecialtyId { get; set; }
         public Guid? PathologyCategoryId { get; set; }
+
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
     }
     public class CreateQuizResponseDTO
     {
@@ -91,6 +100,11 @@ namespace BoneVisQA.Services.Models.Expert
         public string? BoneSpecialtyName { get; set; }
         public Guid? PathologyCategoryId { get; set; }
         public string? PathologyCategoryName { get; set; }
+
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
     }
     public class UpdateQuizRequestDTO
     {
@@ -106,6 +120,10 @@ namespace BoneVisQA.Services.Models.Expert
         // Deep classification
         public Guid? BoneSpecialtyId { get; set; }
         public Guid? PathologyCategoryId { get; set; }
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
     }
 
     public class UpdateQuizResponseDTO
@@ -124,6 +142,10 @@ namespace BoneVisQA.Services.Models.Expert
         public string? BoneSpecialtyName { get; set; }
         public Guid? PathologyCategoryId { get; set; }
         public string? PathologyCategoryName { get; set; }
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
     }
 
 

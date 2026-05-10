@@ -12,10 +12,12 @@ namespace BoneVisQA.API.Controllers.Admin
     public class ClassManagementController : ControllerBase
     {
         private readonly IClassManagementService _classservice;
+        private readonly IAdminClassDashboardService _dashboardService;
 
-        public ClassManagementController(IClassManagementService classservice)
+        public ClassManagementController(IClassManagementService classservice, IAdminClassDashboardService dashboardService)
         {
             _classservice = classservice;
+            _dashboardService = dashboardService;
         }
 
         [HttpGet]
@@ -113,6 +115,30 @@ namespace BoneVisQA.API.Controllers.Admin
             if (!deleted)
                 return NotFound(new { message = "Enrollment not found" });
             return Ok(new { deleted = true });
+        }
+
+        /// <summary>
+        /// Xóa Expert khỏi Class (AdminClassDashboard)
+        /// </summary>
+        [HttpPost("{classId:guid}/remove-expert")]
+        public async Task<IActionResult> RemoveExpert(Guid classId)
+        {
+            var result = await _dashboardService.RemoveExpertFromClassAsync(classId);
+            if (!result)
+                return NotFound(new { message = "Class not found." });
+            return Ok(new { message = "Expert removed from class successfully." });
+        }
+
+        /// <summary>
+        /// Xóa Lecturer khỏi Class (AdminClassDashboard)
+        /// </summary>
+        [HttpPost("{classId:guid}/remove-lecturer")]
+        public async Task<IActionResult> RemoveLecturer(Guid classId)
+        {
+            var result = await _dashboardService.RemoveLecturerFromClassAsync(classId);
+            if (!result)
+                return NotFound(new { message = "Class not found." });
+            return Ok(new { message = "Lecturer removed from class successfully." });
         }
     }
 }

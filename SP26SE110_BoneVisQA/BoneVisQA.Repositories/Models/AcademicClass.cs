@@ -35,6 +35,13 @@ public partial class AcademicClass
     [Column("teaching_objectives", TypeName = "jsonb")]
     public string? TeachingObjectives { get; set; }
 
+    [Column("target_pathology_categories", TypeName = "jsonb")]
+    public string? TargetPathologyCategories { get; set; }
+
+    [Column("target_student_level")]
+    [MaxLength(50)]
+    public string? TargetStudentLevel { get; set; } = "Beginner";
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

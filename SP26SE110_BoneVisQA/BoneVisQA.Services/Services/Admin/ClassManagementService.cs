@@ -48,7 +48,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ExpertName = x.Expert != null ? x.Expert.FullName : null,
                     LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
                     ExpertEmail = x.Expert != null ? x.Expert.Email : null,
-                    StudentCount = x.ClassEnrollments.Count
+                    StudentCount = x.ClassEnrollments.Count,
+                    // Classification fields
+                    ClassSpecialtyId = x.ClassSpecialtyId,
+                    ClassSpecialtyName = x.ClassSpecialty != null ? x.ClassSpecialty.Name : null,
+                    ClassSpecialtyCode = x.ClassSpecialty != null ? x.ClassSpecialty.Code : null,
+                    FocusLevel = x.FocusLevel,
+                    TargetStudentLevel = x.TargetStudentLevel,
+                    TargetPathologyCategories = x.TargetPathologyCategories
                 })
                 .ToListAsync();
 
@@ -79,7 +86,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ExpertName = x.Expert != null ? x.Expert.FullName : null,
                     LecturerEmail = x.Lecturer != null ? x.Lecturer.Email : null,
                     ExpertEmail = x.Expert != null ? x.Expert.Email : null,
-                    StudentCount = x.ClassEnrollments.Count
+                    StudentCount = x.ClassEnrollments.Count,
+                    // Classification fields
+                    ClassSpecialtyId = x.ClassSpecialtyId,
+                    ClassSpecialtyName = x.ClassSpecialty != null ? x.ClassSpecialty.Name : null,
+                    ClassSpecialtyCode = x.ClassSpecialty != null ? x.ClassSpecialty.Code : null,
+                    FocusLevel = x.FocusLevel,
+                    TargetStudentLevel = x.TargetStudentLevel,
+                    TargetPathologyCategories = x.TargetPathologyCategories
                 })
                 .FirstOrDefaultAsync();
         }
@@ -92,7 +106,11 @@ namespace BoneVisQA.Services.Services.Admin
                 Id = Guid.NewGuid(),
                 ClassName = dto.ClassName,
                 Semester = dto.Semester,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                // Classification fields
+                ClassSpecialtyId = dto.ClassSpecialtyId,
+                FocusLevel = dto.FocusLevel ?? "Basic",
+                TargetStudentLevel = dto.TargetStudentLevel ?? "Beginner"
             };
 
             await _unitOfWork.AcademicClassRepository.AddAsync(entity);
@@ -113,6 +131,10 @@ namespace BoneVisQA.Services.Services.Admin
             entity.ClassName = dto.ClassName;
             entity.Semester = dto.Semester;
             entity.UpdatedAt = DateTime.UtcNow;
+            // Classification fields
+            entity.ClassSpecialtyId = dto.ClassSpecialtyId;
+            entity.FocusLevel = dto.FocusLevel;
+            entity.TargetStudentLevel = dto.TargetStudentLevel;
 
             _unitOfWork.AcademicClassRepository.Update(entity);
             await _unitOfWork.SaveAsync();
