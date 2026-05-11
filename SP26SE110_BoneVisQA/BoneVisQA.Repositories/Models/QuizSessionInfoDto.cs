@@ -11,4 +11,6 @@ public class QuizSessionInfoDto
     public int? TimeLimitMinutes { get; set; }
     /// <summary>Điểm đạt — int từ DB; giữ nullable để đồng bộ với ClassQuizSession / Quiz.</summary>
     public int? PassingScore { get; set; }
+    /// <summary>Thời điểm lecturer release đáp án.</summary>
+    public DateTime? ReleaseAnswersAt { get; set; }
 }

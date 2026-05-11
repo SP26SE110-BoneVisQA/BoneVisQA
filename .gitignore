@@ -87,6 +87,7 @@ dataset.rar
 
 # Uploaded files (user uploads, images, etc.)
 wwwroot/uploads/
+**/uploads/
 
 # -----------------------------------------------------------------------------
 # Configuration: tracked vs ignored (explicit)

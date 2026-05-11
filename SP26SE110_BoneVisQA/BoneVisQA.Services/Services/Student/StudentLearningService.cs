@@ -617,6 +617,30 @@ public class StudentLearningService : IStudentLearningService
         if (attempt.Quiz == null)
             throw new KeyNotFoundException("Không tìm thấy quiz.");
 
+        // Kiểm tra xem đáp án đã được release chưa
+        var utcNow = DateTime.UtcNow;
+        bool answersReleased = false;
+
+        // Lấy ClassQuizSession để kiểm tra release status
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        if (classIds.Count > 0)
+        {
+            var session = await _unitOfWork.Context.ClassQuizSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.QuizId == attempt.QuizId && classIds.Contains(s.ClassId));
+
+            if (session != null)
+            {
+                // Quiz đã đóng HOẶC lecturer đã release đáp án
+                var isQuizClosed = session.CloseTime.HasValue && session.CloseTime.Value < utcNow;
+                answersReleased = isQuizClosed || session.ReleaseAnswersAt.HasValue;
+            }
+        }
+
         var totalQuestions = attempt.Quiz.QuizQuestions.Count;
         var correctCount = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true);
         var score = attempt.Score ?? 0;
@@ -639,7 +663,8 @@ public class StudentLearningService : IStudentLearningService
                 OptionD = question.OptionD,
                 StudentAnswer = answer?.StudentAnswer,
                 EssayAnswer = answer?.EssayAnswer,
-                CorrectAnswer = question.CorrectAnswer,
+                // Chỉ hiển thị CorrectAnswer khi đáp án đã được release
+                CorrectAnswer = answersReleased ? question.CorrectAnswer : null,
                 IsCorrect = answer?.IsCorrect ?? false,
                 ImageUrl = question.ImageUrl,
                 CaseId = question.CaseId?.ToString(),
@@ -661,6 +686,7 @@ public class StudentLearningService : IStudentLearningService
             CorrectAnswers = correctCount,
             Passed = passingScore.HasValue ? score >= passingScore.Value : true,
             PassingScore = passingScore,
+            AnswersReleased = answersReleased,
             Questions = questionDtos
         };
     }

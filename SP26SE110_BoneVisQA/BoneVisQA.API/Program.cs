@@ -28,6 +28,8 @@ using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
+using BoneVisQA.Services.Services.Analytics;
+using BoneVisQA.Services.Services.QuizExtensions;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
@@ -349,6 +351,16 @@ builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IBoneSpecialtyService, BoneSpecialtyService>();
 builder.Services.AddScoped<IPathologyCategoryService, PathologyCategoryService>();
+
+// Learning Analytics Services
+builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddScoped<LecturerAnalyticsService>();
+
+// Quiz Extensions Services
+builder.Services.AddScoped<QuizReviewService>();
+builder.Services.AddScoped<SpacedRepetitionService>();
+builder.Services.AddScoped<AdaptiveQuizService>();
+
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();

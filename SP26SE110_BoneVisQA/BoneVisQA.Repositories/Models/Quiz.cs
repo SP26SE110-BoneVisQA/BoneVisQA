@@ -71,6 +71,13 @@ public partial class Quiz
     [MaxLength(50)]
     public string? TargetStudentLevel { get; set; }
 
+    // Quiz Extensions
+    [Column("adaptive_difficulty")]
+    public bool AdaptiveDifficulty { get; set; } = false;
+
+    [Column("spaced_repetition_enabled")]
+    public bool SpacedRepetitionEnabled { get; set; } = false;
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

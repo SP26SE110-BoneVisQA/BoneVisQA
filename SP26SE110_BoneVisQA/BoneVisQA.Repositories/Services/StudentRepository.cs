@@ -210,7 +210,8 @@ public class StudentRepository : IStudentRepository
                 CloseTime = cqs.CloseTime,
                 // Session có thể null: fallback sang cấu hình trên bản ghi quiz (giống lecturer UI).
                 TimeLimitMinutes = cqs.TimeLimitMinutes ?? (cqs.Quiz != null ? cqs.Quiz.TimeLimit : null),
-                PassingScore = cqs.PassingScore ?? (cqs.Quiz != null ? cqs.Quiz.PassingScore : null)
+                PassingScore = cqs.PassingScore ?? (cqs.Quiz != null ? cqs.Quiz.PassingScore : null),
+                ReleaseAnswersAt = cqs.ReleaseAnswersAt
             })
             .ToListAsync();
     }

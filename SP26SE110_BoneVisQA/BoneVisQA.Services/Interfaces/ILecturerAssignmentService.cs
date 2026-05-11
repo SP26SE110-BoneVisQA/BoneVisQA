@@ -40,4 +40,13 @@ public interface ILecturerAssignmentService
 
     /// <summary>Export all quiz results to Excel file for a specific class (all quizzes in that class).</summary>
     Task<(byte[] FileBytes, string FileName)> ExportClassAllQuizResultsAsync(Guid lecturerId, Guid classId);
+
+    /// <summary>Release quiz answers for all students in a class.</summary>
+    Task ReleaseQuizAnswersAsync(Guid lecturerId, Guid classId, Guid quizId);
+
+    /// <summary>Hide quiz answers (undo release) for all students in a class.</summary>
+    Task HideQuizAnswersAsync(Guid lecturerId, Guid classId, Guid quizId);
+
+    /// <summary>Get release status for a quiz in a class.</summary>
+    Task<QuizReleaseStatusDto> GetReleaseStatusAsync(Guid lecturerId, Guid classId, Guid quizId);
 }

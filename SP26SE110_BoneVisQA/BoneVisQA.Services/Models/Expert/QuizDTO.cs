@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Expert
@@ -243,18 +244,25 @@ namespace BoneVisQA.Services.Models.Expert
     // Assign Quiz to Class
     public class AssignQuizRequestDTO
     {
+        [JsonPropertyName("classId")]
         public Guid ClassId { get; set; }
 
+        [JsonPropertyName("quizId")]
         public Guid QuizId { get; set; }
 
+        [JsonPropertyName("assignedExpertId")]
         public Guid? AssignedExpertId { get; set; }
 
+        [JsonPropertyName("openTime")]
         public DateTime? OpenTime { get; set; }
 
+        [JsonPropertyName("closeTime")]
         public DateTime? CloseTime { get; set; }
 
+        [JsonPropertyName("passingScore")]
         public int? PassingScore { get; set; }
 
+        [JsonPropertyName("timeLimitMinutes")]
         public int? TimeLimitMinutes { get; set; }
     }
     public class ClassQuizSessionResponseDTO
@@ -390,10 +398,15 @@ namespace BoneVisQA.Services.Models.Expert
     // - Nếu không truyền, hệ thống sẽ dùng thông số mặc định từ quiz gốc
     public class AssignExpertQuizRequestDto
     {
+        [JsonPropertyName("titleOverride")]
         public string? TitleOverride { get; set; }                            // Tiêu đề mới cho bản sao (optional)
+        [JsonPropertyName("openTime")]
         public DateTime? OpenTime { get; set; }                               // Thời gian mở quiz (override)
+        [JsonPropertyName("closeTime")]
         public DateTime? CloseTime { get; set; }                              // Thời gian đóng quiz (override)
+        [JsonPropertyName("passingScore")]
         public int? PassingScore { get; set; }                                 // Điểm đạt (override)
+        [JsonPropertyName("timeLimitMinutes")]
         public int? TimeLimitMinutes { get; set; }                            // Thời gian làm bài (override)
     }
 

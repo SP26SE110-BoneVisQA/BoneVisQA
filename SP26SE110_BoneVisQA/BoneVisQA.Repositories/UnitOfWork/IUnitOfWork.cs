@@ -43,6 +43,17 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<BoneSpecialty> BoneSpecialtyRepository { get; }
         GenericRepository<PathologyCategory> PathologyCategoryRepository { get; }
         GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository { get; }
+
+        // Learning Analytics
+        GenericRepository<StudentCompetency> StudentCompetencyRepository { get; }
+        GenericRepository<ErrorPattern> ErrorPatternRepository { get; }
+        GenericRepository<LearningInsight> LearningInsightRepository { get; }
+        GenericRepository<CompetencyDefinition> CompetencyDefinitionRepository { get; }
+
+        // Quiz Extensions
+        GenericRepository<ReviewSchedule> ReviewScheduleRepository { get; }
+        GenericRepository<QuizReviewItem> QuizReviewItemRepository { get; }
+
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();

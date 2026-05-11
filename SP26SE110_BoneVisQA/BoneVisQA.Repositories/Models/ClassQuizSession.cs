@@ -60,6 +60,14 @@ public partial class ClassQuizSession
     [Column("announcement_id")]
     public Guid? AnnouncementId { get; set; }
 
+    /// <summary>Thời điểm lecturer chủ động release đáp án cho sinh viên xem.</summary>
+    [Column("release_answers_at")]
+    public DateTime? ReleaseAnswersAt { get; set; }
+
+    /// <summary>ID của lecturer đã thực hiện release đáp án.</summary>
+    [Column("released_by_id")]
+    public Guid? ReleasedById { get; set; }
+
     [ForeignKey("AnnouncementId")]
     [InverseProperty("ClassQuizSessions")]
     public virtual Announcement? Announcement { get; set; }
