@@ -33,6 +33,7 @@ namespace BoneVisQA.API.Controllers.Expert
             _tagCaseService = tagCaseService;
             _storageService = storageService;
         }
+        
         [HttpGet("cases")]
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
@@ -41,7 +42,6 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
-        /// <summary>Single case for expert dashboard / editor (includes images and tags).</summary>
         [HttpGet("cases/{id:guid}")]
         [ProducesResponseType(typeof(GetExpertMedicalCaseDetailDto), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -61,9 +61,7 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
-
-        /// <summary>JSON: case metadata + <c>MedicalImages</c> (public <c>ImageUrl</c> after FE upload to Supabase) and nested annotations; expert id from JWT.</summary>
-        [HttpPost("cases")]
+     
         [Consumes("application/json")]
         public async Task<IActionResult> CreateCase([FromBody] CreateExpertMedicalCaseJsonRequest body, CancellationToken cancellationToken)
         {
@@ -125,6 +123,8 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(new { message = "Medical case deleted successfully." });
         }
 
+        //=====================================================   IMAGE & ANNOTATION  ==========================================================
+
         [HttpPost("images")]
         public async Task<IActionResult> AddImage([FromForm] AddMedicalImageDTOResponse dto)
         {
@@ -152,7 +152,6 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(new { message = "Medical image deleted successfully." });
         }
 
-        /// <summary>Upload quiz question image to Supabase storage</summary>
         [HttpPost("quiz-questions/upload-image")]
         [RequestSizeLimit(10485760)]
         [RequestFormLimits(MultipartBodyLengthLimit = 10485760)]
@@ -439,7 +438,6 @@ namespace BoneVisQA.API.Controllers.Expert
             return Ok(result);
         }
 
-        /// <summary>Alias for <c>GET /api/expert/tag</c> (plural) for older FE clients.</summary>
         [HttpGet("tags")]
         public Task<IActionResult> GetAllTags(int pageIndex = 1, int pageSize = 10) =>
             GetAllTag(pageIndex, pageSize);
