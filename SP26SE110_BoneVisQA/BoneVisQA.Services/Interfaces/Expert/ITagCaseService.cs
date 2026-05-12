@@ -9,7 +9,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
 {
     public interface ITagCaseService
     {
-        Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize);
+        Task<PagedResult<GetTagDTO>> GetAllTagAsync(int pageIndex, int pageSize);
         Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto);
     }
 }

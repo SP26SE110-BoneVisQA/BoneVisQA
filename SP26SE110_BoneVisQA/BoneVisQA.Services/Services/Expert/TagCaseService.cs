@@ -19,7 +19,7 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
-        public async Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetTagDTO>> GetAllTagAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.TagRepository.GetQueryable();
 

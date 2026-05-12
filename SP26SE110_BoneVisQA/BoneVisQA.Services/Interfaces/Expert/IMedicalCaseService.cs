@@ -14,27 +14,21 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex, int pageSize);
         Task<GetExpertMedicalCaseDetailDto?> GetMedicalCaseByIdAsync(Guid id);
         Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto);
-        Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(
-            CreateExpertMedicalCaseJsonRequest request,
-            Guid expertUserId,
-            CancellationToken cancellationToken = default);
+        Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(CreateExpertMedicalCaseJsonRequest request,Guid expertUserId,CancellationToken cancellationToken = default);
         Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request);
         Task<bool>DeleteMedicalCaseAsync(Guid medicalCaseId);
 
+        //============================================================================================
 
-        Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize);
+        Task<PagedResult<GetAllImageDTO>> GetAllImageAsync(int pageIndex, int pageSize);
         Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto);
         Task<bool> DeleteMedicalImageAsync(Guid imageId);
 
-        Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize);
+        Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotationAsync(int pageIndex, int pageSize);
         Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto);
        
+        //============================================================================================
 
-        Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize);
-
-
-
-
-
+        Task<PagedResult<GetCategoryDTO>> GetAllCategoryAsync(int pageIndex, int pageSize);
     }
 }
