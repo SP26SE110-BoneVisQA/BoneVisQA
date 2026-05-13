@@ -86,5 +86,11 @@ public interface ILecturerService
 
     /// <summary>Export all quiz results for a lecturer into a single Excel file with multiple sheets.</summary>
     Task<(byte[] FileBytes, string FileName)> ExportAllQuizResultsAsync(Guid lecturerId);
+
+    // Teaching Objectives
+    Task<TeachingObjectivesDto?> GetTeachingObjectivesAsync(Guid lecturerId, Guid? classId = null);
+    Task<TeachingObjectivesDto> UpdateTeachingObjectivesAsync(Guid lecturerId, Guid classId, UpdateTeachingObjectivesRequestDto request);
+    Task<List<TeachingObjectiveSuggestionDto>> GetExpertSuggestionsAsync(Guid classId);
+    Task<TeachingObjectiveSuggestionDto> ConfirmSuggestionAsync(Guid lecturerId, Guid suggestionId, ConfirmSuggestionRequestDto request);
 }
 

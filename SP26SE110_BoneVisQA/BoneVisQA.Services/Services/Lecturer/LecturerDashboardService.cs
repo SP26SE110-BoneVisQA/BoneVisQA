@@ -283,4 +283,439 @@ public class LecturerDashboardService : ILecturerDashboardService
             BottomStudents = bottomStudents
         };
     }
+
+    #region Student Progress Methods
+
+    public async Task<StudentProgressSummaryDto> GetClassStudentProgressAsync(Guid classId)
+    {
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .Include(c => c.Lecturer)
+            .Include(c => c.Expert)
+            .FirstOrDefaultAsync(c => c.Id == classId);
+
+        if (academicClass == null)
+            throw new KeyNotFoundException("Class not found.");
+
+        var students = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.ClassId == classId)
+            .Include(e => e.Student)
+            .ToListAsync();
+
+        var classCases = await _unitOfWork.Context.ClassCases
+            .Where(cc => cc.ClassId == classId)
+            .CountAsync();
+
+        var classQuizzes = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
+            .ToListAsync();
+
+        var studentProgressList = new List<StudentProgressItemDto>();
+        double totalAverageScore = 0;
+        int scoreCount = 0;
+
+        foreach (var enrollment in students)
+        {
+            var studentId = enrollment.StudentId;
+
+            var quizAttempts = await _unitOfWork.Context.QuizAttempts
+                .Where(a => a.StudentId == studentId && a.Score.HasValue && classQuizzes.Contains(a.QuizId))
+                .ToListAsync();
+
+            var averageScore = quizAttempts.Count > 0 ? quizAttempts.Average(a => a.Score!.Value) : 0;
+            var completedQuizzes = quizAttempts.Count;
+            totalAverageScore += averageScore;
+            scoreCount++;
+
+            var casesViewed = await _unitOfWork.Context.CaseViewLogs
+                .CountAsync(v => v.StudentId == studentId && v.ClassId == classId);
+
+            var competencyEntities = await _unitOfWork.Context.StudentCompetencies
+                .Where(sc => sc.StudentId == studentId)
+                .Include(sc => sc.BoneSpecialty)
+                .Take(5)
+                .ToListAsync();
+
+            var competencies = competencyEntities
+                .Select(sc => new CompetencyScoreDto
+                {
+                    CompetencyId = sc.Id,
+                    CompetencyName = sc.BoneSpecialty != null ? sc.BoneSpecialty.Name : "Unknown",
+                    Score = (double)sc.Score,
+                    MaxScore = 100,
+                    Percentage = (double)sc.Score
+                })
+                .ToList();
+
+            var lastActivity = await _unitOfWork.Context.CaseViewLogs
+                .Where(v => v.StudentId == studentId)
+                .OrderByDescending(v => v.ViewedAt)
+                .Select(v => (DateTime?)v.ViewedAt)
+                .FirstOrDefaultAsync();
+
+            var overallProgress = classCases > 0
+                ? (double)casesViewed / classCases * 100
+                : 0;
+
+            var progressStatus = overallProgress switch
+            {
+                0 => "NotStarted",
+                < 30 => "InProgress",
+                < 70 => "Halfway",
+                < 100 => "AlmostDone",
+                _ => "Completed"
+            };
+
+            studentProgressList.Add(new StudentProgressItemDto
+            {
+                StudentId = studentId,
+                StudentName = enrollment.Student?.FullName,
+                Email = enrollment.Student?.Email,
+                AvatarUrl = enrollment.Student?.AvatarUrl,
+                AverageScore = Math.Round(averageScore, 1),
+                QuizzesCompleted = completedQuizzes,
+                TotalQuizzes = classQuizzes.Count,
+                CasesViewed = casesViewed,
+                TotalCases = classCases,
+                OverallProgress = Math.Round(overallProgress, 1),
+                ProgressStatus = progressStatus,
+                Competencies = competencies,
+                LastActivity = lastActivity
+            });
+        }
+
+        var classAverageScore = scoreCount > 0 ? totalAverageScore / scoreCount : 0;
+        var classAverageProgress = students.Count > 0
+            ? studentProgressList.Average(s => s.OverallProgress)
+            : 0;
+
+        return new StudentProgressSummaryDto
+        {
+            ClassId = classId,
+            ClassName = academicClass.ClassName,
+            TotalStudents = students.Count,
+            ActiveStudents = students.Count(s => studentProgressList.Any(p => p.StudentId == s.StudentId && p.OverallProgress > 0)),
+            Students = studentProgressList.OrderByDescending(s => s.AverageScore).ToList(),
+            Overview = new ClassProgressOverviewDto
+            {
+                ClassAverageScore = Math.Round(classAverageScore, 1),
+                ClassAverageProgress = Math.Round(classAverageProgress, 1),
+                TotalQuizzes = classQuizzes.Count,
+                TotalCases = classCases,
+                QuizCompletionRate = classQuizzes.Count > 0
+                    ? Math.Round(studentProgressList.Average(s => s.TotalQuizzes > 0 ? (double)s.QuizzesCompleted / s.TotalQuizzes * 100 : 0), 1)
+                    : 0,
+                CaseCompletionRate = classCases > 0
+                    ? Math.Round(studentProgressList.Average(s => s.TotalCases > 0 ? s.OverallProgress : 0), 1)
+                    : 0,
+                CalculatedAt = DateTime.UtcNow
+            }
+        };
+    }
+
+    public async Task<StudentProgressDetailDto?> GetStudentProgressDetailAsync(Guid classId, Guid studentId)
+    {
+        var enrollment = await _unitOfWork.Context.ClassEnrollments
+            .Include(e => e.Student)
+            .Include(e => e.Class)
+            .FirstOrDefaultAsync(e => e.ClassId == classId && e.StudentId == studentId);
+
+        if (enrollment == null)
+            return null;
+
+        var student = enrollment.Student!;
+        var @class = enrollment.Class!;
+
+        var classQuizzes = await _unitOfWork.Context.ClassQuizSessions
+            .Where(cqs => cqs.ClassId == classId)
+            .Select(cqs => cqs.QuizId)
+            .Distinct()
+            .ToListAsync();
+
+        var quizAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.StudentId == studentId && classQuizzes.Contains(a.QuizId))
+            .Include(a => a.Quiz)
+            .OrderByDescending(a => a.StartedAt)
+            .ToListAsync();
+
+        var completedAttempts = quizAttempts.Where(a => a.Score.HasValue).ToList();
+        var quizScores = completedAttempts.Select(a => new QuizScoreItemDto
+        {
+            QuizId = a.QuizId,
+            QuizTitle = a.Quiz?.Title,
+            Topic = a.Quiz?.Topic,
+            Score = a.Score ?? 0,
+            MaxScore = 100,
+            Percentage = a.Score ?? 0,
+            CompletedAt = a.CompletedAt,
+            IsPassed = (a.Score ?? 0) >= 60
+        }).ToList();
+
+        var classCases = await _unitOfWork.Context.ClassCases
+            .Where(cc => cc.ClassId == classId)
+            .Select(cc => cc.CaseId)
+            .ToListAsync();
+
+        var caseViews = await _unitOfWork.Context.CaseViewLogs
+            .Where(v => v.StudentId == studentId && classCases.Contains(v.CaseId))
+            .Include(v => v.Case)
+            .GroupBy(v => v.CaseId)
+            .Select(g => new
+            {
+                CaseId = g.Key,
+                Case = g.OrderByDescending(v => v.ViewedAt).FirstOrDefault().Case,
+                ViewCount = g.Count(),
+                LastViewedAt = g.Max(v => v.ViewedAt),
+                IsCompleted = g.Any(v => v.IsCompleted ?? false)
+            })
+            .OrderByDescending(x => x.LastViewedAt)
+            .Take(10)
+            .ToListAsync();
+
+        var competencies = await _unitOfWork.Context.StudentCompetencies
+            .Where(sc => sc.StudentId == studentId)
+            .Include(sc => sc.BoneSpecialty)
+            .ToListAsync();
+
+        var competencyDtos = competencies
+            .Select(sc => new CompetencyScoreDto
+            {
+                CompetencyId = sc.Id,
+                CompetencyName = sc.BoneSpecialty != null ? sc.BoneSpecialty.Name : "Unknown",
+                Score = (double)sc.Score,
+                MaxScore = 100,
+                Percentage = (double)sc.Score,
+                Level = sc.Score switch
+                {
+                    >= 80 => "Expert",
+                    >= 60 => "Proficient",
+                    >= 40 => "Intermediate",
+                    >= 20 => "Beginner",
+                    _ => "Novice"
+                }
+            })
+            .ToList();
+
+        var recentActivities = new List<RecentActivityDto>();
+
+        foreach (var attempt in quizAttempts.Take(5))
+        {
+            recentActivities.Add(new RecentActivityDto
+            {
+                ActivityId = attempt.Id,
+                ActivityType = "Quiz",
+                Description = $"Completed quiz: {attempt.Quiz?.Title ?? "Unknown"}",
+                Timestamp = attempt.CompletedAt ?? attempt.StartedAt ?? DateTime.UtcNow,
+                Score = attempt.Score
+            });
+        }
+
+        foreach (var view in caseViews.Take(5))
+        {
+            recentActivities.Add(new RecentActivityDto
+            {
+                ActivityId = view.CaseId, // Use CaseId as unique identifier for activity
+                ActivityType = "CaseView",
+                Description = $"Viewed case: {view.Case?.Title ?? "Unknown"} ({view.ViewCount} times)",
+                Timestamp = view.LastViewedAt ?? DateTime.UtcNow
+            });
+        }
+
+        var overallCompetency = competencyDtos.Count > 0 ? competencyDtos.Average(c => c.Percentage) : 0;
+
+        return new StudentProgressDetailDto
+        {
+            StudentId = studentId,
+            StudentName = student.FullName,
+            Email = student.Email,
+            ClassId = classId,
+            EnrolledAt = enrollment.EnrolledAt ?? DateTime.UtcNow,
+            LastActivity = recentActivities.FirstOrDefault()?.Timestamp,
+            QuizProgress = new QuizProgressDetailDto
+            {
+                TotalQuizzes = classQuizzes.Count,
+                CompletedQuizzes = completedAttempts.Count,
+                PendingQuizzes = classQuizzes.Count - completedAttempts.Count,
+                AverageScore = completedAttempts.Count > 0 ? completedAttempts.Average(a => a.Score ?? 0) : 0,
+                HighestScore = completedAttempts.Count > 0 ? completedAttempts.Max(a => a.Score ?? 0) : 0,
+                LowestScore = completedAttempts.Count > 0 ? completedAttempts.Min(a => a.Score ?? 0) : 0,
+                QuizScores = quizScores
+            },
+            CaseProgress = new CaseProgressDetailDto
+            {
+                TotalAssignedCases = classCases.Count,
+                ViewedCases = caseViews.Count,
+                CompletedCases = caseViews.Count(v => v.IsCompleted),
+                CompletionRate = classCases.Count > 0 ? (double)caseViews.Count / classCases.Count * 100 : 0,
+                RecentCases = caseViews.Select(v => new CaseViewItemDto
+                {
+                    CaseId = v.CaseId,
+                    CaseTitle = v.Case?.Title,
+                    CaseImageUrl = null,
+                    ViewedAt = v.LastViewedAt,
+                    ViewCount = v.ViewCount,
+                    IsCompleted = v.IsCompleted
+                }).ToList()
+            },
+            CompetencyDetail = new CompetencyDetailDto
+            {
+                OverallCompetency = overallCompetency,
+                Competencies = competencyDtos,
+                TopicMasteries = competencyDtos.Select(c => new TopicMasteryDto
+                {
+                    TopicId = c.CompetencyId,
+                    TopicName = c.CompetencyName,
+                    MasteryScore = c.Score,
+                    MaxScore = c.MaxScore,
+                    MasteryPercentage = c.Percentage,
+                    MasteryLevel = c.Level
+                }).ToList(),
+                History = new List<CompetencyHistoryDto>()
+            },
+            RecentActivities = recentActivities.OrderByDescending(a => a.Timestamp).Take(10).ToList()
+        };
+    }
+
+    public async Task<ClassCompetencyOverviewDto> GetClassCompetencyOverviewAsync(Guid classId)
+    {
+        var academicClass = await _unitOfWork.Context.AcademicClasses
+            .FirstOrDefaultAsync(c => c.Id == classId);
+
+        if (academicClass == null)
+            throw new KeyNotFoundException("Class not found.");
+
+        var students = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.ClassId == classId)
+            .Select(e => e.StudentId)
+            .ToListAsync();
+
+        var allCompetencies = await _unitOfWork.Context.StudentCompetencies
+            .Where(sc => students.Contains(sc.StudentId))
+            .Include(sc => sc.BoneSpecialty)
+            .ToListAsync();
+
+        var classCompetencies = allCompetencies
+            .GroupBy(c => c.BoneSpecialty?.Name ?? "Unknown")
+            .Select(g => new CompetencyScoreDto
+            {
+                CompetencyId = g.First().Id,
+                CompetencyName = g.Key,
+                Score = (double)g.Average(c => c.Score),
+                MaxScore = 100,
+                Percentage = Math.Round((double)g.Average(c => c.Score), 1),
+                Level = g.Average(c => c.Score) switch
+                {
+                    >= 80 => "Expert",
+                    >= 60 => "Proficient",
+                    >= 40 => "Intermediate",
+                    >= 20 => "Beginner",
+                    _ => "Novice"
+                }
+            })
+            .OrderByDescending(c => c.Percentage)
+            .ToList();
+
+        var topicMasteries = classCompetencies.Select(comp => new TopicMasteryDto
+        {
+            TopicId = comp.CompetencyId,
+            TopicName = comp.CompetencyName,
+            MasteryScore = comp.Score,
+            MaxScore = 100,
+            MasteryPercentage = comp.Percentage,
+            MasteryLevel = comp.Level,
+            StudentsAssessed = allCompetencies.Count(c => c.BoneSpecialty?.Name == comp.CompetencyName),
+            ClassAverage = comp.Percentage
+        }).ToList();
+
+        var competencyDistribution = new List<CompetencyDistributionDto>
+        {
+            new() { Level = "Expert", StudentCount = allCompetencies.Count(c => (double)c.Score >= 80), Percentage = 0 },
+            new() { Level = "Proficient", StudentCount = allCompetencies.Count(c => (double)c.Score >= 60 && (double)c.Score < 80), Percentage = 0 },
+            new() { Level = "Intermediate", StudentCount = allCompetencies.Count(c => (double)c.Score >= 40 && (double)c.Score < 60), Percentage = 0 },
+            new() { Level = "Beginner", StudentCount = allCompetencies.Count(c => (double)c.Score >= 20 && (double)c.Score < 40), Percentage = 0 },
+            new() { Level = "Novice", StudentCount = allCompetencies.Count(c => (double)c.Score < 20), Percentage = 0 }
+        };
+
+        if (students.Count > 0)
+        {
+            foreach (var dist in competencyDistribution)
+            {
+                dist.Percentage = Math.Round((double)dist.StudentCount / students.Count * 100, 1);
+            }
+        }
+
+        var weakTopics = topicMasteries
+            .Where(t => t.MasteryPercentage < 50)
+            .Select(t => new WeakTopicDto
+            {
+                TopicName = t.TopicName,
+                AverageScore = t.MasteryScore,
+                StudentsNeedingHelp = students.Count / 2,
+                Recommendation = $"Consider assigning more cases related to {t.TopicName}"
+            })
+            .ToList();
+
+        var strongTopics = topicMasteries
+            .Where(t => t.MasteryPercentage >= 70)
+            .Select(t => new StrongTopicDto
+            {
+                TopicName = t.TopicName,
+                AverageScore = t.MasteryScore,
+                StudentsMastered = students.Count
+            })
+            .ToList();
+
+        return new ClassCompetencyOverviewDto
+        {
+            ClassId = classId,
+            ClassName = academicClass.ClassName,
+            TotalStudents = students.Count,
+            AverageCompetency = classCompetencies.Count > 0 ? Math.Round(classCompetencies.Average(c => c.Percentage), 1) : 0,
+            ClassCompetencies = classCompetencies,
+            TopicMasteries = topicMasteries,
+            CompetencyDistribution = competencyDistribution,
+            WeakTopics = weakTopics,
+            StrongTopics = strongTopics
+        };
+    }
+
+    public async Task<List<TopicMasteryDto>> GetClassTopicsMasteryAsync(Guid classId)
+    {
+        var students = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.ClassId == classId)
+            .Select(e => e.StudentId)
+            .ToListAsync();
+
+        var competencies = await _unitOfWork.Context.StudentCompetencies
+            .Where(sc => students.Contains(sc.StudentId))
+            .Include(sc => sc.BoneSpecialty)
+            .ToListAsync();
+
+        return competencies
+            .GroupBy(c => new { c.BoneSpecialtyId, Name = c.BoneSpecialty?.Name ?? "Unknown" })
+            .Select(g => new TopicMasteryDto
+            {
+                TopicId = g.Key.BoneSpecialtyId ?? Guid.Empty,
+                TopicName = g.Key.Name,
+                Category = g.First().BoneSpecialty?.Parent?.Name,
+                MasteryScore = (double)g.Average(c => c.Score),
+                MaxScore = 100,
+                MasteryPercentage = Math.Round((double)g.Average(c => c.Score), 1),
+                MasteryLevel = g.Average(c => c.Score) switch
+                {
+                    >= 80 => "Expert",
+                    >= 60 => "Proficient",
+                    >= 40 => "Intermediate",
+                    >= 20 => "Beginner",
+                    _ => "Novice"
+                },
+                StudentsAssessed = g.Count(),
+                ClassAverage = Math.Round((double)g.Average(c => c.Score), 1)
+            })
+            .OrderByDescending(t => t.MasteryPercentage)
+            .ToList();
+    }
+
+    #endregion
 }

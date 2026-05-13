@@ -3557,4 +3557,234 @@ public class LecturerService : ILecturerService
 
         return (memoryStream.ToArray(), fileName);
     }
+
+    // =============================================
+    // Teaching Objectives Methods
+    // =============================================
+
+    public async Task<TeachingObjectivesDto?> GetTeachingObjectivesAsync(Guid lecturerId, Guid? classId = null)
+    {
+        if (classId.HasValue)
+        {
+            await EnsureLecturerOwnsClassAsync(lecturerId, classId.Value);
+            return await GetClassTeachingObjectivesAsync(classId.Value);
+        }
+
+        var classes = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Include(c => c.Expert)
+            .ToListAsync();
+
+        if (classes.Count == 0)
+            return null;
+
+        var firstClass = classes.First();
+        var dto = await GetClassTeachingObjectivesAsync(firstClass.Id);
+        return dto;
+    }
+
+    private async Task<TeachingObjectivesDto> GetClassTeachingObjectivesAsync(Guid classId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .Include(c => c.Expert)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new KeyNotFoundException($"Class with ID {classId} not found.");
+
+        var dto = new TeachingObjectivesDto
+        {
+            ClassId = academicClass.Id,
+            ClassName = academicClass.ClassName,
+            LecturerId = academicClass.LecturerId ?? Guid.Empty,
+            ExpertId = academicClass.ExpertId,
+            ExpertName = academicClass.Expert?.FullName,
+            LastUpdated = academicClass.UpdatedAt
+        };
+
+        if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
+        {
+            try
+            {
+                var objectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
+                    academicClass.TeachingObjectives,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                dto.Objectives = objectives ?? new List<TeachingObjectiveItem>();
+            }
+            catch
+            {
+                dto.Objectives = new List<TeachingObjectiveItem>();
+            }
+        }
+
+        return dto;
+    }
+
+    public async Task<TeachingObjectivesDto> UpdateTeachingObjectivesAsync(Guid lecturerId, Guid classId, UpdateTeachingObjectivesRequestDto request)
+    {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new KeyNotFoundException($"Class with ID {classId} not found.");
+
+        if (request.ReplaceAll)
+        {
+            var objectivesJson = JsonSerializer.Serialize(request.Objectives);
+            academicClass.TeachingObjectives = objectivesJson;
+            academicClass.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
+        }
+        else
+        {
+            var currentObjectives = new List<TeachingObjectiveItem>();
+            if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
+            {
+                try
+                {
+                    currentObjectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
+                        academicClass.TeachingObjectives,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TeachingObjectiveItem>();
+                }
+                catch { }
+            }
+
+            foreach (var newObj in request.Objectives)
+            {
+                var existing = currentObjectives.FirstOrDefault(o => o.Id == newObj.Id);
+                if (existing != null)
+                {
+                    existing.Topic = newObj.Topic;
+                    existing.Objective = newObj.Objective;
+                    existing.Level = newObj.Level;
+                    existing.Order = newObj.Order;
+                    existing.IsActive = newObj.IsActive;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    newObj.Id = Guid.NewGuid();
+                    newObj.CreatedAt = DateTime.UtcNow;
+                    newObj.UpdatedAt = DateTime.UtcNow;
+                    currentObjectives.Add(newObj);
+                }
+            }
+
+            academicClass.TeachingObjectives = JsonSerializer.Serialize(currentObjectives);
+            academicClass.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
+        }
+
+        await _unitOfWork.SaveAsync();
+        return await GetClassTeachingObjectivesAsync(classId);
+    }
+
+    public async Task<List<TeachingObjectiveSuggestionDto>> GetExpertSuggestionsAsync(Guid classId)
+    {
+        var suggestions = await _unitOfWork.Context.TeachingObjectiveSuggestions
+            .AsNoTracking()
+            .Include(s => s.Expert)
+            .Include(s => s.Class)
+            .Where(s => s.ClassId == classId)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync();
+
+        return suggestions.Select(s => new TeachingObjectiveSuggestionDto
+        {
+            Id = s.Id,
+            ClassId = s.ClassId,
+            ClassName = s.Class?.ClassName,
+            ExpertId = s.ExpertId,
+            ExpertName = s.Expert?.FullName,
+            Topic = s.Topic,
+            Objective = s.Objective,
+            Level = s.Level,
+            Status = s.Status,
+            RejectionReason = s.RejectionReason,
+            CreatedAt = s.CreatedAt,
+            ReviewedAt = s.ReviewedAt
+        }).ToList();
+    }
+
+    public async Task<TeachingObjectiveSuggestionDto> ConfirmSuggestionAsync(Guid lecturerId, Guid suggestionId, ConfirmSuggestionRequestDto request)
+    {
+        var suggestion = await _unitOfWork.Context.TeachingObjectiveSuggestions
+            .Include(s => s.Class)
+            .FirstOrDefaultAsync(s => s.Id == suggestionId);
+
+        if (suggestion == null)
+            throw new KeyNotFoundException($"Suggestion with ID {suggestionId} not found.");
+
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == suggestion.ClassId)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null || academicClass.LecturerId != lecturerId)
+            throw new UnauthorizedAccessException("You do not have permission to review this suggestion.");
+
+        suggestion.Status = request.Approve ? "Approved" : "Rejected";
+        suggestion.ReviewedAt = DateTime.UtcNow;
+        suggestion.ReviewedBy = lecturerId;
+
+        if (!request.Approve && !string.IsNullOrEmpty(request.RejectionReason))
+        {
+            suggestion.RejectionReason = request.RejectionReason;
+        }
+
+        _unitOfWork.Context.TeachingObjectiveSuggestions.Update(suggestion);
+
+        if (request.Approve)
+        {
+            var currentObjectives = new List<TeachingObjectiveItem>();
+            if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
+            {
+                try
+                {
+                    currentObjectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
+                        academicClass.TeachingObjectives,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TeachingObjectiveItem>();
+                }
+                catch { }
+            }
+
+            var order = request.Order ?? currentObjectives.Count + 1;
+            var newObjective = new TeachingObjectiveItem
+            {
+                Id = Guid.NewGuid(),
+                Topic = suggestion.Topic,
+                Objective = suggestion.Objective,
+                Level = suggestion.Level,
+                Order = order,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            currentObjectives.Add(newObjective);
+            academicClass.TeachingObjectives = JsonSerializer.Serialize(currentObjectives);
+            academicClass.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
+        }
+
+        await _unitOfWork.SaveAsync();
+
+        return new TeachingObjectiveSuggestionDto
+        {
+            Id = suggestion.Id,
+            ClassId = suggestion.ClassId,
+            ClassName = suggestion.Class?.ClassName,
+            ExpertId = suggestion.ExpertId,
+            Topic = suggestion.Topic,
+            Objective = suggestion.Objective,
+            Level = suggestion.Level,
+            Status = suggestion.Status,
+            RejectionReason = suggestion.RejectionReason,
+            CreatedAt = suggestion.CreatedAt,
+            ReviewedAt = suggestion.ReviewedAt
+        };
+    }
 }

@@ -186,4 +186,10 @@ public partial class User
    
     [InverseProperty("GradedByUser")]
     public virtual ICollection<StudentQuizAnswer> GradedStudentQuizAnswers { get; set; } = new List<StudentQuizAnswer>();
+
+    [InverseProperty("Expert")]
+    public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
+
+    [InverseProperty("Reviewer")]
+    public virtual ICollection<TeachingObjectiveSuggestion> ReviewedSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
 }

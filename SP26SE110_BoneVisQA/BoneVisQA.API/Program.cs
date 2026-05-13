@@ -316,6 +316,9 @@ builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService
 builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
+builder.Services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
+builder.Services.AddScoped<ILecturerReportService, LecturerReportService>();
+builder.Services.AddScoped<ILecturerGradeBookService, LecturerGradeBookService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
@@ -341,6 +344,7 @@ builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 builder.Services.AddScoped<IExpertSpecialtyService, ExpertSpecialtyService>();
+builder.Services.AddScoped<ITeachingObjectiveService, TeachingObjectiveService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
