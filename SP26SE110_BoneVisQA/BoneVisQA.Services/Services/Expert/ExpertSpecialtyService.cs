@@ -29,19 +29,35 @@ public class ExpertSpecialtyService : IExpertSpecialtyService
         return specialties.Select(MapToDto).ToList();
     }
 
-    public async Task<List<ExpertSpecialtyDto>> GetAllSpecialtiesAsync()
+    public async Task<PagedResult<ExpertSpecialtyDto>> GetAllSpecialtiesAsync(int pageIndex, int pageSize)
     {
-        var specialties = await _unitOfWork.Context.ExpertSpecialties
-            .Include(es => es.Expert)
-            .Include(es => es.BoneSpecialty)
-            .Include(es => es.PathologyCategory)
-            .Where(es => es.IsActive)
+        var query = _unitOfWork.Context.ExpertSpecialties
+        .Include(es => es.Expert)
+        .Include(es => es.BoneSpecialty)
+        .Include(es => es.PathologyCategory)
+        .Where(es => es.IsActive);
+
+        var totalCount = await query.CountAsync();
+
+        var specialties = await query
             .OrderByDescending(es => es.Expert!.FullName)
             .ThenByDescending(es => es.IsPrimary)
             .ThenByDescending(es => es.ProficiencyLevel)
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return specialties.Select(MapToDto).ToList();
+        var items = specialties
+            .Select(MapToDto)
+            .ToList();
+
+        return new PagedResult<ExpertSpecialtyDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            PageIndex = pageIndex,
+            PageSize = pageSize
+        };
     }
 
     public async Task<ExpertSpecialtyDto?> GetByIdAsync(Guid id)

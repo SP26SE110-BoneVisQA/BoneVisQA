@@ -61,7 +61,8 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
-     
+       
+        [HttpPost("cases")]
         [Consumes("application/json")]
         public async Task<IActionResult> CreateCase([FromBody] CreateExpertMedicalCaseJsonRequest body, CancellationToken cancellationToken)
         {

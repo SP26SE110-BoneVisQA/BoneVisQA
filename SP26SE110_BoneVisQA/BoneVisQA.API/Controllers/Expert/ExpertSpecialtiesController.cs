@@ -39,11 +39,14 @@ public class ExpertSpecialtiesController : ControllerBase
 
     /// <summary>Get all specialties of all experts (for Admin)</summary>
     [HttpGet("all")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(List<ExpertSpecialtyDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllSpecialties()
+    [ProducesResponseType(typeof(PagedResult<ExpertSpecialtyDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllSpecialties(
+     [FromQuery] int pageIndex = 1,
+     [FromQuery] int pageSize = 10)
     {
-        var result = await _expertSpecialtyService.GetAllSpecialtiesAsync();
+        var result = await _expertSpecialtyService
+            .GetAllSpecialtiesAsync(pageIndex, pageSize);
+
         return Ok(result);
     }
 
