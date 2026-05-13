@@ -20,6 +20,9 @@ public partial class CaseViewLog
     [Column("case_id")]
     public Guid CaseId { get; set; }
 
+    [Column("class_id")]
+    public Guid? ClassId { get; set; }
+
     [Column("viewed_at")]
     public DateTime? ViewedAt { get; set; }
 
@@ -36,4 +39,8 @@ public partial class CaseViewLog
     [ForeignKey("StudentId")]
     [InverseProperty("CaseViewLogs")]
     public virtual User Student { get; set; } = null!;
+
+    [ForeignKey("ClassId")]
+    [InverseProperty("CaseViewLogs")]
+    public virtual AcademicClass? Class { get; set; }
 }

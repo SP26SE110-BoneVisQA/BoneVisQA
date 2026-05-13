@@ -13,6 +13,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BoneVisQA.Services.Interfaces;
 
 namespace BoneVisQA.API.Controllers.Lecturer;
 
@@ -1165,5 +1166,133 @@ public class LecturersController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Đã xảy ra lỗi: " + ex.Message });
         }
     }
+
+    #region Teaching Objectives
+
+    /// <summary>
+    /// Lấy Teaching Objectives của lớp học hiện tại (lớp đầu tiên của Lecturer).
+    /// </summary>
+    [HttpGet("class/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> GetTeachingObjectives()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetTeachingObjectivesAsync(lecturerId.Value);
+        if (result == null)
+            return NotFound(new { message = "Class not found." });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Lấy Teaching Objectives của một lớp cụ thể.
+    /// </summary>
+    [HttpGet("classes/{classId:guid}/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> GetTeachingObjectivesByClass(Guid classId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetTeachingObjectivesAsync(lecturerId.Value, classId);
+        if (result == null)
+            return NotFound(new { message = "Class not found or you don't have permission." });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Cập nhật Teaching Objectives của lớp học (thêm, sửa, xóa objectives).
+    /// Lecturer có thể confirm/reject Expert suggestions.
+    /// </summary>
+    [HttpPut("classes/{classId:guid}/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> UpdateTeachingObjectives(
+        Guid classId,
+        [FromBody] UpdateTeachingObjectivesRequestDto request)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _lecturerService.UpdateTeachingObjectivesAsync(lecturerId.Value, classId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy danh sách Expert Suggestions đang chờ duyệt cho một lớp.
+    /// </summary>
+    [HttpGet("classes/{classId:guid}/objectives/suggestions")]
+    public async Task<ActionResult<List<TeachingObjectiveSuggestionDto>>> GetExpertSuggestions(Guid classId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetExpertSuggestionsAsync(classId);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Lecturer duyệt hoặc từ chối một Expert Suggestion.
+    /// </summary>
+    [HttpPost("classes/{classId:guid}/objectives/suggestions/{suggestionId:guid}/confirm")]
+    public async Task<ActionResult<TeachingObjectiveSuggestionDto>> ConfirmSuggestion(
+        Guid classId,
+        Guid suggestionId,
+        [FromBody] ConfirmSuggestionRequestDto request)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        request.SuggestionId = suggestionId;
+        try
+        {
+            var result = await _lecturerService.ConfirmSuggestionAsync(lecturerId.Value, suggestionId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    #endregion
+
+    #region Student Progress
+
+    /// <summary>
+    /// Lấy tổng quan tiến độ học tập của tất cả sinh viên trong một lớp.
+    /// </summary>
+    [HttpGet("classes/{classId:guid}/student-progress-summary")]
+    public async Task<ActionResult<StudentProgressSummaryDto>> GetClassStudentProgressSummary(Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetClassStudentProgressAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    #endregion
 
 }

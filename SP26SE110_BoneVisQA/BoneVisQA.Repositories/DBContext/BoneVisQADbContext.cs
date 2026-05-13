@@ -106,6 +106,9 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<ReviewSchedule> ReviewSchedules { get; set; }
     public virtual DbSet<QuizReviewItem> QuizReviewItems { get; set; }
 
+    // Teaching Objectives
+    public virtual DbSet<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -304,6 +307,11 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasOne(d => d.Case).WithMany(p => p.CaseViewLogs).HasConstraintName("case_view_logs_case_id_fkey");
 
             entity.HasOne(d => d.Student).WithMany(p => p.CaseViewLogs).HasConstraintName("case_view_logs_student_id_fkey");
+
+            entity.HasOne(d => d.Class).WithMany(p => p.CaseViewLogs)
+                .HasForeignKey(d => d.ClassId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("case_view_logs_class_id_fkey");
         });
 
         modelBuilder.Entity<Category>(entity =>
@@ -979,6 +987,33 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.QuestionId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("quiz_review_items_question_id_fkey");
+        });
+
+        modelBuilder.Entity<TeachingObjectiveSuggestion>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("teaching_objective_suggestions_pkey");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Status).HasDefaultValue("Pending");
+
+            entity.HasOne(d => d.Class)
+                .WithMany(p => p.TeachingObjectiveSuggestions)
+                .HasForeignKey(d => d.ClassId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("teaching_objective_suggestions_class_id_fkey");
+
+            entity.HasOne(d => d.Expert)
+                .WithMany(p => p.TeachingObjectiveSuggestions)
+                .HasForeignKey(d => d.ExpertId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("teaching_objective_suggestions_expert_id_fkey");
+
+            entity.HasOne(d => d.Reviewer)
+                .WithMany(p => p.ReviewedSuggestions)
+                .HasForeignKey(d => d.ReviewedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("teaching_objective_suggestions_reviewer_id_fkey");
         });
 
         // Update Quiz model configuration

@@ -81,4 +81,10 @@ public partial class AcademicClass
     [InverseProperty("Class")]
     public virtual ICollection<ClassExpertAssignment> ClassExpertAssignments { get; set; } = new List<ClassExpertAssignment>();
 
+    [InverseProperty("Class")]
+    public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
+
+    [InverseProperty("Class")]
+    public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();
+
 }
