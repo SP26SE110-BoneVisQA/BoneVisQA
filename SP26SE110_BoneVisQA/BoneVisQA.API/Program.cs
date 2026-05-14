@@ -67,8 +67,8 @@ else
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
-        // Production: HTTP only (handled by reverse proxy like nginx/Render)
-        options.ListenLocalhost(5047);
+        // Production: HTTP on all interfaces (0.0.0.0) so Render can detect port
+        options.ListenAnyIP(5047);
     });
 }
 
