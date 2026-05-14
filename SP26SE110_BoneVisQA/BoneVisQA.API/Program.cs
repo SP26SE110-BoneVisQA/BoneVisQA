@@ -46,16 +46,31 @@ builder.Services.AddHttpContextAccessor();
 
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
 const long maxUploadBodyBytes = 104857600; // 100 MB
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
 
-    // HTTPS on localhost:5047 using ASP.NET Core dev certificate
-    options.ListenLocalhost(5047, listenOptions =>
+// In Docker/Production: use HTTP only (no dev cert available)
+// In Development: optionally use HTTPS with dev certificate
+if (builder.Environment.IsDevelopment())
+{
+    builder.WebHost.ConfigureKestrel(options =>
     {
-        listenOptions.UseHttps();
+        options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+
+        // HTTPS on localhost:5047 using ASP.NET Core dev certificate
+        options.ListenLocalhost(5047, listenOptions =>
+        {
+            listenOptions.UseHttps();
+        });
     });
-});
+}
+else
+{
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+        // Production: HTTP on all interfaces (0.0.0.0) so Render can detect port
+        options.ListenAnyIP(5047);
+    });
+}
 
 builder.Services.Configure<FormOptions>(options =>
 {

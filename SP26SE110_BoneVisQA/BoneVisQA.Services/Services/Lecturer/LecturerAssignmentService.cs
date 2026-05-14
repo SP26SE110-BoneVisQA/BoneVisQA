@@ -855,9 +855,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Student submission not found.");
 
-        // Update score if provided
-        if (request.Score.HasValue)
-            attempt.Score = request.Score.Value;
+        // Note: Score is ALWAYS recalculated from answers below, never from request.Score
+        // This ensures consistency between scoreAwarded and attempt.Score
 
         // Update answers if provided
         if (request.Answers.Count > 0)
@@ -1291,7 +1290,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.QuizId == quizSession.QuizId)
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         return quizEnrollments.Select(e => new AssignmentSubmissionDto
         {
@@ -1319,7 +1319,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizSession.QuizId && studentIds.Contains(a.StudentId))
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         foreach (var update in request.Submissions)
         {
