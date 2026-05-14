@@ -1,0 +1,932 @@
+//========================================================================================== Context / Problem / Solution===================================================================================================================
+Context: 
+In medical education, especially in orthopedics and musculoskeletal imaging, medical students need extensive exposure to and practice in interpreting X-ray, CT, MRI, and musculoskeletal ultrasound images. However:
+Access to a systematic set of representative image-based clinical cases is limited and heavily dependent on hospitals and individual clinical instructors.
+Students often learn in a fragmented, memorization-based manner (lesion names, diagnostic criteria) instead of linking knowledge to visual patterns and structured descriptions.
+There is currently no digital tool that allows students to ask questions directly on images (for example: “What condition does this lesion suggest?”, “Which imaging sign is most important here?”) and receive answers accompanied by references.
+Existing AI-based diagnostic support tools in the field of bone and joint diseases mainly target clinicians, with limited focus on educational objectives for students and with little transparency regarding knowledge sources or reasoning processes.
+In this context, the project proposes to build a multi-platform (web and mobile) interactive visual question answering system (visual Q&A), in which students can view or upload X-ray/CT/MRI images of bones, ask questions about diagnosis and key imaging signs; the system combines AI-based image processing models and Retrieval-Augmented Generation (RAG) as the core mechanism to mitigate hallucination in AI responses by retrieving precise context from the bone disease knowledge base before generating answers, ensuring replies are grounded in educational materials.
+
+Proposed Solutions 
+The BoneVisQA system will be developed with the following main components and characteristics:
+Web platform for interactive Q&A on bone images
+The system allows students to:
+Log in, manage personal profiles, and track learning progress.
+Select sample cases from a case library or upload bone images.
+Ask free-form questions about the images, for example:
+“What type of fracture does this lesion suggest?”
+“How to differentiate osteoarthritis from rheumatoid arthritis in this case?”
+Interact visually with images: zoom in/out and annotate suspicious regions on the image to be sent together with the question.
+Mobile application to support learning anytime, anywhere
+Provide a mobile application for medical students.
+Allow login and synchronization of learning progress with the web system.
+Enable viewing of case lists and details on mobile devices, with touch operations for zooming and panning images.
+Allow students to ask visual questions directly on images during hospital rotations or clinical practice sessions.
+Support short quiz sessions (micro-learning) with bone images and corresponding questions.
+Provide notifications about new cases, new quizzes, or learning tasks assigned by lecturers.
+Bone image processing and information extraction module
+Use AI models to:
+Analyze user-annotated regions on bone images (e.g., extract features from cropped areas).
+Extract image features to support:
+Retrieval of similar cases in the case library.
+Improving the relevance of document retrieval in the RAG mechanism.
+Knowledge base on bone diseases and RAG mechanism
+Build a knowledge base from:
+Open-access materials on bone diseases, textbooks, and basic guidelines (for educational purposes only, not for direct treatment decision-making).
+A set of sample cases (images + descriptions + diagnoses + key imaging signs that should be remembered).
+Apply Retrieval-Augmented Generation (RAG):
+Encode (embed) text segments and case descriptions into a vector database.
+When a student asks a question accompanied by an image, the system combines the question embedding and image features to retrieve the most relevant documents/cases.
+A generative language model (LLM) produces answers based on the retrieved context, with structured explanations and cited sources.
+Role of Knowledge Base Manager (System Admin):
+Select, update, organize, and tag documents in the knowledge base.
+Trigger re-indexing when documents are added or modified, ensuring data quality for the RAG module.
+Learning-oriented interface for medical students
+Answers are presented in a structure that supports learning:
+Suggested main diagnosis.
+Important differential diagnoses.
+Key imaging signs to focus on.
+Reflective questions for student self-assessment.
+Links or citations to references from the knowledge base.
+Support a quiz mode: the system proactively asks questions about a lesion region on an image; students answer, then the system displays the correct answer and explanation. This mode is optimized for both web and mobile interfaces.
+Review workflow with lecturers/clinical experts
+Allow lecturers/clinical experts to review selected student questions and system-generated answers, assess appropriateness, edit content, and verify cases and explanations.
+Provide statistics on common mistakes in student answers to help lecturers adjust teaching methods and update training content.
+
+Functional requirement 
+The system is expected to support the following main roles:
+Medical Student
+Clinical Expert / Reviewer
+Lecturer / Course Coordinator
+System Administrator
+Web/Mobile portal for Students (Medical Student)
+Register, log in, and update personal information (school, cohort, major).
+View a list of sample bone cases categorized by:
+Location (long bones, spine, knee, hip, shoulder, wrist, ankle, etc.).
+Type of lesion (fracture, dislocation, degenerative disease, bone tumor, osteomyelitis, etc.).
+Difficulty level (basic, intermediate, advanced).
+Open a case:
+View images (X-ray/CT/MRI) with zoom/pan operations on web and mobile.
+Annotate regions of interest on the image.
+Ask free-form questions about the case:
+Enter questions in Vietnamese and optionally attach a link to the annotated region on the image.
+Submit question with annotated region coordinates; system crops and extracts features from the region to enhance RAG query embedding. (Image + RAG).
+Receive answers:
+View structured explanations (suggested diagnosis, key findings, differential diagnoses, recommended readings).
+View citations to documents and similar cases from the knowledge base.
+Practice in quiz mode:
+The system displays bone images and short questions (multiple-choice or short-answer).
+Students respond and then receive feedback and explanations.
+On mobile, this can be implemented as short learning sessions (micro-quiz).
+Track learning progress:
+Number of cases viewed, questions asked, quizzes completed, and correctness rate.
+Statistics by topic (e.g., long bone fractures, spine lesions, degenerative diseases).
+Web portal for Clinical Experts (Expert / Reviewer)
+Log in with expert privileges.
+Manage the case library:
+Add new sample cases (anonymous images + description + diagnosis + key learning points).
+Tag cases by specialty, bone location, lesion type, and difficulty level.
+View student questions and system-generated answers:
+Filter by case, time, student, keyword.
+Assess clinical accuracy and educational appropriateness.
+Edit/upgrade answers, add explanations or clinical notes.
+Assess RAG accuracy by reviewing retrieved contexts and editing explanations; flag low-quality chunks for knowledge base update.
+Mark cases and explanations as “approved”.
+Define quiz sets and scoring criteria; propose topic-based quizzes for each class.
+Web portal for Lecturers / Course Coordinators
+Log in with lecturer / course coordinator privileges.
+Manage classes and clinical rotations:
+Create classes (e.g., “Orthopedics – Class A – Cohort 2023”).
+Assign students to classes; import class lists from files.
+Assign learning content:
+Assign case sets to classes or student groups.
+Configure quiz sessions (topic, number of questions, open/close time).
+Monitor learning outcomes:
+View statistics by class/group/individual: number of cases studied, quiz scores by topic, common interpretation errors.
+Export reports to support assessment and teaching improvement.
+Send announcements to students:
+Announce new cases, new quizzes, or required tasks to be completed before clinical rotations.
+Web portal for System Administrator (System Admin)
+Log in with administrator privileges.
+Manage user accounts:
+View users by role (Student, Expert, Lecturer, Admin).
+Activate/deactivate accounts.
+Assign/revoke roles for each user.
+Monitor system logs and summary reports:
+Track system activity, errors, and basic usage statistics (e.g., number of questions, number of case views, load).
+Manage documents in the knowledge base supporting RAG:
+Upload and update open-access documents (guidelines, textbooks, teaching materials) related to bone diseases.
+Organize documents by topics and subtopics; assign tags (e.g., “fracture classification”, “osteoarthritis”, “osteoporosis”).
+Manage document versions and mark outdated documents for update.
+Control the indexing pipeline for RAG:
+Trigger embedding generation and re-indexing when new documents are added or existing documents are updated.
+View indexing logs and handle errors.
+Adjust chunking strategies to improve retrieval quality.
+Ensure content quality:
+Monitor which documents/segments are frequently retrieved.
+Detect low-quality or outdated content and flag it for review by experts/lecturers.
+Non-functional requirement:
+Usability: User-friendly interface for all roles; Vietnamese support (with the possibility to extend to English).
+Security: Data security, especially for medical images; clear access control; secure communication channels.
+Performance: Reasonable response time and stable operation for a medium-scale number of samples and users.
+Scalability: Ability to scale when the number of images, projects, and users grows.
+Reliability: Mitigate AI hallucination through RAG context retrieval and prompt engineering.
+
+
+//======================================================================================================= Database Script===================================================================================================================
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.__EFMigrationsHistory (
+  MigrationId character varying NOT NULL,
+  ProductVersion character varying NOT NULL,
+  CONSTRAINT __EFMigrationsHistory_pkey PRIMARY KEY (MigrationId)
+);
+CREATE TABLE public.academic_classes (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_name text NOT NULL,
+  semester text NOT NULL,
+  lecturer_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  expert_id uuid,
+  class_specialty_id uuid,
+  focus_level text DEFAULT 'Basic'::text CHECK (focus_level = ANY (ARRAY['Basic'::text, 'Intermediate'::text, 'Advanced'::text])),
+  teaching_objectives jsonb,
+  target_pathology_categories jsonb,
+  target_student_level character varying,
+  CONSTRAINT academic_classes_pkey PRIMARY KEY (id),
+  CONSTRAINT academic_classes_lecturer_id_fkey FOREIGN KEY (lecturer_id) REFERENCES public.users(id),
+  CONSTRAINT academic_classes_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT academic_classes_specialty_fkey FOREIGN KEY (class_specialty_id) REFERENCES public.bone_specialties(id)
+);
+CREATE TABLE public.announcements (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  send_email boolean NOT NULL DEFAULT true,
+  assignment_id uuid,
+  CONSTRAINT announcements_pkey PRIMARY KEY (id),
+  CONSTRAINT announcements_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id)
+);
+CREATE TABLE public.backups (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name character varying NOT NULL,
+  type character varying NOT NULL DEFAULT 'all'::character varying,
+  size character varying,
+  status character varying NOT NULL DEFAULT 'pending'::character varying,
+  file_path character varying,
+  notes character varying,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  completed_at timestamp with time zone,
+  CONSTRAINT backups_pkey PRIMARY KEY (id),
+  CONSTRAINT backups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.body_regions (
+  id integer NOT NULL DEFAULT nextval('body_regions_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  description text,
+  sort_order integer DEFAULT 0,
+  CONSTRAINT body_regions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.bone_specialties (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  code text NOT NULL UNIQUE,
+  name text NOT NULL,
+  parent_id uuid,
+  description text,
+  display_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT bone_specialties_pkey PRIMARY KEY (id),
+  CONSTRAINT bone_specialties_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.bone_specialties(id)
+);
+CREATE TABLE public.case_annotations (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  image_id uuid NOT NULL,
+  coordinates jsonb,
+  label text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_annotations_pkey PRIMARY KEY (id),
+  CONSTRAINT case_annotations_image_id_fkey FOREIGN KEY (image_id) REFERENCES public.medical_images(id)
+);
+CREATE TABLE public.case_answers (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  question_id uuid NOT NULL,
+  answer_text text,
+  structured_diagnosis text,
+  differential_diagnoses text,
+  status text DEFAULT 'Pending'::text CHECK (status = ANY (ARRAY['Pending'::text, 'RequiresLecturerReview'::text, 'Approved'::text, 'Edited'::text, 'Rejected'::text, 'Escalated'::text, 'EscalatedToExpert'::text, 'ExpertApproved'::text, 'Revised'::text])),
+  reviewed_by_id uuid,
+  generated_at timestamp with time zone DEFAULT now(),
+  reviewed_at timestamp with time zone,
+  escalated_by_id uuid,
+  escalated_at timestamp with time zone,
+  ai_confidence_score double precision,
+  key_imaging_findings text,
+  reflective_questions text,
+  CONSTRAINT case_answers_pkey PRIMARY KEY (id),
+  CONSTRAINT case_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.student_questions(id),
+  CONSTRAINT case_answers_reviewed_by_id_fkey FOREIGN KEY (reviewed_by_id) REFERENCES public.users(id),
+  CONSTRAINT case_answers_escalated_by_id_fkey FOREIGN KEY (escalated_by_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.case_media (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  case_id uuid NOT NULL,
+  media_url text NOT NULL,
+  storage_path text,
+  media_type character varying NOT NULL DEFAULT 'Image'::character varying,
+  modality character varying NOT NULL DEFAULT 'Other'::character varying,
+  anatomy character varying NOT NULL DEFAULT 'Other'::character varying,
+  dicom_metadata jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_media_pkey PRIMARY KEY (id),
+  CONSTRAINT case_media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id)
+);
+CREATE TABLE public.case_media_embeddings (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  media_id uuid NOT NULL,
+  image_vector USER-DEFINED NOT NULL,
+  embedding_model character varying NOT NULL DEFAULT 'clip-vit-base-patch32'::character varying,
+  embedding_dimensions integer NOT NULL DEFAULT 768,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_media_embeddings_pkey PRIMARY KEY (id),
+  CONSTRAINT case_media_embeddings_media_id_fkey FOREIGN KEY (media_id) REFERENCES public.case_media(id)
+);
+CREATE TABLE public.case_metadata (
+  case_id uuid NOT NULL,
+  modality character varying NOT NULL DEFAULT 'Other'::character varying,
+  anatomy character varying NOT NULL DEFAULT 'Other'::character varying,
+  pathology_group character varying NOT NULL DEFAULT 'Other'::character varying,
+  bone_specialty_id uuid,
+  pathology_category_id uuid,
+  suggested_diagnosis text,
+  clinical_context jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_metadata_pkey PRIMARY KEY (case_id),
+  CONSTRAINT case_metadata_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT case_metadata_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT case_metadata_pathology_category_id_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.case_tags (
+  case_id uuid NOT NULL,
+  tag_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT case_tags_pkey PRIMARY KEY (case_id, tag_id),
+  CONSTRAINT case_tags_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT case_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id)
+);
+CREATE TABLE public.case_text_embeddings (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  case_id uuid NOT NULL,
+  source_text text NOT NULL,
+  source_type character varying NOT NULL DEFAULT 'Diagnosis'::character varying,
+  text_vector USER-DEFINED NOT NULL,
+  embedding_model character varying NOT NULL DEFAULT 'sentence-transformers/all-mpnet-base-v2'::character varying,
+  embedding_dimensions integer NOT NULL DEFAULT 768,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT case_text_embeddings_pkey PRIMARY KEY (id),
+  CONSTRAINT case_text_embeddings_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id)
+);
+CREATE TABLE public.case_view_logs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  viewed_at timestamp with time zone DEFAULT now(),
+  duration_seconds integer,
+  is_completed boolean DEFAULT false,
+  class_id uuid,
+  CONSTRAINT case_view_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT case_view_logs_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT case_view_logs_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT case_view_logs_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id)
+);
+CREATE TABLE public.categories (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL UNIQUE,
+  description text,
+  CONSTRAINT categories_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.citations (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  answer_id uuid,
+  chunk_id uuid NOT NULL,
+  similarity_score double precision NOT NULL,
+  message_id uuid,
+  CONSTRAINT citations_pkey PRIMARY KEY (id),
+  CONSTRAINT citations_answer_id_fkey FOREIGN KEY (answer_id) REFERENCES public.case_answers(id),
+  CONSTRAINT citations_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES public.document_chunks(id),
+  CONSTRAINT citations_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.qa_messages(id)
+);
+CREATE TABLE public.class_cases (
+  class_id uuid NOT NULL,
+  case_id uuid NOT NULL,
+  assigned_at timestamp with time zone DEFAULT now(),
+  due_date timestamp with time zone,
+  is_mandatory boolean NOT NULL DEFAULT false,
+  announcement_id uuid,
+  CONSTRAINT class_cases_pkey PRIMARY KEY (class_id, case_id),
+  CONSTRAINT class_cases_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT class_cases_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id)
+);
+CREATE TABLE public.class_enrollments (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  enrolled_at timestamp with time zone DEFAULT now(),
+  class_name text,
+  CONSTRAINT class_enrollments_pkey PRIMARY KEY (id),
+  CONSTRAINT class_enrollments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT class_enrollments_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.class_expert_assignments (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  expert_id uuid NOT NULL,
+  bone_specialty_id uuid NOT NULL,
+  role_in_class text DEFAULT 'Supporting'::text CHECK (role_in_class = ANY (ARRAY['Primary'::text, 'Supporting'::text, 'Guest'::text])),
+  assigned_at timestamp with time zone DEFAULT now(),
+  is_active boolean DEFAULT true,
+  CONSTRAINT class_expert_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT class_expert_assignments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT class_expert_assignments_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT class_expert_assignments_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id)
+);
+CREATE TABLE public.class_quiz_sessions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  class_id uuid NOT NULL,
+  quiz_id uuid NOT NULL,
+  open_time timestamp with time zone,
+  close_time timestamp with time zone,
+  passing_score integer,
+  time_limit_minutes integer,
+  created_at timestamp with time zone DEFAULT now(),
+  shuffle_questions boolean NOT NULL DEFAULT false,
+  allow_retake boolean NOT NULL DEFAULT false,
+  retake_reset_at timestamp with time zone,
+  allow_late boolean DEFAULT false,
+  show_results_after_submission boolean DEFAULT true,
+  is_auto_created boolean NOT NULL DEFAULT false,
+  announcement_id uuid,
+  release_answers_at timestamp without time zone,
+  released_by_id uuid,
+  CONSTRAINT class_quiz_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT class_quiz_sessions_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT class_quiz_sessions_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quizzes(id)
+);
+CREATE TABLE public.class_tags (
+  class_id uuid NOT NULL,
+  tag_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT class_tags_pkey PRIMARY KEY (class_id, tag_id),
+  CONSTRAINT class_tags_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT class_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id)
+);
+CREATE TABLE public.competency_definitions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  bone_specialty_id uuid,
+  pathology_category_id uuid,
+  mastery_thresholds jsonb DEFAULT '{"Expert": 80, "Beginner": 0, "Proficient": 60, "Intermediate": 40}'::jsonb,
+  description text,
+  created_at timestamp without time zone DEFAULT now(),
+  updated_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT competency_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT competency_definitions_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT competency_definitions_pathology_category_id_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.data_exports (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name character varying NOT NULL,
+  export_type character varying NOT NULL,
+  format character varying NOT NULL DEFAULT 'csv'::character varying,
+  record_count integer NOT NULL DEFAULT 0,
+  status character varying NOT NULL DEFAULT 'pending'::character varying,
+  file_path character varying,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  completed_at timestamp with time zone,
+  CONSTRAINT data_exports_pkey PRIMARY KEY (id),
+  CONSTRAINT data_exports_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.document_chunks (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  doc_id uuid NOT NULL,
+  content text NOT NULL,
+  embedding USER-DEFINED,
+  chunk_order integer NOT NULL,
+  is_flagged boolean DEFAULT false,
+  flagged_by_expert_id uuid,
+  flag_reason text,
+  flagged_at timestamp with time zone,
+  start_page integer DEFAULT 0,
+  end_page integer DEFAULT 0,
+  modality character varying NOT NULL DEFAULT 'Other'::character varying,
+  anatomy character varying NOT NULL DEFAULT 'Other'::character varying,
+  pathology_group character varying NOT NULL DEFAULT 'Other'::character varying,
+  CONSTRAINT document_chunks_pkey PRIMARY KEY (id),
+  CONSTRAINT document_chunks_doc_id_fkey FOREIGN KEY (doc_id) REFERENCES public.documents(id),
+  CONSTRAINT document_chunks_flagged_by_expert_id_fkey FOREIGN KEY (flagged_by_expert_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.document_tags (
+  document_id uuid NOT NULL,
+  tag_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT document_tags_pkey PRIMARY KEY (document_id, tag_id),
+  CONSTRAINT document_tags_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id),
+  CONSTRAINT document_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id)
+);
+CREATE TABLE public.documents (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  title text NOT NULL,
+  file_path text,
+  category_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  version character varying NOT NULL DEFAULT '1.0.0'::character varying,
+  is_outdated boolean NOT NULL DEFAULT false,
+  indexing_status text DEFAULT 'Pending'::text,
+  content_hash text,
+  indexing_progress integer DEFAULT 0,
+  total_pages integer DEFAULT 0,
+  current_page_indexing integer DEFAULT 0,
+  total_chunks integer DEFAULT 0,
+  pending_reindex_path text,
+  pending_reindex_hash text,
+  updated_at timestamp with time zone DEFAULT now(),
+  pending_target_version character varying,
+  CONSTRAINT documents_pkey PRIMARY KEY (id),
+  CONSTRAINT documents_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id)
+);
+CREATE TABLE public.error_patterns (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  question_pattern text,
+  error_topic character varying,
+  error_count integer DEFAULT 1,
+  topic_hint text,
+  first_occurred_at timestamp without time zone DEFAULT now(),
+  last_occurred_at timestamp without time zone DEFAULT now(),
+  is_resolved boolean DEFAULT false,
+  resolved_at timestamp without time zone,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT error_patterns_pkey PRIMARY KEY (id),
+  CONSTRAINT error_patterns_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.expert_reviews (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  expert_id uuid NOT NULL,
+  answer_id uuid,
+  review_note text,
+  action text CHECK (action = ANY (ARRAY['Approve'::text, 'Reject'::text, 'Edit'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  session_id uuid,
+  corrected_roi jsonb,
+  CONSTRAINT expert_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT expert_reviews_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT expert_reviews_answer_id_fkey FOREIGN KEY (answer_id) REFERENCES public.case_answers(id),
+  CONSTRAINT expert_reviews_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.visual_qa_sessions(id)
+);
+CREATE TABLE public.expert_specialties (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  expert_id uuid NOT NULL,
+  bone_specialty_id uuid NOT NULL,
+  pathology_category_id uuid,
+  proficiency_level integer DEFAULT 1 CHECK (proficiency_level >= 1 AND proficiency_level <= 5),
+  years_experience integer,
+  certifications jsonb,
+  is_primary boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expert_specialties_pkey PRIMARY KEY (id),
+  CONSTRAINT expert_specialties_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT expert_specialties_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT expert_specialties_pathology_category_id_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.learning_insights (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  insight_type character varying NOT NULL,
+  title character varying NOT NULL,
+  description text,
+  confidence numeric DEFAULT 0.5,
+  related_bone_specialty_id uuid,
+  related_pathology_id uuid,
+  recommended_action text,
+  is_read boolean DEFAULT false,
+  is_action_taken boolean DEFAULT false,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT learning_insights_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_insights_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT learning_insights_related_bone_specialty_id_fkey FOREIGN KEY (related_bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT learning_insights_related_pathology_id_fkey FOREIGN KEY (related_pathology_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.learning_statistics (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  class_id uuid,
+  total_cases_viewed integer DEFAULT 0,
+  total_questions_asked integer DEFAULT 0,
+  avg_quiz_score double precision,
+  error_distribution jsonb,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT learning_statistics_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_statistics_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT learning_statistics_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id)
+);
+CREATE TABLE public.medical_cases (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  title text NOT NULL,
+  description text NOT NULL,
+  difficulty text CHECK (difficulty = ANY (ARRAY['Easy'::text, 'Medium'::text, 'Hard'::text])),
+  category_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  is_approved boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  suggested_diagnosis text,
+  key_findings text,
+  created_by_expert_id uuid,
+  assigned_expert_id uuid,
+  reflective_questions text,
+  embedding USER-DEFINED,
+  indexing_status text DEFAULT 'Pending'::text,
+  version character varying NOT NULL DEFAULT '1.0.0'::character varying,
+  bone_specialty_id uuid,
+  pathology_category_id uuid,
+  severity text CHECK (severity = ANY (ARRAY['Mild'::text, 'Moderate'::text, 'Severe'::text])),
+  patient_age_group text CHECK (patient_age_group = ANY (ARRAY['Pediatric'::text, 'Adult'::text, 'Geriatric'::text])),
+  emergency_level text DEFAULT 'Low'::text CHECK (emergency_level = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text, 'Critical'::text])),
+  body_region character varying,
+  view_count integer NOT NULL DEFAULT 0,
+  CONSTRAINT medical_cases_pkey PRIMARY KEY (id),
+  CONSTRAINT medical_cases_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
+  CONSTRAINT medical_cases_created_by_expert_id_fkey FOREIGN KEY (created_by_expert_id) REFERENCES public.users(id),
+  CONSTRAINT medical_cases_assigned_expert_id_fkey FOREIGN KEY (assigned_expert_id) REFERENCES public.users(id),
+  CONSTRAINT medical_cases_bone_specialty_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT medical_cases_pathology_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.medical_images (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  case_id uuid NOT NULL,
+  image_url text NOT NULL,
+  modality text CHECK (modality = ANY (ARRAY['X-Ray'::text, 'CT'::text, 'MRI'::text, 'Ultrasound'::text, 'Other'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  view_type text CHECK (view_type = ANY (ARRAY['AP'::text, 'Lateral'::text, 'Oblique'::text, '3D'::text, 'Tangential'::text])),
+  body_part text CHECK (body_part = ANY (ARRAY['Left'::text, 'Right'::text, 'Bilateral'::text])),
+  contrast_used boolean DEFAULT false,
+  image_quality text CHECK (image_quality = ANY (ARRAY['Good'::text, 'Fair'::text, 'Poor'::text])),
+  clinical_notes text,
+  CONSTRAINT medical_images_pkey PRIMARY KEY (id),
+  CONSTRAINT medical_images_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  message text NOT NULL,
+  type text NOT NULL,
+  target_url text,
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.password_reset_tokens (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  token character varying NOT NULL UNIQUE,
+  expires_at timestamp with time zone NOT NULL,
+  is_used boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.pathology_categories (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  code text NOT NULL UNIQUE,
+  name text NOT NULL,
+  bone_specialty_id uuid,
+  description text,
+  display_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pathology_categories_pkey PRIMARY KEY (id),
+  CONSTRAINT pathology_categories_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id)
+);
+CREATE TABLE public.pending_document_chunks (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  doc_id uuid NOT NULL,
+  content text NOT NULL,
+  embedding USER-DEFINED,
+  chunk_order integer NOT NULL,
+  start_page integer DEFAULT 0,
+  end_page integer DEFAULT 0,
+  modality character varying NOT NULL DEFAULT 'Other'::character varying,
+  anatomy character varying NOT NULL DEFAULT 'Other'::character varying,
+  pathology_group character varying NOT NULL DEFAULT 'Other'::character varying,
+  CONSTRAINT pending_document_chunks_pkey PRIMARY KEY (id),
+  CONSTRAINT pending_document_chunks_doc_id_fkey FOREIGN KEY (doc_id) REFERENCES public.documents(id)
+);
+CREATE TABLE public.qa_messages (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL,
+  role character varying DEFAULT 'User'::character varying,
+  content text NOT NULL,
+  suggested_diagnosis text,
+  differential_diagnoses jsonb,
+  key_imaging_findings text,
+  reflective_questions text,
+  ai_confidence_score double precision,
+  created_at timestamp with time zone DEFAULT now(),
+  coordinates jsonb,
+  client_request_id character varying,
+  citations_json jsonb,
+  target_assistant_message_id uuid,
+  CONSTRAINT qa_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT qam_session_fk FOREIGN KEY (session_id) REFERENCES public.visual_qa_sessions(id)
+);
+CREATE TABLE public.quiz_attempts (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  quiz_id uuid NOT NULL,
+  score double precision,
+  started_at timestamp with time zone DEFAULT now(),
+  completed_at timestamp with time zone,
+  difficulty_level character varying DEFAULT 'Medium'::character varying,
+  next_review_date date,
+  ease_factor numeric DEFAULT 2.5,
+  review_interval integer DEFAULT 1,
+  current_question_index integer DEFAULT 0,
+  CONSTRAINT quiz_attempts_pkey PRIMARY KEY (id),
+  CONSTRAINT quiz_attempts_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT quiz_attempts_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quizzes(id)
+);
+CREATE TABLE public.quiz_questions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  quiz_id uuid NOT NULL,
+  case_id uuid,
+  question_text text NOT NULL,
+  correct_answer text,
+  option_a text,
+  option_b text,
+  option_c text,
+  option_d text,
+  image_url text,
+  max_score integer NOT NULL DEFAULT 10,
+  type integer,
+  reference_answer text,
+  CONSTRAINT quiz_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT quiz_questions_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quizzes(id),
+  CONSTRAINT quiz_questions_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id)
+);
+CREATE TABLE public.quiz_review_items (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  attempt_id uuid NOT NULL,
+  question_id uuid NOT NULL,
+  question_text text NOT NULL,
+  student_answer text,
+  correct_answer text,
+  is_correct boolean,
+  ai_explanation text,
+  related_cases jsonb DEFAULT '[]'::jsonb,
+  topic_tags jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT quiz_review_items_pkey PRIMARY KEY (id),
+  CONSTRAINT quiz_review_items_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.quiz_attempts(id),
+  CONSTRAINT quiz_review_items_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.quiz_questions(id)
+);
+CREATE TABLE public.quizzes (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  title text NOT NULL,
+  open_time timestamp with time zone,
+  close_time timestamp with time zone,
+  time_limit integer,
+  passing_score integer,
+  created_at timestamp with time zone DEFAULT now(),
+  created_by_expert_id uuid,
+  assigned_expert_id uuid,
+  topic text,
+  is_ai_generated boolean DEFAULT false,
+  difficulty text CHECK (difficulty = ANY (ARRAY['Easy'::text, 'Medium'::text, 'Hard'::text])),
+  classification text,
+  is_verified_curriculum boolean NOT NULL DEFAULT false,
+  mode text NOT NULL DEFAULT 'multiple_choice'::text,
+  bone_specialty_id uuid,
+  pathology_category_id uuid,
+  teaching_points integer DEFAULT 0,
+  learning_objectives jsonb,
+  target_student_level character varying,
+  created_by_lecturer_id uuid,
+  adaptive_difficulty boolean DEFAULT false,
+  spaced_repetition_enabled boolean DEFAULT false,
+  CONSTRAINT quizzes_pkey PRIMARY KEY (id),
+  CONSTRAINT quizzes_created_by_expert_id_fkey FOREIGN KEY (created_by_expert_id) REFERENCES public.users(id),
+  CONSTRAINT quizzes_assigned_expert_id_fkey FOREIGN KEY (assigned_expert_id) REFERENCES public.users(id),
+  CONSTRAINT fk_quizzes_created_by_lecturer FOREIGN KEY (created_by_lecturer_id) REFERENCES public.users(id),
+  CONSTRAINT quizzes_bone_specialty_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT quizzes_pathology_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.review_schedules (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  case_id uuid,
+  quiz_id uuid,
+  question_id uuid,
+  next_review_date date NOT NULL,
+  ease_factor numeric DEFAULT 2.5,
+  interval_days integer DEFAULT 1,
+  repetition_count integer DEFAULT 0,
+  last_review_date timestamp without time zone,
+  last_quality integer DEFAULT '-1'::integer,
+  created_at timestamp without time zone DEFAULT now(),
+  updated_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT review_schedules_pkey PRIMARY KEY (id),
+  CONSTRAINT review_schedules_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT review_schedules_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT review_schedules_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES public.quizzes(id),
+  CONSTRAINT review_schedules_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.quiz_questions(id)
+);
+CREATE TABLE public.roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  description text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT roles_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.student_competencies (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  bone_specialty_id uuid,
+  pathology_category_id uuid,
+  score numeric DEFAULT 0,
+  total_attempts integer DEFAULT 0,
+  correct_attempts integer DEFAULT 0,
+  mastery_level character varying DEFAULT 'Beginner'::character varying,
+  last_attempt_at timestamp without time zone,
+  created_at timestamp without time zone DEFAULT now(),
+  updated_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT student_competencies_pkey PRIMARY KEY (id),
+  CONSTRAINT student_competencies_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT student_competencies_bone_specialty_id_fkey FOREIGN KEY (bone_specialty_id) REFERENCES public.bone_specialties(id),
+  CONSTRAINT student_competencies_pathology_category_id_fkey FOREIGN KEY (pathology_category_id) REFERENCES public.pathology_categories(id)
+);
+CREATE TABLE public.student_levels (
+  id integer NOT NULL DEFAULT nextval('student_levels_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  description text,
+  sort_order integer DEFAULT 0,
+  CONSTRAINT student_levels_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.student_questions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  case_id uuid,
+  annotation_id uuid,
+  question_text text NOT NULL,
+  language text CHECK (language = ANY (ARRAY['vi'::text, 'en'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  custom_image_url text,
+  custom_coordinates jsonb,
+  CONSTRAINT student_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT student_questions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT student_questions_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT student_questions_annotation_id_fkey FOREIGN KEY (annotation_id) REFERENCES public.case_annotations(id)
+);
+CREATE TABLE public.student_quiz_answers (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  attempt_id uuid NOT NULL,
+  question_id uuid NOT NULL,
+  student_answer text,
+  is_correct boolean,
+  essay_answer text,
+  score_awarded integer,
+  lecturer_feedback text,
+  graded_at timestamp with time zone,
+  graded_by uuid,
+  is_graded boolean NOT NULL DEFAULT false,
+  CONSTRAINT student_quiz_answers_pkey PRIMARY KEY (id),
+  CONSTRAINT student_quiz_answers_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.quiz_attempts(id),
+  CONSTRAINT student_quiz_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.quiz_questions(id),
+  CONSTRAINT student_quiz_answers_graded_by_fkey FOREIGN KEY (graded_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.system_configs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  config_key character varying NOT NULL UNIQUE,
+  config_value text NOT NULL,
+  category character varying NOT NULL,
+  value_type character varying NOT NULL DEFAULT 'string'::character varying,
+  description character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT system_configs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.system_logs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  timestamp timestamp with time zone NOT NULL,
+  level character varying NOT NULL,
+  category character varying NOT NULL,
+  message character varying NOT NULL,
+  user_email character varying,
+  ip_address character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT system_logs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.tags (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  type text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tags_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.teaching_objective_suggestions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid NOT NULL,
+  expert_id uuid NOT NULL,
+  topic character varying NOT NULL,
+  objective character varying NOT NULL,
+  level character varying NOT NULL DEFAULT 'Basic'::character varying,
+  order_index integer NOT NULL DEFAULT 0,
+  status character varying NOT NULL DEFAULT 'Pending'::character varying,
+  rejection_reason character varying,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone,
+  CONSTRAINT teaching_objective_suggestions_pkey PRIMARY KEY (id),
+  CONSTRAINT teaching_objective_suggestions_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.academic_classes(id),
+  CONSTRAINT teaching_objective_suggestions_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT teaching_objective_suggestions_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  role_id uuid NOT NULL,
+  assigned_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id)
+);
+CREATE TABLE public.users (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  full_name text NOT NULL,
+  email text NOT NULL UNIQUE,
+  password text,
+  school_cohort text,
+  last_login timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  is_active boolean NOT NULL DEFAULT true,
+  google_id character varying,
+  avatar_url character varying,
+  date_of_birth date,
+  phone_number character varying,
+  gender text CHECK (gender = ANY (ARRAY['Male'::text, 'Female'::text, 'Other'::text])),
+  student_id character varying UNIQUE,
+  class_code character varying,
+  address text,
+  bio text,
+  emergency_contact character varying,
+  medical_school character varying,
+  medical_student_id character varying,
+  verification_status character varying,
+  verification_notes text,
+  verified_at timestamp with time zone,
+  verified_by uuid,
+  department character varying,
+  specialty character varying,
+  primary_bone_specialty_id uuid,
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(id),
+  CONSTRAINT users_primary_specialty_fkey FOREIGN KEY (primary_bone_specialty_id) REFERENCES public.bone_specialties(id)
+);
+CREATE TABLE public.visual_qa_sessions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  student_id uuid NOT NULL,
+  case_id uuid,
+  image_id uuid,
+  custom_image_url text,
+  status character varying DEFAULT 'Active'::character varying CHECK (status::text = ANY (ARRAY['Active'::character varying::text, 'PendingExpertReview'::character varying::text, 'EscalatedToExpert'::character varying::text, 'LecturerApproved'::character varying::text, 'ExpertApproved'::character varying::text, 'Rejected'::character varying::text])),
+  lecturer_id uuid,
+  expert_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  promoted_case_id uuid,
+  requested_review_message_id uuid,
+  CONSTRAINT visual_qa_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT vqs_student_fk FOREIGN KEY (student_id) REFERENCES public.users(id),
+  CONSTRAINT vqs_case_fk FOREIGN KEY (case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT vqs_image_fk FOREIGN KEY (image_id) REFERENCES public.medical_images(id),
+  CONSTRAINT vqs_lecturer_fk FOREIGN KEY (lecturer_id) REFERENCES public.users(id),
+  CONSTRAINT vqs_expert_fk FOREIGN KEY (expert_id) REFERENCES public.users(id),
+  CONSTRAINT vqs_promoted_case_fk FOREIGN KEY (promoted_case_id) REFERENCES public.medical_cases(id),
+  CONSTRAINT fk_visual_qa_sessions_requested_review_message FOREIGN KEY (requested_review_message_id) REFERENCES public.qa_messages(id)
+);
