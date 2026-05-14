@@ -11,5 +11,6 @@ namespace BoneVisQA.Services.Interfaces.Expert
     {
         Task<PagedResult<GetTagDTO>> GetAllTagAsync(int pageIndex, int pageSize);
         Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto);
+        Task<UpdateTagCaseDTO> UpdateTagCaseAsync(UpdateTagCaseDTO dto);
     }
 }

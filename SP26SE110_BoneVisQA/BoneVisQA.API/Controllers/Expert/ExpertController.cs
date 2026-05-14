@@ -418,6 +418,14 @@ namespace BoneVisQA.API.Controllers.Expert
 
             return Ok(result);
         }
+        [HttpPut("update-tag-case")]
+
+        public async Task<IActionResult> UpdateTagCase([FromBody] UpdateTagCaseDTO dto)
+        {
+                var result = await _tagCaseService.UpdateTagCaseAsync(dto);
+
+                return Ok(result);
+        }
 
         [HttpPost("case-tag")]
         public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)

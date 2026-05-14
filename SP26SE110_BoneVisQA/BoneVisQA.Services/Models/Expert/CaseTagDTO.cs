@@ -23,4 +23,13 @@ namespace BoneVisQA.Services.Models.Expert
         public string? TagName { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
+
+    public class UpdateTagCaseDTO
+    {
+        public Guid CaseId { get; set; }
+
+        public Guid OldTagId { get; set; }
+
+        public Guid NewTagId { get; set; }
+    }
 }

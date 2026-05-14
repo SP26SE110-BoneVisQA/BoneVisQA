@@ -44,6 +44,32 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
+        public async Task<UpdateTagCaseDTO> UpdateTagCaseAsync(UpdateTagCaseDTO dto)
+        {
+            // Tìm TagCase theo CaseId
+            var tagCase = await _unitOfWork.Context.CaseTags.FirstOrDefaultAsync(x =>x.CaseId == dto.CaseId && x.TagId == dto.OldTagId);
+
+            tagCase.TagId = dto.NewTagId;
+
+            if (tagCase == null)
+            {
+                throw new Exception("TagCase not found");
+            }
+
+            // Update TagId
+            tagCase.TagId = dto.NewTagId;
+
+            // Update database
+            _unitOfWork.Context.CaseTags.Update(tagCase);
+
+            await _unitOfWork.SaveAsync();
+
+            return new UpdateTagCaseDTO
+            {
+                CaseId = tagCase.CaseId,
+                NewTagId = tagCase.TagId
+            };
+        }
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.MedicalCaseId)
