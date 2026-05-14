@@ -393,6 +393,9 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             AllowLate = session.AllowLate,
             ShowResultsAfterSubmission = session.ShowResultsAfterSubmission,
             RetakeResetAt = session.RetakeResetAt,
+            ReleaseAnswersAt = session.ReleaseAnswersAt,
+            ReleasedById = session.ReleasedById,
+            IsAnswersReleased = session.ReleaseAnswersAt.HasValue,
             Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
         };
     }
@@ -852,9 +855,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Student submission not found.");
 
-        // Update score if provided
-        if (request.Score.HasValue)
-            attempt.Score = request.Score.Value;
+        // Note: Score is ALWAYS recalculated from answers below, never from request.Score
+        // This ensures consistency between scoreAwarded and attempt.Score
 
         // Update answers if provided
         if (request.Answers.Count > 0)
@@ -1009,7 +1011,9 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             AllowRetake = quizSession.AllowRetake,
             ShowResultsAfterSubmission = quizSession.ShowResultsAfterSubmission,
             AvgScore = quizAvgScore,
-            CreatedAt = quizSession.CreatedAt
+            CreatedAt = quizSession.CreatedAt,
+            ReleaseAnswersAt = quizSession.ReleaseAnswersAt,
+            IsAnswersReleased = quizSession.ReleaseAnswersAt.HasValue
         };
     }
 
@@ -1204,6 +1208,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             ShowResultsAfterSubmission = quizSession.ShowResultsAfterSubmission,
             AvgScore = await _unitOfWork.Context.QuizAttempts.Where(a => a.QuizId == quizSession.QuizId && a.Score.HasValue).AverageAsync(a => (double?)a.Score) ?? null,
             CreatedAt = quizSession.CreatedAt,
+            ReleaseAnswersAt = quizSession.ReleaseAnswersAt,
+            IsAnswersReleased = quizSession.ReleaseAnswersAt.HasValue,
             Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
         };
 
@@ -1284,7 +1290,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.QuizId == quizSession.QuizId)
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         return quizEnrollments.Select(e => new AssignmentSubmissionDto
         {
@@ -1312,7 +1319,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizSession.QuizId && studentIds.Contains(a.StudentId))
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         foreach (var update in request.Submissions)
         {
@@ -1908,5 +1916,72 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var fileName = $"ClassQuizResults_{academicClass.ClassName?.Replace(" ", "_") ?? "Export"}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
 
         return (memoryStream.ToArray(), fileName);
+    }
+
+    // ── Release/Hide Answers Methods ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Release quiz answers for all students in a class.
+    /// </summary>
+    public async Task ReleaseQuizAnswersAsync(Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
+            ?? throw new KeyNotFoundException("Quiz assignment not found.");
+
+        session.ReleaseAnswersAt = DateTime.UtcNow;
+        session.ReleasedById = lecturerId;
+        await _unitOfWork.SaveAsync();
+
+        _logger.LogInformation("[ReleaseQuizAnswers] Lecturer {LecturerId} released answers for quiz {QuizId} in class {ClassId}",
+            lecturerId, quizId, classId);
+    }
+
+    /// <summary>
+    /// Hide quiz answers (undo release) for all students in a class.
+    /// </summary>
+    public async Task HideQuizAnswersAsync(Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
+            ?? throw new KeyNotFoundException("Quiz assignment not found.");
+
+        session.ReleaseAnswersAt = null;
+        session.ReleasedById = null;
+        await _unitOfWork.SaveAsync();
+
+        _logger.LogInformation("[HideQuizAnswers] Lecturer {LecturerId} hid answers for quiz {QuizId} in class {ClassId}",
+            lecturerId, quizId, classId);
+    }
+
+    /// <summary>
+    /// Get release status for a quiz in a class.
+    /// </summary>
+    public async Task<QuizReleaseStatusDto> GetReleaseStatusAsync(Guid lecturerId, Guid classId, Guid quizId)
+    {
+        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+
+        var session = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Include(s => s.Quiz)
+            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId)
+            ?? throw new KeyNotFoundException("Quiz assignment not found.");
+
+        var utcNow = DateTime.UtcNow;
+        var isQuizClosed = session.CloseTime.HasValue && session.CloseTime.Value < utcNow;
+
+        return new QuizReleaseStatusDto
+        {
+            ClassId = classId,
+            QuizId = quizId,
+            QuizTitle = session.Quiz?.Title ?? "Unknown Quiz",
+            IsReleased = session.ReleaseAnswersAt.HasValue,
+            ReleasedAt = session.ReleaseAnswersAt,
+            IsQuizClosed = isQuizClosed
+        };
     }
 }

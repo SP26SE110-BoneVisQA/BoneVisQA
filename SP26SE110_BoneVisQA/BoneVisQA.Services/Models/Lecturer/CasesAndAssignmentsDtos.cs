@@ -224,6 +224,12 @@ public class ClassQuizSessionDto
     public bool AllowLate { get; set; }
     public bool ShowResultsAfterSubmission { get; set; }
     public DateTime? RetakeResetAt { get; set; }
+    /// <summary>Thời điểm lecturer chủ động release đáp án.</summary>
+    public DateTime? ReleaseAnswersAt { get; set; }
+    /// <summary>ID của lecturer đã release đáp án.</summary>
+    public Guid? ReleasedById { get; set; }
+    /// <summary>Trạng thái đáp án đã được release hay chưa.</summary>
+    public bool IsAnswersReleased { get; set; }
     /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
     public string? Warning { get; set; }
 }
@@ -354,6 +360,10 @@ public class AssignmentDetailDto
     public bool ShowResultsAfterSubmission { get; set; }
     public double? AvgScore { get; set; }
     public DateTime? CreatedAt { get; set; }
+    /// <summary>Thời điểm lecturer release đáp án (chỉ áp dụng cho quiz).</summary>
+    public DateTime? ReleaseAnswersAt { get; set; }
+    /// <summary>Trạng thái đáp án đã được release hay chưa (chỉ áp dụng cho quiz).</summary>
+    public bool IsAnswersReleased { get; set; }
     /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
     public string? Warning { get; set; }
 }
@@ -402,4 +412,20 @@ public class UpdateSubmissionScoreDto
 public class UpdateSubmissionsRequestDto
 {
     public List<UpdateSubmissionScoreDto> Submissions { get; set; } = new();
+}
+
+/// <summary>
+/// DTO trả về trạng thái release đáp án của một quiz.
+/// </summary>
+public class QuizReleaseStatusDto
+{
+    public Guid ClassId { get; set; }
+    public Guid QuizId { get; set; }
+    public string QuizTitle { get; set; } = string.Empty;
+    /// <summary>True nếu lecturer đã release đáp án.</summary>
+    public bool IsReleased { get; set; }
+    /// <summary>Thời điểm release (null nếu chưa release).</summary>
+    public DateTime? ReleasedAt { get; set; }
+    /// <summary>Quiz đã đóng chưa.</summary>
+    public bool IsQuizClosed { get; set; }
 }

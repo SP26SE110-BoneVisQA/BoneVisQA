@@ -47,5 +47,9 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<List<ExpertQuizQuestionDto>> GetExpertQuizQuestionsAsync(Guid quizId);
         Task<(bool IsAssigned, int AssignedClassCount)> IsQuizAssignedAsync(Guid quizId);
         Task<CopiedExpertQuizDto> CopyExpertQuizForLecturerAsync(Guid expertQuizId, Guid lecturerId, string? newTitle = null);
+
+        //=====================================================   DEEP CLASSIFICATION  ==========================================================
+        Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesTreeAsync();
+        Task<List<PathologyCategorySimpleDto>> GetPathologyCategoriesAsync();
     }
 }

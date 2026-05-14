@@ -55,6 +55,9 @@ public partial class User
     [MaxLength(256)]
     public string? Specialty { get; set; }
 
+    [Column("primary_bone_specialty_id")]
+    public Guid? PrimaryBoneSpecialtyId { get; set; }
+
     [Column("date_of_birth")]
     public DateOnly? DateOfBirth { get; set; }
 
@@ -111,6 +114,10 @@ public partial class User
     [InverseProperty("UsersVerifiedByThisUser")]
     public virtual User? Verifier { get; set; }
 
+    [ForeignKey("PrimaryBoneSpecialtyId")]
+    [InverseProperty("UsersWithPrimarySpecialty")]
+    public virtual BoneSpecialty? PrimaryBoneSpecialty { get; set; }
+
     [InverseProperty("Verifier")]
     public virtual ICollection<User> UsersVerifiedByThisUser { get; set; } = new List<User>();
 
@@ -129,6 +136,9 @@ public partial class User
     [InverseProperty("CreatedByExpert")]
     public virtual ICollection<Quiz> CreatedQuizzes { get; set; } = new List<Quiz>();
 
+    [InverseProperty("CreatedByLecturer")]
+    public virtual ICollection<Quiz> CreatedLecturerQuizzes { get; set; } = new List<Quiz>();
+
     [InverseProperty("AssignedExpert")]
     public virtual ICollection<Quiz> AssignedQuizzes { get; set; } = new List<Quiz>();
 
@@ -146,6 +156,12 @@ public partial class User
 
     [InverseProperty("Expert")]
     public virtual ICollection<ExpertReview> ExpertReviews { get; set; } = new List<ExpertReview>();
+
+    [InverseProperty("Expert")]
+    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
+
+    [InverseProperty("Expert")]
+    public virtual ICollection<ClassExpertAssignment> ExpertClassAssignments { get; set; } = new List<ClassExpertAssignment>();
 
     [InverseProperty("FlaggedByExpert")]
     public virtual ICollection<DocumentChunk> FlaggedDocumentChunks { get; set; } = new List<DocumentChunk>();
@@ -170,4 +186,10 @@ public partial class User
    
     [InverseProperty("GradedByUser")]
     public virtual ICollection<StudentQuizAnswer> GradedStudentQuizAnswers { get; set; } = new List<StudentQuizAnswer>();
+
+    [InverseProperty("Expert")]
+    public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
+
+    [InverseProperty("Reviewer")]
+    public virtual ICollection<TeachingObjectiveSuggestion> ReviewedSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
 }

@@ -1485,6 +1485,9 @@ public class StudentService : IStudentService
         {
             var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
             quizzesWithCreatedAt.TryGetValue(s.QuizId, out var createdAt);
+            // AnswersReleased = true khi lecturer đã release đáp án HOẶC quiz đã đóng
+            var answersReleased = s.ReleaseAnswersAt.HasValue ||
+                (s.CloseTime.HasValue && s.CloseTime.Value < utcNow);
             return new QuizListItemDto
             {
                 QuizId = s.QuizId,
@@ -1499,7 +1502,8 @@ public class StudentService : IStudentService
                 IsCompleted = attempt?.CompletedAt != null,
                 Score = attempt?.Score,
                 AttemptId = attempt?.Id,
-                CreatedAt = createdAt
+                CreatedAt = createdAt,
+                AnswersReleased = answersReleased
             };
         })
         .OrderByDescending(q => q.CreatedAt.HasValue)  // Items with CreatedAt come first

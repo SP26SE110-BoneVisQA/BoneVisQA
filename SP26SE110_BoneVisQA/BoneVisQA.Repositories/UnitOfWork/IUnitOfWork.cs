@@ -40,6 +40,20 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<Tag> TagRepository { get; }
         GenericRepository<DocumentTag> DocumentTagRepository { get; }
         GenericRepository<PasswordResetToken> PasswordResetTokenRepository { get; }
+        GenericRepository<BoneSpecialty> BoneSpecialtyRepository { get; }
+        GenericRepository<PathologyCategory> PathologyCategoryRepository { get; }
+        GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository { get; }
+
+        // Learning Analytics
+        GenericRepository<StudentCompetency> StudentCompetencyRepository { get; }
+        GenericRepository<ErrorPattern> ErrorPatternRepository { get; }
+        GenericRepository<LearningInsight> LearningInsightRepository { get; }
+        GenericRepository<CompetencyDefinition> CompetencyDefinitionRepository { get; }
+
+        // Quiz Extensions
+        GenericRepository<ReviewSchedule> ReviewScheduleRepository { get; }
+        GenericRepository<QuizReviewItem> QuizReviewItemRepository { get; }
+
         int Save();
         Task<int> SaveAsync();
         Task BeginTransactionAsync();

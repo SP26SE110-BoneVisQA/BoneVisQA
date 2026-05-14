@@ -21,6 +21,8 @@ public class QuizListItemDto
     public Guid? AttemptId { get; set; }
     /// <summary>Thời gian tạo quiz — dùng để sắp xếp theo quiz mới nhất.</summary>
     public DateTime? CreatedAt { get; set; }
+    /// <summary>True nếu lecturer đã release đáp án hoặc quiz đã đóng.</summary>
+    public bool AnswersReleased { get; set; }
 }
 
 /// <summary>
@@ -190,6 +192,8 @@ public class QuizAttemptReviewDto
     public int CorrectAnswers { get; set; }
     public bool Passed { get; set; }
     public int? PassingScore { get; set; }
+    /// <summary>True nếu lecturer đã release đáp án hoặc quiz đã đóng.</summary>
+    public bool AnswersReleased { get; set; }
     public IReadOnlyList<QuestionReviewItemDto> Questions { get; set; } = Array.Empty<QuestionReviewItemDto>();
 }
 
@@ -202,8 +206,10 @@ public class QuestionReviewItemDto
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    /// <summary>Câu trả lời của sinh viên.</summary>
     public string? StudentAnswer { get; set; }
     public string? EssayAnswer { get; set; }
+    /// <summary>Đáp án đúng — chỉ hiển thị khi AnswersReleased = true.</summary>
     public string? CorrectAnswer { get; set; }
     public bool IsCorrect { get; set; }
     public string? ImageUrl { get; set; }

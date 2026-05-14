@@ -1,3 +1,4 @@
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using System;
 using System.Collections.Generic;
@@ -30,9 +31,10 @@ public interface ILecturerService
 
 
     Task<bool> DeleteQuizQuestionAsync(Guid questionId);
-    Task<bool> DeleteQuizAsync(Guid quizId);
+    Task<bool> DeleteQuizAsync(Guid quizId, Guid lecturerId);
     Task RemoveQuizFromClassAsync(Guid classId, Guid quizId);
     Task<IReadOnlyList<CaseDto>> GetAllCasesAsync();
+    Task<PagedResultDTO<CaseDto>> GetAllCasesPagedAsync(int pageIndex, int pageSize);
     Task<IReadOnlyList<CaseDto>> AssignCasesToClassAsync(Guid classId, AssignCasesToClassRequestDto request);
     Task<bool> ApproveCaseAsync(Guid caseId, ApproveCaseRequestDto request);
     Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null);
@@ -84,5 +86,11 @@ public interface ILecturerService
 
     /// <summary>Export all quiz results for a lecturer into a single Excel file with multiple sheets.</summary>
     Task<(byte[] FileBytes, string FileName)> ExportAllQuizResultsAsync(Guid lecturerId);
+
+    // Teaching Objectives
+    Task<TeachingObjectivesDto?> GetTeachingObjectivesAsync(Guid lecturerId, Guid? classId = null);
+    Task<TeachingObjectivesDto> UpdateTeachingObjectivesAsync(Guid lecturerId, Guid classId, UpdateTeachingObjectivesRequestDto request);
+    Task<List<TeachingObjectiveSuggestionDto>> GetExpertSuggestionsAsync(Guid classId);
+    Task<TeachingObjectiveSuggestionDto> ConfirmSuggestionAsync(Guid lecturerId, Guid suggestionId, ConfirmSuggestionRequestDto request);
 }
 

@@ -197,7 +197,7 @@ public class LecturerAssignmentsController : ControllerBase
         }
     }
 
-    /// <summary>Export quiz results to Excel file.</summary>
+    /// <summary>Export all quiz results to Excel file for a specific class.</summary>
     [HttpGet("quizzes/{quizId:guid}/export")]
     public async Task<ActionResult> ExportQuizResults(Guid classId, Guid quizId)
     {
@@ -217,6 +217,73 @@ public class LecturerAssignmentsController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    // ── Release Answers Endpoints ─────────────────────────────────────────────────
+
+    /// <summary>Release quiz answers for all students in the class to view.</summary>
+    [HttpPost("quizzes/{quizId:guid}/release-answers")]
+    public async Task<ActionResult> ReleaseQuizAnswers(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _lecturerAssignmentService.ReleaseQuizAnswersAsync(lecturerId.Value, classId, quizId);
+            return Ok(new { message = "Đáp án đã được công bố cho tất cả sinh viên trong lớp." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Hide quiz answers (undo release) for all students in the class.</summary>
+    [HttpPost("quizzes/{quizId:guid}/hide-answers")]
+    public async Task<ActionResult> HideQuizAnswers(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            await _lecturerAssignmentService.HideQuizAnswersAsync(lecturerId.Value, classId, quizId);
+            return Ok(new { message = "Đáp án đã được ẩn khỏi sinh viên." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Get release status for a quiz in a class.</summary>
+    [HttpGet("quizzes/{quizId:guid}/release-status")]
+    public async Task<ActionResult<QuizReleaseStatusDto>> GetReleaseStatus(Guid classId, Guid quizId)
+    {
+        var lecturerId = GetUserId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token không chứa user id hợp lệ." });
+
+        try
+        {
+            var result = await _lecturerAssignmentService.GetReleaseStatusAsync(lecturerId.Value, classId, quizId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
         }
     }
 

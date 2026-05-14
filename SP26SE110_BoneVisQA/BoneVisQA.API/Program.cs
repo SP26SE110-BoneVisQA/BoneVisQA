@@ -16,6 +16,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
@@ -27,6 +28,8 @@ using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
+using BoneVisQA.Services.Services.Analytics;
+using BoneVisQA.Services.Services.QuizExtensions;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
@@ -46,6 +49,12 @@ const long maxUploadBodyBytes = 104857600; // 100 MB
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+
+    // HTTPS on localhost:5047 using ASP.NET Core dev certificate
+    options.ListenLocalhost(5047, listenOptions =>
+    {
+        listenOptions.UseHttps();
+    });
 });
 
 builder.Services.Configure<FormOptions>(options =>
@@ -75,7 +84,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
@@ -88,7 +97,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
@@ -307,13 +316,20 @@ builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService
 builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
+builder.Services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
+builder.Services.AddScoped<ILecturerReportService, LecturerReportService>();
+builder.Services.AddScoped<ILecturerGradeBookService, LecturerGradeBookService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
+builder.Services.AddScoped<IClassExpertAssignmentService, ClassExpertAssignmentService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
+builder.Services.AddScoped<IAdminClassDashboardService, AdminClassDashboardService>();
+builder.Services.AddScoped<IClassificationAnalyticsService, ClassificationAnalyticsService>();
+builder.Services.AddScoped<IClassClassificationService, ClassClassificationService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -322,10 +338,13 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
     client.Timeout = TimeSpan.FromMinutes(60);
 });
 
+builder.Services.AddScoped<ISystemLogService, SystemLogService>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+builder.Services.AddScoped<IExpertSpecialtyService, ExpertSpecialtyService>();
+builder.Services.AddScoped<ITeachingObjectiveService, TeachingObjectiveService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
@@ -334,6 +353,18 @@ builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IBoneSpecialtyService, BoneSpecialtyService>();
+builder.Services.AddScoped<IPathologyCategoryService, PathologyCategoryService>();
+
+// Learning Analytics Services
+builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddScoped<LecturerAnalyticsService>();
+
+// Quiz Extensions Services
+builder.Services.AddScoped<QuizReviewService>();
+builder.Services.AddScoped<SpacedRepetitionService>();
+builder.Services.AddScoped<AdaptiveQuizService>();
+
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();

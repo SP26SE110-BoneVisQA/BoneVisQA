@@ -41,6 +41,19 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<CaseTag> _casetagRepository = null!;
         private GenericRepository<Tag> _tagRepository = null!;
         private GenericRepository<PasswordResetToken> _passwordresetTokenRepository = null!;
+        private GenericRepository<BoneSpecialty> _bonespecialtyRepository = null!;
+        private GenericRepository<PathologyCategory> _pathologycategoryRepository = null!;
+        private GenericRepository<ExpertSpecialty> _expertspecialtyRepository = null!;
+
+        // Learning Analytics
+        private GenericRepository<StudentCompetency> _studentcompetencyRepository = null!;
+        private GenericRepository<ErrorPattern> _errorpatternRepository = null!;
+        private GenericRepository<LearningInsight> _learninginsightRepository = null!;
+        private GenericRepository<CompetencyDefinition> _competencydefinitionRepository = null!;
+
+        // Quiz Extensions
+        private GenericRepository<ReviewSchedule> _reviewscheduleRepository = null!;
+        private GenericRepository<QuizReviewItem> _quizreviewitemRepository = null!;
 
         public UnitOfWork(BoneVisQADbContext context)
         {
@@ -77,6 +90,19 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<Tag> TagRepository => _tagRepository ??= new GenericRepository<Tag>(_context);
         public GenericRepository<DocumentTag> DocumentTagRepository => _documenttagRepository ??= new GenericRepository<DocumentTag>(_context);
         public GenericRepository<PasswordResetToken> PasswordResetTokenRepository => _passwordresetTokenRepository ??= new GenericRepository<PasswordResetToken>(_context);
+        public GenericRepository<BoneSpecialty> BoneSpecialtyRepository => _bonespecialtyRepository ??= new GenericRepository<BoneSpecialty>(_context);
+        public GenericRepository<PathologyCategory> PathologyCategoryRepository => _pathologycategoryRepository ??= new GenericRepository<PathologyCategory>(_context);
+        public GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository => _expertspecialtyRepository ??= new GenericRepository<ExpertSpecialty>(_context);
+
+        // Learning Analytics
+        public GenericRepository<StudentCompetency> StudentCompetencyRepository => _studentcompetencyRepository ??= new GenericRepository<StudentCompetency>(_context);
+        public GenericRepository<ErrorPattern> ErrorPatternRepository => _errorpatternRepository ??= new GenericRepository<ErrorPattern>(_context);
+        public GenericRepository<LearningInsight> LearningInsightRepository => _learninginsightRepository ??= new GenericRepository<LearningInsight>(_context);
+        public GenericRepository<CompetencyDefinition> CompetencyDefinitionRepository => _competencydefinitionRepository ??= new GenericRepository<CompetencyDefinition>(_context);
+
+        // Quiz Extensions
+        public GenericRepository<ReviewSchedule> ReviewScheduleRepository => _reviewscheduleRepository ??= new GenericRepository<ReviewSchedule>(_context);
+        public GenericRepository<QuizReviewItem> QuizReviewItemRepository => _quizreviewitemRepository ??= new GenericRepository<QuizReviewItem>(_context);
 
         public int Save() => _context.SaveChanges();
 

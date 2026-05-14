@@ -31,6 +31,9 @@ public partial class Quiz
     [Column("created_by_expert_id")]
     public Guid? CreatedByExpertId { get; set; }
 
+    [Column("created_by_lecturer_id")]
+    public Guid? CreatedByLecturerId { get; set; }
+
     [Column("assigned_expert_id")]
     public Guid? AssignedExpertId { get; set; }
 
@@ -52,6 +55,29 @@ public partial class Quiz
     [Column("mode")]
     public string? Mode { get; set; } = "multiple_choice";
 
+    [Column("bone_specialty_id")]
+    public Guid? BoneSpecialtyId { get; set; }
+
+    [Column("pathology_category_id")]
+    public Guid? PathologyCategoryId { get; set; }
+
+    [Column("teaching_points")]
+    public int? TeachingPoints { get; set; } = 0;
+
+    [Column("learning_objectives", TypeName = "jsonb")]
+    public string? LearningObjectives { get; set; }
+
+    [Column("target_student_level")]
+    [MaxLength(50)]
+    public string? TargetStudentLevel { get; set; }
+
+    // Quiz Extensions
+    [Column("adaptive_difficulty")]
+    public bool AdaptiveDifficulty { get; set; } = false;
+
+    [Column("spaced_repetition_enabled")]
+    public bool SpacedRepetitionEnabled { get; set; } = false;
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -67,7 +93,19 @@ public partial class Quiz
     [InverseProperty("CreatedQuizzes")]
     public virtual User? CreatedByExpert { get; set; }
 
+    [ForeignKey("CreatedByLecturerId")]
+    [InverseProperty("CreatedLecturerQuizzes")]
+    public virtual User? CreatedByLecturer { get; set; }
+
     [ForeignKey("AssignedExpertId")]
     [InverseProperty("AssignedQuizzes")]
     public virtual User? AssignedExpert { get; set; }
+
+    [ForeignKey("BoneSpecialtyId")]
+    [InverseProperty("Quizzes")]
+    public virtual BoneSpecialty? BoneSpecialty { get; set; }
+
+    [ForeignKey("PathologyCategoryId")]
+    [InverseProperty("Quizzes")]
+    public virtual PathologyCategory? PathologyCategory { get; set; }
 }
