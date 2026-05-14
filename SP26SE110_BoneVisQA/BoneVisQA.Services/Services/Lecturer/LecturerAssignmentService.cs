@@ -1290,7 +1290,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.QuizId == quizSession.QuizId)
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         return quizEnrollments.Select(e => new AssignmentSubmissionDto
         {
@@ -1318,7 +1319,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizSession.QuizId && studentIds.Contains(a.StudentId))
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         foreach (var update in request.Submissions)
         {
