@@ -855,9 +855,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Student submission not found.");
 
-        // Update score if provided
-        if (request.Score.HasValue)
-            attempt.Score = request.Score.Value;
+        // Note: Score is ALWAYS recalculated from answers below, never from request.Score
+        // This ensures consistency between scoreAwarded and attempt.Score
 
         // Update answers if provided
         if (request.Answers.Count > 0)
