@@ -44,6 +44,9 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
+// Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
+const long maxUploadBodyBytes = 104857600; // 100 MB
+
 // In Docker/Production: use HTTP only (no dev cert available)
 // In Development: optionally use HTTPS with dev certificate
 if (builder.Environment.IsDevelopment())
