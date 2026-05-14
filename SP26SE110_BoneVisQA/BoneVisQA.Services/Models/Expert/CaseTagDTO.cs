@@ -28,7 +28,7 @@ namespace BoneVisQA.Services.Models.Expert
     {
         public Guid CaseId { get; set; }
 
-        public Guid OldTagId { get; set; }
+        public Guid? OldTagId { get; set; }
 
         public Guid NewTagId { get; set; }
     }

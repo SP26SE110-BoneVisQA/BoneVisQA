@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert;
 
-[Authorize(Roles = "Expert,Admin")]
+//[Authorize(Roles = "Expert,Admin")]
 [ApiController]
 [Route("api/expert-specialties")]
 [Tags("Expert Specialties")]

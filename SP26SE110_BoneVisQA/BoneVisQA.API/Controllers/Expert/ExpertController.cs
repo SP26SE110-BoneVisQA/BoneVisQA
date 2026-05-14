@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-    [Authorize(Roles = "Expert")]
+   // [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/expert")]
     [Tags("Expert")]
@@ -420,12 +420,12 @@ namespace BoneVisQA.API.Controllers.Expert
         }
         [HttpPut("update-tag-case")]
 
-        public async Task<IActionResult> UpdateTagCase([FromBody] UpdateTagCaseDTO dto)
-        {
-                var result = await _tagCaseService.UpdateTagCaseAsync(dto);
+        //public async Task<IActionResult> UpdateTagCase([FromBody] UpdateTagCaseDTO dto)
+        //{
+        //        var result = await _tagCaseService.UpdateTagCaseAsync(dto);
 
-                return Ok(result);
-        }
+        //        return Ok(result);
+        //}
 
         [HttpPost("case-tag")]
         public async Task<IActionResult> AddTags([FromBody] CaseTagDTO dto)
@@ -438,9 +438,20 @@ namespace BoneVisQA.API.Controllers.Expert
                 result
             });
         }
+        [HttpDelete("tags")]
+        public async Task<IActionResult> DeleteCaseTag([FromQuery] Guid caseId,[FromQuery] Guid tagId)
+        {
+           
+                var result = await _tagCaseService .DeleteCaseTagAsync(caseId, tagId);
 
+            return Ok(new
+            {
+                Success = result,
+                Message = "Delete CaseTag successfully"
+            });
+        }
         //==================================================================================================
-       
+
         [HttpGet("category")]
         public async Task<IActionResult> GetAllCategories(int pageIndex = 1, int pageSize = 10)
         {

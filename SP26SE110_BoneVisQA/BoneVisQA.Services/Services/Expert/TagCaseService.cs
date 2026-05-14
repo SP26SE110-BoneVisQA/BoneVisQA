@@ -44,31 +44,50 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
-        public async Task<UpdateTagCaseDTO> UpdateTagCaseAsync(UpdateTagCaseDTO dto)
+        //public async Task<UpdateTagCaseDTO> UpdateTagCaseAsync(UpdateTagCaseDTO dto)
+        //{
+        //    var tagCase = await _unitOfWork.Context.CaseTags
+        //        .FirstOrDefaultAsync(x =>
+        //            x.CaseId == dto.CaseId &&
+        //            x.TagId == dto.OldTagId);
+
+        //    if (tagCase == null)
+        //    {
+        //        throw new Exception("TagCase not found");
+        //    }
+
+        //    // Update tag
+        //    tagCase.TagId = dto.NewTagId;
+
+        //    _unitOfWork.Context.CaseTags.Update(tagCase);
+
+        //    await _unitOfWork.SaveAsync();
+
+        //    return new UpdateTagCaseDTO
+        //    {
+        //        CaseId = tagCase.CaseId,
+        //        OldTagId = dto.OldTagId,
+        //        NewTagId = tagCase.TagId
+        //    };
+        //}
+
+        public async Task<bool> DeleteCaseTagAsync(Guid caseId, Guid tagId)
         {
-            // Tìm TagCase theo CaseId
-            var tagCase = await _unitOfWork.Context.CaseTags.FirstOrDefaultAsync(x =>x.CaseId == dto.CaseId && x.TagId == dto.OldTagId);
+            var caseTag = await _unitOfWork.Context.CaseTags
+                .FirstOrDefaultAsync(x =>
+                    x.CaseId == caseId &&
+                    x.TagId == tagId);
 
-            tagCase.TagId = dto.NewTagId;
-
-            if (tagCase == null)
+            if (caseTag == null)
             {
-                throw new Exception("TagCase not found");
+                throw new Exception("CaseTag not found");
             }
 
-            // Update TagId
-            tagCase.TagId = dto.NewTagId;
-
-            // Update database
-            _unitOfWork.Context.CaseTags.Update(tagCase);
+            _unitOfWork.Context.CaseTags.Remove(caseTag);
 
             await _unitOfWork.SaveAsync();
 
-            return new UpdateTagCaseDTO
-            {
-                CaseId = tagCase.CaseId,
-                NewTagId = tagCase.TagId
-            };
+            return true;
         }
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {
