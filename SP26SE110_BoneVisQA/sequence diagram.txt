@@ -1,0 +1,36 @@
+    LearnSvc-->>Student: điểm + giải thích + related_cases
+    deactivate LearnSvc
+    deactivate StuCtrl
+    deactivate FE
+    destroy StuCtrl
+```
+3.3 Spaced repetition (mở rộng)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student as Medical Student (Web)
+    participant ExtCtrl as QuizExtensionsController
+    participant Spaced as SpacedRepetitionService
+    participant DB as PostgreSQL
+    Student->>ExtCtrl: GET /api/quiz-extensions/spaced-repetition/due
+    activate ExtCtrl
+    ExtCtrl->>Spaced: GetDueReviewsAsync(studentId)
+    activate Spaced
+    Spaced->>DB: SELECT review_schedules<br/>WHERE next_review_date <= today
+    activate DB
+    deactivate DB
+    Spaced-->>Student: Câu/case cần ôn
+    deactivate Spaced
+    deactivate ExtCtrl
+    Student->>ExtCtrl: POST complete-review (quality score)
+    activate ExtCtrl
+    ExtCtrl->>Spaced: UpdateScheduleAsync()
+    activate Spaced
+    Spaced->>DB: UPDATE review_schedules<br/>(ease_factor, interval_days)
+    activate DB
+    Spaced->>DB: UPDATE quiz_attempts.next_review_date
+    deactivate DB
+    deactivate Spaced
+    deactivate ExtCtrl
+    destroy ExtCtrl
+```
