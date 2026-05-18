@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BoneVisQA.API.Controllers.Expert
 {
-   // [Authorize(Roles = "Expert")]
+    [Authorize(Roles = "Expert")]
     [ApiController]
     [Route("api/expert")]
     [Tags("Expert")]
