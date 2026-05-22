@@ -49,6 +49,32 @@ public partial class QuizQuestion
     [Column("max_score")]
     public int MaxScore { get; set; } = 10;
 
+    /// <summary>
+    /// Hint for the question - only shown in practice mode.
+    /// </summary>
+    [Column("hint")]
+    public string? Hint { get; set; }
+
+    /// <summary>
+    /// Explanation of the correct answer - shown after submission.
+    /// </summary>
+    [Column("explanation")]
+    public string? Explanation { get; set; }
+
+    /// <summary>
+    /// JSON array of correct answers for multi-select questions.
+    /// Example: ["A", "C"] means options A and C are correct.
+    /// </summary>
+    [Column("correct_answers", TypeName = "jsonb")]
+    public string? CorrectAnswers { get; set; }
+
+    /// <summary>
+    /// JSON array of accepted answers for fill-in-blank questions (case-insensitive).
+    /// Example: ["x-ray", "X-ray", "xray"]
+    /// </summary>
+    [Column("accepted_answers", TypeName = "jsonb")]
+    public string? AcceptedAnswers { get; set; }
+
     [ForeignKey("CaseId")]
     [InverseProperty("QuizQuestions")]
     public virtual MedicalCase? Case { get; set; }

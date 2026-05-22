@@ -205,58 +205,6 @@ namespace BoneVisQA.API.Controllers.Admin
 
         #endregion
 
-        #region ==================== EXPERT MATCHING ====================
-
-        /// <summary>
-        /// Tìm Expert phù hợp nhất cho lớp học
-        /// </summary>
-        /// <param name="classId">ID lớp học</param>
-        /// <returns>Danh sách Expert được xếp hạng theo độ phù hợp</returns>
-        [HttpGet("{classId:guid}/matching-experts")]
-        public async Task<IActionResult> FindMatchingExperts(Guid classId)
-        {
-            if (classId == Guid.Empty)
-                return BadRequest(new { message = "ClassId is required." });
-
-            try
-            {
-                var result = await _classificationService.FindMatchingExpertsAsync(classId);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred.", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Tính điểm phù hợp của Expert với lớp học
-        /// </summary>
-        /// <param name="classId">ID lớp học</param>
-        /// <param name="expertId">ID Expert</param>
-        /// <returns>Kết quả ghép Expert với lớp học</returns>
-        [HttpGet("{classId:guid}/expert-match/{expertId:guid}")]
-        public async Task<IActionResult> CalculateExpertMatch(Guid classId, Guid expertId)
-        {
-            if (classId == Guid.Empty || expertId == Guid.Empty)
-                return BadRequest(new { message = "ClassId and ExpertId are required." });
-
-            try
-            {
-                var result = await _classificationService.CalculateExpertMatchAsync(classId, expertId);
-                if (result == null)
-                    return NotFound(new { message = "Class or Expert not found." });
-
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred.", error = ex.Message });
-            }
-        }
-
-        #endregion
-
         #region ==================== DASHBOARD & SUMMARY ====================
 
         /// <summary>

@@ -25,13 +25,31 @@ public class AIQuizService : IAIQuizService
         "TASK: Generate high-quality multiple-choice questions on musculoskeletal imaging diagnosis.\n\n" +
         "STRICT RULES:\n" +
         "1. Each question must have 4 options (A, B, C, D)\n" +
-        "2. There must be exactly 1 correct answer\n" +
+        "2. There must be exactly 1 correct answer (unless it's multi-select)\n" +
         "3. Incorrect options must be plausible and potentially confusable\n" +
         "4. Questions must be based on the described X-ray, CT, or MRI findings\n" +
         "5. Respond in professional, accurate medical English\n" +
-        "6. The correct answer must be A, B, C, or D (not answer text)\n\n" +
+        "6. The correct answer must be A, B, C, or D (not answer text)\n" +
+        "7. Include a 'hint' field with a helpful clue for students\n" +
+        "8. Include an 'explanation' field explaining why the answer is correct\n\n" +
+        "QUESTION TYPES (use these types):\n" +
+        "- 'MultipleChoice': Standard 4-option MCQ (1 correct answer)\n" +
+        "- 'TrueFalse': Statement is True or False\n" +
+        "- 'MultiSelect': Multiple correct answers (select all that apply)\n" +
+        "- 'FillInBlank': Complete the statement by filling in the blank\n\n" +
         "RETURN ONLY A JSON ARRAY in this format:\n" +
-        "{\"questions\": [{\"questionText\": \"...\", \"optionA\": \"...\", \"optionB\": \"...\", \"optionC\": \"...\", \"optionD\": \"...\", \"correctAnswer\": \"A\"}]}\n" +
+        "{\"questions\": [{\n" +
+        "  \"questionText\": \"...\",\n" +
+        "  \"type\": \"MultipleChoice\",\n" +
+        "  \"optionA\": \"...\",\n" +
+        "  \"optionB\": \"...\",\n" +
+        "  \"optionC\": \"...\",\n" +
+        "  \"optionD\": \"...\",\n" +
+        "  \"correctAnswer\": \"A\",\n" +
+        "  \"correctAnswers\": null,\n" +
+        "  \"hint\": \"Helpful clue for students\",\n" +
+        "  \"explanation\": \"Detailed explanation of why this is correct\"\n" +
+        "}]}\n" +
         "DO NOT add any text outside the JSON.";
 
     public AIQuizService(
@@ -382,11 +400,24 @@ public class AIQuizService : IAIQuizService
                         OptionC = GetStringProperty(q, "optionC"),
                         OptionD = GetStringProperty(q, "optionD"),
                         CorrectAnswer = GetStringProperty(q, "correctAnswer"),
-                        Type = "MultipleChoice",
+                        Type = GetStringProperty(q, "type"),
                         CaseId = caseId,
                         CaseTitle = caseTitle,
-                        ImageUrl = imageUrl
+                        ImageUrl = imageUrl,
+                        Explanation = GetStringProperty(q, "explanation")
                     };
+
+                    // Validate and set type defaults
+                    if (string.IsNullOrWhiteSpace(question.Type) ||
+                        !Enum.TryParse<Repositories.Models.QuestionType>(question.Type, true, out var qt))
+                    {
+                        question.Type = "MultipleChoice";
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(question.Type))
+                    {
+                        question.Type = question.Type.Trim();
+                    }
 
                     if (!string.IsNullOrWhiteSpace(question.QuestionText))
                         questions.Add(question);

@@ -43,7 +43,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         private GenericRepository<PasswordResetToken> _passwordresetTokenRepository = null!;
         private GenericRepository<BoneSpecialty> _bonespecialtyRepository = null!;
         private GenericRepository<PathologyCategory> _pathologycategoryRepository = null!;
-        private GenericRepository<ExpertSpecialty> _expertspecialtyRepository = null!;
 
         // Learning Analytics
         private GenericRepository<StudentCompetency> _studentcompetencyRepository = null!;
@@ -54,6 +53,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         // Quiz Extensions
         private GenericRepository<ReviewSchedule> _reviewscheduleRepository = null!;
         private GenericRepository<QuizReviewItem> _quizreviewitemRepository = null!;
+
+        // Flashcards
+        private GenericRepository<FlashcardDeck> _flashcarddeckRepository = null!;
+        private GenericRepository<Flashcard> _flashcardRepository = null!;
 
         public UnitOfWork(BoneVisQADbContext context)
         {
@@ -92,7 +95,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         public GenericRepository<PasswordResetToken> PasswordResetTokenRepository => _passwordresetTokenRepository ??= new GenericRepository<PasswordResetToken>(_context);
         public GenericRepository<BoneSpecialty> BoneSpecialtyRepository => _bonespecialtyRepository ??= new GenericRepository<BoneSpecialty>(_context);
         public GenericRepository<PathologyCategory> PathologyCategoryRepository => _pathologycategoryRepository ??= new GenericRepository<PathologyCategory>(_context);
-        public GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository => _expertspecialtyRepository ??= new GenericRepository<ExpertSpecialty>(_context);
 
         // Learning Analytics
         public GenericRepository<StudentCompetency> StudentCompetencyRepository => _studentcompetencyRepository ??= new GenericRepository<StudentCompetency>(_context);
@@ -103,6 +105,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         // Quiz Extensions
         public GenericRepository<ReviewSchedule> ReviewScheduleRepository => _reviewscheduleRepository ??= new GenericRepository<ReviewSchedule>(_context);
         public GenericRepository<QuizReviewItem> QuizReviewItemRepository => _quizreviewitemRepository ??= new GenericRepository<QuizReviewItem>(_context);
+
+        // Flashcards
+        public GenericRepository<FlashcardDeck> FlashcardDeckRepository => _flashcarddeckRepository ??= new GenericRepository<FlashcardDeck>(_context);
+        public GenericRepository<Flashcard> FlashcardRepository => _flashcardRepository ??= new GenericRepository<Flashcard>(_context);
 
         public int Save() => _context.SaveChanges();
 

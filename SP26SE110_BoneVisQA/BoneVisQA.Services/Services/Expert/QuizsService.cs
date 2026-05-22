@@ -122,7 +122,9 @@ namespace BoneVisQA.Services.Services.Expert
                     TeachingPoints = q.TeachingPoints,
                     TargetStudentLevel = q.TargetStudentLevel,
                     // LearningObjectives stored as JSON string - will be parsed in response
-                    LearningObjectives = null // Parsed separately to avoid LINQ to Entities issues
+                    LearningObjectives = null, // Parsed separately to avoid LINQ to Entities issues
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 })
                 .ToList();
 
@@ -182,7 +184,10 @@ namespace BoneVisQA.Services.Services.Expert
                 LearningObjectives = request.LearningObjectives != null
                     ? System.Text.Json.JsonSerializer.Serialize(request.LearningObjectives)
                     : null,
-                TargetStudentLevel = request.TargetStudentLevel
+                TargetStudentLevel = request.TargetStudentLevel,
+
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive (default to Exam = 1)
+                QuizMode = request.QuizMode ?? 1
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -244,7 +249,10 @@ namespace BoneVisQA.Services.Services.Expert
                 LearningObjectives = !string.IsNullOrEmpty(quiz.LearningObjectives)
                     ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(quiz.LearningObjectives)
                     : null,
-                TargetStudentLevel = quiz.TargetStudentLevel
+                TargetStudentLevel = quiz.TargetStudentLevel,
+
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = quiz.QuizMode
             };
         }
         public async Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update)
@@ -281,6 +289,12 @@ namespace BoneVisQA.Services.Services.Expert
                 : null;
             quiz.TargetStudentLevel = update.TargetStudentLevel;
 
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            if (update.QuizMode.HasValue)
+            {
+                quiz.QuizMode = update.QuizMode.Value;
+            }
+
             await _unitOfWork.QuizRepository.UpdateAsync(quiz);
 
             await _unitOfWork.SaveAsync();
@@ -316,7 +330,9 @@ namespace BoneVisQA.Services.Services.Expert
                 BoneSpecialtyId = quiz.BoneSpecialtyId,
                 BoneSpecialtyName = boneSpecialtyName,
                 PathologyCategoryId = quiz.PathologyCategoryId,
-                PathologyCategoryName = pathologyCategoryName
+                PathologyCategoryName = pathologyCategoryName,
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = quiz.QuizMode
             };
         }
         public async Task<bool> DeleteQuizAsync(Guid quizId)
@@ -401,7 +417,9 @@ namespace BoneVisQA.Services.Services.Expert
                     OptionD = q.OptionD,
 
                     CorrectAnswer = q.CorrectAnswer,
-                    ImageUrl = ResolveImageUrl(q.ImageUrl)
+                    ImageUrl = ResolveImageUrl(q.ImageUrl),
+                    Hint = q.Hint,
+                    Explanation = q.Explanation
                 });
             }
 
@@ -435,7 +453,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionC = request.OptionC,
                 OptionD = request.OptionD,
                 CorrectAnswer = request.CorrectAnswer,
-                ImageUrl = request.ImageUrl  // Lưu URL ảnh câu hỏi
+                ImageUrl = request.ImageUrl,  // Lưu URL ảnh câu hỏi
+                Hint = request.Hint,         // Lưu Hint
+                Explanation = request.Explanation  // Lưu Explanation
             };
 
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -455,7 +475,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
                 CorrectAnswer = question.CorrectAnswer,
-                ImageUrl = ResolveImageUrl(question.ImageUrl)
+                ImageUrl = ResolveImageUrl(question.ImageUrl),
+                Hint = question.Hint,
+                Explanation = question.Explanation
             };
         }
         public async Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update)
@@ -499,6 +521,8 @@ namespace BoneVisQA.Services.Services.Expert
 
             question.CorrectAnswer = update.CorrectAnswer;
             question.ImageUrl = update.ImageUrl;
+            question.Hint = update.Hint;
+            question.Explanation = update.Explanation;
 
             await _unitOfWork.QuizQuestionRepository.UpdateAsync(question);
 
@@ -526,7 +550,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
-                ImageUrl = ResolveImageUrl(question.ImageUrl)
+                ImageUrl = ResolveImageUrl(question.ImageUrl),
+                Hint = question.Hint,
+                Explanation = question.Explanation
             };
         }
         public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
@@ -702,21 +728,41 @@ namespace BoneVisQA.Services.Services.Expert
 
             int totalQuestions = questions.Count;
 
-            // ✅ FIX: Tính điểm theo ScoreAwarded (bao gồm essay đã chấm)
-            var totalMaxScore = questions.Sum(q => q.MaxScore);
-            var totalScoreAwarded = studentAnswers
-                .Where(a => a.ScoreAwarded.HasValue)
-                .Sum(a => a.ScoreAwarded.Value);
-
-            float score = totalMaxScore == 0 ? 0 :
-                (float)Math.Round((double)totalScoreAwarded / totalMaxScore * 100, 1);
+            // Total quiz score always = 100, divided equally among all questions
+            var pointsPerQuestion = totalQuestions > 0 ? 100f / totalQuestions : 0;
+            
+            // Calculate earned points: MC = full points if correct, 0 if wrong
+            // Essay = full points if graded, 0 if not yet graded
+            float earnedPoints = 0;
+            foreach (var answer in studentAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += (float)(answer.ScoreAwarded ?? 0);
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+            
+            // score = earnedPoints (each point is already worth 1 point since pointsPerQuestion = 100/total)
+            float score = (float)earnedPoints;
+            
+            // Clamp score to 0-100 range
+            score = Math.Max(0, Math.Min(100, score));
 
             // Số câu đúng (chỉ MCQ/TF) - vẫn giữ cho thống kê
             int correctAnswers = studentAnswers.Count(a => a.IsCorrect == true);
 
-            // Kiểm tra xem có essay nào chưa chấm không
-            int ungradedEssayCount = studentAnswers.Count(a =>
-                a.Question.Type == QuestionType.Essay && !a.IsGraded);
+            // Kiểm tra xem có essay nào chưa chấm không (đếm theo questionId distinct để tránh trùng lặp)
+            int ungradedEssayCount = studentAnswers
+                .Where(a => a.Question.Type == QuestionType.Essay && !a.IsGraded)
+                .Select(a => a.QuestionId)
+                .Distinct()
+                .Count();
 
             int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
             bool isPassed = normalizedPassingScore.HasValue && score >= normalizedPassingScore.Value;
@@ -888,7 +934,9 @@ namespace BoneVisQA.Services.Services.Expert
                     ExpertName = q.CreatedByExpert != null ? q.CreatedByExpert.FullName : null,
                     // QUAN TRỌNG: Đếm số câu hỏi trong quiz
                     // Đây là số câu hỏi mà Student sẽ nhận được khi làm quiz
-                    QuestionCount = q.QuizQuestions.Count()
+                    QuestionCount = q.QuizQuestions.Count(),
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 })
                 .ToListAsync();
 
@@ -1035,7 +1083,9 @@ namespace BoneVisQA.Services.Services.Expert
                 CloseTime = null,
                 TimeLimit = originalQuiz.TimeLimit,
                 PassingScore = originalQuiz.PassingScore,
-                CreatedAt = now
+                CreatedAt = now,
+                // Copy QuizMode from original quiz: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = originalQuiz.QuizMode
             };
 
             await _unitOfWork.QuizRepository.AddAsync(newQuiz);
@@ -1061,7 +1111,7 @@ namespace BoneVisQA.Services.Services.Expert
                     CorrectAnswer = originalQ.CorrectAnswer,
                     ImageUrl = originalQ.ImageUrl,
                     CaseId = originalQ.CaseId,
-                    MaxScore = originalQ.MaxScore,
+                    MaxScore = 1, // Each question is worth 1 point
                     ReferenceAnswer = originalQ.ReferenceAnswer
                 };
 
@@ -1097,6 +1147,32 @@ namespace BoneVisQA.Services.Services.Expert
                 .ToListAsync();
 
             return BuildBoneSpecialtyTree(all, null, 0);
+        }
+
+        /// <summary>
+        /// Lấy danh sách Bone Specialty dạng flat list (không có children) cho Student Practice Quiz.
+        /// </summary>
+        public async Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesFlatAsync()
+        {
+            var all = await _unitOfWork.Context.BoneSpecialties
+                .Where(bs => bs.IsActive)
+                .OrderBy(bs => bs.DisplayOrder)
+                .ThenBy(bs => bs.Name)
+                .ToListAsync();
+
+            return all.Select(bs => new BoneSpecialtyTreeDto
+            {
+                Id = bs.Id,
+                Code = bs.Code,
+                Name = bs.Name,
+                ParentId = bs.ParentId,
+                ParentName = bs.Parent?.Name,
+                Description = bs.Description,
+                DisplayOrder = bs.DisplayOrder,
+                IsActive = bs.IsActive,
+                Level = 0,
+                Children = new List<BoneSpecialtyTreeDto>()
+            }).ToList();
         }
 
         private List<BoneSpecialtyTreeDto> BuildBoneSpecialtyTree(List<Repositories.Models.BoneSpecialty> all, Guid? parentId, int level)

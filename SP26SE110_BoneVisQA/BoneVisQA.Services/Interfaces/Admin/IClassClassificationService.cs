@@ -71,25 +71,6 @@ namespace BoneVisQA.Services.Interfaces.Admin
 
         #endregion
 
-        #region ==================== EXPERT MATCHING ====================
-
-        /// <summary>
-        /// Tìm Expert phù hợp nhất cho lớp học
-        /// </summary>
-        /// <param name="classId">ID lớp học</param>
-        /// <returns>Danh sách Expert phù hợp</returns>
-        Task<List<ExpertMatchClassificationDto>> FindMatchingExpertsAsync(Guid classId);
-
-        /// <summary>
-        /// Tính điểm phù hợp của Expert với lớp học
-        /// </summary>
-        /// <param name="classId">ID lớp học</param>
-        /// <param name="expertId">ID Expert</param>
-        /// <returns>Kết quả ghép</returns>
-        Task<ExpertMatchClassificationDto?> CalculateExpertMatchAsync(Guid classId, Guid expertId);
-
-        #endregion
-
         #region ==================== DASHBOARD & SUMMARY ====================
 
         /// <summary>

@@ -42,7 +42,6 @@ namespace BoneVisQA.Repositories.UnitOfWork
         GenericRepository<PasswordResetToken> PasswordResetTokenRepository { get; }
         GenericRepository<BoneSpecialty> BoneSpecialtyRepository { get; }
         GenericRepository<PathologyCategory> PathologyCategoryRepository { get; }
-        GenericRepository<ExpertSpecialty> ExpertSpecialtyRepository { get; }
 
         // Learning Analytics
         GenericRepository<StudentCompetency> StudentCompetencyRepository { get; }
@@ -53,6 +52,10 @@ namespace BoneVisQA.Repositories.UnitOfWork
         // Quiz Extensions
         GenericRepository<ReviewSchedule> ReviewScheduleRepository { get; }
         GenericRepository<QuizReviewItem> QuizReviewItemRepository { get; }
+
+        // Flashcards
+        GenericRepository<FlashcardDeck> FlashcardDeckRepository { get; }
+        GenericRepository<Flashcard> FlashcardRepository { get; }
 
         int Save();
         Task<int> SaveAsync();

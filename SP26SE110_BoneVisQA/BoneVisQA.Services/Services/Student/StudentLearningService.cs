@@ -54,7 +54,7 @@ public class StudentLearningService : IStudentLearningService
                 .FirstOrDefaultAsync();
 
             if (aiQuiz != null)
-                return await CreateSessionFromQuizAsync(aiQuiz, studentId);
+                return await CreateSessionFromQuizAsync(aiQuiz, studentId, false, false, null);
         }
 
         // 2. Fallback: Tìm quiz lecturer theo topic (is_ai_generated = false)
@@ -90,7 +90,8 @@ public class StudentLearningService : IStudentLearningService
             var classSession = quiz.ClassQuizSessions
                 .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId));
             var shuffleSetting = classSession?.ShuffleQuestions ?? false;
-            return await CreateSessionFromQuizAsync(quiz, studentId, shuffleSetting, classSession);
+            var shuffleOptionsSetting = classSession?.ShuffleOptions ?? false;
+            return await CreateSessionFromQuizAsync(quiz, studentId, shuffleSetting, shuffleOptionsSetting, classSession);
         }
 
         // 3. Fallback cuối: Tìm bất kỳ quiz nào (AI hoặc lecturer)
@@ -112,7 +113,8 @@ public class StudentLearningService : IStudentLearningService
             var classSession = anyQuiz.ClassQuizSessions
                 .FirstOrDefault(cqs => classIds.Contains(cqs.ClassId));
             var shuffleSetting = classSession?.ShuffleQuestions ?? false;
-            return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting, classSession);
+            var shuffleOptionsSetting = classSession?.ShuffleOptions ?? false;
+            return await CreateSessionFromQuizAsync(anyQuiz, studentId, shuffleSetting, shuffleOptionsSetting, classSession);
         }
 
         throw new KeyNotFoundException("No suitable practice quiz found.");
@@ -140,6 +142,7 @@ public class StudentLearningService : IStudentLearningService
         BoneVisQA.Repositories.Models.Quiz quiz,
         Guid studentId,
         bool shuffleQuestions = false,
+        bool shuffleOptions = false,
         ClassQuizSession? classSession = null)
     {
         var attempt = await _unitOfWork.Context.QuizAttempts
@@ -165,6 +168,11 @@ public class StudentLearningService : IStudentLearningService
             await ResetQuizAttemptForRetakeAsync(_unitOfWork, attempt);
         }
 
+        // Check if practice mode
+        var quizMode = classSession?.QuizMode ?? quiz.QuizMode;
+        var isPracticeMode = quizMode == 2; // 2 = Practice mode
+        var allowHints = isPracticeMode;
+
         var questions = quiz.QuizQuestions.AsEnumerable();
 
         if (shuffleQuestions)
@@ -176,21 +184,50 @@ public class StudentLearningService : IStudentLearningService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
+            QuizMode = classSession?.QuizMode ?? quiz.QuizMode,
             TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
+            AllowHints = allowHints,
             Questions = questions
-                .Select(q => new StudentQuizQuestionDto
+                .Select(q =>
                 {
-                    QuestionId = q.Id,
-                    QuestionText = q.QuestionText,
-                    Type = q.Type?.ToString(),
-                    CaseId = q.CaseId,
-                    OptionA = q.OptionA,
-                    OptionB = q.OptionB,
-                    OptionC = q.OptionC,
-                    OptionD = q.OptionD,
-                    ImageUrl = q.ImageUrl,
-                    MaxScore = q.MaxScore,
-                    ReferenceAnswer = q.ReferenceAnswer
+                    // Shuffle options if enabled
+                    string? optA = q.OptionA;
+                    string? optB = q.OptionB;
+                    string? optC = q.OptionC;
+                    string? optD = q.OptionD;
+
+                    if (shuffleOptions && (q.Type == QuestionType.MultipleChoice || q.Type == QuestionType.MultiSelect))
+                    {
+                        var options = new List<(string key, string value)>();
+                        if (!string.IsNullOrWhiteSpace(q.OptionA)) options.Add(("A", q.OptionA));
+                        if (!string.IsNullOrWhiteSpace(q.OptionB)) options.Add(("B", q.OptionB));
+                        if (!string.IsNullOrWhiteSpace(q.OptionC)) options.Add(("C", q.OptionC));
+                        if (!string.IsNullOrWhiteSpace(q.OptionD)) options.Add(("D", q.OptionD));
+
+                        var shuffled = options.OrderBy(_ => Random.Shared.Next()).ToList();
+                        optA = shuffled.ElementAtOrDefault(0).value;
+                        optB = shuffled.ElementAtOrDefault(1).value;
+                        optC = shuffled.ElementAtOrDefault(2).value;
+                        optD = shuffled.ElementAtOrDefault(3).value;
+                    }
+
+                    return new StudentQuizQuestionDto
+                    {
+                        QuestionId = q.Id,
+                        QuestionText = q.QuestionText,
+                        Type = q.Type?.ToString(),
+                        CaseId = q.CaseId,
+                        OptionA = optA,
+                        OptionB = optB,
+                        OptionC = optC,
+                        OptionD = optD,
+                        ImageUrl = q.ImageUrl,
+                        MaxScore = 1, // Each question is worth 1 point
+                        Hint = allowHints ? q.Hint : null,
+                        HintAvailable = allowHints && !string.IsNullOrWhiteSpace(q.Hint),
+                        CorrectAnswers = q.CorrectAnswers,
+                        AcceptedAnswers = q.AcceptedAnswers
+                    };
                 })
                 .ToList()
         };
@@ -241,6 +278,10 @@ public class StudentLearningService : IStudentLearningService
             .FirstOrDefaultAsync(q => q.Id == attempt.QuizId)
             ?? throw new KeyNotFoundException("Quiz not found.");
 
+        // Calculate points per question: total quiz score always = 100, divided equally among all questions
+        var totalQuestions = quiz.QuizQuestions.Count;
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
         var questionMap = quiz.QuizQuestions.ToDictionary(q => q.Id, q => q);
         var incomingAnswers = request.Answers
             .GroupBy(a => a.QuestionId)
@@ -283,9 +324,24 @@ public class StudentLearningService : IStudentLearningService
                     await _unitOfWork.StudentQuizAnswerRepository.UpdateAsync(existing);
                 }
             }
-            else // MultipleChoice: auto-grade
+            else // MultipleChoice, TrueFalse, MultiSelect, FillInBlank: auto-grade
             {
-                var isCorrect = QuizAnswerMatchesCorrect(question.CorrectAnswer, answer.StudentAnswer);
+                var isCorrect = false;
+                if (question.Type == QuestionType.MultiSelect)
+                {
+                    isCorrect = CheckMultiSelectAnswer(answer.SelectedAnswers, question.CorrectAnswers);
+                }
+                else if (question.Type == QuestionType.FillInBlank)
+                {
+                    isCorrect = CheckFillInBlankAnswer(answer.StudentAnswer, question.AcceptedAnswers);
+                }
+                else
+                {
+                    isCorrect = string.Equals(
+                        answer.StudentAnswer?.Trim(),
+                        question.CorrectAnswer?.Trim(),
+                        StringComparison.OrdinalIgnoreCase);
+                }
 
                 if (existing == null)
                 {
@@ -297,7 +353,7 @@ public class StudentLearningService : IStudentLearningService
                         StudentAnswer = answer.StudentAnswer,
                         EssayAnswer = null,
                         IsCorrect = isCorrect,
-                        ScoreAwarded = isCorrect ? question.MaxScore : 0,
+                        ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
                         IsGraded = true // Auto-graded
                     };
                     await _unitOfWork.StudentQuizAnswerRepository.AddAsync(existing);
@@ -308,10 +364,60 @@ public class StudentLearningService : IStudentLearningService
                     existing.StudentAnswer = answer.StudentAnswer;
                     existing.EssayAnswer = null;
                     existing.IsCorrect = isCorrect;
-                    existing.ScoreAwarded = isCorrect ? question.MaxScore : 0;
+                    existing.ScoreAwarded = isCorrect ? pointsPerQuestion : 0;
                     existing.IsGraded = true;
                     await _unitOfWork.StudentQuizAnswerRepository.UpdateAsync(existing);
                 }
+            }
+        }
+
+        // Helper methods for grading
+        bool CheckMultiSelectAnswer(string? studentAnswer, string? correctAnswersJson)
+        {
+            if (string.IsNullOrWhiteSpace(studentAnswer) || string.IsNullOrWhiteSpace(correctAnswersJson))
+                return false;
+
+            try
+            {
+                var studentAnswers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(studentAnswer)?
+                    .Select(a => a.Trim().ToUpperInvariant())
+                    .OrderBy(a => a)
+                    .ToList() ?? new List<string>();
+
+                var correctAnswers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(correctAnswersJson)?
+                    .Select(a => a.Trim().ToUpperInvariant())
+                    .OrderBy(a => a)
+                    .ToList() ?? new List<string>();
+
+                return studentAnswers.SequenceEqual(correctAnswers);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        bool CheckFillInBlankAnswer(string? studentAnswer, string? acceptedAnswersJson)
+        {
+            if (string.IsNullOrWhiteSpace(studentAnswer))
+                return false;
+
+            var normalizedStudent = studentAnswer.Trim().ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(acceptedAnswersJson))
+                return false;
+
+            try
+            {
+                var acceptedAnswers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(acceptedAnswersJson)?
+                    .Select(a => a.Trim().ToUpperInvariant())
+                    .ToList() ?? new List<string>();
+
+                return acceptedAnswers.Contains(normalizedStudent);
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -356,13 +462,31 @@ public class StudentLearningService : IStudentLearningService
             }
         }
 
-        // Calculate score: sum of ScoreAwarded / sum of MaxScore * 100
-        var totalMaxScore = quiz.QuizQuestions.Sum(q => q.MaxScore);
-        var totalScoreAwarded = attempt.StudentQuizAnswers
-            .Where(a => a.ScoreAwarded.HasValue)
-            .Sum(a => a.ScoreAwarded.Value);
-
-        var score = totalMaxScore == 0 ? 0 : (double)(totalScoreAwarded * 100 / totalMaxScore);
+        // Calculate score: total quiz score always = 100, divided equally among all questions
+        // Essay not yet graded = 0 points for that question, but still counts as 1 question
+        
+        // Calculate earned points: MC = full points if correct, 0 if wrong
+        // Essay = full points if graded, 0 if not yet graded
+        decimal earnedPoints = 0;
+        foreach (var answer in attempt.StudentQuizAnswers)
+        {
+            if (answer.Question.Type == QuestionType.Essay)
+            {
+                // Essay: add actual awarded points (can be partial credit)
+                earnedPoints += answer.ScoreAwarded ?? 0;
+            }
+            else
+            {
+                // MC/TF/etc: full points if correct, 0 if wrong
+                earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+            }
+        }
+        
+        // score = earnedPoints (each point is already worth 1 point since pointsPerQuestion = 100/total)
+        double score = (double)earnedPoints;
+        
+        // Clamp score to 0-100 range
+        score = Math.Max(0, Math.Min(100, score));
         attempt.Score = score;
         attempt.CompletedAt = DateTime.UtcNow;
         await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
@@ -422,9 +546,12 @@ public class StudentLearningService : IStudentLearningService
         // Chuẩn hóa PassingScore về thang 100 trước khi so sánh
         int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
 
-        // Đếm số essay chưa chấm (cần load Question)
-        int ungradedEssayCount = attempt.StudentQuizAnswers.Count(a =>
-            a.Question.Type == QuestionType.Essay && !a.IsGraded);
+        // Đếm số essay chưa chấm (đếm theo questionId distinct để tránh trùng lặp)
+        int ungradedEssayCount = attempt.StudentQuizAnswers
+            .Where(a => a.Question.Type == QuestionType.Essay && !a.IsGraded)
+            .Select(a => a.QuestionId)
+            .Distinct()
+            .Count();
 
         return new QuizResultDto
         {
@@ -477,7 +604,7 @@ public class StudentLearningService : IStudentLearningService
         foreach (var q in generated.Questions)
         {
             QuestionType questionType;
-            if (string.IsNullOrEmpty(q.Type) || !Enum.TryParse<QuestionType>(q.Type, out questionType))
+            if (string.IsNullOrEmpty(q.Type) || !Enum.TryParse<QuestionType>(q.Type, true, out questionType))
             {
                 questionType = QuestionType.MultipleChoice; // default
             }
@@ -495,6 +622,10 @@ public class StudentLearningService : IStudentLearningService
                 CorrectAnswer = q.CorrectAnswer,
                 CaseId = q.CaseId,
                 ImageUrl = q.ImageUrl,
+                Hint = q.Hint,
+                Explanation = q.Explanation,
+                CorrectAnswers = q.CorrectAnswers,
+                AcceptedAnswers = q.AcceptedAnswers
             };
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
         }
@@ -528,8 +659,7 @@ public class StudentLearningService : IStudentLearningService
                 OptionC = q.OptionC,
                 OptionD = q.OptionD,
                 ImageUrl = q.ImageUrl,
-                MaxScore = q.MaxScore,
-                ReferenceAnswer = q.ReferenceAnswer
+                MaxScore = 1 // Each question is worth 1 point
             })
             .ToListAsync();
 
@@ -550,6 +680,8 @@ public class StudentLearningService : IStudentLearningService
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Include(a => a.Quiz)
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .Where(a => a.StudentId == studentId)
             .OrderByDescending(a => a.CompletedAt)
             .ToListAsync();
@@ -572,6 +704,30 @@ public class StudentLearningService : IStudentLearningService
 
             var classSession = classQuizSessions.FirstOrDefault(cqs => cqs.QuizId == attempt.QuizId);
 
+            // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+            var totalQuestions = attempt.Quiz.QuizQuestions.Count;
+            var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+            // Calculate earned points: MC = full points if correct, 0 if wrong
+            // Essay = full points if graded, 0 if not yet graded
+            decimal earnedPoints = 0;
+            foreach (var answer in attempt.StudentQuizAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+
+            // Score = earnedPoints (clamped to 0-100)
+            double calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+
             var summary = new StudentQuizAttemptSummaryDto
             {
                 AttemptId = attempt.Id,
@@ -585,12 +741,10 @@ public class StudentLearningService : IStudentLearningService
                     .FirstOrDefaultAsync() : null,
                 StartedAt = attempt.StartedAt,
                 CompletedAt = attempt.CompletedAt,
-                Score = attempt.Score,
+                Score = calculatedScore, // Use calculated score instead of saved score
                 PassingScore = attempt.Quiz.PassingScore,
-                Passed = attempt.Score.HasValue && attempt.Quiz.PassingScore.HasValue
-                    ? attempt.Score >= attempt.Quiz.PassingScore
-                    : false,
-                TotalQuestions = attempt.Quiz.QuizQuestions.Count,
+                Passed = calculatedScore >= (attempt.Quiz.PassingScore ?? 0),
+                TotalQuestions = totalQuestions,
                 CorrectAnswers = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true),
                 IsAiGenerated = attempt.Quiz.IsAiGenerated
             };
@@ -629,22 +783,54 @@ public class StudentLearningService : IStudentLearningService
 
         if (classIds.Count > 0)
         {
-            var session = await _unitOfWork.Context.ClassQuizSessions
+            var quizSession = await _unitOfWork.Context.ClassQuizSessions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.QuizId == attempt.QuizId && classIds.Contains(s.ClassId));
 
-            if (session != null)
+            if (quizSession != null)
             {
                 // Quiz đã đóng HOẶC lecturer đã release đáp án
-                var isQuizClosed = session.CloseTime.HasValue && session.CloseTime.Value < utcNow;
-                answersReleased = isQuizClosed || session.ReleaseAnswersAt.HasValue;
+                var isQuizClosed = quizSession.CloseTime.HasValue && quizSession.CloseTime.Value < utcNow;
+                answersReleased = isQuizClosed || quizSession.ReleaseAnswersAt.HasValue;
             }
         }
 
         var totalQuestions = attempt.Quiz.QuizQuestions.Count;
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
         var correctCount = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true);
-        var score = attempt.Score ?? 0;
+
+        // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+        decimal earnedPoints = 0;
+        foreach (var answer in attempt.StudentQuizAnswers)
+        {
+            if (answer.Question?.Type == QuestionType.Essay)
+            {
+                // Essay: add actual awarded points (can be partial credit)
+                earnedPoints += answer.ScoreAwarded ?? 0;
+            }
+            else
+            {
+                // MC/TF/etc: full points if correct, 0 if wrong
+                earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+            }
+        }
+
+        // Score = earnedPoints (clamped to 0-100)
+        var score = Math.Max(0, Math.Min(100, (double)earnedPoints));
         var passingScore = NormalizePassingScore(attempt.Quiz.PassingScore, attempt.Quiz.IsAiGenerated);
+
+        // Determine if practice mode based on quiz/session settings
+        var session = classIds.Count > 0
+            ? await _unitOfWork.Context.ClassQuizSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.QuizId == attempt.QuizId && classIds.Contains(s.ClassId))
+            : null;
+
+        var quizMode = session?.QuizMode ?? attempt.Quiz?.QuizMode ?? 1;
+        var isPracticeMode = quizMode == 2; // 2 = Practice mode
+
+        // In practice mode, always show answers. Otherwise, only show when released.
+        var showAnswers = isPracticeMode || answersReleased;
 
         var questionDtos = new List<QuestionReviewItemDto>();
 
@@ -663,15 +849,22 @@ public class StudentLearningService : IStudentLearningService
                 OptionD = question.OptionD,
                 StudentAnswer = answer?.StudentAnswer,
                 EssayAnswer = answer?.EssayAnswer,
-                // Chỉ hiển thị CorrectAnswer khi đáp án đã được release
-                CorrectAnswer = answersReleased ? question.CorrectAnswer : null,
+                StudentSelectedAnswers = answer?.StudentAnswer,
+                StudentTextAnswer = answer?.StudentAnswer,
+                // Show correct answer based on mode
+                CorrectAnswer = showAnswers ? question.CorrectAnswer : null,
+                CorrectAnswers = showAnswers ? question.CorrectAnswers : null,
+                AcceptedAnswers = showAnswers ? question.AcceptedAnswers : null,
                 IsCorrect = answer?.IsCorrect ?? false,
                 ImageUrl = question.ImageUrl,
                 CaseId = question.CaseId?.ToString(),
                 ScoreAwarded = answer?.ScoreAwarded,
                 LecturerFeedback = answer?.LecturerFeedback,
                 IsGraded = answer?.IsGraded ?? (question.Type == QuestionType.Essay ? false : true),
-                MaxScore = question.MaxScore
+                MaxScore = 1, // Each question is worth 1 point
+                // Show explanation in practice mode or when released
+                Explanation = showAnswers ? question.Explanation : null,
+                Hint = question.Hint
             };
 
             questionDtos.Add(questionDto);
@@ -717,57 +910,86 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<IReadOnlyList<StudentRecentActivityDto>> GetRecentActivityAsync(Guid studentId)
     {
-        var recentQuestions = await _unitOfWork.Context.QaMessages
-            .AsNoTracking()
-            .Include(m => m.Session)
-                .ThenInclude(s => s.Case)
-                    .ThenInclude(c => c!.Category)
-            .Where(m => m.Role == "User" && m.Session.StudentId == studentId)
-            .OrderByDescending(m => m.CreatedAt)
-            .Take(10)
-            .Select(m => new StudentRecentActivityDto
-            {
-                ActivityType = "visual_qa",
-                Title = m.Session.Case != null ? $"Asked a question on {m.Session.Case.Title}" : "Asked a visual QA question",
-                Description = m.Content,
-                Topic = m.Session.Case != null
-                    ? m.Session.Case.Category != null
-                        ? m.Session.Case.Category.Name
-                        : m.Session.Case.Title
-                    : "Personal Upload",
-                OccurredAt = m.CreatedAt,
-                SessionId = m.SessionId,
-                TargetUrl = "/student/qa/image?sessionId=" + m.SessionId.ToString()
-            })
-            .ToListAsync();
-
-        var recentQuizAttempts = await _unitOfWork.Context.QuizAttempts
-            .AsNoTracking()
-            .Include(a => a.Quiz)
-                .ThenInclude(q => q.QuizQuestions)
-                    .ThenInclude(qq => qq.Case)
-                        .ThenInclude(c => c!.Category)
-            .Where(a => a.StudentId == studentId && a.CompletedAt.HasValue)
-            .OrderByDescending(a => a.CompletedAt)
-            .Take(10)
-            .ToListAsync();
-
-        var recentQuizzes = recentQuizAttempts.Select(a => new StudentRecentActivityDto
+        try
         {
-            ActivityType = "Quiz",
-            Title = $"Completed Quiz {a.Quiz.Title}",
-            Description = a.Score.HasValue
-                ? $"Completed Quiz {a.Quiz.Title} with {a.Score.Value:F0}%"
-                : $"Completed Quiz {a.Quiz.Title}",
-            Topic = InferQuizTopic(a),
-            OccurredAt = a.CompletedAt ?? a.StartedAt ?? DateTime.MinValue
-        }).ToList();
+            // Fetch recent QA messages
+            var recentQuestions = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .Where(m => m.Role == "User")
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(20)
+                .ToListAsync();
 
-        return recentQuestions
-            .Concat(recentQuizzes)
-            .OrderByDescending(x => x.OccurredAt)
-            .Take(10)
-            .ToList();
+            var sessionIds = recentQuestions
+                .Select(m => m.SessionId)
+                .Distinct()
+                .ToList();
+
+            var sessions = await _unitOfWork.Context.VisualQaSessions
+                .AsNoTracking()
+                .Where(s => sessionIds.Contains(s.Id))
+                .Include(s => s.Case)
+                    .ThenInclude(c => c != null ? c.Category : null)
+                .ToListAsync();
+
+            var sessionDict = sessions.ToDictionary(s => s.Id);
+
+            var questionActivities = recentQuestions
+                .Where(m => sessionDict.ContainsKey(m.SessionId))
+                .Where(m => sessionDict[m.SessionId].StudentId == studentId)
+                .Select(m =>
+                {
+                    var session = sessionDict[m.SessionId];
+                    var caseEntity = session.Case;
+                    return new StudentRecentActivityDto
+                    {
+                        ActivityType = "visual_qa",
+                        Title = caseEntity != null ? $"Asked a question on {caseEntity.Title}" : "Asked a visual QA question",
+                        Description = m.Content ?? string.Empty,
+                        Topic = caseEntity != null
+                            ? caseEntity.Category != null
+                                ? caseEntity.Category.Name ?? caseEntity.Title ?? "Case"
+                                : caseEntity.Title ?? "Case"
+                            : "Personal Upload",
+                        OccurredAt = m.CreatedAt,
+                        SessionId = m.SessionId,
+                        TargetUrl = "/student/qa/image?sessionId=" + m.SessionId.ToString()
+                    };
+                })
+                .ToList();
+
+            // Fetch recent quiz attempts
+            var recentQuizAttempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Quiz)
+                .Where(a => a.StudentId == studentId && a.CompletedAt.HasValue)
+                .OrderByDescending(a => a.CompletedAt)
+                .Take(10)
+                .ToListAsync();
+
+            var quizActivities = recentQuizAttempts.Select(a => new StudentRecentActivityDto
+            {
+                ActivityType = "quiz",
+                Title = $"Completed Quiz {a.Quiz?.Title ?? "Unknown"}",
+                Description = a.Score.HasValue
+                    ? $"Completed Quiz {a.Quiz?.Title ?? "Unknown"} with {a.Score.Value:F0}%"
+                    : $"Completed Quiz {a.Quiz?.Title ?? "Unknown"}",
+                Topic = a.Quiz?.Title ?? "Quiz",
+                OccurredAt = a.CompletedAt ?? a.StartedAt ?? DateTime.UtcNow,
+                QuizId = a.QuizId
+            }).ToList();
+
+            return questionActivities
+                .Concat(quizActivities)
+                .OrderByDescending(x => x.OccurredAt)
+                .Take(10)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching recent activity for student {StudentId}", studentId);
+            return new List<StudentRecentActivityDto>();
+        }
     }
 
     private static string InferQuizTopic(QuizAttempt a)

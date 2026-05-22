@@ -260,7 +260,16 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> CreateQuiz([FromBody] CreateQuizRequestDto request)
     {
         if (!ModelState.IsValid)
-            return BadRequest(ModelState);
+        {
+            var errors = ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray()
+                );
+            _logger.LogWarning("[CreateQuiz] Validation failed: {Errors}", System.Text.Json.JsonSerializer.Serialize(errors));
+            return BadRequest(new { message = "Validation failed", errors });
+        }
 
         try
         {
@@ -271,6 +280,11 @@ public class LecturersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CreateQuiz] Unexpected error creating quiz");
+            return StatusCode(500, new { message = "An error occurred while creating the quiz", detail = ex.Message });
         }
     }
 
@@ -639,7 +653,12 @@ public class LecturersController : ControllerBase
                         OptionB = q.OptionB,
                         OptionC = q.OptionC,
                         OptionD = q.OptionD,
-                        CorrectAnswer = q.CorrectAnswer
+                        CorrectAnswer = q.CorrectAnswer,
+                        Hint = q.Hint,
+                        Explanation = q.Explanation,
+                        CorrectAnswers = q.CorrectAnswers,
+                        AcceptedAnswers = q.AcceptedAnswers,
+                        MaxScore = 10 // Default maxScore for AI-generated questions
                     };
 
                     await _lecturerService.AddQuizQuestionAsync(quiz.Id, questionRequest);

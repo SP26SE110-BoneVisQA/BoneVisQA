@@ -23,6 +23,18 @@ public class CommonClassificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Get all Bone Specialties in flat list structure.
+    /// Used for dropdown in Student Practice Quiz and Catalog filters.
+    /// </summary>
+    [HttpGet("bone-specialties")]
+    [ProducesResponseType(typeof(List<BoneSpecialtyTreeDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBoneSpecialtiesFlat()
+    {
+        var result = await _quizService.GetBoneSpecialtiesFlatAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get all Bone Specialties in tree (hierarchical) structure.
     /// Used for dropdown in Create/Edit Quiz forms.
     /// </summary>

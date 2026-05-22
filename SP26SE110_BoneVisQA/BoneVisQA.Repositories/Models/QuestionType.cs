@@ -1,17 +1,17 @@
 namespace BoneVisQA.Repositories.Models;
 
-/// <summary>
-/// Enum representing the type of a quiz question.
-/// </summary>
 public enum QuestionType
 {
-	/// <summary>
-	/// Multiple choice question with 4 options (A, B, C, D).
-	/// </summary>
-	MultipleChoice = 1,
+    MultipleChoice = 1,
+    Essay = 2,
+    TrueFalse = 3,
+    MultiSelect = 4,
+    FillInBlank = 5
+}
 
-	/// <summary>
-	/// Essay question requiring a free-text answer.
-	/// </summary>
-	Essay = 2
+public enum QuizMode
+{
+    Exam = 1,
+    Practice = 2,
+    Adaptive = 3
 }

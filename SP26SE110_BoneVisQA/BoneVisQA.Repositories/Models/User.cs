@@ -157,12 +157,6 @@ public partial class User
     [InverseProperty("Expert")]
     public virtual ICollection<ExpertReview> ExpertReviews { get; set; } = new List<ExpertReview>();
 
-    [InverseProperty("Expert")]
-    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
-
-    [InverseProperty("Expert")]
-    public virtual ICollection<ClassExpertAssignment> ExpertClassAssignments { get; set; } = new List<ClassExpertAssignment>();
-
     [InverseProperty("FlaggedByExpert")]
     public virtual ICollection<DocumentChunk> FlaggedDocumentChunks { get; set; } = new List<DocumentChunk>();
 

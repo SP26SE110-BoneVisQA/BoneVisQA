@@ -50,6 +50,7 @@ namespace BoneVisQA.Services.Interfaces.Expert
 
         //=====================================================   DEEP CLASSIFICATION  ==========================================================
         Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesTreeAsync();
+        Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesFlatAsync();
         Task<List<PathologyCategorySimpleDto>> GetPathologyCategoriesAsync();
     }
 }

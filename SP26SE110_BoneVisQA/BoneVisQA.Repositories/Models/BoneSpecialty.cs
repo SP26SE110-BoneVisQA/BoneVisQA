@@ -54,12 +54,6 @@ public partial class BoneSpecialty
     public virtual ICollection<PathologyCategory> PathologyCategories { get; set; } = new List<PathologyCategory>();
 
     [InverseProperty("BoneSpecialty")]
-    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
-
-    [InverseProperty("BoneSpecialty")]
-    public virtual ICollection<ClassExpertAssignment> ClassExpertAssignments { get; set; } = new List<ClassExpertAssignment>();
-
-    [InverseProperty("BoneSpecialty")]
     public virtual ICollection<MedicalCase> MedicalCases { get; set; } = new List<MedicalCase>();
 
     [InverseProperty("BoneSpecialty")]
