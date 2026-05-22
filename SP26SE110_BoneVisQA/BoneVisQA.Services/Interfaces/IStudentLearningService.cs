@@ -49,4 +49,13 @@ public interface IStudentLearningService
         Guid attemptId,
         string? customDeckName = null,
         string? description = null);
+
+    /// Lưu các câu hỏi đã đánh dấu (bookmarked) vào flashcard deck.
+    Task<SaveQuizToFlashcardsResultDto> SaveBookmarkedQuestionsToFlashcardsAsync(
+        Guid studentId,
+        Guid attemptId,
+        Guid? deckId = null,
+        string? deckName = null,
+        string? description = null,
+        List<Guid>? questionIds = null);
 }

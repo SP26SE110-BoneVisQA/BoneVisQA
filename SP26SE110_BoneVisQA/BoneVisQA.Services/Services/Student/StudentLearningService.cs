@@ -1497,4 +1497,152 @@ public class StudentLearningService : IStudentLearningService
             Message = $"Đã tạo deck '{deck.DeckName}' với {cardCount} flashcard từ quiz '{attempt.Quiz.Title}'."
         };
     }
+
+    /// <summary>
+    /// Lưu các câu hỏi đã đánh dấu (bookmarked) vào flashcard deck.
+    /// Có thể thêm vào deck có sẵn hoặc tạo deck mới.
+    /// </summary>
+    public async Task<SaveQuizToFlashcardsResultDto> SaveBookmarkedQuestionsToFlashcardsAsync(
+        Guid studentId,
+        Guid attemptId,
+        Guid? deckId = null,
+        string? deckName = null,
+        string? description = null,
+        List<Guid>? questionIds = null)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+
+        if (attempt.Quiz == null)
+            throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        // Lọc câu hỏi theo danh sách bookmarked
+        var quizQuestions = attempt.Quiz.QuizQuestions.AsEnumerable();
+        if (questionIds != null && questionIds.Count > 0)
+        {
+            quizQuestions = quizQuestions.Where(q => questionIds.Contains(q.Id));
+        }
+
+        var questionsList = quizQuestions.ToList();
+        if (questionsList.Count == 0)
+        {
+            throw new InvalidOperationException("Không có câu hỏi nào được đánh dấu để lưu.");
+        }
+
+        // Tìm hoặc tạo deck
+        BoneVisQA.Repositories.Models.FlashcardDeck deck;
+        
+        if (deckId.HasValue && deckId.Value != Guid.Empty)
+        {
+            // Sử dụng deck có sẵn
+            deck = await _unitOfWork.Context.FlashcardDecks
+                .FirstOrDefaultAsync(d => d.Id == deckId.Value && d.StudentId == studentId)
+                ?? throw new KeyNotFoundException("Không tìm thấy bộ flashcard.");
+        }
+        else
+        {
+            // Tạo deck mới
+            var newDeckName = !string.IsNullOrWhiteSpace(deckName)
+                ? deckName
+                : $"Đánh dấu từ: {attempt.Quiz.Title}";
+                
+            deck = new BoneVisQA.Repositories.Models.FlashcardDeck
+            {
+                Id = Guid.NewGuid(),
+                DeckName = newDeckName,
+                Description = description ?? $"Flashcard từ câu hỏi đánh dấu trong quiz '{attempt.Quiz.Title}'.",
+                StudentId = studentId,
+                CardCount = 0,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _unitOfWork.Context.FlashcardDecks.Add(deck);
+        }
+
+        var initialValues = SM2Algorithm.GetInitialValues();
+        var cardCount = 0;
+
+        foreach (var question in questionsList)
+        {
+            // Xây dựng nội dung front (câu hỏi + các lựa chọn)
+            var frontContent = question.QuestionText ?? "(Câu hỏi không có nội dung)";
+
+            var optionsBuilder = new System.Text.StringBuilder();
+            if (!string.IsNullOrWhiteSpace(question.OptionA))
+                optionsBuilder.AppendLine($"A. {question.OptionA}");
+            if (!string.IsNullOrWhiteSpace(question.OptionB))
+                optionsBuilder.AppendLine($"B. {question.OptionB}");
+            if (!string.IsNullOrWhiteSpace(question.OptionC))
+                optionsBuilder.AppendLine($"C. {question.OptionC}");
+            if (!string.IsNullOrWhiteSpace(question.OptionD))
+                optionsBuilder.AppendLine($"D. {question.OptionD}");
+
+            var optionsText = optionsBuilder.ToString();
+            if (!string.IsNullOrWhiteSpace(optionsText))
+                frontContent += "\n\n" + optionsText.TrimEnd();
+
+            // Xây dựng nội dung back (đáp án + giải thích)
+            var backContent = "";
+
+            if (!string.IsNullOrWhiteSpace(question.CorrectAnswer))
+            {
+                backContent = $"Đáp án đúng: {question.CorrectAnswer}";
+
+                var correctOptionKey = question.CorrectAnswer.Trim().ToUpperInvariant();
+                var correctOptionValue = correctOptionKey switch
+                {
+                    "A" => question.OptionA,
+                    "B" => question.OptionB,
+                    "C" => question.OptionC,
+                    "D" => question.OptionD,
+                    _ => null
+                };
+                if (!string.IsNullOrWhiteSpace(correctOptionValue))
+                    backContent += $" - {correctOptionValue}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(question.Explanation))
+            {
+                backContent += "\n\nGiải thích:\n" + question.Explanation;
+            }
+
+            if (string.IsNullOrWhiteSpace(backContent))
+                backContent = "(Không có đáp án hoặc giải thích)";
+
+            var flashcard = new BoneVisQA.Repositories.Models.Flashcard
+            {
+                Id = Guid.NewGuid(),
+                DeckId = deck.Id,
+                FrontContent = frontContent,
+                BackContent = backContent,
+                ImageUrl = question.ImageUrl,
+                EaseFactor = initialValues.EaseFactor,
+                IntervalDays = initialValues.IntervalDays,
+                RepetitionCount = initialValues.RepetitionCount,
+                NextReviewDate = initialValues.NextReviewDate,
+                IsBookmarked = true, // Đánh dấu là đã bookmark
+                BookmarkedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _unitOfWork.Context.Flashcards.Add(flashcard);
+            cardCount++;
+        }
+
+        deck.CardCount += cardCount;
+        deck.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
+
+        return new SaveQuizToFlashcardsResultDto
+        {
+            Success = true,
+            DeckId = deck.Id,
+            DeckName = deck.DeckName,
+            CardCount = cardCount,
+            Message = $"Đã thêm {cardCount} flashcard vào bộ '{deck.DeckName}'."
+        };
+    }
 }

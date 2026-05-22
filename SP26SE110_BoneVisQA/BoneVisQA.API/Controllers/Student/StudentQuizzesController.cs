@@ -337,6 +337,40 @@ public class StudentQuizzesController : ControllerBase
     }
 
     /// <summary>
+    /// Lưu các câu hỏi đã đánh dấu (bookmarked) từ quiz vào flashcard deck.
+    /// Có thể thêm vào deck có sẵn hoặc tạo deck mới.
+    /// </summary>
+    [HttpPost("{attemptId}/save-bookmarked-to-flashcards")]
+    public async Task<ActionResult<SaveQuizToFlashcardsResultDto>> SaveBookmarkedToFlashcards(
+        Guid attemptId,
+        [FromBody] SaveBookmarkedToFlashcardsRequestDto? request)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _studentLearningService.SaveBookmarkedQuestionsToFlashcardsAsync(
+                studentId.Value,
+                attemptId,
+                request?.DeckId,
+                request?.DeckName,
+                request?.Description,
+                request?.QuestionIds);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Lấy danh sách cases có sẵn để student chọn tạo AI practice quiz.
     /// </summary>
     [HttpGet("cases")]
@@ -416,6 +450,14 @@ public class StudentQuizzesController : ControllerBase
     {
         public string? DeckName { get; set; }
         public string? Description { get; set; }
+    }
+
+    public class SaveBookmarkedToFlashcardsRequestDto
+    {
+        public Guid? DeckId { get; set; }
+        public string? DeckName { get; set; }
+        public string? Description { get; set; }
+        public List<Guid>? QuestionIds { get; set; }
     }
 
     /// <summary>
