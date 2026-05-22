@@ -1650,7 +1650,7 @@ public class StudentService : IStudentService
         var shuffleQuestions = classSession?.ShuffleQuestions ?? false;
         var shuffleOptions = classSession?.ShuffleOptions ?? false;
         var quizMode = (classSession?.QuizMode ?? quiz.QuizMode);
-        var isPracticeMode = quizMode == 2; // 2 = Practice mode
+        var isPracticeMode = quizMode == 2 || quiz.IsAiGenerated; // 2 = Practice mode, AI quizzes are always practice
         var allowHints = isPracticeMode;
 
         var questionList = quiz.QuizQuestions.AsEnumerable();
@@ -1702,7 +1702,10 @@ public class StudentService : IStudentService
                     Hint = allowHints ? q.Hint : null,
                     HintAvailable = allowHints && !string.IsNullOrWhiteSpace(q.Hint),
                     CorrectAnswers = q.CorrectAnswers,
-                    AcceptedAnswers = q.AcceptedAnswers
+                    AcceptedAnswers = q.AcceptedAnswers,
+                    // Practice Mode: hiển thị đáp án đúng và giải thích sau khi nộp bài
+                    CorrectAnswer = isPracticeMode ? q.CorrectAnswer : null,
+                    Explanation = isPracticeMode ? q.Explanation : null
                 };
             })
             .ToList();

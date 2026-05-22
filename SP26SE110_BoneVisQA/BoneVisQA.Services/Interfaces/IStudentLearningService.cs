@@ -1,3 +1,4 @@
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
@@ -24,9 +25,28 @@ public interface IStudentLearningService
     /// Trả về lịch sử tất cả quiz attempt của student (gồm quiz giao + quiz AI tự tạo).
     Task<IReadOnlyList<StudentQuizAttemptSummaryDto>> GetQuizAttemptHistoryAsync(Guid studentId);
 
+    /// Trả về lịch sử quiz attempt của student với phân trang.
+    Task<PagedResultDTO<StudentQuizAttemptSummaryDto>> GetQuizAttemptHistoryPagedAsync(
+        Guid studentId,
+        int pageIndex = 0,
+        int pageSize = 10,
+        string? quizTitle = null,
+        string? topic = null,
+        bool? isAiGenerated = null,
+        bool? passed = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null);
+
     /// Lấy chi tiết đáp án của một quiz attempt đã nộp (để review sau khi nộp).
     Task<QuizAttemptReviewDto> GetQuizAttemptReviewAsync(Guid studentId, Guid attemptId);
 
     /// Xóa một quiz attempt của student (chỉ xóa attempt, không xóa quiz gốc).
     Task DeleteQuizAttemptAsync(Guid studentId, Guid attemptId);
+
+    /// Lưu quiz đã nộp vào flashcard deck để luyện tập lại.
+    Task<SaveQuizToFlashcardsResultDto> SaveQuizAttemptToFlashcardsAsync(
+        Guid studentId,
+        Guid attemptId,
+        string? customDeckName = null,
+        string? description = null);
 }

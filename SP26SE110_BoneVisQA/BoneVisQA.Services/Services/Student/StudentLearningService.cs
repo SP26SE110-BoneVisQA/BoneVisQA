@@ -4,8 +4,10 @@ using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -168,9 +170,9 @@ public class StudentLearningService : IStudentLearningService
             await ResetQuizAttemptForRetakeAsync(_unitOfWork, attempt);
         }
 
-        // Check if practice mode
+        // Check if practice mode (QuizMode == 2) OR if this is an AI-generated quiz (always practice mode)
         var quizMode = classSession?.QuizMode ?? quiz.QuizMode;
-        var isPracticeMode = quizMode == 2; // 2 = Practice mode
+        var isPracticeMode = quizMode == 2 || quiz.IsAiGenerated; // 2 = Practice mode, AI quizzes are always practice
         var allowHints = isPracticeMode;
 
         var questions = quiz.QuizQuestions.AsEnumerable();
@@ -226,7 +228,10 @@ public class StudentLearningService : IStudentLearningService
                         Hint = allowHints ? q.Hint : null,
                         HintAvailable = allowHints && !string.IsNullOrWhiteSpace(q.Hint),
                         CorrectAnswers = q.CorrectAnswers,
-                        AcceptedAnswers = q.AcceptedAnswers
+                        AcceptedAnswers = q.AcceptedAnswers,
+                        // Trong Practice Mode, hiển thị đáp án đúng và giải thích sau khi nộp bài
+                        CorrectAnswer = isPracticeMode ? q.CorrectAnswer : null,
+                        Explanation = isPracticeMode ? q.Explanation : null
                     };
                 })
                 .ToList()
@@ -643,7 +648,7 @@ public class StudentLearningService : IStudentLearningService
         await _unitOfWork.QuizAttemptRepository.AddAsync(attempt);
         await _unitOfWork.SaveAsync();
 
-        // 4. Load questions để trả về
+        // 4. Load questions để trả về (luôn bao gồm Explanation và CorrectAnswer cho Practice Mode)
         var questions = await _unitOfWork.Context.QuizQuestions
             .AsNoTracking()
             .Where(q => q.QuizId == quiz.Id)
@@ -659,7 +664,10 @@ public class StudentLearningService : IStudentLearningService
                 OptionC = q.OptionC,
                 OptionD = q.OptionD,
                 ImageUrl = q.ImageUrl,
-                MaxScore = 1 // Each question is worth 1 point
+                MaxScore = 1, // Each question is worth 1 point
+                // Luôn bao gồm đáp án đúng và giải thích cho Practice Mode
+                CorrectAnswer = q.CorrectAnswer,
+                Explanation = q.Explanation
             })
             .ToListAsync();
 
@@ -754,6 +762,138 @@ public class StudentLearningService : IStudentLearningService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Trả về lịch sử quiz attempt của student với phân trang và bộ lọc.
+    /// </summary>
+    public async Task<PagedResultDTO<StudentQuizAttemptSummaryDto>> GetQuizAttemptHistoryPagedAsync(
+        Guid studentId,
+        int pageIndex = 0,
+        int pageSize = 10,
+        string? quizTitle = null,
+        string? topic = null,
+        bool? isAiGenerated = null,
+        bool? passed = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        pageIndex = Math.Max(0, pageIndex);
+
+        var query = _unitOfWork.Context.QuizAttempts
+            .AsNoTracking()
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
+            .Where(a => a.StudentId == studentId);
+
+        // Apply filters
+        if (!string.IsNullOrWhiteSpace(quizTitle))
+        {
+            var normalizedTitle = quizTitle.Trim().ToLower();
+            query = query.Where(a => a.Quiz != null && a.Quiz.Title.ToLower().Contains(normalizedTitle));
+        }
+
+        if (!string.IsNullOrWhiteSpace(topic))
+        {
+            var normalizedTopic = topic.Trim().ToLower();
+            query = query.Where(a => a.Quiz != null && a.Quiz.Topic != null && a.Quiz.Topic.ToLower().Contains(normalizedTopic));
+        }
+
+        if (isAiGenerated.HasValue)
+        {
+            query = query.Where(a => a.Quiz != null && a.Quiz.IsAiGenerated == isAiGenerated.Value);
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Get class enrollments for this student (for class name lookup)
+        var classIds = await _unitOfWork.Context.ClassEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync();
+
+        var classQuizSessions = await _unitOfWork.Context.ClassQuizSessions
+            .AsNoTracking()
+            .Where(cqs => classIds.Contains(cqs.ClassId))
+            .ToListAsync();
+
+        // Apply pagination and ordering
+        var pagedAttempts = await query
+            .OrderByDescending(a => a.CompletedAt)
+            .Skip(pageIndex * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var result = new List<StudentQuizAttemptSummaryDto>();
+
+        foreach (var attempt in pagedAttempts)
+        {
+            if (attempt.Quiz == null) continue;
+
+            // Apply passed filter in memory if specified
+            var totalQuestions = attempt.Quiz.QuizQuestions.Count;
+            var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+            decimal earnedPoints = 0;
+            foreach (var answer in attempt.StudentQuizAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+
+            var calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+            var attemptPassed = calculatedScore >= (attempt.Quiz.PassingScore ?? 0);
+
+            // Filter by passed status if specified
+            if (passed.HasValue && passed.Value != attemptPassed)
+                continue;
+
+            var classSession = classQuizSessions.FirstOrDefault(cqs => cqs.QuizId == attempt.QuizId);
+
+            var summary = new StudentQuizAttemptSummaryDto
+            {
+                AttemptId = attempt.Id,
+                QuizId = attempt.QuizId,
+                QuizTitle = attempt.Quiz.Title,
+                Topic = attempt.Quiz.Topic,
+                Difficulty = attempt.Quiz.Difficulty,
+                ClassName = classSession != null
+                    ? await _unitOfWork.Context.AcademicClasses
+                        .Where(c => c.Id == classSession.ClassId)
+                        .Select(c => c.ClassName)
+                        .FirstOrDefaultAsync()
+                    : null,
+                StartedAt = attempt.StartedAt,
+                CompletedAt = attempt.CompletedAt,
+                Score = calculatedScore,
+                PassingScore = attempt.Quiz.PassingScore,
+                Passed = attemptPassed,
+                TotalQuestions = totalQuestions,
+                CorrectAnswers = attempt.StudentQuizAnswers.Count(a => a.IsCorrect == true),
+                IsAiGenerated = attempt.Quiz.IsAiGenerated
+            };
+
+            result.Add(summary);
+        }
+
+        return new PagedResultDTO<StudentQuizAttemptSummaryDto>
+        {
+            Items = result,
+            TotalCount = totalCount,
+            PageIndex = pageIndex,
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+        };
     }
 
     /// <summary>
@@ -887,26 +1027,229 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<StudentProgressDto> GetProgressSummaryAsync(Guid studentId)
     {
-        // TODO: Implement progress summary logic
-        return new StudentProgressDto
+        try
         {
-            TotalCasesViewed = 0,
-            TotalQuestionsAsked = 0,
-            QuizzesCompleted = 0,
-            TotalQuizAnswersSubmitted = 0,
-            AvgQuizScore = null,
-            TotalQuizAttempts = 0,
-            CompletedQuizzes = 0,
-            EscalatedAnswers = 0,
-            LatestQuizScore = null,
-            QuizAccuracyRate = null
-        };
+            var utcNow = DateTime.UtcNow;
+
+            // 1. Get quiz statistics
+            var quizAttempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Quiz)
+                .Include(a => a.StudentQuizAnswers)
+                    .ThenInclude(sa => sa.Question)
+                .Where(a => a.StudentId == studentId)
+                .ToListAsync();
+
+            var completedAttempts = quizAttempts.Where(a => a.CompletedAt.HasValue).ToList();
+            var totalQuizAttempts = quizAttempts.Count;
+            var completedQuizzes = completedAttempts.Count;
+
+            // Calculate total correct answers and average score
+            decimal totalEarnedPoints = 0;
+            int totalQuestions = 0;
+            int totalCorrectAnswers = 0;
+
+            foreach (var attempt in completedAttempts)
+            {
+                if (attempt.Quiz == null) continue;
+                
+                var questions = attempt.Quiz.QuizQuestions;
+                var questionCount = questions.Count;
+                totalQuestions += questionCount;
+                
+                var pointsPerQuestion = questionCount > 0 ? 100m / questionCount : 0;
+                
+                foreach (var answer in attempt.StudentQuizAnswers)
+                {
+                    if (answer.Question?.Type == QuestionType.Essay)
+                    {
+                        totalEarnedPoints += answer.ScoreAwarded ?? 0;
+                        if ((answer.IsGraded == true) && answer.IsCorrect == true)
+                            totalCorrectAnswers++;
+                    }
+                    else
+                    {
+                        if (answer.IsCorrect == true)
+                        {
+                            totalEarnedPoints += pointsPerQuestion;
+                            totalCorrectAnswers++;
+                        }
+                    }
+                }
+            }
+
+            double? avgQuizScore = completedQuizzes > 0 
+                ? Math.Round((double)(totalEarnedPoints / completedQuizzes), 2) 
+                : null;
+            double? quizAccuracyRate = totalQuestions > 0 
+                ? Math.Round((double)totalCorrectAnswers / totalQuestions * 100, 2) 
+                : null;
+            double? latestQuizScore = completedAttempts
+                .OrderByDescending(a => a.CompletedAt)
+                .FirstOrDefault()?.Score;
+
+            // 2. Get cases viewed (unique cases from Visual QA sessions)
+            var casesViewed = await _unitOfWork.Context.VisualQaSessions
+                .AsNoTracking()
+                .Where(s => s.StudentId == studentId)
+                .Select(s => s.CaseId)
+                .Where(c => c.HasValue)
+                .Distinct()
+                .CountAsync();
+
+            // 3. Get questions asked (QA messages)
+            var questionsAsked = await _unitOfWork.Context.QaMessages
+                .AsNoTracking()
+                .Where(m => m.Role == "User" || m.Role == "Student")
+                .Where(m => _unitOfWork.Context.VisualQaSessions
+                    .Where(s => s.StudentId == studentId)
+                    .Select(s => s.Id)
+                    .Contains(m.SessionId))
+                .CountAsync();
+
+            // 4. Get escalated answers (CaseAnswers escalated to expert)
+            var escalatedAnswers = await _unitOfWork.Context.CaseAnswers
+                .AsNoTracking()
+                .Where(a => a.Question.StudentId == studentId)
+                .Where(a => a.Status == "EscalatedToExpert" || a.Status == "Escalated")
+                .CountAsync();
+
+            // 5. Get total quiz answers submitted
+            var totalQuizAnswersSubmitted = await _unitOfWork.Context.StudentQuizAnswers
+                .AsNoTracking()
+                .Where(sa => sa.Attempt.StudentId == studentId)
+                .CountAsync();
+
+            return new StudentProgressDto
+            {
+                TotalCasesViewed = casesViewed,
+                TotalQuestionsAsked = questionsAsked,
+                QuizzesCompleted = completedQuizzes,
+                TotalQuizAnswersSubmitted = totalQuizAnswersSubmitted,
+                AvgQuizScore = avgQuizScore,
+                TotalQuizAttempts = totalQuizAttempts,
+                CompletedQuizzes = completedQuizzes,
+                EscalatedAnswers = escalatedAnswers,
+                LatestQuizScore = latestQuizScore,
+                QuizAccuracyRate = quizAccuracyRate
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting progress summary for student {StudentId}", studentId);
+            return new StudentProgressDto
+            {
+                TotalCasesViewed = 0,
+                TotalQuestionsAsked = 0,
+                QuizzesCompleted = 0,
+                TotalQuizAnswersSubmitted = 0,
+                AvgQuizScore = null,
+                TotalQuizAttempts = 0,
+                CompletedQuizzes = 0,
+                EscalatedAnswers = 0,
+                LatestQuizScore = null,
+                QuizAccuracyRate = null
+            };
+        }
     }
 
     public async Task<IReadOnlyList<StudentTopicStatDto>> GetTopicStatsAsync(Guid studentId)
     {
-        // TODO: Implement topic statistics
-        return new List<StudentTopicStatDto>();
+        try
+        {
+            // Get all completed quiz attempts with quiz questions and cases
+            var completedAttempts = await _unitOfWork.Context.QuizAttempts
+                .AsNoTracking()
+                .Include(a => a.Quiz)
+                    .ThenInclude(q => q!.QuizQuestions)
+                        .ThenInclude(qq => qq.Case)
+                            .ThenInclude(c => c!.Category)
+                .Include(a => a.StudentQuizAnswers)
+                    .ThenInclude(sa => sa.Question)
+                .Where(a => a.StudentId == studentId && a.CompletedAt.HasValue)
+                .ToListAsync();
+
+            // Get topics from cases and quiz titles
+            var topicStats = new Dictionary<string, TopicStatData>();
+
+            foreach (var attempt in completedAttempts)
+            {
+                if (attempt.Quiz == null) continue;
+
+                // Get topic from quiz or questions
+                var topicName = !string.IsNullOrWhiteSpace(attempt.Quiz.Topic)
+                    ? attempt.Quiz.Topic
+                    : attempt.Quiz.Title;
+
+                if (string.IsNullOrWhiteSpace(topicName)) continue;
+
+                // Normalize topic name
+                topicName = topicName.Trim();
+
+                if (!topicStats.ContainsKey(topicName))
+                {
+                    topicStats[topicName] = new TopicStatData();
+                }
+
+                var stat = topicStats[topicName];
+                stat.TotalAttempts++;
+
+                if (attempt.Quiz.QuizQuestions.Count > 0)
+                {
+                    stat.TotalQuestions += attempt.Quiz.QuizQuestions.Count;
+
+                    // Calculate correct answers for this attempt
+                    var pointsPerQuestion = 100m / attempt.Quiz.QuizQuestions.Count;
+                    decimal attemptEarned = 0;
+
+                    foreach (var answer in attempt.StudentQuizAnswers)
+                    {
+                        if (answer.Question == null) continue;
+                        
+                        if (answer.Question.Type == QuestionType.Essay)
+                        {
+                            attemptEarned += answer.ScoreAwarded ?? 0;
+                        }
+                        else if (answer.IsCorrect == true)
+                        {
+                            attemptEarned += pointsPerQuestion;
+                        }
+                    }
+
+                    stat.TotalEarnedPoints += attemptEarned;
+                }
+            }
+
+            // Convert to DTOs
+            var result = new List<StudentTopicStatDto>();
+            foreach (var kvp in topicStats)
+            {
+                var accuracyRate = kvp.Value.TotalQuestions > 0
+                    ? Math.Round((double)kvp.Value.TotalEarnedPoints / kvp.Value.TotalQuestions * 100, 2)
+                    : 0;
+
+                result.Add(new StudentTopicStatDto
+                {
+                    Topic = kvp.Key,
+                    AccuracyRate = accuracyRate,
+                    QuizAttempts = kvp.Value.TotalAttempts
+                });
+            }
+
+            return result.OrderByDescending(r => r.AccuracyRate).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting topic stats for student {StudentId}", studentId);
+            return new List<StudentTopicStatDto>();
+        }
+    }
+
+    private class TopicStatData
+    {
+        public int TotalAttempts { get; set; }
+        public int TotalQuestions { get; set; }
+        public decimal TotalEarnedPoints { get; set; }
     }
 
     public async Task<IReadOnlyList<StudentRecentActivityDto>> GetRecentActivityAsync(Guid studentId)
@@ -1026,5 +1369,132 @@ public class StudentLearningService : IStudentLearningService
         // Delete attempt
         _unitOfWork.Context.QuizAttempts.Remove(attempt);
         await _unitOfWork.SaveAsync();
+    }
+
+    /// <summary>
+    /// Lưu quiz đã nộp vào flashcard deck. Mỗi câu hỏi trở thành 1 flashcard:
+    /// - Front: câu hỏi + các lựa chọn
+    /// - Back: đáp án đúng + giải thích
+    /// </summary>
+    public async Task<SaveQuizToFlashcardsResultDto> SaveQuizAttemptToFlashcardsAsync(
+        Guid studentId,
+        Guid attemptId,
+        string? customDeckName = null,
+        string? description = null)
+    {
+        var attempt = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
+            ?? throw new KeyNotFoundException("Không tìm thấy lần làm quiz.");
+
+        if (attempt.Quiz == null)
+            throw new KeyNotFoundException("Không tìm thấy quiz.");
+
+        if (!attempt.CompletedAt.HasValue)
+            throw new InvalidOperationException("Quiz chưa được nộp. Vui lòng nộp quiz trước khi lưu vào flashcard.");
+
+        // Tạo deck mới
+        var deckName = !string.IsNullOrWhiteSpace(customDeckName)
+            ? customDeckName
+            : $"Quiz: {attempt.Quiz.Title}";
+
+        var deck = new BoneVisQA.Repositories.Models.FlashcardDeck
+        {
+            Id = Guid.NewGuid(),
+            DeckName = deckName,
+            Description = description ?? $"Flashcard deck từ quiz '{attempt.Quiz.Title}'. Được tạo tự động từ bài quiz đã làm.",
+            StudentId = studentId,
+            CardCount = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _unitOfWork.Context.FlashcardDecks.Add(deck);
+
+        var initialValues = SM2Algorithm.GetInitialValues();
+        var cardCount = 0;
+
+        foreach (var question in attempt.Quiz.QuizQuestions)
+        {
+            // Xây dựng nội dung front (câu hỏi + các lựa chọn)
+            var frontContent = question.QuestionText ?? "(Câu hỏi không có nội dung)";
+
+            // Thêm các lựa chọn vào front (nếu có)
+            var optionsBuilder = new System.Text.StringBuilder();
+            if (!string.IsNullOrWhiteSpace(question.OptionA))
+                optionsBuilder.AppendLine($"A. {question.OptionA}");
+            if (!string.IsNullOrWhiteSpace(question.OptionB))
+                optionsBuilder.AppendLine($"B. {question.OptionB}");
+            if (!string.IsNullOrWhiteSpace(question.OptionC))
+                optionsBuilder.AppendLine($"C. {question.OptionC}");
+            if (!string.IsNullOrWhiteSpace(question.OptionD))
+                optionsBuilder.AppendLine($"D. {question.OptionD}");
+
+            var optionsText = optionsBuilder.ToString();
+            if (!string.IsNullOrWhiteSpace(optionsText))
+                frontContent += "\n\n" + optionsText.TrimEnd();
+
+            // Xây dựng nội dung back (đáp án + giải thích)
+            var backContent = "";
+
+            // Thêm đáp án đúng
+            if (!string.IsNullOrWhiteSpace(question.CorrectAnswer))
+            {
+                backContent = $"Đáp án đúng: {question.CorrectAnswer}";
+
+                // Thêm nội dung của đáp án đúng
+                var correctOptionKey = question.CorrectAnswer.Trim().ToUpperInvariant();
+                var correctOptionValue = correctOptionKey switch
+                {
+                    "A" => question.OptionA,
+                    "B" => question.OptionB,
+                    "C" => question.OptionC,
+                    "D" => question.OptionD,
+                    _ => null
+                };
+                if (!string.IsNullOrWhiteSpace(correctOptionValue))
+                    backContent += $" - {correctOptionValue}";
+            }
+
+            // Thêm giải thích
+            if (!string.IsNullOrWhiteSpace(question.Explanation))
+            {
+                backContent += "\n\nGiải thích:\n" + question.Explanation;
+            }
+
+            if (string.IsNullOrWhiteSpace(backContent))
+                backContent = "(Không có đáp án hoặc giải thích)";
+
+            var flashcard = new BoneVisQA.Repositories.Models.Flashcard
+            {
+                Id = Guid.NewGuid(),
+                DeckId = deck.Id,
+                FrontContent = frontContent,
+                BackContent = backContent,
+                ImageUrl = question.ImageUrl,
+                EaseFactor = initialValues.EaseFactor,
+                IntervalDays = initialValues.IntervalDays,
+                RepetitionCount = initialValues.RepetitionCount,
+                NextReviewDate = initialValues.NextReviewDate,
+                IsBookmarked = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _unitOfWork.Context.Flashcards.Add(flashcard);
+            cardCount++;
+        }
+
+        deck.CardCount = cardCount;
+        deck.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveAsync();
+
+        return new SaveQuizToFlashcardsResultDto
+        {
+            Success = true,
+            DeckId = deck.Id,
+            DeckName = deck.DeckName,
+            CardCount = cardCount,
+            Message = $"Đã tạo deck '{deck.DeckName}' với {cardCount} flashcard từ quiz '{attempt.Quiz.Title}'."
+        };
     }
 }

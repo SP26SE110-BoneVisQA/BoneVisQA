@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,13 +15,16 @@ public class StudentFlashcardsController : ControllerBase
 {
     private readonly IFlashcardService _flashcardService;
     private readonly IFlashcardGeneratorService _flashcardGeneratorService;
+    private readonly IFlashcardRecommendationService _recommendationService;
 
     public StudentFlashcardsController(
         IFlashcardService flashcardService,
-        IFlashcardGeneratorService flashcardGeneratorService)
+        IFlashcardGeneratorService flashcardGeneratorService,
+        IFlashcardRecommendationService recommendationService)
     {
         _flashcardService = flashcardService;
         _flashcardGeneratorService = flashcardGeneratorService;
+        _recommendationService = recommendationService;
     }
 
     private Guid? GetUserId()
@@ -389,6 +393,41 @@ public class StudentFlashcardsController : ControllerBase
         public string SourceText { get; set; } = string.Empty;
         public string? DeckName { get; set; }
         public int CardCount { get; set; } = 10;
+    }
+
+    #endregion
+
+    #region AI Recommendation Endpoints
+
+    /// <summary>
+    /// Get AI-powered study recommendations based on student's flashcard performance.
+    /// </summary>
+    [HttpGet("recommendations")]
+    public async Task<ActionResult<FlashcardRecommendationResultDto>> GetRecommendations()
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _recommendationService.GetRecommendationsAsync(studentId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get personalized study tip for a specific flashcard.
+    /// </summary>
+    [HttpGet("cards/{cardId:guid}/study-tip")]
+    public async Task<ActionResult<object>> GetCardStudyTip(Guid cardId)
+    {
+        var studentId = GetUserId();
+        if (studentId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var tip = await _recommendationService.GetCardStudyTipAsync(studentId.Value, cardId);
+        if (tip == null)
+            return NotFound(new { message = "Flashcard not found." });
+
+        return Ok(new { studyTip = tip });
     }
 
     #endregion

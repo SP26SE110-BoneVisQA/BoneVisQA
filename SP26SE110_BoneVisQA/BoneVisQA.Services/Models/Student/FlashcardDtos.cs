@@ -128,3 +128,14 @@ public class ImportFlashcardsResultDto
     public List<string> Errors { get; set; } = new();
     public List<FlashcardDto> ImportedCards { get; set; } = new();
 }
+
+// ===== Save Quiz to Flashcards DTO =====
+
+public class SaveQuizToFlashcardsResultDto
+{
+    public bool Success { get; set; }
+    public Guid DeckId { get; set; }
+    public string DeckName { get; set; } = string.Empty;
+    public int CardCount { get; set; }
+    public string Message { get; set; } = string.Empty;
+}

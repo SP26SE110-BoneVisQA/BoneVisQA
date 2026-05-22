@@ -1267,7 +1267,8 @@ public class LecturerService : ILecturerService
             Items = items,
             TotalCount = totalCount,
             PageIndex = pageIndex,
-            PageSize = pageSize
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
         };
     }
 
@@ -2634,7 +2635,8 @@ public class LecturerService : ILecturerService
                     CloseTime = s.CloseTime ?? quiz?.CloseTime,
                     QuestionCount = questionCounts.GetValueOrDefault(s.QuizId),
                     CreatorName = creatorName,
-                    CreatorType = creatorType
+                    CreatorType = creatorType,
+                    QuizMode = s.QuizMode
                 };
             })
             .ToList();
@@ -2703,7 +2705,8 @@ public class LecturerService : ILecturerService
                     Difficulty = quiz.Difficulty,
                     CreatorName = creatorName,
                     CreatorType = creatorType,
-                    Classes = classes
+                    Classes = classes,
+                    QuizMode = quiz.QuizMode
                 };
             })
             .ToList();

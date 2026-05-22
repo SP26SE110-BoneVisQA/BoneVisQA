@@ -66,6 +66,10 @@ public class StudentQuizQuestionDto
     public string? AcceptedAnswers { get; set; }
     /// <summary>Whether hints are allowed (based on quiz mode)</summary>
     public bool HintAvailable { get; set; }
+    /// <summary>Giải thích đáp án đúng - hiển thị sau khi nộp bài (Practice Mode)</summary>
+    public string? Explanation { get; set; }
+    /// <summary>Đáp án đúng - hiển thị sau khi nộp bài (Practice Mode)</summary>
+    public string? CorrectAnswer { get; set; }
 }
 
 public class QuizSessionDto
@@ -172,6 +176,8 @@ public class StudentRecentActivityDto
 /// </summary>
 public class StudentGeneratedQuizAttemptDto
 {
+    public bool Success { get; set; }
+    public string? Message { get; set; }
     public Guid AttemptId { get; set; }
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;

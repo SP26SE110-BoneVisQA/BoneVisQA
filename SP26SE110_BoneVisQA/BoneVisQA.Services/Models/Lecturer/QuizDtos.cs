@@ -111,6 +111,8 @@ public class ClassQuizDto
     public string? CreatorName { get; set; }
     /// <summary>Loại người tạo: "Lecturer" hoặc "Expert"</summary>
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 // CreateQuizQuestionDto - For creating questions (with individual options)
@@ -247,6 +249,8 @@ public class AssignedQuizDto
     public bool IsFromExpertLibrary { get; set; }
     public string? CreatorName { get; set; }
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 // QuizQuestionDto - For quiz questions with individual options
@@ -411,6 +415,8 @@ public class MyQuizWithClassesDto
     public string? CreatorName { get; set; }
     /// <summary>Loại người tạo: "Lecturer" hoặc "Expert"</summary>
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
     /// <summary>Danh sách lớp đã gán quiz này</summary>
     public List<MyQuizClassInfoDto> Classes { get; set; } = new();
 }

@@ -420,6 +420,10 @@ builder.Services.AddScoped<AdaptiveQuizService>();
 // Flashcard Services
 builder.Services.AddScoped<IFlashcardService, FlashcardService>();
 builder.Services.AddScoped<IFlashcardGeneratorService, FlashcardGeneratorService>();
+builder.Services.AddScoped<IFlashcardRecommendationService, FlashcardRecommendationService>();
+
+// AI Quiz Services
+builder.Services.AddScoped<IQuizHintService, QuizHintService>();
 
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();

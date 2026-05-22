@@ -136,9 +136,16 @@ public class FlashcardService : IFlashcardService
 
     public async Task<IReadOnlyList<FlashcardDto>> GetFlashcardsByDeckAsync(Guid deckId, Guid studentId)
     {
+        var deck = await _unitOfWork.Context.FlashcardDecks
+            .Where(d => d.Id == deckId && d.StudentId == studentId)
+            .Select(d => new { d.Id })
+            .FirstOrDefaultAsync();
+
+        if (deck == null)
+            return new List<FlashcardDto>();
+
         var flashcards = await _unitOfWork.Context.Flashcards
-            .Include(f => f.Deck)
-            .Where(f => f.DeckId == deckId && f.Deck!.StudentId == studentId)
+            .Where(f => f.DeckId == deckId)
             .OrderBy(f => f.CreatedAt)
             .Select(f => new FlashcardDto
             {
@@ -164,8 +171,9 @@ public class FlashcardService : IFlashcardService
     public async Task<FlashcardDto?> GetFlashcardByIdAsync(Guid flashcardId, Guid studentId)
     {
         var flashcard = await _unitOfWork.Context.Flashcards
-            .Include(f => f.Deck)
-            .Where(f => f.Id == flashcardId && f.Deck!.StudentId == studentId)
+            .Where(f => f.Id == flashcardId)
+            .Where(f => _unitOfWork.Context.FlashcardDecks
+                .Any(d => d.Id == f.DeckId && d.StudentId == studentId))
             .Select(f => new FlashcardDto
             {
                 Id = f.Id,
