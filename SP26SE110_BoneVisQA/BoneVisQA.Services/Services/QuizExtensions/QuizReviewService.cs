@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Services.AiQuizServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -14,11 +16,16 @@ public class QuizReviewService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<QuizReviewService> _logger;
+    private readonly IQuizGeminiService _geminiService;
 
-    public QuizReviewService(IUnitOfWork unitOfWork, ILogger<QuizReviewService> logger)
+    public QuizReviewService(
+        IUnitOfWork unitOfWork,
+        ILogger<QuizReviewService> logger,
+        IQuizGeminiService geminiService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _geminiService = geminiService;
     }
 
     public class DetailedReviewDto
@@ -42,6 +49,10 @@ public class QuizReviewService
         public string? AiExplanation { get; set; }
         public List<string> TopicTags { get; set; } = new();
         public List<RelatedCaseDto> RelatedCases { get; set; } = new();
+        public string? LecturerFeedback { get; set; }
+        public string? ReferenceAnswer { get; set; }
+        public string? ImageUrl { get; set; }
+        public string? CaseTitle { get; set; }
     }
 
     public class RelatedCaseDto
@@ -104,7 +115,11 @@ public class QuizReviewService
                 IsCorrect = answer.IsCorrect,
                 AiExplanation = reviewItem?.AiExplanation,
                 TopicTags = topicTags,
-                RelatedCases = relatedCases
+                RelatedCases = relatedCases,
+                LecturerFeedback = answer.LecturerFeedback,
+                ReferenceAnswer = question.ReferenceAnswer,
+                ImageUrl = question.ImageUrl,
+                CaseTitle = question.Case?.Title
             });
         }
 
@@ -163,6 +178,19 @@ public class QuizReviewService
                 relatedCaseIds = relatedCases.Select(c => c.Id).ToList();
             }
 
+            // Generate AI explanation using Gemini
+            string? generatedExplanation = null;
+            if (!string.IsNullOrWhiteSpace(aiExplanations))
+            {
+                // Use provided explanation
+                generatedExplanation = aiExplanations;
+            }
+            else
+            {
+                // Generate explanation using Gemini AI
+                generatedExplanation = await GenerateAiExplanationAsync(question, answer, attempt);
+            }
+
             var reviewItem = new QuizReviewItem
             {
                 Id = Guid.NewGuid(),
@@ -172,7 +200,7 @@ public class QuizReviewService
                 StudentAnswer = answer.StudentAnswer ?? answer.EssayAnswer,
                 CorrectAnswer = question.CorrectAnswer,
                 IsCorrect = answer.IsCorrect,
-                AiExplanation = aiExplanations,
+                AiExplanation = generatedExplanation,
                 RelatedCases = JsonConvert.SerializeObject(relatedCaseIds),
                 TopicTags = JsonConvert.SerializeObject(topicTags),
                 CreatedAt = DateTime.UtcNow
@@ -182,6 +210,86 @@ public class QuizReviewService
         }
 
         await _unitOfWork.SaveAsync();
+    }
+
+    private async Task<string?> GenerateAiExplanationAsync(
+        QuizQuestion question,
+        StudentQuizAnswer answer,
+        QuizAttempt attempt)
+    {
+        try
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("You are a medical education expert specializing in bone pathology X-ray analysis.");
+            sb.AppendLine();
+            sb.AppendLine("Please provide a clear, educational explanation for the following quiz question:");
+            sb.AppendLine();
+
+            // Question details
+            if (!string.IsNullOrWhiteSpace(question.QuestionText))
+            {
+                sb.AppendLine($"Question: {question.QuestionText}");
+                sb.AppendLine();
+            }
+
+            // Case context
+            if (question.Case != null)
+            {
+                if (!string.IsNullOrWhiteSpace(question.Case.Title))
+                    sb.AppendLine($"Case: {question.Case.Title}");
+                if (!string.IsNullOrWhiteSpace(question.Case.BoneSpecialty?.Name))
+                    sb.AppendLine($"Bone Specialty: {question.Case.BoneSpecialty.Name}");
+                if (!string.IsNullOrWhiteSpace(question.Case.Description))
+                    sb.AppendLine($"Case Description: {question.Case.Description}");
+                sb.AppendLine();
+            }
+
+            // Student's answer
+            var studentAnswer = answer.StudentAnswer ?? answer.EssayAnswer ?? "No answer";
+            sb.AppendLine($"Student's Answer: {studentAnswer}");
+            sb.AppendLine();
+
+            // Correct answer
+            if (!string.IsNullOrWhiteSpace(question.CorrectAnswer))
+            {
+                sb.AppendLine($"Correct Answer: {question.CorrectAnswer}");
+                sb.AppendLine();
+            }
+
+            // Result
+            var isCorrect = answer.IsCorrect == true;
+            sb.AppendLine($"Result: {(isCorrect ? "CORRECT" : "INCORRECT")}");
+            sb.AppendLine();
+
+            // Instructions
+            sb.AppendLine("Please explain:");
+            sb.AppendLine("1. Why the correct answer is correct");
+            if (!isCorrect)
+            {
+                sb.AppendLine("2. Why the student's answer was incorrect (if applicable)");
+            }
+            sb.AppendLine("3. Key learning points from this question");
+            sb.AppendLine("4. Any tips for identifying similar cases in the future");
+            sb.AppendLine();
+            sb.AppendLine("Format your response as a clear, educational explanation suitable for medical students.");
+
+            var prompt = sb.ToString();
+            var imageUrl = question.ImageUrl;
+            var explanation = await _geminiService.GenerateQuizAsync(prompt, imageUrl);
+
+            if (!string.IsNullOrWhiteSpace(explanation))
+            {
+                _logger.LogInformation("Generated AI explanation for question {QuestionId} in attempt {AttemptId}",
+                    question.Id, attempt.Id);
+            }
+
+            return explanation;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate AI explanation for question {QuestionId}", question.Id);
+            return null;
+        }
     }
 
     public async Task UpdateAiExplanationAsync(Guid reviewItemId, string explanation)
