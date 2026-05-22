@@ -680,6 +680,7 @@ public class StudentLearningService : IStudentLearningService
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Include(a => a.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
             .Include(a => a.StudentQuizAnswers)
                 .ThenInclude(sa => sa.Question)
             .Where(a => a.StudentId == studentId)
