@@ -60,6 +60,63 @@ public class LecturerDashboardService : ILecturerDashboardService
                 cqs.QuizId == a.QuizId))
             .AverageAsync(a => (double?)a.Score);
 
+        // Quiz Engagement Stats
+        var totalQuizAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => studentIds.Contains(a.StudentId))
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                cqs.QuizId == a.QuizId))
+            .CountAsync();
+
+        // Calculate average time from completed attempts
+        var completedAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => studentIds.Contains(a.StudentId))
+            .Where(a => a.StartedAt.HasValue && a.CompletedAt.HasValue)
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                cqs.QuizId == a.QuizId))
+            .Select(a => new { a.StartedAt, a.CompletedAt })
+            .ToListAsync();
+
+        double? avgTimeMinutes = null;
+        if (completedAttempts.Count > 0)
+        {
+            var totalSeconds = completedAttempts
+                .Sum(a => (a.CompletedAt!.Value - a.StartedAt!.Value).TotalSeconds);
+            avgTimeMinutes = totalSeconds / completedAttempts.Count / 60.0;
+        }
+
+        // Calculate participation trend (comparing last 30 days vs previous 30 days)
+        var now = DateTime.UtcNow;
+        var thirtyDaysAgo = now.AddDays(-30);
+        var sixtyDaysAgo = now.AddDays(-60);
+
+        var recentAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => studentIds.Contains(a.StudentId))
+            .Where(a => a.StartedAt >= thirtyDaysAgo)
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                cqs.QuizId == a.QuizId))
+            .CountAsync();
+
+        var previousAttempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => studentIds.Contains(a.StudentId))
+            .Where(a => a.StartedAt >= sixtyDaysAgo && a.StartedAt < thirtyDaysAgo)
+            .Where(a => _unitOfWork.Context.ClassQuizSessions.Any(cqs =>
+                classIds.Contains(cqs.ClassId) &&
+                cqs.QuizId == a.QuizId))
+            .CountAsync();
+
+        double? participationTrendPercent = null;
+        if (previousAttempts > 0)
+        {
+            participationTrendPercent = Math.Round(((double)recentAttempts - previousAttempts) / previousAttempts * 100, 1);
+        }
+        else if (recentAttempts > 0)
+        {
+            participationTrendPercent = 100; // First period has activity, previous had none
+        }
+
         return new LecturerDashboardStatsDto
         {
             TotalClasses = classIds.Count,
@@ -67,7 +124,10 @@ public class LecturerDashboardService : ILecturerDashboardService
             TotalQuestions = totalQuestions,
             EscalatedItems = escalatedItems,
             PendingReviews = pendingReviews,
-            AverageQuizScore = avgQuizScore
+            AverageQuizScore = avgQuizScore,
+            TotalQuizAttempts = totalQuizAttempts,
+            AverageTimeMinutes = avgTimeMinutes.HasValue ? Math.Round(avgTimeMinutes.Value, 1) : null,
+            ParticipationTrendPercent = participationTrendPercent
         };
     }
 

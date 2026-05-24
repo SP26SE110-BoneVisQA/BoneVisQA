@@ -5,6 +5,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models;
+using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Utilities;
@@ -1349,9 +1350,78 @@ public class StudentLearningService : IStudentLearningService
         return "Quiz";
     }
 
+    /// <summary>
+    /// Tự động nộp các quiz attempt đã hết hạn.
+    /// Method này tìm tất cả các attempt chưa nộp, kiểm tra xem đã hết giờ chưa,
+    /// và tự động nộp với các câu trả lời hiện có.
+    /// </summary>
     public async Task AutoCloseExpiredAttemptsAsync()
     {
-        // TODO: Implement auto-close for expired attempts
+        var utcNow = DateTime.UtcNow;
+        
+        // Lấy tất cả attempt chưa nộp của quiz không phải AI-generated
+        // (AI-generated quizzes không có time limit cứng)
+        var incompleteAttempts = await _unitOfWork.Context.QuizAttempts
+            .Include(a => a.Quiz)
+                .ThenInclude(q => q!.ClassQuizSessions)
+            .Include(a => a.StudentQuizAnswers)
+            .Where(a => a.CompletedAt == null && a.Quiz != null && !a.Quiz.IsAiGenerated)
+            .ToListAsync();
+
+        foreach (var attempt in incompleteAttempts)
+        {
+            if (attempt.Quiz == null) continue;
+
+            // Lấy thông tin session và quiz
+            var session = attempt.Quiz.ClassQuizSessions?.FirstOrDefault();
+            var timeLimitMinutes = session?.TimeLimitMinutes ?? attempt.Quiz.TimeLimit ?? 0;
+            var closeTime = session?.CloseTime ?? attempt.Quiz.CloseTime;
+            
+            // Kiểm tra đã hết giờ chưa
+            bool expired = false;
+            
+            // Kiểm tra theo time limit (tính từ lúc bắt đầu)
+            if (timeLimitMinutes > 0 && attempt.StartedAt.HasValue)
+            {
+                var deadline = attempt.StartedAt.Value.AddMinutes(timeLimitMinutes);
+                if (utcNow > deadline)
+                {
+                    expired = true;
+                }
+            }
+            
+            // Kiểm tra theo close time (nếu có)
+            if (closeTime.HasValue && utcNow > closeTime.Value)
+            {
+                expired = true;
+            }
+
+            if (expired)
+            {
+                // Auto-submit với answers hiện có
+                var submitRequest = new SubmitQuizRequestDto
+                {
+                    AttemptId = attempt.Id,
+                    Answers = attempt.StudentQuizAnswers.Select(sa => new SubmitQuizQuestionAnswerDto
+                    {
+                        QuestionId = sa.QuestionId,
+                        StudentAnswer = sa.StudentAnswer
+                    }).ToList()
+                };
+                
+                try
+                {
+                    // Gọi nộp bài với student ID từ attempt
+                    await SubmitQuizAttemptAsync(attempt.StudentId, submitRequest);
+                    _logger.LogInformation("[AutoSubmit] Auto-submitted expired attempt {AttemptId} for student {StudentId}", 
+                        attempt.Id, attempt.StudentId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[AutoSubmit] Failed to auto-submit attempt {AttemptId}", attempt.Id);
+                }
+            }
+        }
     }
 
     public async Task DeleteQuizAttemptAsync(Guid studentId, Guid attemptId)
