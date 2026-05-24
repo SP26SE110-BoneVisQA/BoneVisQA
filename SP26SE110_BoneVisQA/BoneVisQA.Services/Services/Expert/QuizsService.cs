@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
 namespace BoneVisQA.Services.Services.Expert
@@ -88,9 +87,11 @@ namespace BoneVisQA.Services.Services.Expert
             return $"{cleanBase}{path}";
         }
 
-        public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetQuizDTO>> GetAllQuizAsync(int pageIndex, int pageSize)
         {
-            var query = _unitOfWork.QuizRepository.GetAllAsync().Result.AsQueryable();
+            var quizzesData = await _unitOfWork.QuizRepository.GetAllAsync();
+
+            var query = quizzesData.AsQueryable();
 
             // Chỉ lấy quiz do Expert tạo (IsAiGenerated = false), không lấy quiz do AI tạo
             query = query.Where(q => !q.IsAiGenerated);
@@ -376,7 +377,7 @@ namespace BoneVisQA.Services.Services.Expert
         }
 
         //================================================================================================================
-        public async Task<List<GetQuizQuestionDTO>> GetQuizQuestionDTO(Guid quizId)
+        public async Task<List<GetQuizQuestionDTO>> GetQuizQuestionAsync(Guid quizId)
         {
             var quiz = await _unitOfWork.QuizRepository
                 .GetByIdAsync(quizId);
@@ -572,7 +573,7 @@ namespace BoneVisQA.Services.Services.Expert
 
 
         //================================================================================================================
-        public async Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizDTO(
+        public async Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizAsync(
     int pageIndex,
     int pageSize)
         {
@@ -789,7 +790,7 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetClassDTO>> GetAllClassAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.AcademicClassRepository.GetQueryable();
 
@@ -814,7 +815,7 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
-        public async Task<PagedResult<GetExpertDTO>> GetAllExpert(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetExpertDTO>> GetAllExpertAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.UserRepository
                 .GetQueryable()

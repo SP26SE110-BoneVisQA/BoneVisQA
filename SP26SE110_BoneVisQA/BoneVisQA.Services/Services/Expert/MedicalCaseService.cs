@@ -66,7 +66,7 @@ namespace BoneVisQA.Services.Services.Expert
 
             return relativeUrl;
         }
-        public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex,int pageSize)
+        public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.MedicalCaseRepository.GetQueryable().AsNoTracking();
 
@@ -184,8 +184,8 @@ namespace BoneVisQA.Services.Services.Expert
         public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto)
         {
             var categoryname = await _unitOfWork.CategoryRepository.GetByIdAsync(dto.CategoryId ?? Guid.Empty);
-          
-            User ? expert = null;
+
+            User? expert = null;
 
             if (dto.CreatedByExpertId.HasValue)
             {
@@ -195,7 +195,7 @@ namespace BoneVisQA.Services.Services.Expert
             var medicalCase = new MedicalCase
             {
                 Id = Guid.NewGuid(),
-                CreatedByExpertId = dto.CreatedByExpertId,  
+                CreatedByExpertId = dto.CreatedByExpertId,
                 Title = dto.Title,
                 Description = dto.Description,
                 Difficulty = MedicalCaseDifficultyNormalizer.Normalize(dto.Difficulty),
@@ -215,7 +215,7 @@ namespace BoneVisQA.Services.Services.Expert
             return new CreateMedicalCaseResponseDTO
             {
                 Id = medicalCase.Id,
-                ExpertName = expert?.FullName,  
+                ExpertName = expert?.FullName,
                 Title = medicalCase.Title,
                 Description = medicalCase.Description,
                 Difficulty = medicalCase.Difficulty,
@@ -228,95 +228,95 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-    public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(
-        CreateExpertMedicalCaseJsonRequest request,
-        Guid expertUserId,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var dto = new CreateMedicalCaseRequestDTO
+        public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(
+            CreateExpertMedicalCaseJsonRequest request,
+            Guid expertUserId,
+            CancellationToken cancellationToken = default)
         {
-            Title = request.Title,
-            Description = request.Description,
-            Difficulty = request.Difficulty,
-            CategoryId = request.CategoryId,
-            SuggestedDiagnosis = request.SuggestedDiagnosis,
-            KeyFindings = request.KeyFindings,
-            CreatedByExpertId = expertUserId
-        };
+            ArgumentNullException.ThrowIfNull(request);
 
-        var created = await CreateMedicalCaseAsync(dto);
-        var caseId = created.Id;
-
-        foreach (var img in request.MedicalImages ?? Enumerable.Empty<CreateExpertMedicalCaseImageJson>())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(img.ImageUrl))
-                continue;
-
-            var image = new MedicalImage
+            var dto = new CreateMedicalCaseRequestDTO
             {
-                Id = Guid.NewGuid(),
-                CaseId = caseId,
-                ImageUrl = img.ImageUrl.Trim(),
-                Modality = MedicalImageModalityNormalizer.Normalize(img.Modality),
-                CreatedAt = DateTime.UtcNow
+                Title = request.Title,
+                Description = request.Description,
+                Difficulty = request.Difficulty,
+                CategoryId = request.CategoryId,
+                SuggestedDiagnosis = request.SuggestedDiagnosis,
+                KeyFindings = request.KeyFindings,
+                CreatedByExpertId = expertUserId
             };
-            await _unitOfWork.MedicalImageRepository.AddAsync(image);
 
-            foreach (var ann in img.Annotations ?? Enumerable.Empty<CreateAnnotationDTO>())
+            var created = await CreateMedicalCaseAsync(dto);
+            var caseId = created.Id;
+
+            foreach (var img in request.MedicalImages ?? Enumerable.Empty<CreateExpertMedicalCaseImageJson>())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await _unitOfWork.CaseAnnotationRepository.AddAsync(new CaseAnnotation
+                if (string.IsNullOrWhiteSpace(img.ImageUrl))
+                    continue;
+
+                var image = new MedicalImage
                 {
                     Id = Guid.NewGuid(),
-                    ImageId = image.Id,
-                    Label = ResolveAnnotationLabel(ann.Label),
-                    Coordinates = ann.Coordinates,
+                    CaseId = caseId,
+                    ImageUrl = img.ImageUrl.Trim(),
+                    Modality = MedicalImageModalityNormalizer.Normalize(img.Modality),
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _unitOfWork.MedicalImageRepository.AddAsync(image);
+
+                foreach (var ann in img.Annotations ?? Enumerable.Empty<CreateAnnotationDTO>())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await _unitOfWork.CaseAnnotationRepository.AddAsync(new CaseAnnotation
+                    {
+                        Id = Guid.NewGuid(),
+                        ImageId = image.Id,
+                        Label = ResolveAnnotationLabel(ann.Label),
+                        Coordinates = ann.Coordinates,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            await _unitOfWork.SaveAsync();
+
+            await ApplyCaseTagIdsAsync(caseId, request.TagIds, cancellationToken);
+
+            return created;
+        }
+
+        private async Task ApplyCaseTagIdsAsync(Guid caseId, IEnumerable<Guid>? tagIds, CancellationToken cancellationToken)
+        {
+            if (tagIds == null)
+                return;
+
+            foreach (var tagId in tagIds.Distinct())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var tagExists = await _unitOfWork.TagRepository.ExistsAsync(t => t.Id == tagId);
+                if (!tagExists)
+                    continue;
+                var exists = await _unitOfWork.CaseTagRepository.ExistsAsync(x => x.CaseId == caseId && x.TagId == tagId);
+                if (exists)
+                    continue;
+                await _unitOfWork.CaseTagRepository.AddAsync(new CaseTag
+                {
+                    CaseId = caseId,
+                    TagId = tagId,
                     CreatedAt = DateTime.UtcNow
                 });
             }
+
+            await _unitOfWork.SaveAsync();
         }
 
-        await _unitOfWork.SaveAsync();
-
-        await ApplyCaseTagIdsAsync(caseId, request.TagIds, cancellationToken);
-
-        return created;
-    }
-
-    private async Task ApplyCaseTagIdsAsync(Guid caseId, IEnumerable<Guid>? tagIds, CancellationToken cancellationToken)
-    {
-        if (tagIds == null)
-            return;
-
-        foreach (var tagId in tagIds.Distinct())
+        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id, UpdateMedicalCaseDTORequest request)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var tagExists = await _unitOfWork.TagRepository.ExistsAsync(t => t.Id == tagId);
-            if (!tagExists)
-                continue;
-            var exists = await _unitOfWork.CaseTagRepository.ExistsAsync(x => x.CaseId == caseId && x.TagId == tagId);
-            if (exists)
-                continue;
-            await _unitOfWork.CaseTagRepository.AddAsync(new CaseTag
-            {
-                CaseId = caseId,
-                TagId = tagId,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
+            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
 
-        await _unitOfWork.SaveAsync();
-    }
-
-    public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request)
-    {
-        var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
-
-        if (medicalCase == null)
-            return null;
+            if (medicalCase == null)
+                return null;
 
             var contentChanged =
                 !string.Equals(medicalCase.Title, request.Title, StringComparison.Ordinal) ||
@@ -415,6 +415,35 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
+        // Get all images for case
+        public async Task<PagedResult<GetAllImageDTO>> GetAllImageAsync(int pageIndex, int pageSize)
+        {
+            var query = _unitOfWork.MedicalImageRepository.GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var images = await query
+                .OrderByDescending(x => x.CreatedAt)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+              .Select(x => new GetAllImageDTO
+              {
+                  Id = x.Id,
+                  CaseId = x.CaseId,
+                  ImageUrl = x.ImageUrl,
+                  FileName = Path.GetFileName(x.ImageUrl)
+              })
+                .ToListAsync();
+
+            return new PagedResult<GetAllImageDTO>
+            {
+                Items = images,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+    
         // Add image for case
         public async Task<AddMedicalImageDTO> AddImageAsync(AddMedicalImageDTOResponse dto)
         {
@@ -458,6 +487,41 @@ namespace BoneVisQA.Services.Services.Expert
             return true;
         }
 
+        // Get all annotations for image
+        public async Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotationAsync(int pageIndex, int pageSize)
+        {
+            var request = _httpContextAccessor.HttpContext.Request;
+
+            var baseUrl = $"{request.Scheme}://{request.Host}";
+
+            var query = _unitOfWork.CaseAnnotationRepository
+                .GetQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var annotations = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new GetAllAnnotationDTO
+                {
+                    Id = x.Id,
+                    ImageId = x.ImageId,
+                    ImageUrl = baseUrl + x.Image.ImageUrl,
+                    Label = x.Label,
+                    Coordinates = x.Coordinates
+                })
+                .ToListAsync();
+
+            return new PagedResult<GetAllAnnotationDTO>
+            {
+                Items = annotations,
+                TotalCount = totalCount,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+
         // Add annotation for image
         public async Task<AddAnnotationDTO> AddAnnotationAsync(AddAnnotationDTOResponse dto)
         {
@@ -483,40 +547,8 @@ namespace BoneVisQA.Services.Services.Expert
                 Coordinates = annotation.Coordinates
             };
         }
-        public async Task<PagedResult<GetAllAnnotationDTO>> GetAllAnnotation(int pageIndex, int pageSize)
-        {
-            var request = _httpContextAccessor.HttpContext.Request;
-
-            var baseUrl = $"{request.Scheme}://{request.Host}";
-
-            var query = _unitOfWork.CaseAnnotationRepository
-                .GetQueryable();
-
-            var totalCount = await query.CountAsync();
-
-            var annotations = await query
-                .OrderByDescending(x => x.Id)
-                .Skip((pageIndex - 1) * pageSize)
-                .Take(pageSize)
-                .Select(x => new GetAllAnnotationDTO
-                {
-                    Id = x.Id,
-                    ImageId = x.ImageId,    
-                    ImageUrl = baseUrl + x.Image.ImageUrl,
-                    Label = x.Label,
-                    Coordinates = x.Coordinates
-                })
-                .ToListAsync();
-
-            return new PagedResult<GetAllAnnotationDTO>
-            {
-                Items = annotations,
-                TotalCount = totalCount,
-                PageIndex = pageIndex,
-                PageSize = pageSize
-            };
-        }
-        public async Task<PagedResult<GetCategoryDTO>> GetAllCategory(int pageIndex, int pageSize)
+  
+        public async Task<PagedResult<GetCategoryDTO>> GetAllCategoryAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.CategoryRepository.GetQueryable();
 
@@ -541,33 +573,5 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
-
-        public async Task<PagedResult<GetAllImageDTO>> GetAllImage(int pageIndex, int pageSize)
-        {            
-            var query = _unitOfWork.MedicalImageRepository.GetQueryable();
-
-            var totalCount = await query.CountAsync();
-
-            var images = await query
-                .OrderByDescending(x => x.CreatedAt) 
-                .Skip((pageIndex - 1) * pageSize)
-                .Take(pageSize)
-              .Select(x => new GetAllImageDTO
-              {
-                  Id = x.Id,
-                  CaseId = x.CaseId,
-                  ImageUrl = x.ImageUrl,
-                  FileName = Path.GetFileName(x.ImageUrl)
-              })
-                .ToListAsync();
-
-            return new PagedResult<GetAllImageDTO>
-            {
-                Items = images,
-                TotalCount = totalCount,
-                PageIndex = pageIndex,
-                PageSize = pageSize
-            };
-        }
-    }
+    }       
 }
