@@ -25,15 +25,18 @@ namespace BoneVisQA.Services.Services.Expert
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWebHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IConfiguration _configuration;
 
         public MedicalCaseService(
             IUnitOfWork unitOfWork,
             IWebHostEnvironment env,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IConfiguration configuration)
         {
             _unitOfWork = unitOfWork;
             _env = env;
             _httpContextAccessor = httpContextAccessor;
+            _configuration = configuration;
         }
         private async Task<string> SaveImageAsync(IFormFile file)
         {
@@ -56,11 +59,20 @@ namespace BoneVisQA.Services.Services.Expert
 
             var relativeUrl = $"/uploads/images/{fileName}";
 
-            // Tạo absolute URL với backend base URL
+            // Use App:BaseUrl from configuration (set in appsettings.json or environment)
+            var baseUrl = _configuration["App:BaseUrl"];
+            if (!string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return $"{baseUrl.TrimEnd('/')}{relativeUrl}";
+            }
+
+            // Fallback: construct from request context (for local dev)
             var request = _httpContextAccessor.HttpContext?.Request;
             if (request != null)
             {
-                var baseUrl = $"{request.Scheme}://{request.Host.Host}:{request.Host.Port ?? 5046}";
+                var host = request.Host.Host;
+                var port = request.Host.Port ?? 5047;
+                baseUrl = $"{request.Scheme}://{host}:{port}";
                 return $"{baseUrl}{relativeUrl}";
             }
 
