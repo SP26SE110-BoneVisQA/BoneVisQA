@@ -241,11 +241,15 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<QuizResultDto> SubmitQuizAttemptAsync(Guid studentId, SubmitQuizRequestDto request)
     {
+        // Convert string AttemptId to Guid
+        if (!Guid.TryParse(request.AttemptId, out var attemptId))
+            throw new InvalidOperationException("Invalid attempt ID format.");
+        
         var attempt = await _unitOfWork.Context.QuizAttempts
             .Include(a => a.Quiz)
             .Include(a => a.StudentQuizAnswers)
                 .ThenInclude(sa => sa.Question)
-            .FirstOrDefaultAsync(a => a.Id == request.AttemptId && a.StudentId == studentId)
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
             ?? throw new KeyNotFoundException("Quiz attempt not found.");
 
         if (attempt.CompletedAt.HasValue)
@@ -1401,7 +1405,7 @@ public class StudentLearningService : IStudentLearningService
                 // Auto-submit với answers hiện có
                 var submitRequest = new SubmitQuizRequestDto
                 {
-                    AttemptId = attempt.Id,
+                    AttemptId = attempt.Id.ToString(),
                     Answers = attempt.StudentQuizAnswers.Select(sa => new SubmitQuizQuestionAnswerDto
                     {
                         QuestionId = sa.QuestionId,

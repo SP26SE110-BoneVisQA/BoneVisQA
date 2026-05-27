@@ -100,10 +100,16 @@ public class SubmitQuizQuestionAnswerDto
     public string? TextAnswer { get; set; }
 }
 
+/// <summary>
+/// Request body for quiz submission. Accepts string IDs for frontend compatibility.
+/// </summary>
 public class SubmitQuizRequestDto
 {
-    public Guid AttemptId { get; set; }
-    public IReadOnlyList<SubmitQuizQuestionAnswerDto> Answers { get; set; } = Array.Empty<SubmitQuizQuestionAnswerDto>();
+    /// <summary>Attempt ID - can be string or Guid</summary>
+    public string AttemptId { get; set; } = string.Empty;
+    
+    /// <summary>List of answers for each question</summary>
+    public List<SubmitQuizQuestionAnswerDto> Answers { get; set; } = new();
 }
 
 public class QuizResultDto
