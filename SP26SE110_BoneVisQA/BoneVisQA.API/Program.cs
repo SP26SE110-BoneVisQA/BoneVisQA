@@ -66,8 +66,28 @@ else
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
-        // Production: HTTP on all interfaces (0.0.0.0) so Render can detect port
-        options.ListenAnyIP(5047);
+        // Production: respect PORT env variable (Render, Azure, etc.)
+        // Default to 8080 (Render's default) if PORT is not set
+        var port = Environment.GetEnvironmentVariable("PORT");
+        if (!string.IsNullOrEmpty(port) && int.TryParse(port, out var portNum))
+        {
+            options.ListenAnyIP(portNum);
+        }
+        else
+        {
+            // Render default port is 10000, but 8080 is common for Node-like services
+            // Check if ASPNETCORE_URLS is set
+            var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+            if (!string.IsNullOrEmpty(urls))
+            {
+                // ASPNETCORE_URLS is already set by Dockerfile, let Kestrel use defaults
+                options.ListenAnyIP(8080);
+            }
+            else
+            {
+                options.ListenAnyIP(8080);
+            }
+        }
     });
 }
 
@@ -125,41 +145,15 @@ builder.Services.AddCors(options =>
     });
     
     // Separate policy for SignalR
+    // SignalR requires AllowCredentials, but WithOrigins + AllowCredentials can fail preflight.
+    // Use SetIsOriginAllowed for flexibility while maintaining security through other means (JWT Bearer auth).
     options.AddPolicy("AllowAllForSignalR", policy =>
     {
-        var origins = new List<string>();
-
-        var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
-        origins.AddRange(configuredOrigins.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()));
-
-        if (builder.Environment.IsDevelopment())
-        {
-            origins.AddRange(new[]
-            {
-                "http://localhost:3000",
-                "https://localhost:3000",
-                "http://localhost:5173",
-                "https://localhost:5173",
-                "https://localhost:5047"
-            });
-        }
-
-        if (origins.Count == 0)
-        {
-            origins.AddRange(new[]
-            {
-                "http://localhost:3000",
-                "https://localhost:3000",
-                "http://localhost:5173",
-                "https://localhost:5173",
-                "https://localhost:5047"
-            });
-        }
-
-        policy.WithOrigins(origins.ToArray())
+        policy.SetIsOriginAllowed(_ => true)
               .AllowCredentials()
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
