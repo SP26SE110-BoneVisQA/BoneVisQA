@@ -34,6 +34,10 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TeachingPoints { get; set; }
         public List<string>? LearningObjectives { get; set; }
         public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
     public class CreateQuizRequestDTO
     {
@@ -69,6 +73,11 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TeachingPoints { get; set; }
         public List<string>? LearningObjectives { get; set; }
         public string? TargetStudentLevel { get; set; }
+
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
     public class CreateQuizResponseDTO
     {
@@ -106,6 +115,11 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TeachingPoints { get; set; }
         public List<string>? LearningObjectives { get; set; }
         public string? TargetStudentLevel { get; set; }
+
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
     public class UpdateQuizRequestDTO
     {
@@ -125,6 +139,10 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TeachingPoints { get; set; }
         public List<string>? LearningObjectives { get; set; }
         public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
     public class UpdateQuizResponseDTO
@@ -147,6 +165,10 @@ namespace BoneVisQA.Services.Models.Expert
         public int? TeachingPoints { get; set; }
         public List<string>? LearningObjectives { get; set; }
         public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
 
@@ -168,6 +190,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }   
     public class CreateQuizQuestionRequestDTO
     {
@@ -185,6 +215,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// Ảnh sẽ được upload lên Supabase và lưu URL vào đây
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
     public class CreateQuizQuestionResponseDTO
     {
@@ -204,6 +242,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
     public class UpdateQuizQuestionRequestDTO
     {
@@ -221,6 +267,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi (có thể cập nhật ảnh mới)
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
 
     public class UpdateQuizQuestionResponseDTO
@@ -239,6 +293,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
 
     // Assign Quiz to Class
@@ -359,6 +421,10 @@ namespace BoneVisQA.Services.Models.Expert
         public DateTime? CreatedAt { get; set; }                              // Ngày tạo
         public string? ExpertName { get; set; }                               // Tên Expert đã tạo quiz
         public int QuestionCount { get; set; }                                // SỐ CÂU HỎI - Quan trọng!
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
     // Câu hỏi trong quiz - CÓ đáp án đúng + CÓ ảnh

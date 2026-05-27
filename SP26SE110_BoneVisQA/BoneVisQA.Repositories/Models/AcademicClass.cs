@@ -79,9 +79,6 @@ public partial class AcademicClass
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
 
     [InverseProperty("Class")]
-    public virtual ICollection<ClassExpertAssignment> ClassExpertAssignments { get; set; } = new List<ClassExpertAssignment>();
-
-    [InverseProperty("Class")]
     public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
 
     [InverseProperty("Class")]

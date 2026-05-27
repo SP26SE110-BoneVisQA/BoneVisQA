@@ -16,7 +16,6 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
-using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
@@ -117,10 +116,50 @@ builder.Services.AddCors(options =>
                 originSet.Add(o);
         }
 
-        policy.WithOrigins(originSet.ToArray())
+        // Note: AllowCredentials is NOT used because:
+        // 1. Authentication uses JWT Bearer tokens in Authorization headers (not cookies)
+        // 2. SetIsOriginAllowed with AllowCredentials causes preflight failures per CORS spec
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowAnyMethod();
+    });
+    
+    // Separate policy for SignalR
+    options.AddPolicy("AllowAllForSignalR", policy =>
+    {
+        var origins = new List<string>();
+
+        var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+        origins.AddRange(configuredOrigins.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()));
+
+        if (builder.Environment.IsDevelopment())
+        {
+            origins.AddRange(new[]
+            {
+                "http://localhost:3000",
+                "https://localhost:3000",
+                "http://localhost:5173",
+                "https://localhost:5173",
+                "https://localhost:5047"
+            });
+        }
+
+        if (origins.Count == 0)
+        {
+            origins.AddRange(new[]
+            {
+                "http://localhost:3000",
+                "https://localhost:3000",
+                "http://localhost:5173",
+                "https://localhost:5173",
+                "https://localhost:5047"
+            });
+        }
+
+        policy.WithOrigins(origins.ToArray())
+              .AllowCredentials()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
@@ -340,7 +379,6 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
-builder.Services.AddScoped<IClassExpertAssignmentService, ClassExpertAssignmentService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
 builder.Services.AddScoped<IAdminClassDashboardService, AdminClassDashboardService>();
 builder.Services.AddScoped<IClassificationAnalyticsService, ClassificationAnalyticsService>();
@@ -358,7 +396,6 @@ builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
-builder.Services.AddScoped<IExpertSpecialtyService, ExpertSpecialtyService>();
 builder.Services.AddScoped<ITeachingObjectiveService, TeachingObjectiveService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
@@ -379,6 +416,14 @@ builder.Services.AddScoped<LecturerAnalyticsService>();
 builder.Services.AddScoped<QuizReviewService>();
 builder.Services.AddScoped<SpacedRepetitionService>();
 builder.Services.AddScoped<AdaptiveQuizService>();
+
+// Flashcard Services
+builder.Services.AddScoped<IFlashcardService, FlashcardService>();
+builder.Services.AddScoped<IFlashcardGeneratorService, FlashcardGeneratorService>();
+builder.Services.AddScoped<IFlashcardRecommendationService, FlashcardRecommendationService>();
+
+// AI Quiz Services
+builder.Services.AddScoped<IQuizHintService, QuizHintService>();
 
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
@@ -410,7 +455,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications")
-   .RequireCors("AllowAll")
+   .RequireCors("AllowAllForSignalR")
    .RequireAuthorization();
 
 // Ensure uploads directory exists before using PhysicalFileProvider

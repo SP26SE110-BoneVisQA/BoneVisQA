@@ -19,7 +19,7 @@ namespace BoneVisQA.Services.Services.Expert
         {
             _unitOfWork = unitOfWork;
         }
-        public async Task<PagedResult<GetTagDTO>> GetAllTag(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetTagDTO>> GetAllTagAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.TagRepository.GetQueryable();
 
@@ -43,6 +43,51 @@ namespace BoneVisQA.Services.Services.Expert
                 PageIndex = pageIndex,
                 PageSize = pageSize
             };
+        }
+        //public async Task<UpdateTagCaseDTO> UpdateTagCaseAsync(UpdateTagCaseDTO dto)
+        //{
+        //    var tagCase = await _unitOfWork.Context.CaseTags
+        //        .FirstOrDefaultAsync(x =>
+        //            x.CaseId == dto.CaseId &&
+        //            x.TagId == dto.OldTagId);
+
+        //    if (tagCase == null)
+        //    {
+        //        throw new Exception("TagCase not found");
+        //    }
+
+        //    // Update tag
+        //    tagCase.TagId = dto.NewTagId;
+
+        //    _unitOfWork.Context.CaseTags.Update(tagCase);
+
+        //    await _unitOfWork.SaveAsync();
+
+        //    return new UpdateTagCaseDTO
+        //    {
+        //        CaseId = tagCase.CaseId,
+        //        OldTagId = dto.OldTagId,
+        //        NewTagId = tagCase.TagId
+        //    };
+        //}
+
+        public async Task<bool> DeleteCaseTagAsync(Guid caseId, Guid tagId)
+        {
+            var caseTag = await _unitOfWork.Context.CaseTags
+                .FirstOrDefaultAsync(x =>
+                    x.CaseId == caseId &&
+                    x.TagId == tagId);
+
+            if (caseTag == null)
+            {
+                throw new Exception("CaseTag not found");
+            }
+
+            _unitOfWork.Context.CaseTags.Remove(caseTag);
+
+            await _unitOfWork.SaveAsync();
+
+            return true;
         }
         public async Task<CaseTagDTOResponse> AddTagCasesAsync(CaseTagDTO dto)
         {

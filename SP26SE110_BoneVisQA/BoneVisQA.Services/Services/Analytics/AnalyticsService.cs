@@ -231,7 +231,11 @@ public class AnalyticsService
 
             if (!boneSpecialtyId.HasValue) continue;
 
-            var scorePercent = answer.ScoreAwarded.HasValue ? (decimal)(answer.ScoreAwarded / 10 * 100) : (answer.IsCorrect == true ? 100 : 0);
+            var scorePercent = answer.ScoreAwarded.HasValue && answer.Question != null && answer.Question.MaxScore > 0
+                ? (decimal)(answer.ScoreAwarded.Value * 100m / answer.Question.MaxScore)
+                : (answer.IsCorrect == true ? 100 : 0);
+            // Clamp to 0-100 range
+            scorePercent = Math.Max(0, Math.Min(100, scorePercent));
             await UpdateStudentCompetencyAsync(attempt.StudentId, boneSpecialtyId.Value, pathologyId, scorePercent);
 
             if (!answer.IsCorrect.GetValueOrDefault())

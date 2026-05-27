@@ -158,23 +158,6 @@ namespace BoneVisQA.Services.Models.Admin
         public string? Email { get; set; }
         public int MatchScore { get; set; }
         public string MatchLevel { get; set; } = null!;
-        public List<ExpertSpecialtyMatchDto> MatchingSpecialties { get; set; } = new();
-        public int ProficiencyLevel { get; set; }
-        public int YearsExperience { get; set; }
-    }
-
-    /// <summary>
-    /// Ghép chuyên môn Expert
-    /// </summary>
-    public class ExpertSpecialtyMatchDto
-    {
-        public Guid SpecialtyId { get; set; }
-        public string SpecialtyName { get; set; } = null!;
-        public Guid? PathologyId { get; set; }
-        public string? PathologyName { get; set; }
-        public int ProficiencyLevel { get; set; }
-        public bool IsPrimary { get; set; }
-        public bool IsMatch { get; set; }
     }
 
     #endregion

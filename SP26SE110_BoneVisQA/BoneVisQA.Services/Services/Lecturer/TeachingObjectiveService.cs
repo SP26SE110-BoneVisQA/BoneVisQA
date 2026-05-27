@@ -20,21 +20,21 @@ public class TeachingObjectiveService : ITeachingObjectiveService
 
     public async Task<ExpertTeachingObjectivesDto?> GetClassObjectivesForExpertAsync(Guid expertId, Guid classId)
     {
-        var assignment = await _unitOfWork.Context.ClassExpertAssignments
-            .Include(a => a.Class)
-                .ThenInclude(c => c.Lecturer)
-            .FirstOrDefaultAsync(a => a.ClassId == classId && a.ExpertId == expertId && a.IsActive);
+        var classEntity = await _unitOfWork.Context.AcademicClasses
+            .Include(c => c.Lecturer)
+            .FirstOrDefaultAsync(c => c.Id == classId && c.ExpertId == expertId);
 
-        if (assignment == null)
+        if (classEntity == null)
             return null;
 
-        var classEntity = assignment.Class;
         var suggestions = await _unitOfWork.Context.TeachingObjectiveSuggestions
             .Where(s => s.ClassId == classId && s.ExpertId == expertId)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
 
         var objectives = ParseObjectives(classEntity.TeachingObjectives);
+
+        var expert = await _unitOfWork.Context.Users.FindAsync(expertId);
 
         return new ExpertTeachingObjectivesDto
         {
@@ -53,7 +53,7 @@ public class TeachingObjectiveService : ITeachingObjectiveService
                     Id = s.Id,
                     ClassId = s.ClassId,
                     ExpertId = s.ExpertId,
-                    ExpertName = assignment.Expert.FullName,
+                    ExpertName = expert?.FullName,
                     Topic = s.Topic,
                     Objective = s.Objective,
                     Level = s.Level,
@@ -68,17 +68,16 @@ public class TeachingObjectiveService : ITeachingObjectiveService
 
     public async Task<List<ExpertTeachingObjectivesDto>> GetAssignedClassesObjectivesAsync(Guid expertId)
     {
-        var assignments = await _unitOfWork.Context.ClassExpertAssignments
-            .Include(a => a.Class)
-                .ThenInclude(c => c.Lecturer)
-            .Where(a => a.ExpertId == expertId && a.IsActive)
+        var classes = await _unitOfWork.Context.AcademicClasses
+            .Include(c => c.Lecturer)
+            .Where(c => c.ExpertId == expertId)
             .ToListAsync();
 
         var result = new List<ExpertTeachingObjectivesDto>();
 
-        foreach (var assignment in assignments)
+        foreach (var classEntity in classes)
         {
-            var dto = await GetClassObjectivesForExpertAsync(expertId, assignment.ClassId);
+            var dto = await GetClassObjectivesForExpertAsync(expertId, classEntity.Id);
             if (dto != null)
                 result.Add(dto);
         }
@@ -88,10 +87,10 @@ public class TeachingObjectiveService : ITeachingObjectiveService
 
     public async Task<TeachingObjectiveSuggestionDto> SuggestObjectiveAsync(Guid expertId, SuggestObjectiveRequestDto request)
     {
-        var assignment = await _unitOfWork.Context.ClassExpertAssignments
-            .FirstOrDefaultAsync(a => a.ClassId == request.ClassId && a.ExpertId == expertId && a.IsActive);
+        var classEntity = await _unitOfWork.Context.AcademicClasses
+            .FirstOrDefaultAsync(c => c.Id == request.ClassId && c.ExpertId == expertId);
 
-        if (assignment == null)
+        if (classEntity == null)
             throw new UnauthorizedAccessException("You don't have access to suggest objectives for this class.");
 
         var expert = await _unitOfWork.Context.Users.FindAsync(expertId);

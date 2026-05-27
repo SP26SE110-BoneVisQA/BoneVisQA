@@ -68,8 +68,6 @@ public class QuizGeminiService : IQuizGeminiService
         }
 
         var baseUrl = _settings.BaseUrl.TrimEnd('/');
-        var modelId = resolvedModels[0];
-        var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={apiKeys[0]}";
 
         string? base64Image = null;
         string? mimeType = null;
@@ -80,73 +78,98 @@ public class QuizGeminiService : IQuizGeminiService
                 _logger.LogWarning("QuizGemini: could not load image, continuing text-only. Url={Url}", imageUrl);
         }
 
-        var retryAttempts = 3;
-        for (var attempt = 1; attempt <= retryAttempts; attempt++)
+        // Thử tất cả các model cho đến khi có response hợp lệ
+        foreach (var modelId in resolvedModels)
         {
-            try
+            var endpoint = $"{baseUrl}/models/{modelId}:generateContent?key={apiKeys[0]}";
+
+            for (var attempt = 1; attempt <= 3; attempt++)
             {
-                var payload = BuildPayload(prompt, base64Image, mimeType ?? MimeTypeJpeg);
-
-                using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-                var client = _httpClientFactory.CreateClient(HttpClientName);
-                var resp = await client.SendAsync(req, ct);
-                var raw = Encoding.UTF8.GetString(await resp.Content.ReadAsByteArrayAsync(ct));
-
-                if (!resp.IsSuccessStatusCode)
+                try
                 {
-                    _logger.LogWarning("QuizGemini HTTP {Status}. Body: {Body}",
-                        resp.StatusCode, raw.Length > 500 ? raw[..500] : raw);
-                    if (IsTransient(resp.StatusCode) && attempt < retryAttempts)
+                    var payload = BuildPayload(prompt, base64Image, mimeType ?? MimeTypeJpeg);
+
+                    using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                    req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+                    var client = _httpClientFactory.CreateClient(HttpClientName);
+                    var resp = await client.SendAsync(req, ct);
+                    var raw = Encoding.UTF8.GetString(await resp.Content.ReadAsByteArrayAsync(ct));
+
+                    if (!resp.IsSuccessStatusCode)
                     {
-                        await DelayAsync(attempt, ct);
+                        _logger.LogWarning("QuizGemini HTTP {Status} with model {Model}. Body: {Body}",
+                            resp.StatusCode, modelId, raw.Length > 500 ? raw[..500] : raw);
+                        if (IsTransient(resp.StatusCode) && attempt < 3)
+                        {
+                            await DelayAsync(attempt, ct);
+                            continue;
+                        }
+                        // Thử model khác nếu không phải quota error
+                        if (resp.StatusCode != System.Net.HttpStatusCode.TooManyRequests)
+                            break;
                         continue;
                     }
-                    return null;
+
+                    using var doc = JsonDocument.Parse(raw);
+                    var root = doc.RootElement;
+
+                    // Safety check
+                    if (root.TryGetProperty("promptFeedback", out var pf) &&
+                        pf.TryGetProperty("blockReason", out var br) &&
+                        !string.IsNullOrWhiteSpace(br.GetString()))
+                    {
+                        _logger.LogWarning("QuizGemini blocked by promptFeedback: {Reason}", br.GetString());
+                        return null;
+                    }
+
+                    if (root.TryGetProperty("candidates", out var cands) &&
+                        cands.ValueKind == JsonValueKind.Array &&
+                        cands.GetArrayLength() > 0 &&
+                        cands[0].TryGetProperty("finishReason", out var fr) &&
+                        string.Equals(fr.GetString(), "SAFETY", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("QuizGemini blocked by finishReason=SAFETY");
+                        return null;
+                    }
+
+                    var text = ExtractText(root);
+                    _logger.LogInformation("QuizGemini raw response text (first 1000 chars) from model {Model}: {Text}",
+                        modelId, text.Length > 1000 ? text[..1000] : text);
+
+                    // Nếu response rỗng hoặc chỉ có whitespace, thử lại
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        if (attempt < 3)
+                        {
+                            await DelayAsync(attempt, ct);
+                            continue;
+                        }
+                        // Thử model khác
+                        break;
+                    }
+
+                    return text;
                 }
-
-                using var doc = JsonDocument.Parse(raw);
-                var root = doc.RootElement;
-
-                // Safety check
-                if (root.TryGetProperty("promptFeedback", out var pf) &&
-                    pf.TryGetProperty("blockReason", out var br) &&
-                    !string.IsNullOrWhiteSpace(br.GetString()))
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    _logger.LogWarning("QuizGemini blocked by promptFeedback: {Reason}", br.GetString());
-                    return null;
+                    throw;
                 }
-
-                if (root.TryGetProperty("candidates", out var cands) &&
-                    cands.ValueKind == JsonValueKind.Array &&
-                    cands.GetArrayLength() > 0 &&
-                    cands[0].TryGetProperty("finishReason", out var fr) &&
-                    string.Equals(fr.GetString(), "SAFETY", StringComparison.OrdinalIgnoreCase))
+                catch (Exception ex) when (attempt < 3)
                 {
-                    _logger.LogWarning("QuizGemini blocked by finishReason=SAFETY");
-                    return null;
+                    _logger.LogWarning(ex, "QuizGemini attempt {Attempt}/{Max} failed with model {Model}. Retrying...", attempt, 3, modelId);
+                    await DelayAsync(attempt, ct);
                 }
-
-                var text = ExtractText(root);
-                return string.IsNullOrWhiteSpace(text) ? null : text;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex) when (attempt < retryAttempts)
-            {
-                _logger.LogWarning(ex, "QuizGemini attempt {Attempt}/{Max} failed. Retrying...", attempt, retryAttempts);
-                await DelayAsync(attempt, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "QuizGemini permanently failed.");
-                return null;
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "QuizGemini permanently failed with model {Model}.", modelId);
+                    // Thử model khác
+                    break;
+                }
             }
         }
 
+        _logger.LogWarning("All Gemini models exhausted. Could not generate quiz.");
         return null;
     }
 

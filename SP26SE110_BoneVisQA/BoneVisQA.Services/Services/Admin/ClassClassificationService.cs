@@ -208,11 +208,6 @@ namespace BoneVisQA.Services.Services.Admin
                     .Include(c => c.ClassSpecialty)
                         .ThenInclude(s => s.Parent)
                     .Include(c => c.Expert)
-                        .ThenInclude(e => e.ExpertSpecialties)
-                            .ThenInclude(es => es.BoneSpecialty)
-                    .Include(c => c.Expert)
-                        .ThenInclude(e => e.ExpertSpecialties)
-                            .ThenInclude(es => es.PathologyCategory)
                     .FirstOrDefaultAsync(c => c.Id == request.ClassId);
 
                 if (academicClass == null)
@@ -253,11 +248,6 @@ namespace BoneVisQA.Services.Services.Admin
                 .Include(c => c.ClassSpecialty)
                     .ThenInclude(s => s.Parent)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
-                .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.PathologyCategory)
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
             if (academicClass == null)
@@ -333,8 +323,7 @@ namespace BoneVisQA.Services.Services.Admin
                 .GetQueryable()
                 .Include(c => c.ClassEnrollments)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
+                .Include(c => c.ClassSpecialty)
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
             if (academicClass == null)
@@ -348,20 +337,13 @@ namespace BoneVisQA.Services.Services.Admin
                 Reasoning = ""
             };
 
-            // Auto-suggest based on expert's specialties
-            if (academicClass.Expert != null && academicClass.Expert.ExpertSpecialties.Any())
+            // Suggest based on existing class specialty
+            if (academicClass.ClassSpecialty != null)
             {
-                var primarySpecialty = academicClass.Expert.ExpertSpecialties
-                    .Where(es => es.IsPrimary && es.IsActive)
-                    .FirstOrDefault();
-
-                if (primarySpecialty != null)
-                {
-                    suggestion.SuggestedBoneSpecialtyId = primarySpecialty.BoneSpecialtyId;
-                    suggestion.SuggestedBoneSpecialtyName = primarySpecialty.BoneSpecialty?.Name;
-                    suggestion.ConfidenceScore = primarySpecialty.ProficiencyLevel * 20;
-                    suggestion.Reasoning = $"Dựa trên chuyên môn chính của Expert {academicClass.Expert.FullName}";
-                }
+                suggestion.SuggestedBoneSpecialtyId = academicClass.ClassSpecialty.Id;
+                suggestion.SuggestedBoneSpecialtyName = academicClass.ClassSpecialty.Name;
+                suggestion.ConfidenceScore = 80;
+                suggestion.Reasoning = "Dựa trên Bone Specialty hiện tại của lớp học";
             }
 
             // Suggest based on student count
@@ -378,12 +360,6 @@ namespace BoneVisQA.Services.Services.Admin
 
             // Suggest focus level based on existing data
             suggestion.SuggestedFocusLevel = academicClass.FocusLevel ?? "Basic";
-
-            // Find matching experts
-            if (suggestion.SuggestedBoneSpecialtyId.HasValue)
-            {
-                suggestion.SuggestedExperts = await FindSuggestedExpertsAsync(suggestion.SuggestedBoneSpecialtyId.Value);
-            }
 
             return suggestion;
         }
@@ -437,109 +413,6 @@ namespace BoneVisQA.Services.Services.Admin
 
         #endregion
 
-        #region ==================== EXPERT MATCHING ====================
-
-        /// <summary>
-        /// Tìm Expert phù hợp nhất cho lớp học
-        /// </summary>
-        public async Task<List<ExpertMatchClassificationDto>> FindMatchingExpertsAsync(Guid classId)
-        {
-            var academicClass = await _unitOfWork.AcademicClassRepository
-                .GetQueryable()
-                .Include(c => c.ClassSpecialty)
-                .FirstOrDefaultAsync(c => c.Id == classId);
-
-            if (academicClass == null)
-                return new List<ExpertMatchClassificationDto>();
-
-            if (!academicClass.ClassSpecialtyId.HasValue)
-                return new List<ExpertMatchClassificationDto>();
-
-            var experts = await _unitOfWork.ExpertSpecialtyRepository
-                .GetQueryable()
-                .Include(es => es.Expert)
-                .Include(es => es.BoneSpecialty)
-                .Include(es => es.PathologyCategory)
-                .Where(es => es.BoneSpecialtyId == academicClass.ClassSpecialtyId.Value && es.IsActive)
-                .ToListAsync();
-
-            return experts
-                .GroupBy(es => es.ExpertId)
-                .Select(g => new ExpertMatchClassificationDto
-                {
-                    ExpertId = g.Key,
-                    ExpertName = g.First().Expert?.FullName ?? "Unknown",
-                    Email = g.First().Expert?.Email,
-                    MatchScore = CalculateMatchScore(g.ToList()),
-                    MatchLevel = GetMatchLevel(CalculateMatchScore(g.ToList())),
-                    MatchingSpecialties = g.Select(es => new ExpertSpecialtyMatchDto
-                    {
-                        SpecialtyId = es.BoneSpecialtyId,
-                        SpecialtyName = es.BoneSpecialty?.Name ?? "Unknown",
-                        PathologyId = es.PathologyCategoryId,
-                        PathologyName = es.PathologyCategory?.Name,
-                        ProficiencyLevel = es.ProficiencyLevel,
-                        IsPrimary = es.IsPrimary,
-                        IsMatch = true
-                    }).ToList(),
-                    ProficiencyLevel = g.Max(es => es.ProficiencyLevel),
-                    YearsExperience = g.Max(es => es.YearsExperience ?? 0)
-                })
-                .OrderByDescending(e => e.MatchScore)
-                .ToList();
-        }
-
-        /// <summary>
-        /// Tính điểm phù hợp của Expert với lớp học
-        /// </summary>
-        public async Task<ExpertMatchClassificationDto?> CalculateExpertMatchAsync(Guid classId, Guid expertId)
-        {
-            var academicClass = await _unitOfWork.AcademicClassRepository
-                .GetQueryable()
-                .Include(c => c.ClassSpecialty)
-                .Include(c => c.ClassEnrollments)
-                .FirstOrDefaultAsync(c => c.Id == classId);
-
-            if (academicClass == null)
-                return null;
-
-            var expert = await _unitOfWork.UserRepository
-                .GetQueryable()
-                .Include(u => u.ExpertSpecialties)
-                    .ThenInclude(es => es.BoneSpecialty)
-                .Include(u => u.ExpertSpecialties)
-                    .ThenInclude(es => es.PathologyCategory)
-                .FirstOrDefaultAsync(u => u.Id == expertId);
-
-            if (expert == null)
-                return null;
-
-            var expertSpecialties = expert.ExpertSpecialties.Where(es => es.IsActive).ToList();
-
-            return new ExpertMatchClassificationDto
-            {
-                ExpertId = expertId,
-                ExpertName = expert.FullName,
-                Email = expert.Email,
-                MatchScore = CalculateMatchScore(expertSpecialties),
-                MatchLevel = GetMatchLevel(CalculateMatchScore(expertSpecialties)),
-                MatchingSpecialties = expertSpecialties.Select(es => new ExpertSpecialtyMatchDto
-                {
-                    SpecialtyId = es.BoneSpecialtyId,
-                    SpecialtyName = es.BoneSpecialty?.Name ?? "Unknown",
-                    PathologyId = es.PathologyCategoryId,
-                    PathologyName = es.PathologyCategory?.Name,
-                    ProficiencyLevel = es.ProficiencyLevel,
-                    IsPrimary = es.IsPrimary,
-                    IsMatch = academicClass.ClassSpecialtyId == es.BoneSpecialtyId
-                }).ToList(),
-                ProficiencyLevel = expertSpecialties.Max(es => es.ProficiencyLevel),
-                YearsExperience = expertSpecialties.Max(es => es.YearsExperience ?? 0)
-            };
-        }
-
-        #endregion
-
         #region ==================== DASHBOARD & SUMMARY ====================
 
         /// <summary>
@@ -587,18 +460,14 @@ namespace BoneVisQA.Services.Services.Admin
 
             // Classes needing attention
             summary.ClassesNeedingAttention = allClasses
-                .Where(c => c.ClassSpecialtyId == null || c.ExpertId == null)
+                .Where(c => c.ClassSpecialtyId == null)
                 .Select(c => new ClassNeedsAttentionDto
                 {
                     ClassId = c.Id,
                     ClassName = c.ClassName,
-                    Issue = c.ClassSpecialtyId == null 
-                        ? "Chưa phân loại chuyên môn" 
-                        : "Chưa có Expert",
-                    Severity = c.ClassSpecialtyId == null ? "High" : "Medium",
-                    SuggestedAction = c.ClassSpecialtyId == null
-                        ? "Vui lòng phân loại lớp học theo Bone Specialty"
-                        : "Vui lòng gán Expert cho lớp học"
+                    Issue = "Chưa phân loại chuyên môn",
+                    Severity = "High",
+                    SuggestedAction = "Vui lòng phân loại lớp học theo Bone Specialty"
                 })
                 .ToList();
 
@@ -618,8 +487,6 @@ namespace BoneVisQA.Services.Services.Admin
                 .Include(c => c.ClassSpecialty)
                     .ThenInclude(s => s.Parent)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
                 .AsQueryable();
 
             // Apply filters
@@ -696,7 +563,6 @@ namespace BoneVisQA.Services.Services.Admin
                 .Include(c => c.ClassSpecialty)
                     .ThenInclude(s => s.Parent)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
                 .Include(c => c.ClassEnrollments)
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
@@ -707,32 +573,25 @@ namespace BoneVisQA.Services.Services.Admin
                 return validation;
             }
 
-            // Check if classified
+            // Check if classified by Bone Specialty
             if (!academicClass.ClassSpecialtyId.HasValue)
             {
                 validation.Warnings.Add("Class is not classified by Bone Specialty");
                 validation.Health.Issues.Add("Missing Bone Specialty classification");
             }
 
-            // Check expert match
-            if (academicClass.ExpertId.HasValue && academicClass.ClassSpecialtyId.HasValue)
+            // Check Focus Level
+            if (string.IsNullOrEmpty(academicClass.FocusLevel))
             {
-                var expertSpecialties = academicClass.Expert?.ExpertSpecialties
-                    .Where(es => es.IsActive)
-                    .ToList() ?? new List<ExpertSpecialty>();
-
-                var hasMatchingSpecialty = expertSpecialties
-                    .Any(es => es.BoneSpecialtyId == academicClass.ClassSpecialtyId.Value);
-
-                if (!hasMatchingSpecialty)
-                {
-                    validation.Warnings.Add("Expert does not have matching specialty with class");
-                    validation.Health.Issues.Add("Expert-Specialty mismatch");
-                }
+                validation.Warnings.Add("Class does not have a Focus Level set");
+                validation.Health.Issues.Add("Missing Focus Level");
             }
-            else if (academicClass.ClassSpecialtyId.HasValue && !academicClass.ExpertId.HasValue)
+
+            // Check Target Student Level
+            if (string.IsNullOrEmpty(academicClass.TargetStudentLevel))
             {
-                validation.Warnings.Add("Class has specialty but no expert assigned");
+                validation.Warnings.Add("Class does not have a Target Student Level set");
+                validation.Health.Issues.Add("Missing Target Student Level");
             }
 
             // Check student count
@@ -859,7 +718,7 @@ namespace BoneVisQA.Services.Services.Admin
 
         #endregion
 
-        #region ==================== HELPER METHODS ====================
+        #region ==================== PRIVATE HELPER METHODS ====================
 
         private async Task<ClassClassificationResultDto> BuildClassificationResultAsync(AcademicClass academicClass)
         {
@@ -906,23 +765,16 @@ namespace BoneVisQA.Services.Services.Admin
                 details.FocusLevelInfo = focusLevelInfo;
             }
 
-            // Expert match
-            if (academicClass.Expert != null && academicClass.Expert.ExpertSpecialties.Any())
+            // Expert info (simplified without specialty matching)
+            if (academicClass.Expert != null)
             {
-                var expertSpecialties = academicClass.Expert.ExpertSpecialties
-                    .Where(es => es.IsActive)
-                    .ToList();
-
-                var matchScore = CalculateMatchScore(expertSpecialties);
                 details.ExpertMatch = new ExpertMatchClassificationDto
                 {
                     ExpertId = academicClass.Expert.Id,
                     ExpertName = academicClass.Expert.FullName,
                     Email = academicClass.Expert.Email,
-                    MatchScore = matchScore,
-                    MatchLevel = GetMatchLevel(matchScore),
-                    ProficiencyLevel = expertSpecialties.Max(es => es.ProficiencyLevel),
-                    YearsExperience = expertSpecialties.Max(es => es.YearsExperience ?? 0)
+                    MatchScore = 50,
+                    MatchLevel = "Fair"
                 };
             }
 
@@ -970,55 +822,6 @@ namespace BoneVisQA.Services.Services.Admin
             return Math.Min(score, 100);
         }
 
-        private int CalculateMatchScore(List<ExpertSpecialty> specialties)
-        {
-            if (!specialties.Any()) return 0;
-
-            var primaryCount = specialties.Count(es => es.IsPrimary);
-            var avgProficiency = specialties.Average(es => es.ProficiencyLevel);
-            var baseScore = (primaryCount * 20) + (avgProficiency * 10);
-
-            return Math.Min((int)baseScore, 100);
-        }
-
-        private string GetMatchLevel(int score)
-        {
-            return score switch
-            {
-                >= 80 => "Excellent",
-                >= 60 => "Good",
-                >= 40 => "Fair",
-                _ => "Poor"
-            };
-        }
-
-        private async Task<List<ExpertMatchSuggestionDto>> FindSuggestedExpertsAsync(Guid specialtyId)
-        {
-            var expertSpecialties = await _unitOfWork.ExpertSpecialtyRepository
-                .GetQueryable()
-                .Include(es => es.Expert)
-                .Where(es => es.BoneSpecialtyId == specialtyId && es.IsActive)
-                .ToListAsync();
-
-            return expertSpecialties
-                .GroupBy(es => es.ExpertId)
-                .Select(g =>
-                {
-                    var primary = g.FirstOrDefault(es => es.IsPrimary);
-                    return new ExpertMatchSuggestionDto
-                    {
-                        ExpertId = g.Key,
-                        ExpertName = g.First().Expert?.FullName ?? "Unknown",
-                        MatchScore = g.Sum(es => es.ProficiencyLevel * 10),
-                        ProficiencyLevel = primary?.ProficiencyLevel ?? 0,
-                        MatchingSpecialties = g.Select(es => es.BoneSpecialty?.Name ?? "").ToList()
-                    };
-                })
-                .OrderByDescending(e => e.MatchScore)
-                .Take(5)
-                .ToList();
-        }
-
         private int CalculateHealthScore(ClassificationValidationDto validation)
         {
             int score = 100;
@@ -1044,11 +847,11 @@ namespace BoneVisQA.Services.Services.Admin
             if (validation.Warnings.Any(w => w.Contains("not classified")))
                 recommendations.Add("Vui lòng phân loại lớp học theo Bone Specialty");
 
-            if (validation.Warnings.Any(w => w.Contains("no expert")))
-                recommendations.Add("Vui lòng gán Expert cho lớp học");
+            if (validation.Warnings.Any(w => w.Contains("Focus Level")))
+                recommendations.Add("Vui lòng thiết lập Focus Level cho lớp học");
 
-            if (validation.Warnings.Any(w => w.Contains("mismatch")))
-                recommendations.Add("Cân nhắc gán Expert có chuyên môn phù hợp với lớp học");
+            if (validation.Warnings.Any(w => w.Contains("Target Student Level")))
+                recommendations.Add("Vui lòng thiết lập Target Student Level cho lớp học");
 
             if (!recommendations.Any())
                 recommendations.Add("Phân loại lớp học đang tốt");

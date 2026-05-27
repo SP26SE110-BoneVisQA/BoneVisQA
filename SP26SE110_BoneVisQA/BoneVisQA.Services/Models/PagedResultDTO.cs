@@ -6,5 +6,16 @@ public class PagedResultDTO<T>
     public int TotalCount { get; set; }
     public int PageIndex { get; set; }
     public int PageSize { get; set; }
-    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+    public int TotalPages { get; set; }
+
+    public PagedResultDTO()
+    {
+        // Computed during construction so it gets serialized in JSON responses
+    }
+
+    public int ComputeTotalPages()
+    {
+        TotalPages = PageSize > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 0;
+        return TotalPages;
+    }
 }

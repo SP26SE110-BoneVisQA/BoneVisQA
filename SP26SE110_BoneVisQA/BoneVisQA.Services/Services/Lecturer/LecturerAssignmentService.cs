@@ -766,21 +766,46 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .FirstOrDefaultAsync();
 
         var totalQuestions = questionCounts?.Count ?? 0;
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
-        return attempts.Select(a => new StudentQuizAttemptDto
-        {
-            AttemptId = a.Id,
-            StudentId = a.StudentId,
-            StudentName = a.Student.FullName ?? "Student",
-            StudentEmail = a.Student.Email ?? "",
-            Score = a.Score,
-            StartedAt = a.StartedAt,
-            CompletedAt = a.CompletedAt,
-            TotalQuestions = totalQuestions,
-            CorrectCount = a.StudentQuizAnswers.Count(sa =>
-                sa.Question != null
-                && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer)),
-            IsGraded = a.Score.HasValue
+        return attempts.Select(a => {
+            // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+            decimal earnedPoints = 0;
+            foreach (var answer in a.StudentQuizAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+
+            // Score = earnedPoints (clamped to 0-100)
+            double calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+
+            return new StudentQuizAttemptDto
+            {
+                AttemptId = a.Id,
+                StudentId = a.StudentId,
+                StudentName = a.Student.FullName ?? "Student",
+                StudentEmail = a.Student.Email ?? "",
+                Score = calculatedScore, // Use calculated score instead of saved score
+                StartedAt = a.StartedAt,
+                CompletedAt = a.CompletedAt,
+                TotalQuestions = totalQuestions,
+                // FIX: CorrectCount should only count non-Essay questions that are correct
+                // Essay questions don't have CorrectAnswer text, so they should NOT be counted
+                CorrectCount = a.StudentQuizAnswers.Count(sa =>
+                    sa.Question != null
+                    && sa.Question.Type != QuestionType.Essay  // Exclude Essay from correct count
+                    && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer)),
+                IsGraded = a.Score.HasValue
+            };
         }).ToList();
     }
 
@@ -805,6 +830,28 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
+        // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+        var totalQuestions = attempt.StudentQuizAnswers.Count;
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+        decimal earnedPoints = 0;
+        foreach (var answer in attempt.StudentQuizAnswers)
+        {
+            if (answer.Question?.Type == QuestionType.Essay)
+            {
+                // Essay: add actual awarded points (can be partial credit)
+                earnedPoints += answer.ScoreAwarded ?? 0;
+            }
+            else
+            {
+                // MC/TF/etc: full points if correct, 0 if wrong
+                earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+            }
+        }
+
+        // Score = earnedPoints (clamped to 0-100)
+        double calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+
         return new QuizAttemptDetailDto
         {
             AttemptId = attempt.Id,
@@ -812,7 +859,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             QuizTitle = quiz.Title,
             StudentId = attempt.StudentId,
             StudentName = attempt.Student?.FullName ?? "Student",
-            Score = attempt.Score,
+            Score = calculatedScore, // Use calculated score instead of saved score
             StartedAt = attempt.StartedAt,
             CompletedAt = attempt.CompletedAt,
             PassingScore = NormalizePassingScore(session?.PassingScore, quiz.IsAiGenerated),
@@ -830,9 +877,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                     CorrectAnswer = sa.Question.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
                     EssayAnswer = sa.EssayAnswer,
-                    IsCorrect = sa.Question != null && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer),
+                    // FIX: Use IsCorrect from DB which is properly set:
+                    // - MC/TF/etc: auto-set during submission
+                    // - Essay: null until lecturer grades (so IsCorrect stays null)
+                    IsCorrect = sa.IsCorrect,
                     AnswerId = sa.Id,
-                    MaxScore = sa.Question.MaxScore,
+                    MaxScore = 1, // Each question is worth 1 point
                     ScoreAwarded = sa.ScoreAwarded,
                     LecturerFeedback = sa.LecturerFeedback,
                     IsGraded = sa.IsGraded,
@@ -875,7 +925,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                         answer.IsCorrect = update.IsCorrect.Value;
                     if (update.ScoreAwarded.HasValue)
                     {
-                        answer.ScoreAwarded = update.ScoreAwarded.Value;
+                        // Validate: Essay score cannot exceed points for 1 question (100 / totalQuestions)
+                        var totalQ = attempt.StudentQuizAnswers.Count;
+                        var maxEssayPoints = totalQ > 0 ? 100m / totalQ : 100m;
+                        answer.ScoreAwarded = (int)Math.Min(update.ScoreAwarded.Value, maxEssayPoints);
                         answer.IsGraded = true;
                         answer.GradedAt = DateTime.UtcNow;
                     }
@@ -891,11 +944,32 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }
 
             // Recalculate attempt score based on updated essay scores
-            var totalMaxScore = attempt.StudentQuizAnswers.Sum(a => a.Question.MaxScore);
-            var totalScoreAwarded = attempt.StudentQuizAnswers
-                .Where(a => a.ScoreAwarded.HasValue)
-                .Sum(a => a.ScoreAwarded.Value);
-            attempt.Score = totalMaxScore == 0 ? 0 : (double)(totalScoreAwarded * 100 / totalMaxScore);
+            // Total quiz score always = 100, divided equally among all questions
+            var totalQuestions = attempt.StudentQuizAnswers.Count;
+            var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+            
+            // Calculate earned points: MC = full points if correct, 0 if wrong
+            // Essay = full points if graded, 0 if not yet graded
+            decimal earnedPoints = 0;
+            foreach (var answer in attempt.StudentQuizAnswers)
+            {
+                if (answer.Question.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+            
+            // score = earnedPoints (each point is already worth 1 point since pointsPerQuestion = 100/total)
+            double calculatedScore = (double)earnedPoints;
+            
+            // Clamp score to 0-100 range
+            attempt.Score = Math.Max(0, Math.Min(100, calculatedScore));
         }
 
         await _unitOfWork.SaveAsync();
@@ -1326,7 +1400,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             if (attempts.TryGetValue(update.StudentId, out var attempt))
             {
-                attempt.Score = update.Score;
+                // Clamp score to 0-100 range
+                attempt.Score = update.Score.HasValue
+                    ? Math.Max(0, Math.Min(100, update.Score.Value))
+                    : (double?)null;
             }
         }
 
@@ -1872,14 +1949,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
             var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
             var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
-            var maxScore = questions.Sum(q => q.MaxScore);
+            var totalQuestions = questions.Count;
             var passingScore = session.PassingScore ?? 50.0;
 
             foreach (var attempt in attempts)
             {
-                var percentage = maxScore > 0 && attempt.Score.HasValue
-                    ? (attempt.Score.Value / maxScore) * 100
-                    : 0;
+                var percentage = attempt.Score ?? 0;
                 var isPass = percentage >= passingScore;
                 var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
                     ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
@@ -1889,7 +1964,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 detailSheet.Cell(dataRow, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
                 detailSheet.Cell(dataRow, 3).Value = attempt.Student?.Email ?? "";
                 detailSheet.Cell(dataRow, 4).Value = attempt.Score ?? 0;
-                detailSheet.Cell(dataRow, 5).Value = maxScore;
+                detailSheet.Cell(dataRow, 5).Value = totalQuestions;
                 detailSheet.Cell(dataRow, 6).Value = Math.Round(percentage, 1);
                 detailSheet.Cell(dataRow, 7).Value = isPass ? "Pass" : "Fail";
                 detailSheet.Cell(dataRow, 7).Style.Font.Bold = true;

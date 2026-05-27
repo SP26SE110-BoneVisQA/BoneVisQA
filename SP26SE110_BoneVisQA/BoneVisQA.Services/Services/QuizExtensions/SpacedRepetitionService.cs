@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -109,6 +110,8 @@ public class SpacedRepetitionService
             return;
         }
 
+        var initialValues = SM2Algorithm.GetInitialValues();
+
         var schedule = new ReviewSchedule
         {
             Id = Guid.NewGuid(),
@@ -116,10 +119,10 @@ public class SpacedRepetitionService
             CaseId = caseId,
             QuizId = quizId,
             QuestionId = questionId,
-            NextReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
-            EaseFactor = 2.5m,
-            IntervalDays = 1,
-            RepetitionCount = 0,
+            NextReviewDate = initialValues.NextReviewDate,
+            EaseFactor = initialValues.EaseFactor,
+            IntervalDays = initialValues.IntervalDays,
+            RepetitionCount = initialValues.RepetitionCount,
             LastQuality = quality,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -141,34 +144,16 @@ public class SpacedRepetitionService
         schedule.LastQuality = quality;
         schedule.LastReviewDate = DateTime.UtcNow;
 
-        if (quality < 3)
-        {
-            schedule.RepetitionCount = 0;
-            schedule.IntervalDays = 1;
-        }
-        else
-        {
-            if (schedule.RepetitionCount == 0)
-            {
-                schedule.IntervalDays = 1;
-            }
-            else if (schedule.RepetitionCount == 1)
-            {
-                schedule.IntervalDays = 6;
-            }
-            else
-            {
-                schedule.IntervalDays = (int)Math.Round(schedule.IntervalDays * schedule.EaseFactor);
-            }
+        var result = SM2Algorithm.Calculate(
+            schedule.EaseFactor,
+            schedule.IntervalDays,
+            schedule.RepetitionCount,
+            quality);
 
-            schedule.RepetitionCount++;
-        }
-
-        schedule.EaseFactor = Math.Max(1.3m, 
-            schedule.EaseFactor + (0.1m - (5 - quality) * (0.08m + (5 - quality) * 0.02m)));
-
-        schedule.IntervalDays = Math.Min(365, Math.Max(1, schedule.IntervalDays));
-        schedule.NextReviewDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(schedule.IntervalDays));
+        schedule.EaseFactor = result.EaseFactor;
+        schedule.IntervalDays = result.IntervalDays;
+        schedule.RepetitionCount = result.RepetitionCount;
+        schedule.NextReviewDate = result.NextReviewDate;
         schedule.UpdatedAt = DateTime.UtcNow;
 
         _unitOfWork.ReviewScheduleRepository.Update(schedule);
