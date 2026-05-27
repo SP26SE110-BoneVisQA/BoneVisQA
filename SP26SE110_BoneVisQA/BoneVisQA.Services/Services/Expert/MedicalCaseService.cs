@@ -1,6 +1,7 @@
 ﻿using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Helpers;
+using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Services;
@@ -27,57 +28,32 @@ namespace BoneVisQA.Services.Services.Expert
         private readonly IWebHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IConfiguration _configuration;
+        private readonly ISupabaseStorageService _storageService;
+        private const string MedicalImagesBucket = "medical-images";
 
         public MedicalCaseService(
             IUnitOfWork unitOfWork,
             IWebHostEnvironment env,
             IHttpContextAccessor httpContextAccessor,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ISupabaseStorageService storageService)
         {
             _unitOfWork = unitOfWork;
             _env = env;
             _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
+            _storageService = storageService;
         }
-        private async Task<string> SaveImageAsync(IFormFile file)
+        private async Task<string> SaveImageAsync(IFormFile file, Guid caseId)
         {
-            var uploadFolder = Path.Combine(_env.ContentRootPath, "uploads", "images");
-            if (!Directory.Exists(uploadFolder))
-                Directory.CreateDirectory(uploadFolder);
-
+            // Generate unique filename with case ID for organization
             var extension = Path.GetExtension(file.FileName);
-            var originalName = Path.GetFileNameWithoutExtension(file.FileName);
+            var fileName = $"{caseId}/{Guid.NewGuid()}{extension}";
 
-            // Shorten name if too long
-            if (originalName.Length > 50)
-                originalName = originalName.Substring(0, 50);
+            // Upload to Supabase Storage
+            var imageUrl = await _storageService.UploadFileToPathAsync(file, MedicalImagesBucket, fileName);
 
-            var fileName = $"{originalName}_{DateTime.UtcNow:yyyyMMddHHmmss}{extension}";
-            var filePath = Path.Combine(uploadFolder, fileName);
-
-            using var stream = new FileStream(filePath, FileMode.Create);
-            await file.CopyToAsync(stream);
-
-            var relativeUrl = $"/uploads/images/{fileName}";
-
-            // Use App:BaseUrl from configuration (set in appsettings.json or environment)
-            var baseUrl = _configuration["App:BaseUrl"];
-            if (!string.IsNullOrWhiteSpace(baseUrl))
-            {
-                return $"{baseUrl.TrimEnd('/')}{relativeUrl}";
-            }
-
-            // Fallback: construct from request context (for local dev)
-            var request = _httpContextAccessor.HttpContext?.Request;
-            if (request != null)
-            {
-                var host = request.Host.Host;
-                var port = request.Host.Port ?? 5047;
-                baseUrl = $"{request.Scheme}://{host}:{port}";
-                return $"{baseUrl}{relativeUrl}";
-            }
-
-            return relativeUrl;
+            return imageUrl;
         }
         public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex, int pageSize)
         {
@@ -463,7 +439,7 @@ namespace BoneVisQA.Services.Services.Expert
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(dto.CaseId)
                 ?? throw new KeyNotFoundException("Medical case not found.");
 
-            var imageUrl = await SaveImageAsync(dto.Image);
+            var imageUrl = await SaveImageAsync(dto.Image, dto.CaseId);
 
             var image = new MedicalImage
             {
@@ -493,11 +469,51 @@ namespace BoneVisQA.Services.Services.Expert
             var image = await _unitOfWork.MedicalImageRepository.GetByIdAsync(imageId);
             if (image == null) return false;
 
-            // TODO: Xóa file từ Supabase storage nếu cần
+            // Extract object path from URL and delete from Supabase
+            if (!string.IsNullOrWhiteSpace(image.ImageUrl))
+            {
+                try
+                {
+                    var objectPath = ExtractObjectPathFromUrl(image.ImageUrl, MedicalImagesBucket);
+                    if (!string.IsNullOrEmpty(objectPath))
+                    {
+                        await _storageService.DeleteFileAsync(MedicalImagesBucket, objectPath);
+                    }
+                }
+                catch
+                {
+                    // Log error but don't fail the deletion
+                }
+            }
 
             await _unitOfWork.MedicalImageRepository.DeleteAsync(imageId);
             await _unitOfWork.SaveAsync();
             return true;
+        }
+
+        private static string? ExtractObjectPathFromUrl(string url, string bucket)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+
+            try
+            {
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath;
+
+                // Expected format: /storage/v1/object/public/{bucket}/{objectPath}
+                var marker = $"/storage/v1/object/public/{bucket}/";
+                var idx = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    return path[(idx + marker.Length)..];
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // Get all annotations for image

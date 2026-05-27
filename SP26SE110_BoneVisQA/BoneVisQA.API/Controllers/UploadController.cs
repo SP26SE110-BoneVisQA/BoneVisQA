@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using BoneVisQA.Services.Interfaces;
 
 namespace BoneVisQA.API.Controllers;
 
@@ -7,6 +8,15 @@ namespace BoneVisQA.API.Controllers;
 [Tags("Upload")]
 public class UploadController : ControllerBase
 {
+    private readonly ISupabaseStorageService _storageService;
+    private const string ImagesBucket = "medical-images";
+    private const string DicomBucket = "medical-images"; // Dùng chung bucket
+
+    public UploadController(ISupabaseStorageService storageService)
+    {
+        _storageService = storageService;
+    }
+
     [HttpPost("image")]
     [RequestSizeLimit(10485760)]
     [RequestFormLimits(MultipartBodyLengthLimit = 10485760)]
@@ -24,18 +34,10 @@ public class UploadController : ControllerBase
         if (!allowedExtensions.Contains(extension))
             return BadRequest(new { message = "Only JPG, PNG, GIF, WEBP, SVG files are allowed." });
 
-        var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "images");
-        Directory.CreateDirectory(uploadsDir);
+        // Upload to Supabase Storage
+        var fileName = $"general/{Guid.NewGuid()}{extension}";
+        var url = await _storageService.UploadFileToPathAsync(file, ImagesBucket, fileName);
 
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var filePath = Path.Combine(uploadsDir, fileName);
-
-        await using (var stream = new FileStream(filePath, FileMode.Create))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        var url = $"/uploads/images/{fileName}";
         return Ok(new ImageUploadResponse { Url = url });
     }
 
@@ -57,18 +59,10 @@ public class UploadController : ControllerBase
         if (!allowedExtensions.Contains(extension))
             return BadRequest(new { message = "Only DICOM, JPG, PNG files are allowed." });
 
-        var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "dicom");
-        Directory.CreateDirectory(uploadsDir);
+        // Upload to Supabase Storage
+        var fileName = $"dicom/{Guid.NewGuid()}{extension}";
+        var url = await _storageService.UploadFileToPathAsync(file, DicomBucket, fileName);
 
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var filePath = Path.Combine(uploadsDir, fileName);
-
-        await using (var stream = new FileStream(filePath, FileMode.Create))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        var url = $"/uploads/dicom/{fileName}";
         return Ok(new ImageUploadResponse { Url = url });
     }
 }
