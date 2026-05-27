@@ -33,13 +33,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdiplus \
     && rm -rf /var/lib/apt/lists/*
 
-EXPOSE 5047
-
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:5047
+# Respect PORT environment variable (Render, Azure, etc.)
+# Default to 8080 if PORT is not set
+ENV PORT=${PORT:-8080}
+ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Copy published files from build stage
 COPY --from=build /app/publish .
+
+# Note: EXPOSE is informational; actual port is controlled by ASPNETCORE_URLS
+EXPOSE ${PORT:-8080}
 
 ENTRYPOINT ["dotnet", "BoneVisQA.API.dll"]
