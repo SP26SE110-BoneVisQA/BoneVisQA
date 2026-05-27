@@ -1,0 +1,48 @@
+@startuml
+title Sequence Diagram: Login
+
+skinparam style strictuml
+skinparam DefaultFontName Arial
+skinparam DefaultFontSize 12
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+skinparam Shadowing false
+
+autonumber "<b>0.</b>"
+
+actor User
+participant "Client Browser" as CB
+participant "AuthController" as AC
+participant "RequestFilter" as RF
+participant "AuthService" as AS
+participant "UserRepository" as UR
+participant "AppDbContext" as DB
+
+User -> CB ++ : POST /api/auth/login
+CB -> AC ++ : Forward request (LoginDTO)
+
+alt
+    AC -> RF ++ : Validate token
+    RF -> RF : Extract claims
+    RF --> AC -- : Claims result
+    AC -> AC : Skip token validation
+end
+
+AC -> AS ++ : LoginAsync(LoginDTO)
+AS -> UR ++ : GetByEmail(email)
+UR -> DB ++ : Query Users table
+DB --> UR -- : User record
+UR --> AS -- : User data
+AS -> AS : Verify password hash
+
+alt Valid credentials
+    AS -> AS : Generate JWT token
+    AS --> AC : AuthResponse
+    AC --> CB : 200 OK
+    CB --> User : Login success
+else Invalid credentials
+    AS --> AC -- : Invalid credentials
+    AC --> CB -- : 401 Unauthorized
+    CB --> User -- : Login failed
+end
+@enduml

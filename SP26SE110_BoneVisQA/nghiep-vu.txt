@@ -1,0 +1,131 @@
+3. Register content of Capstone Project 
+(*) 3.1. Capstone Project name: 
+●	English: BoneVisQA - Interactive Visual Question Answering System for Bone Diseases to Support Medical Students in Diagnostic Practice
+●	Vietnamese: BoneVisQA - Hệ thống hỏi đáp trực quan về các bệnh lý xương hỗ trợ sinh viên y khoa thực hành chẩn đoán
+●	Abbreviation: BoneVisQA
+a.	Context: 
+In medical education, especially in orthopedics and musculoskeletal imaging, medical students need extensive exposure to and practice in interpreting X-ray, CT, MRI, and musculoskeletal ultrasound images. However:
+●	Access to a systematic set of representative image-based clinical cases is limited and heavily dependent on hospitals and individual clinical instructors.
+●	Students often learn in a fragmented, memorization-based manner (lesion names, diagnostic criteria) instead of linking knowledge to visual patterns and structured descriptions.
+●	There is currently no digital tool that allows students to ask questions directly on images (for example: “What condition does this lesion suggest?”, “Which imaging sign is most important here?”) and receive answers accompanied by references.
+●	Existing AI-based diagnostic support tools in the field of bone and joint diseases mainly target clinicians, with limited focus on educational objectives for students and with little transparency regarding knowledge sources or reasoning processes.
+In this context, the project proposes to build a multi-platform (web and mobile) interactive visual question answering system (visual Q&A), in which students can view or upload X-ray/CT/MRI images of bones, ask questions about diagnosis and key imaging signs; the system combines AI-based image processing models and Retrieval-Augmented Generation (RAG) as the core mechanism to mitigate hallucination in AI responses by retrieving precise context from the bone disease knowledge base before generating answers, ensuring replies are grounded in educational materials.
+
+b.	Proposed Solutions 
+The BoneVisQA system will be developed with the following main components and characteristics:
+Web platform for interactive Q&A on bone images
+The system allows students to:
+●	Log in, manage personal profiles, and track learning progress.
+●	Select sample cases from a case library or upload bone images.
+●	Ask free-form questions about the images, for example:
+o	“What type of fracture does this lesion suggest?”
+o	“How to differentiate osteoarthritis from rheumatoid arthritis in this case?”
+●	Interact visually with images: zoom in/out and annotate suspicious regions on the image to be sent together with the question.
+Mobile application to support learning anytime, anywhere
+●	Provide a mobile application for medical students.
+●	Allow login and synchronization of learning progress with the web system.
+●	Enable viewing of case lists and details on mobile devices, with touch operations for zooming and panning images.
+●	Allow students to ask visual questions directly on images during hospital rotations or clinical practice sessions.
+●	Support short quiz sessions (micro-learning) with bone images and corresponding questions.
+●	Provide notifications about new cases, new quizzes, or learning tasks assigned by lecturers.
+Bone image processing and information extraction module
+Use AI models to:
+•	Analyze user-annotated regions on bone images (e.g., extract features from cropped areas).
+●	Extract image features to support:
+o	Retrieval of similar cases in the case library.
+o	Improving the relevance of document retrieval in the RAG mechanism.
+Knowledge base on bone diseases and RAG mechanism
+Build a knowledge base from:
+●	Open-access materials on bone diseases, textbooks, and basic guidelines (for educational purposes only, not for direct treatment decision-making).
+●	A set of sample cases (images + descriptions + diagnoses + key imaging signs that should be remembered).
+Apply Retrieval-Augmented Generation (RAG):
+●	Encode (embed) text segments and case descriptions into a vector database.
+●	When a student asks a question accompanied by an image, the system combines the question embedding and image features to retrieve the most relevant documents/cases.
+●	A generative language model (LLM) produces answers based on the retrieved context, with structured explanations and cited sources.
+Role of Knowledge Base Manager (System Admin):
+●	Select, update, organize, and tag documents in the knowledge base.
+●	Trigger re-indexing when documents are added or modified, ensuring data quality for the RAG module.
+Learning-oriented interface for medical students
+Answers are presented in a structure that supports learning:
+●	Suggested main diagnosis.
+●	Important differential diagnoses.
+●	Key imaging signs to focus on.
+●	Reflective questions for student self-assessment.
+●	Links or citations to references from the knowledge base.
+Support a quiz mode: the system proactively asks questions about a lesion region on an image; students answer, then the system displays the correct answer and explanation. This mode is optimized for both web and mobile interfaces.
+Review workflow with lecturers/clinical experts
+●	Allow lecturers/clinical experts to review selected student questions and system-generated answers, assess appropriateness, edit content, and verify cases and explanations.
+●	Provide statistics on common mistakes in student answers to help lecturers adjust teaching methods and update training content.
+
+c.	Functional requirement 
+The system is expected to support the following main roles:
+●	Medical Student
+●	Clinical Expert 
+●	Lecturer
+●	System Administrator
+Web/Mobile portal for Students (Medical Student)
+●	Register, log in, and update personal information (school, cohort, major).
+●	View a list of sample bone cases categorized by:
+o	Location (long bones, spine, knee, hip, shoulder, wrist, ankle, etc.).
+o	Type of lesion (fracture, dislocation, degenerative disease, bone tumor, osteomyelitis, etc.).
+o	Difficulty level (basic, intermediate, advanced).
+●	Open a case:
+o	View images (X-ray/CT/MRI) with zoom/pan operations on web and mobile.
+o	Annotate regions of interest on the image.
+●	Ask free-form questions about the case:
+o	Enter questions in Vietnamese and optionally attach a link to the annotated region on the image.
+o	Submit question with annotated region coordinates; system crops and extracts features from the region to enhance RAG query embedding. (Image + RAG).
+●	Receive answers:
+o	View structured explanations (suggested diagnosis, key findings, differential diagnoses, recommended readings).
+o	View citations to documents and similar cases from the knowledge base.
+●	Practice in quiz mode:
+o	The system displays bone images and short questions (multiple-choice or short-answer).
+o	Students respond and then receive feedback and explanations.
+o	On mobile, this can be implemented as short learning sessions (micro-quiz).
+●	Track learning progress:
+o	Number of cases viewed, questions asked, quizzes completed, and correctness rate.
+o	Statistics by topic (e.g., long bone fractures, spine lesions, degenerative diseases).
+Web portal for Clinical Experts 
+●	Log in with expert privileges.
+●	Manage the case library:
+o	Add new sample cases (anonymous images + description + diagnosis + key learning points).
+o	Tag cases by specialty, bone location, lesion type, and difficulty level.
+●	View student questions and system-generated answers:
+o	Filter by case, time, student, keyword.
+o	Assess clinical accuracy and educational appropriateness.
+o	Edit/upgrade answers, add explanations or clinical notes.
+o	Assess RAG accuracy by reviewing retrieved contexts and editing explanations; flag low-quality chunks for knowledge base update.
+o	Mark cases and explanations as “approved”.
+Web portal for Lecturers
+●	Log in with lecturer / course coordinator privileges.
+●	Manage classes and clinical rotations:
+o	Create classes (e.g., “Orthopedics – Class A – Cohort 2023”).
+o	Assign students to classes; import class lists from files.
+●	Assign learning content:
+o	Assign case sets to classes or student groups.
+o	Configure quiz sessions (topic, number of questions, open/close time).
+●	Monitor learning outcomes:
+o	View statistics by class/group/individual: number of cases studied, quiz scores by topic, common interpretation errors.
+o	Export reports to support assessment and teaching improvement.
+●	Send announcements to students:
+o	Announce new cases, new quizzes, or required tasks to be completed before clinical rotations.
+Web portal for System Administrator (System Admin)
+●	Log in with administrator privileges.
+●	Manage user accounts:
+o	View users by role (Student, Expert, Lecturer, Admin).
+o	Activate/deactivate accounts.
+o	Assign/revoke roles for each user.
+●	Monitor system logs and summary reports:
+o	Track system activity, errors, and basic usage statistics (e.g., number of questions, number of case views, load).
+●	Manage documents in the knowledge base supporting RAG:
+o	Upload and update open-access documents (guidelines, textbooks, teaching materials) related to bone diseases.
+o	Organize documents by topics and subtopics; assign tags (e.g., “fracture classification”, “osteoarthritis”, “osteoporosis”).
+o	Manage document versions and mark outdated documents for update.
+●	Control the indexing pipeline for RAG:
+o	Trigger embedding generation and re-indexing when new documents are added or existing documents are updated.
+o	View indexing logs and handle errors.
+o	Adjust chunking strategies to improve retrieval quality.
+●	Ensure content quality:
+o	Monitor which documents/segments are frequently retrieved.
+o	Detect low-quality or outdated content and flag it for review by experts/lecturers.
+

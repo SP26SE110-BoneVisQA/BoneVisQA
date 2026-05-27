@@ -1,0 +1,44 @@
+@startuml
+title Sequence Diagram: Register
+
+skinparam style strictuml
+skinparam DefaultFontName Arial
+skinparam DefaultFontSize 12
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+skinparam Shadowing false
+
+autonumber "<b>0.</b>"
+
+actor User
+participant "Client Browser" as CB
+participant "AuthController" as AC
+participant "AuthService" as AS
+participant "UserRepository" as UR
+participant "AppDbContext" as DB
+
+User -> CB ++ : POST /api/auth/register
+CB -> AC ++ : Forward RegisterDTO
+AC -> AS ++ : RegisterAsync(RegisterDTO)
+AS -> UR ++ : CheckEmailExists(email)
+UR -> DB ++ : Query Users table
+DB --> UR -- : Exists result
+UR --> AS -- : Email status
+
+alt Email duplicate
+    AS --> AC : Email duplicate
+    AC --> CB : 409 Conflict
+    CB --> User : Registration failed
+else Email available
+    AS -> AS : Hash password
+    AS -> AS : Map DTO to AppUser
+    AS -> AS : Assign Student role
+    AS -> UR ++ : AddAsync(AppUser)
+    UR -> DB ++ : Insert new user
+    DB --> UR -- : Saved successfully
+    UR --> AS -- : Success
+    AS --> AC -- : UserResponseDTO
+    AC --> CB -- : 201 Created
+    CB --> User -- : Registration success
+end
+@enduml
