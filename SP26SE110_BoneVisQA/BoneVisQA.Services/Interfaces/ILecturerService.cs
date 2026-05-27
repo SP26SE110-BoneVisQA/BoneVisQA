@@ -90,7 +90,5 @@ public interface ILecturerService
     // Teaching Objectives
     Task<TeachingObjectivesDto?> GetTeachingObjectivesAsync(Guid lecturerId, Guid? classId = null);
     Task<TeachingObjectivesDto> UpdateTeachingObjectivesAsync(Guid lecturerId, Guid classId, UpdateTeachingObjectivesRequestDto request);
-    Task<List<TeachingObjectiveSuggestionDto>> GetExpertSuggestionsAsync(Guid classId);
-    Task<TeachingObjectiveSuggestionDto> ConfirmSuggestionAsync(Guid lecturerId, Guid suggestionId, ConfirmSuggestionRequestDto request);
 }
 

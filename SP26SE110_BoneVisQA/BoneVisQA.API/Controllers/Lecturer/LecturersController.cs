@@ -1248,49 +1248,6 @@ public class LecturersController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy danh sách Expert Suggestions đang chờ duyệt cho một lớp.
-    /// </summary>
-    [HttpGet("classes/{classId:guid}/objectives/suggestions")]
-    public async Task<ActionResult<List<TeachingObjectiveSuggestionDto>>> GetExpertSuggestions(Guid classId)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token does not contain a valid user id." });
-
-        var result = await _lecturerService.GetExpertSuggestionsAsync(classId);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Lecturer duyệt hoặc từ chối một Expert Suggestion.
-    /// </summary>
-    [HttpPost("classes/{classId:guid}/objectives/suggestions/{suggestionId:guid}/confirm")]
-    public async Task<ActionResult<TeachingObjectiveSuggestionDto>> ConfirmSuggestion(
-        Guid classId,
-        Guid suggestionId,
-        [FromBody] ConfirmSuggestionRequestDto request)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token does not contain a valid user id." });
-
-        request.SuggestionId = suggestionId;
-        try
-        {
-            var result = await _lecturerService.ConfirmSuggestionAsync(lecturerId.Value, suggestionId, request);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-    }
-
     #endregion
 
     #region Student Progress

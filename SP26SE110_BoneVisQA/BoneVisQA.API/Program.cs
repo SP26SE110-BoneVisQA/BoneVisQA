@@ -390,7 +390,6 @@ builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
-builder.Services.AddScoped<ITeachingObjectiveService, TeachingObjectiveService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();

@@ -125,28 +125,5 @@ public class LecturerDashboardController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy bảng xếp hạng học sinh trong lớp.
-    /// </summary>
-    [HttpGet("monitoring/class-leaderboard")]
-    [ProducesResponseType(typeof(List<ClassLeaderboardItemDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<List<ClassLeaderboardItemDto>>> GetClassLeaderboard([FromQuery] Guid classId)
-    {
-        try
-        {
-            var lecturerId = GetUserId();
-            if (lecturerId == null)
-                return Unauthorized(new { message = "Token does not contain a valid user id." });
-
-            var result = await _lecturerDashboardService.GetClassLeaderboardAsync(lecturerId.Value, classId);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-    }
-
     #endregion
 }
