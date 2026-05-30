@@ -106,11 +106,11 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasKey("Id")
                         .HasName("academic_classes_pkey");
 
-                    b.HasIndex("ClassSpecialtyId");
-
                     b.HasIndex("ExpertId");
 
                     b.HasIndex("LecturerId");
+
+                    b.HasIndex(new[] { "ClassSpecialtyId" }, "idx_academic_classes_class_specialty_id");
 
                     b.ToTable("academic_classes");
                 });
@@ -407,6 +407,147 @@ namespace BoneVisQA.Repositories.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseMedia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<string>("Anatomy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Other")
+                        .HasColumnName("anatomy");
+
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("DicomMetadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("dicom_metadata");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Image")
+                        .HasColumnName("media_type");
+
+                    b.Property<string>("MediaUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("media_url");
+
+                    b.Property<string>("Modality")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Other")
+                        .HasColumnName("modality");
+
+                    b.Property<string>("StoragePath")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_path");
+
+                    b.HasKey("Id")
+                        .HasName("case_media_pkey");
+
+                    b.HasIndex(new[] { "CaseId" }, "idx_case_media_case_id");
+
+                    b.ToTable("case_media");
+                });
+
+            modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseMetadata", b =>
+                {
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("case_id");
+
+                    b.Property<string>("Anatomy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Other")
+                        .HasColumnName("anatomy");
+
+                    b.Property<string>("AnatomySite")
+                        .HasColumnType("text")
+                        .HasColumnName("anatomy_site");
+
+                    b.Property<Guid?>("BoneSpecialtyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bone_specialty_id");
+
+                    b.Property<string>("ClinicalContext")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("clinical_context");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Difficulty")
+                        .HasColumnType("text")
+                        .HasColumnName("difficulty");
+
+                    b.Property<string>("Laterality")
+                        .HasColumnType("text")
+                        .HasColumnName("laterality");
+
+                    b.Property<string>("Modality")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Other")
+                        .HasColumnName("modality");
+
+                    b.Property<Guid?>("PathologyCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pathology_category_id");
+
+                    b.Property<string>("PathologyGroup")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Other")
+                        .HasColumnName("pathology_group");
+
+                    b.Property<double?>("QualityScore")
+                        .HasColumnType("double precision")
+                        .HasColumnName("quality_score");
+
+                    b.Property<string>("SourceType")
+                        .HasColumnType("text")
+                        .HasColumnName("source_type");
+
+                    b.Property<string>("SuggestedDiagnosis")
+                        .HasColumnType("text")
+                        .HasColumnName("suggested_diagnosis");
+
+                    b.Property<string>("ViewPosition")
+                        .HasColumnType("text")
+                        .HasColumnName("view_position");
+
+                    b.HasKey("CaseId")
+                        .HasName("case_metadata_pkey");
+
+                    b.HasIndex(new[] { "BoneSpecialtyId" }, "idx_case_metadata_bone_specialty_id");
+
+                    b.ToTable("case_metadata");
+                });
+
             modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseTag", b =>
                 {
                     b.Property<Guid>("CaseId")
@@ -620,61 +761,6 @@ namespace BoneVisQA.Repositories.Migrations
                     b.ToTable("class_enrollments");
                 });
 
-            modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassExpertAssignment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<DateTime?>("AssignedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("assigned_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("BoneSpecialtyId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("bone_specialty_id");
-
-                    b.Property<Guid>("ClassId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("class_id");
-
-                    b.Property<Guid>("ExpertId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("expert_id");
-
-                    b.Property<Guid?>("ExpertSpecialtyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("RoleInClass")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("role_in_class");
-
-                    b.HasKey("Id")
-                        .HasName("class_expert_assignments_pkey");
-
-                    b.HasIndex("BoneSpecialtyId");
-
-                    b.HasIndex("ExpertSpecialtyId");
-
-                    b.HasIndex(new[] { "ClassId" }, "idx_class_expert_assignments_class");
-
-                    b.HasIndex(new[] { "ExpertId" }, "idx_class_expert_assignments_expert");
-
-                    b.ToTable("class_expert_assignments");
-                });
-
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassQuizSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -716,7 +802,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnName("open_time");
 
                     b.Property<int?>("PassingScore")
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasColumnName("passing_score");
 
                     b.Property<Guid>("QuizId")
@@ -725,7 +811,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Property<int>("QuizMode")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasDefaultValue(1)
                         .HasColumnName("quiz_mode");
 
@@ -758,7 +844,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnName("shuffle_questions");
 
                     b.Property<int?>("TimeLimitMinutes")
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasColumnName("time_limit_minutes");
 
                     b.HasKey("Id")
@@ -1236,66 +1322,18 @@ namespace BoneVisQA.Repositories.Migrations
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ExpertSpecialty", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("ExpertId")
                         .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
+                        .HasColumnName("expert_id");
 
                     b.Property<Guid>("BoneSpecialtyId")
                         .HasColumnType("uuid")
                         .HasColumnName("bone_specialty_id");
 
-                    b.Property<string>("Certifications")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("certifications");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("ExpertId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("expert_id");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_primary");
-
-                    b.Property<Guid?>("PathologyCategoryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pathology_category_id");
-
-                    b.Property<int>("ProficiencyLevel")
-                        .HasColumnType("integer")
-                        .HasColumnName("proficiency_level");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<int?>("YearsExperience")
-                        .HasColumnType("integer")
-                        .HasColumnName("years_experience");
-
-                    b.HasKey("Id")
+                    b.HasKey("ExpertId", "BoneSpecialtyId")
                         .HasName("expert_specialties_pkey");
 
-                    b.HasIndex("PathologyCategoryId");
-
-                    b.HasIndex(new[] { "BoneSpecialtyId" }, "idx_expert_specialties_bone");
-
-                    b.HasIndex(new[] { "ExpertId" }, "idx_expert_specialties_expert");
+                    b.HasIndex("BoneSpecialtyId");
 
                     b.ToTable("expert_specialties");
                 });
@@ -1312,6 +1350,10 @@ namespace BoneVisQA.Repositories.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("back_content");
+
+                    b.Property<DateTime?>("BookmarkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bookmarked_at");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1344,6 +1386,10 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
                         .HasColumnName("interval_days");
+
+                    b.Property<bool>("IsBookmarked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_bookmarked");
 
                     b.Property<DateTime?>("LastReviewDate")
                         .HasColumnType("timestamp with time zone")
@@ -1614,6 +1660,10 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("text")
                         .HasColumnName("key_findings");
 
+                    b.Property<Guid?>("OwnerStudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_student_id");
+
                     b.Property<Guid?>("PathologyCategoryId")
                         .HasColumnType("uuid")
                         .HasColumnName("pathology_category_id");
@@ -1626,6 +1676,10 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Property<string>("ReflectiveQuestions")
                         .HasColumnType("text")
                         .HasColumnName("reflective_questions");
+
+                    b.Property<string>("ReviewVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("review_version");
 
                     b.Property<string>("Severity")
                         .HasMaxLength(50)
@@ -1646,6 +1700,14 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("ValidatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("validated_at");
+
+                    b.Property<Guid?>("ValidatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("validated_by");
 
                     b.Property<string>("Version")
                         .ValueGeneratedOnAdd()
@@ -1671,6 +1733,10 @@ namespace BoneVisQA.Repositories.Migrations
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.HasIndex("PathologyCategoryId");
+
+                    b.HasIndex("ValidatedByUserId");
+
+                    b.HasIndex(new[] { "OwnerStudentId" }, "idx_medical_cases_owner_student_id");
 
                     b.ToTable("medical_cases");
                 });
@@ -2005,6 +2071,8 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "SessionId", "CreatedAt" }, "idx_qa_messages_session_created_at");
 
+                    b.HasIndex(new[] { "SessionId" }, "idx_qa_messages_session_id");
+
                     b.HasIndex(new[] { "SessionId", "ClientRequestId", "Role" }, "ux_qa_messages_session_client_request_role")
                         .IsUnique();
 
@@ -2142,7 +2210,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnName("open_time");
 
                     b.Property<int?>("PassingScore")
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasColumnName("passing_score");
 
                     b.Property<Guid?>("PathologyCategoryId")
@@ -2151,7 +2219,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Property<int>("QuizMode")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasDefaultValue(1)
                         .HasColumnName("quiz_mode");
 
@@ -2171,7 +2239,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnName("teaching_points");
 
                     b.Property<int?>("TimeLimit")
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasColumnName("time_limit");
 
                     b.Property<string>("Title")
@@ -2213,7 +2281,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Property<int>("CurrentQuestionIndex")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasDefaultValue(0)
                         .HasColumnName("current_question_index");
 
@@ -2221,13 +2289,13 @@ namespace BoneVisQA.Repositories.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasColumnType("varchar(20)")
                         .HasDefaultValue("Medium")
                         .HasColumnName("difficulty_level");
 
                     b.Property<decimal>("EaseFactor")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric")
+                        .HasColumnType("decimal(4,2)")
                         .HasDefaultValue(2.5m)
                         .HasColumnName("ease_factor");
 
@@ -2241,7 +2309,7 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Property<int>("ReviewInterval")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("int")
                         .HasDefaultValue(1)
                         .HasColumnName("review_interval");
 
@@ -2881,89 +2949,6 @@ namespace BoneVisQA.Repositories.Migrations
                     b.ToTable("tags");
                 });
 
-            modelBuilder.Entity("BoneVisQA.Repositories.Models.TeachingObjectiveSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuid_generate_v4()");
-
-                    b.Property<Guid>("ClassId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("class_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("ExpertId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("expert_id");
-
-                    b.Property<string>("Level")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("level");
-
-                    b.Property<string>("Objective")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("objective");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("order_index");
-
-                    b.Property<string>("RejectionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("rejection_reason");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<Guid?>("ReviewedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Pending")
-                        .HasColumnName("status");
-
-                    b.Property<string>("Topic")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("topic");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("teaching_objective_suggestions_pkey");
-
-                    b.HasIndex("ReviewedBy");
-
-                    b.HasIndex(new[] { "ClassId" }, "idx_teaching_objective_suggestions_class");
-
-                    b.HasIndex(new[] { "ExpertId" }, "idx_teaching_objective_suggestions_expert");
-
-                    b.HasIndex(new[] { "Status" }, "idx_teaching_objective_suggestions_status");
-
-                    b.ToTable("teaching_objective_suggestions");
-                });
-
             modelBuilder.Entity("BoneVisQA.Repositories.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3103,11 +3088,11 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasKey("Id")
                         .HasName("users_pkey");
 
-                    b.HasIndex("PrimaryBoneSpecialtyId");
-
                     b.HasIndex("VerifiedBy");
 
                     b.HasIndex(new[] { "IsActive" }, "idx_users_is_active");
+
+                    b.HasIndex(new[] { "PrimaryBoneSpecialtyId" }, "idx_users_primary_bone_specialty_id");
 
                     b.HasIndex(new[] { "Email" }, "users_email_key")
                         .IsUnique();
@@ -3192,6 +3177,10 @@ namespace BoneVisQA.Repositories.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("requested_review_message_id");
 
+                    b.Property<string>("ReviewFeedback")
+                        .HasColumnType("text")
+                        .HasColumnName("review_feedback");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -3203,6 +3192,10 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
+
+                    b.Property<Guid?>("TargetBoneSpecialtyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_bone_specialty_id");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -3223,6 +3216,8 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.HasIndex(new[] { "StudentId" }, "idx_visual_qa_sessions_student");
 
+                    b.HasIndex(new[] { "TargetBoneSpecialtyId" }, "idx_visual_qa_sessions_target_bone_specialty");
+
                     b.ToTable("visual_qa_sessions");
                 });
 
@@ -3232,7 +3227,7 @@ namespace BoneVisQA.Repositories.Migrations
                         .WithMany("AcademicClasses")
                         .HasForeignKey("ClassSpecialtyId")
                         .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("academic_classes_specialty_fkey");
+                        .HasConstraintName("academic_classes_class_specialty_id_fkey");
 
                     b.HasOne("BoneVisQA.Repositories.Models.User", "Expert")
                         .WithMany("ExpertAcademicClasses")
@@ -3325,6 +3320,30 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("Question");
 
                     b.Navigation("ReviewedBy");
+                });
+
+            modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseMedia", b =>
+                {
+                    b.HasOne("BoneVisQA.Repositories.Models.MedicalCase", "Case")
+                        .WithMany("CaseMedia")
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("case_media_case_id_fkey");
+
+                    b.Navigation("Case");
+                });
+
+            modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseMetadata", b =>
+                {
+                    b.HasOne("BoneVisQA.Repositories.Models.MedicalCase", "Case")
+                        .WithOne("CaseMetadata")
+                        .HasForeignKey("BoneVisQA.Repositories.Models.CaseMetadata", "CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("case_metadata_case_id_fkey");
+
+                    b.Navigation("Case");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.CaseTag", b =>
@@ -3451,40 +3470,6 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("Class");
 
                     b.Navigation("Student");
-                });
-
-            modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassExpertAssignment", b =>
-                {
-                    b.HasOne("BoneVisQA.Repositories.Models.BoneSpecialty", "BoneSpecialty")
-                        .WithMany("ClassExpertAssignments")
-                        .HasForeignKey("BoneSpecialtyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("class_expert_assignments_bone_specialty_id_fkey");
-
-                    b.HasOne("BoneVisQA.Repositories.Models.AcademicClass", "Class")
-                        .WithMany("ClassExpertAssignments")
-                        .HasForeignKey("ClassId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("class_expert_assignments_class_id_fkey");
-
-                    b.HasOne("BoneVisQA.Repositories.Models.User", "Expert")
-                        .WithMany("ExpertClassAssignments")
-                        .HasForeignKey("ExpertId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("class_expert_assignments_expert_id_fkey");
-
-                    b.HasOne("BoneVisQA.Repositories.Models.ExpertSpecialty", null)
-                        .WithMany("ClassExpertAssignments")
-                        .HasForeignKey("ExpertSpecialtyId");
-
-                    b.Navigation("BoneSpecialty");
-
-                    b.Navigation("Class");
-
-                    b.Navigation("Expert");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.ClassQuizSession", b =>
@@ -3656,7 +3641,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasOne("BoneVisQA.Repositories.Models.BoneSpecialty", "BoneSpecialty")
                         .WithMany("ExpertSpecialties")
                         .HasForeignKey("BoneSpecialtyId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("expert_specialties_bone_specialty_id_fkey");
 
@@ -3667,17 +3652,9 @@ namespace BoneVisQA.Repositories.Migrations
                         .IsRequired()
                         .HasConstraintName("expert_specialties_expert_id_fkey");
 
-                    b.HasOne("BoneVisQA.Repositories.Models.PathologyCategory", "PathologyCategory")
-                        .WithMany("ExpertSpecialties")
-                        .HasForeignKey("PathologyCategoryId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("expert_specialties_pathology_category_id_fkey");
-
                     b.Navigation("BoneSpecialty");
 
                     b.Navigation("Expert");
-
-                    b.Navigation("PathologyCategory");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Flashcard", b =>
@@ -3778,11 +3755,23 @@ namespace BoneVisQA.Repositories.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("medical_cases_created_by_expert_id_fkey");
 
+                    b.HasOne("BoneVisQA.Repositories.Models.User", "OwnerStudent")
+                        .WithMany("OwnedPersonalMedicalCases")
+                        .HasForeignKey("OwnerStudentId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("medical_cases_owner_student_id_fkey");
+
                     b.HasOne("BoneVisQA.Repositories.Models.PathologyCategory", "PathologyCategory")
                         .WithMany("MedicalCases")
                         .HasForeignKey("PathologyCategoryId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("medical_cases_pathology_fkey");
+
+                    b.HasOne("BoneVisQA.Repositories.Models.User", "ValidatedByUser")
+                        .WithMany("ValidatedMedicalCases")
+                        .HasForeignKey("ValidatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("medical_cases_validated_by_fkey");
 
                     b.Navigation("AssignedExpert");
 
@@ -3792,7 +3781,11 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Navigation("CreatedByExpert");
 
+                    b.Navigation("OwnerStudent");
+
                     b.Navigation("PathologyCategory");
+
+                    b.Navigation("ValidatedByUser");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.MedicalImage", b =>
@@ -4032,6 +4025,7 @@ namespace BoneVisQA.Repositories.Migrations
                     b.HasOne("BoneVisQA.Repositories.Models.MedicalCase", "Case")
                         .WithMany("StudentQuestions")
                         .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("student_questions_case_id_fkey");
 
                     b.HasOne("BoneVisQA.Repositories.Models.User", "Student")
@@ -4077,42 +4071,13 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("Question");
                 });
 
-            modelBuilder.Entity("BoneVisQA.Repositories.Models.TeachingObjectiveSuggestion", b =>
-                {
-                    b.HasOne("BoneVisQA.Repositories.Models.AcademicClass", "Class")
-                        .WithMany("TeachingObjectiveSuggestions")
-                        .HasForeignKey("ClassId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("teaching_objective_suggestions_class_id_fkey");
-
-                    b.HasOne("BoneVisQA.Repositories.Models.User", "Expert")
-                        .WithMany("TeachingObjectiveSuggestions")
-                        .HasForeignKey("ExpertId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("teaching_objective_suggestions_expert_id_fkey");
-
-                    b.HasOne("BoneVisQA.Repositories.Models.User", "Reviewer")
-                        .WithMany("ReviewedSuggestions")
-                        .HasForeignKey("ReviewedBy")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("teaching_objective_suggestions_reviewer_id_fkey");
-
-                    b.Navigation("Class");
-
-                    b.Navigation("Expert");
-
-                    b.Navigation("Reviewer");
-                });
-
             modelBuilder.Entity("BoneVisQA.Repositories.Models.User", b =>
                 {
                     b.HasOne("BoneVisQA.Repositories.Models.BoneSpecialty", "PrimaryBoneSpecialty")
                         .WithMany("UsersWithPrimarySpecialty")
                         .HasForeignKey("PrimaryBoneSpecialtyId")
                         .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("users_primary_specialty_fkey");
+                        .HasConstraintName("users_primary_bone_specialty_id_fkey");
 
                     b.HasOne("BoneVisQA.Repositories.Models.User", "Verifier")
                         .WithMany("UsersVerifiedByThisUser")
@@ -4171,6 +4136,12 @@ namespace BoneVisQA.Repositories.Migrations
                         .IsRequired()
                         .HasConstraintName("visual_qa_sessions_student_id_fkey");
 
+                    b.HasOne("BoneVisQA.Repositories.Models.BoneSpecialty", "TargetBoneSpecialty")
+                        .WithMany("TargetVisualQaSessions")
+                        .HasForeignKey("TargetBoneSpecialtyId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("visual_qa_sessions_target_bone_specialty_id_fkey");
+
                     b.Navigation("Case");
 
                     b.Navigation("Image");
@@ -4178,6 +4149,8 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("PromotedCase");
 
                     b.Navigation("Student");
+
+                    b.Navigation("TargetBoneSpecialty");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.AcademicClass", b =>
@@ -4190,15 +4163,11 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Navigation("ClassEnrollments");
 
-                    b.Navigation("ClassExpertAssignments");
-
                     b.Navigation("ClassQuizSessions");
 
                     b.Navigation("ClassTags");
 
                     b.Navigation("LearningStatistics");
-
-                    b.Navigation("TeachingObjectiveSuggestions");
                 });
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.Announcement", b =>
@@ -4214,8 +4183,6 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Navigation("Children");
 
-                    b.Navigation("ClassExpertAssignments");
-
                     b.Navigation("ExpertSpecialties");
 
                     b.Navigation("MedicalCases");
@@ -4223,6 +4190,8 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("PathologyCategories");
 
                     b.Navigation("Quizzes");
+
+                    b.Navigation("TargetVisualQaSessions");
 
                     b.Navigation("UsersWithPrimarySpecialty");
                 });
@@ -4258,11 +4227,6 @@ namespace BoneVisQA.Repositories.Migrations
                     b.Navigation("Citations");
                 });
 
-            modelBuilder.Entity("BoneVisQA.Repositories.Models.ExpertSpecialty", b =>
-                {
-                    b.Navigation("ClassExpertAssignments");
-                });
-
             modelBuilder.Entity("BoneVisQA.Repositories.Models.FlashcardDeck", b =>
                 {
                     b.Navigation("Flashcards");
@@ -4270,6 +4234,10 @@ namespace BoneVisQA.Repositories.Migrations
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.MedicalCase", b =>
                 {
+                    b.Navigation("CaseMedia");
+
+                    b.Navigation("CaseMetadata");
+
                     b.Navigation("CaseTags");
 
                     b.Navigation("CaseViewLogs");
@@ -4296,8 +4264,6 @@ namespace BoneVisQA.Repositories.Migrations
 
             modelBuilder.Entity("BoneVisQA.Repositories.Models.PathologyCategory", b =>
                 {
-                    b.Navigation("ExpertSpecialties");
-
                     b.Navigation("MedicalCases");
 
                     b.Navigation("Quizzes");
@@ -4372,8 +4338,6 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Navigation("ExpertAcademicClasses");
 
-                    b.Navigation("ExpertClassAssignments");
-
                     b.Navigation("ExpertReviews");
 
                     b.Navigation("ExpertSpecialties");
@@ -4386,17 +4350,17 @@ namespace BoneVisQA.Repositories.Migrations
 
                     b.Navigation("Notifications");
 
+                    b.Navigation("OwnedPersonalMedicalCases");
+
                     b.Navigation("QuizAttempts");
 
-                    b.Navigation("ReviewedSuggestions");
-
                     b.Navigation("StudentQuestions");
-
-                    b.Navigation("TeachingObjectiveSuggestions");
 
                     b.Navigation("UserRoles");
 
                     b.Navigation("UsersVerifiedByThisUser");
+
+                    b.Navigation("ValidatedMedicalCases");
 
                     b.Navigation("VisualQASessions");
                 });

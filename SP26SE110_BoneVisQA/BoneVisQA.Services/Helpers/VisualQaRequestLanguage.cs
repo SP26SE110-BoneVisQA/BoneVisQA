@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Http;
 namespace BoneVisQA.Services.Helpers;
 
 /// <summary>
-/// Resolves Visual QA response language from query <c>locale</c>, JSON/form <see cref="Models.VisualQA.VisualQARequestDto.Language"/>,
-/// captured <see cref="ItemsKey"/>, or <c>Accept-Language</c>.
+/// Resolves Visual QA response language from query <c>locale</c>, captured <see cref="ItemsKey"/>, or <c>Accept-Language</c>.
+/// Optional explicit client override was removed for production; call sites pass <c>null</c> for <paramref name="preferredLanguageFromClient"/>.
 /// </summary>
 public static class VisualQaRequestLanguage
 {
@@ -17,7 +17,7 @@ public static class VisualQaRequestLanguage
     public const string DefaultPrimaryTag = "vi";
 
     /// <summary>
-    /// Priority: <paramref name="queryLocale"/> → body/form language → middleware item → <c>Accept-Language</c> header → default Vietnamese.
+    /// Priority: <paramref name="queryLocale"/> → <paramref name="preferredLanguageFromClient"/> (unused; pass null) → middleware item → <c>Accept-Language</c> header → default Vietnamese.
     /// </summary>
     public static string Resolve(HttpRequest request, string? preferredLanguageFromClient, string? queryLocale)
     {

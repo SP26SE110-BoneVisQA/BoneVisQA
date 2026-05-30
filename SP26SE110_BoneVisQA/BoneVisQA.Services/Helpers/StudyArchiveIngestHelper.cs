@@ -1,0 +1,136 @@
+using System.Text.Json;
+using BoneVisQA.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
+
+namespace BoneVisQA.Services.Helpers;
+
+/// <summary>Stages DICOM study archives and invokes Python <c>POST /ingest</c>.</summary>
+public static class StudyArchiveIngestHelper
+{
+    public const long StudyArchiveMaxBytes = 209715200; // 200 MB — keep in sync with Kestrel limits
+
+    private static readonly string[] AllowedExtensions = [".zip", ".rar"];
+
+    public static string? ValidateArchive(IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+            return "File is required.";
+
+        if (file.Length > StudyArchiveMaxBytes)
+            return $"File size exceeds {StudyArchiveMaxBytes / 1048576} MB limit.";
+
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(extension))
+            return "Only .zip or .rar study archives are allowed.";
+
+        return null;
+    }
+
+    public static async Task<string> StageArchiveAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "BoneVisQA", "study-ingest-staging");
+        Directory.CreateDirectory(stagingRoot);
+
+        var filePath = Path.Combine(stagingRoot, $"{Guid.NewGuid():N}{extension}");
+        await using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        return Path.GetFullPath(filePath);
+    }
+
+    public static void TryDeleteStagedFile(string? absoluteArchivePath)
+    {
+        if (string.IsNullOrWhiteSpace(absoluteArchivePath))
+            return;
+
+        try
+        {
+            if (File.Exists(absoluteArchivePath))
+                File.Delete(absoluteArchivePath);
+        }
+        catch
+        {
+            // Best-effort cleanup; do not fail the HTTP response.
+        }
+    }
+
+    public static async Task<IngestResultDto> IngestStagedArchiveAsync(
+        IPythonAiConnectorService pythonAi,
+        string absoluteArchivePath,
+        string ingestPurpose,
+        Guid? ownerUserId,
+        string? diagnosisText,
+        CancellationToken cancellationToken)
+    {
+        return await pythonAi.TriggerIngestAsync(
+            absoluteArchivePath,
+            diagnosis: diagnosisText ?? string.Empty,
+            ingestPurpose: ingestPurpose,
+            ownerUserId: ownerUserId,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>True when Python rejected the archive (client error, not gateway outage).</summary>
+    public static bool IsClientIngestFailure(IngestResultDto ingest) =>
+        ingest.StatusCode is 400 or 422;
+
+    /// <summary>User-facing message for ingest failures (parses FastAPI <c>detail</c> when present).</summary>
+    public static string ResolveIngestErrorMessage(IngestResultDto ingest)
+    {
+        var raw = ingest.ErrorMessage?.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return "Invalid DICOM archive. The file may be corrupt or contain no readable DICOM images.";
+
+        if (TryParseFastApiDetail(raw, out var detail))
+            return MapPythonIngestDetail(detail);
+
+        if (raw.Contains("no DICOM", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("not a valid ZIP", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("not a valid RAR", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("zip slip", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("BadZipFile", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("corrupt", StringComparison.OrdinalIgnoreCase))
+            return "Invalid DICOM archive. The file may be corrupt or contain no readable DICOM images.";
+
+        return raw.Length > 400 ? raw[..400] + "…" : raw;
+    }
+
+    private static bool TryParseFastApiDetail(string body, out string detail)
+    {
+        detail = string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("detail", out var d))
+            {
+                detail = d.ValueKind == JsonValueKind.String
+                    ? d.GetString() ?? string.Empty
+                    : d.ToString();
+                return !string.IsNullOrWhiteSpace(detail);
+            }
+        }
+        catch
+        {
+            // Plain-text error body from Python.
+        }
+
+        return false;
+    }
+
+    private static string MapPythonIngestDetail(string detail)
+    {
+        if (detail.Contains("no DICOM", StringComparison.OrdinalIgnoreCase))
+            return "No valid DICOM images were found in this archive.";
+        if (detail.Contains("not a valid ZIP", StringComparison.OrdinalIgnoreCase)
+            || detail.Contains("BadZipFile", StringComparison.OrdinalIgnoreCase))
+            return "The file is not a valid ZIP archive.";
+        if (detail.Contains("not a valid RAR", StringComparison.OrdinalIgnoreCase))
+            return "The file is not a valid RAR archive.";
+        if (detail.Contains("archive not found", StringComparison.OrdinalIgnoreCase))
+            return "Study archive could not be read after upload.";
+        return detail;
+    }
+}

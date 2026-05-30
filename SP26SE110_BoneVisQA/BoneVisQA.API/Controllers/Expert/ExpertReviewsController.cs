@@ -25,26 +25,30 @@ public class ExpertReviewsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [HttpGet("case-answer")]
-    public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetCaseAanswer()
+    public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetCaseAanswer(
+        [FromQuery] Guid? specialtyId = null,
+        [FromQuery] string? status = null)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-        var result = await _expertReviewService.GetCaseAnswersAsync(expertId.Value);
+        var result = await _expertReviewService.GetCaseAnswersAsync(expertId.Value, specialtyId, status);
         return Ok(result);
     }
 
     [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [HttpGet("escalated")]
-    public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetEscalated()
+    public async Task<ActionResult<IReadOnlyList<ExpertEscalatedAnswerDto>>> GetEscalated(
+        [FromQuery] Guid? specialtyId = null,
+        [FromQuery] string? status = null)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-        var result = await _expertReviewService.GetEscalatedAnswersAsync(expertId.Value);
+        var result = await _expertReviewService.GetEscalatedAnswersAsync(expertId.Value, specialtyId, status);
         return Ok(result);
     }
 
@@ -202,9 +206,9 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return ex.Message.Contains("Only", StringComparison.OrdinalIgnoreCase)
-                ? BadRequest(new { message = ex.Message })
-                : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 

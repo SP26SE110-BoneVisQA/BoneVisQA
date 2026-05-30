@@ -169,6 +169,10 @@ public class StudentService : IStudentService
             return null;
         }
 
+        // Catalog cases require approval; personal ingest rows are scoped by owner_student_id.
+        if (entity.IsApproved != true && entity.OwnerStudentId != studentId)
+            return null;
+
         var viewLog = new CaseViewLog
         {
             Id = Guid.NewGuid(),
@@ -338,7 +342,12 @@ public class StudentService : IStudentService
                 .FirstOrDefaultAsync(s => s.Id == request.SessionId.Value && s.StudentId == studentId);
             if (existing != null)
                 return existing.Id;
+
+            throw new KeyNotFoundException("Q&A session not found.");
         }
+
+        if (request.CaseId is { } newCaseId && newCaseId != Guid.Empty)
+            await ValidateVisualQaCaseAccessAsync(studentId, newCaseId);
 
         string? coordsToSave = BoundingBoxParser.TryParseFromJson(request.Coordinates) is { } b
             ? BoundingBoxParser.Serialize(b)
@@ -368,6 +377,46 @@ public class StudentService : IStudentService
             if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
             {
                 request.ImageUrl = annotation.Image.ImageUrl;
+            }
+
+            imageUrlToSave = request.ImageUrl;
+        }
+        else if (request.CaseId is { } catalogCaseId && catalogCaseId != Guid.Empty)
+        {
+            if (string.IsNullOrWhiteSpace(request.ImageUrl))
+            {
+                if (request.ImageId is { } imgId && imgId != Guid.Empty)
+                {
+                    var mi = await _unitOfWork.Context.MedicalImages
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(m => m.Id == imgId && m.CaseId == catalogCaseId);
+                    if (mi != null)
+                        request.ImageUrl = mi.ImageUrl;
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    request.ImageUrl = await _unitOfWork.Context.MedicalImages
+                        .AsNoTracking()
+                        .Where(m => m.CaseId == catalogCaseId)
+                        .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+                        .ThenBy(m => m.Id)
+                        .Select(m => m.ImageUrl)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    var mediaUrl = await _unitOfWork.Context.CaseMedia
+                        .AsNoTracking()
+                        .Where(c => c.CaseId == catalogCaseId)
+                        .OrderBy(c => c.Id)
+                        .Select(c =>
+                            !string.IsNullOrWhiteSpace(c.MediaUrl) ? c.MediaUrl : c.StoragePath)
+                        .FirstOrDefaultAsync();
+                    if (!string.IsNullOrWhiteSpace(mediaUrl))
+                        request.ImageUrl = mediaUrl;
+                }
             }
 
             imageUrlToSave = request.ImageUrl;
@@ -688,6 +737,32 @@ public class StudentService : IStudentService
         return enrolledWithLecturer.Any(classIdsForCase.Contains);
     }
 
+    public async Task ValidateVisualQaCaseAccessAsync(
+        Guid studentId,
+        Guid? caseId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!caseId.HasValue || caseId.Value == Guid.Empty)
+            return;
+
+        var medicalCase = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == caseId.Value, cancellationToken);
+
+        if (medicalCase == null)
+            throw new KeyNotFoundException("Medical case not found.");
+
+        if (medicalCase.OwnerStudentId.HasValue)
+        {
+            if (medicalCase.OwnerStudentId != studentId)
+                throw new KeyNotFoundException("Medical case not found.");
+            return;
+        }
+
+        if (medicalCase.IsApproved != true || medicalCase.IsActive != true)
+            throw new KeyNotFoundException("Medical case not found.");
+    }
+
     public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
@@ -695,6 +770,9 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId);
         if (session == null)
             throw new KeyNotFoundException("Q&A session not found.");
+
+        if (session.CaseId.HasValue)
+            await ValidateVisualQaCaseAccessAsync(studentId, session.CaseId);
 
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
         var inactiveTime = DateTime.UtcNow - lastActivity;
@@ -935,9 +1013,22 @@ public class StudentService : IStudentService
             .Where(s => s.StudentId == studentId);
 
         if (hasCaseSession.HasValue)
-            baseQuery = hasCaseSession.Value
-                ? baseQuery.Where(s => s.CaseId != null)
-                : baseQuery.Where(s => s.CaseId == null);
+        {
+            if (hasCaseSession.Value)
+            {
+                baseQuery = baseQuery.Where(s =>
+                    s.CaseId != null &&
+                    _unitOfWork.Context.MedicalCases.Any(mc =>
+                        mc.Id == s.CaseId && mc.IsApproved == true && mc.OwnerStudentId == null));
+            }
+            else
+            {
+                baseQuery = baseQuery.Where(s =>
+                    s.CaseId != null &&
+                    _unitOfWork.Context.MedicalCases.Any(mc =>
+                        mc.Id == s.CaseId && mc.OwnerStudentId == studentId));
+            }
+        }
 
         var orderedQuery = baseQuery.OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
 
@@ -977,21 +1068,29 @@ public class StudentService : IStudentService
             .ToDictionaryAsync(x => x.SessionId, x => x.Role, cancellationToken);
 
         var rejectedSessionIds = sessions.Where(x => string.Equals(x.Status, "Rejected", StringComparison.Ordinal)).Select(x => x.Id).ToList();
-        Dictionary<Guid, string> rejectionReasonBySession = new();
+        Dictionary<Guid, string> rejectionReasonBySession = sessions
+            .Where(s => !string.IsNullOrWhiteSpace(s.ReviewFeedback))
+            .ToDictionary(s => s.Id, s => s.ReviewFeedback!.Trim());
+
         if (rejectedSessionIds.Count > 0)
         {
-            var lecturerRows = await _unitOfWork.Context.QaMessages
-                .AsNoTracking()
-                .Where(m =>
-                    rejectedSessionIds.Contains(m.SessionId) &&
-                    (m.Role == "Lecturer" || m.Role == "Expert"))
-                .Select(m => new { m.SessionId, m.Content, m.CreatedAt, m.Id })
-                .ToListAsync(cancellationToken);
-            rejectionReasonBySession = lecturerRows
-                .GroupBy(x => x.SessionId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First().Content.Trim());
+            var missingRejectIds = rejectedSessionIds.Where(id => !rejectionReasonBySession.ContainsKey(id)).ToList();
+            if (missingRejectIds.Count > 0)
+            {
+                var lecturerRows = await _unitOfWork.Context.QaMessages
+                    .AsNoTracking()
+                    .Where(m =>
+                        missingRejectIds.Contains(m.SessionId) &&
+                        (m.Role == "Lecturer" || m.Role == "Expert"))
+                    .Select(m => new { m.SessionId, m.Content, m.CreatedAt, m.Id })
+                    .ToListAsync(cancellationToken);
+                foreach (var group in lecturerRows.GroupBy(x => x.SessionId))
+                {
+                    var legacy = group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First().Content.Trim();
+                    if (!string.IsNullOrWhiteSpace(legacy))
+                        rejectionReasonBySession[group.Key] = legacy;
+                }
+            }
         }
 
         foreach (var s in sessions)
@@ -1010,6 +1109,8 @@ public class StudentService : IStudentService
                 SessionId = s.Id,
                 CaseId = s.CaseId,
                 Status = s.Status,
+                SessionStatus = s.Status,
+                ReviewFeedback = s.ReviewFeedback,
                 UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
                 QuestionSnippet = snippet,
                 ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(
@@ -1017,8 +1118,9 @@ public class StudentService : IStudentService
                     cancellationToken),
                 ReviewState = MapReviewState(s.Status),
                 LastResponderRole = MapResponderRole(lastResponderBySession.TryGetValue(s.Id, out var lastRole) ? lastRole : null),
-                RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal) && rejectionReasonBySession.TryGetValue(s.Id, out var rr)
-                    ? rr
+                RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal)
+                    ? (s.ReviewFeedback?.Trim()
+                       ?? (rejectionReasonBySession.TryGetValue(s.Id, out var rr) ? rr : null))
                     : null
             });
         }
@@ -1074,15 +1176,18 @@ public class StudentService : IStudentService
         string? rejectionReason = null;
         if (string.Equals(session.Status, "Rejected", StringComparison.Ordinal))
         {
-            var rr = messages
-                .Where(m =>
-                    string.Equals(m.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(m.Role, "Expert", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(m => m.CreatedAt)
-                .ThenByDescending(m => m.Id)
-                .Select(m => (m.Content ?? string.Empty).Trim())
-                .FirstOrDefault(t => t.Length > 0);
-            rejectionReason = string.IsNullOrWhiteSpace(rr) ? null : rr;
+            rejectionReason = string.IsNullOrWhiteSpace(session.ReviewFeedback)
+                ? messages
+                    .Where(m =>
+                        string.Equals(m.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(m.Role, "Expert", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(m => m.CreatedAt)
+                    .ThenByDescending(m => m.Id)
+                    .Select(m => (m.Content ?? string.Empty).Trim())
+                    .FirstOrDefault(t => t.Length > 0)
+                : session.ReviewFeedback.Trim();
+            if (string.IsNullOrWhiteSpace(rejectionReason))
+                rejectionReason = null;
         }
 
         return new VisualQaThreadDto
@@ -1099,7 +1204,9 @@ public class StudentService : IStudentService
             ReviewState = reviewState,
             LastResponderRole = ResolveLastResponderRole(messages, capabilities.Reason),
             BlockingNotice = blockingNotice,
-            RejectionReason = rejectionReason
+            RejectionReason = rejectionReason,
+            SessionStatus = session.Status,
+            ReviewFeedback = session.ReviewFeedback
         };
     }
 
@@ -2331,4 +2438,5 @@ public class StudentService : IStudentService
 
         _logger.LogInformation("[RequestRetakeAsync] Student {StudentId} requested retake for quiz {QuizId}", studentId, quizId);
     }
+
 }

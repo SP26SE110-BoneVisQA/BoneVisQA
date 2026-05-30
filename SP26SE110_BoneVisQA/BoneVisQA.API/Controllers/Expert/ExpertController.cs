@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using BoneVisQA.Services.Models.Lecturer;
+using BoneVisQA.Services.Models.VisualQA;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Expert;
 using Microsoft.AspNetCore.Authorization;
@@ -21,17 +23,20 @@ namespace BoneVisQA.API.Controllers.Expert
         private readonly IQuizsService _quizService;
         private readonly ITagCaseService _tagCaseService;
         private readonly ISupabaseStorageService _storageService;
+        private readonly IPythonAiConnectorService _pythonAiConnector;
 
         public ExpertController(
             IMedicalCaseService medicalService,
             IQuizsService quizService,
             ITagCaseService tagCaseService,
-            ISupabaseStorageService storageService)
+            ISupabaseStorageService storageService,
+            IPythonAiConnectorService pythonAiConnector)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
             _tagCaseService = tagCaseService;
             _storageService = storageService;
+            _pythonAiConnector = pythonAiConnector;
         }
         
         [HttpGet("cases")]
@@ -125,7 +130,7 @@ namespace BoneVisQA.API.Controllers.Expert
         }
 
         //=====================================================   IMAGE & ANNOTATION  ==========================================================
-       
+
         [HttpGet("image")]
         public async Task<IActionResult> GetAllImage(int pageIndex = 1, int pageSize = 10)
         {
@@ -143,6 +148,73 @@ namespace BoneVisQA.API.Controllers.Expert
                 message = "Medical_Image created successfully",
                 result
             });
+        }
+
+        /// <summary>
+        /// Expert library ingest: upload a DICOM study archive (<c>.zip</c>/<c>.rar</c>) to Python <c>POST /ingest</c>
+        /// with <c>ingest_purpose=library</c>. Preview PNG is stored in Supabase <c>medical-cases</c>.
+        /// </summary>
+        [HttpPost("cases/upload-dicom")]
+        [RequestSizeLimit(StudyArchiveIngestHelper.StudyArchiveMaxBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = StudyArchiveIngestHelper.StudyArchiveMaxBytes)]
+        [Consumes("multipart/form-data")]
+        [ProducesResponseType(typeof(ExpertDicomStudyUploadResponse), StatusCodes.Status200OK)]
+        public async Task<IActionResult> UploadDicomStudyToLibrary(
+            IFormFile file,
+            [FromForm] string? diagnosisText,
+            CancellationToken cancellationToken)
+        {
+            var validationError = StudyArchiveIngestHelper.ValidateArchive(file);
+            if (validationError != null)
+                return BadRequest(new { message = validationError });
+
+            string? stagedPath = null;
+            try
+            {
+                stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
+                var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
+                    _pythonAiConnector,
+                    stagedPath,
+                    ingestPurpose: "library",
+                    ownerUserId: null,
+                    diagnosisText,
+                    cancellationToken);
+
+                if (!ingest.Success || !ingest.CaseId.HasValue)
+                {
+                    var message = StudyArchiveIngestHelper.ResolveIngestErrorMessage(ingest);
+                    if (StudyArchiveIngestHelper.IsClientIngestFailure(ingest))
+                    {
+                        return BadRequest(new ExpertDicomStudyUploadResponse
+                        {
+                            IngestOk = false,
+                            IngestError = message,
+                        });
+                    }
+
+                    return StatusCode(
+                        StatusCodes.Status502BadGateway,
+                        new ExpertDicomStudyUploadResponse
+                        {
+                            IngestOk = false,
+                            IngestError = message,
+                        });
+                }
+
+                return Ok(new ExpertDicomStudyUploadResponse
+                {
+                    CaseId = ingest.CaseId.Value,
+                    MediaId = ingest.MediaId,
+                    CatalogImageId = ingest.CatalogImageId,
+                    PreviewImageUrl = ingest.PreviewImageUrl ?? string.Empty,
+                    DicomMetadata = ingest.DicomMetadata,
+                    IngestOk = true,
+                });
+            }
+            finally
+            {
+                StudyArchiveIngestHelper.TryDeleteStagedFile(stagedPath);
+            }
         }
 
         [HttpDelete("images/{imageId:guid}")]

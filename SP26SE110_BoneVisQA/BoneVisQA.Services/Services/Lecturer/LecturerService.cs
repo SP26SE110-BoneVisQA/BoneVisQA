@@ -1471,7 +1471,11 @@ public class LecturerService : ILecturerService
             .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
     }
 
-    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null)
+    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(
+        Guid lecturerId,
+        Guid classId,
+        string? source = null,
+        string? status = null)
     {
         var ownsClass = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
@@ -1490,6 +1494,8 @@ public class LecturerService : ILecturerService
                             || string.Equals(normalizedSource, "all", StringComparison.Ordinal)
                             || string.Equals(normalizedSource, "caseqa", StringComparison.Ordinal)
                             || string.Equals(normalizedSource, "case-qa", StringComparison.Ordinal);
+        var visualQaStatuses = LecturerTriageStatusFilter.ResolveVisualQaStatuses(status);
+        var caseQaStatuses = LecturerTriageStatusFilter.ResolveCaseQaStatuses(status);
 
         var studentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
@@ -1508,13 +1514,15 @@ public class LecturerService : ILecturerService
                 .Include(s => s.Student)
                 .Include(s => s.Case!)
                     .ThenInclude(c => c.MedicalImages)
+                .Include(s => s.Case!)
+                    .ThenInclude(c => c.CaseMedia)
                 .Include(s => s.Image)
                 .Include(s => s.Messages)
                     .ThenInclude(m => m.Citations)
                         .ThenInclude(c => c.Chunk)
                             .ThenInclude(ch => ch.Doc)
                 .Where(s => studentIds.Contains(s.StudentId))
-                .Where(s => s.Status == "PendingExpertReview")
+                .Where(s => visualQaStatuses.Contains(s.Status))
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
 
@@ -1532,6 +1540,7 @@ public class LecturerService : ILecturerService
                         turns);
                     var flatImageUrl = ResolveSessionImageUrl(s);
                     var mc = s.Case;
+                    var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(mc);
 
                     return new LecturerTriageRowDto
                     {
@@ -1552,6 +1561,8 @@ public class LecturerService : ILecturerService
                         QuestionText = userMessage?.Content ?? string.Empty,
                         AnswerText = assistantMessage?.Content,
                         Status = s.Status,
+                        SessionStatus = s.Status,
+                        ReviewFeedback = s.ReviewFeedback,
                         AiConfidenceScore = assistantMessage?.AiConfidenceScore,
                         AskedAt = s.CreatedAt,
                         IsEscalated = string.Equals(s.Status, "EscalatedToExpert", StringComparison.Ordinal),
@@ -1570,6 +1581,7 @@ public class LecturerService : ILecturerService
                         SelectedUserMessageId = userMessage?.Id,
                         SelectedAssistantMessageId = assistantMessage?.Id,
                         Citations = ResolveLecturerCitations(assistantMessage),
+                        DicomMetadata = dicomMetadata,
                         Turns = turns
                     };
                 })
@@ -1588,9 +1600,12 @@ public class LecturerService : ILecturerService
                     .ThenInclude(q => q.Case!)
                         .ThenInclude(c => c!.MedicalImages)
                 .Include(a => a.Question!)
+                    .ThenInclude(q => q.Case!)
+                        .ThenInclude(c => c!.CaseMedia)
+                .Include(a => a.Question!)
                     .ThenInclude(q => q.Annotation!)
                     .ThenInclude(an => an!.Image)
-                .Where(a => a.Status == CaseAnswerStatuses.RequiresLecturerReview)
+                .Where(a => caseQaStatuses.Contains(a.Status))
                 .Where(a => a.Question != null && studentIds.Contains(a.Question.StudentId))
                 .OrderByDescending(a => a.GeneratedAt)
                 .ToListAsync();
@@ -1599,6 +1614,7 @@ public class LecturerService : ILecturerService
             {
                 var q = a.Question!;
                 var flat = ResolveStudentQuestionImageUrl(q);
+                var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(q.Case);
                 return new LecturerTriageRowDto
                 {
                     AnswerId = a.Id,
@@ -1631,7 +1647,8 @@ public class LecturerService : ILecturerService
                     CustomImageUrl = q.CustomImageUrl,
                     RequestedReviewMessageId = null,
                     SelectedUserMessageId = q.Id,
-                    SelectedAssistantMessageId = a.Id
+                    SelectedAssistantMessageId = a.Id,
+                    DicomMetadata = dicomMetadata
                 };
             }).ToList();
         }
@@ -1667,6 +1684,8 @@ public class LecturerService : ILecturerService
             .Include(s => s.Student)
             .Include(s => s.Case!)
                 .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMedia)
             .Include(s => s.Image)
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == questionId);
@@ -1687,6 +1706,7 @@ public class LecturerService : ILecturerService
 
         var (userMessage, latestAssistant) = ResolveRequestedReviewPair(session);
         var detailImageUrl = ResolveSessionImageUrl(session);
+        var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
 
         return new LectStudentQuestionDetailDto
         {
@@ -1711,6 +1731,8 @@ public class LecturerService : ILecturerService
             DifferentialDiagnoses = DeserializeJsonArray(latestAssistant?.DifferentialDiagnoses),
             KeyImagingFindings = latestAssistant?.KeyImagingFindings,
             AnswerStatus = session.Status,
+            SessionStatus = session.Status,
+            ReviewFeedback = session.ReviewFeedback,
             AiConfidenceScore = latestAssistant?.AiConfidenceScore,
             ReviewedById = null,
             ReviewedByName = null,
@@ -1718,6 +1740,7 @@ public class LecturerService : ILecturerService
             IsEscalated = string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal),
             EscalatedByName = null,
             EscalatedAt = null,
+            DicomMetadata = dicomMetadata,
             Messages = orderedMessages.Select(m => new LectQAMessageDto
             {
                 Id = m.Id,
@@ -1782,6 +1805,7 @@ public class LecturerService : ILecturerService
                 break;
         }
         session.UpdatedAt = DateTime.UtcNow;
+        session.ReviewFeedback = request.AnswerText.Trim();
 
         await _unitOfWork.SaveAsync();
 
@@ -2052,6 +2076,8 @@ public class LecturerService : ILecturerService
             .Include(q => q.Student)
             .Include(q => q.Case)
                 .ThenInclude(c => c!.MedicalImages)
+            .Include(q => q.Case)
+                .ThenInclude(c => c!.CaseMedia)
             .Include(q => q.CaseAnswers)
             .AsQueryable();
 
@@ -2070,6 +2096,7 @@ public class LecturerService : ILecturerService
                     .OrderByDescending(a => a.GeneratedAt ?? DateTime.MinValue)
                     .ThenByDescending(a => a.Id)
                     .FirstOrDefault();
+                var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(q.Case);
 
                 return new LectStudentQuestionDto
             {
@@ -2088,7 +2115,8 @@ public class LecturerService : ILecturerService
                     AnswerStatus = latestAnswer?.Status,
                     EscalatedById = latestAnswer?.EscalatedById,
                     EscalatedAt = latestAnswer?.EscalatedAt,
-                    AiConfidenceScore = latestAnswer?.AiConfidenceScore
+                    AiConfidenceScore = latestAnswer?.AiConfidenceScore,
+                    DicomMetadata = dicomMetadata
                 };
             })
             .ToList();
@@ -2118,9 +2146,12 @@ public class LecturerService : ILecturerService
             CreatedAt = r.AskedAt,
             AnswerText = r.AnswerText,
             AnswerStatus = r.Status,
+            SessionStatus = r.Status,
+            ReviewFeedback = r.ReviewFeedback,
             EscalatedById = null,
             EscalatedAt = r.EscalatedAt,
-            AiConfidenceScore = r.AiConfidenceScore
+            AiConfidenceScore = r.AiConfidenceScore,
+            DicomMetadata = r.DicomMetadata
         }).ToList();
     }
 
