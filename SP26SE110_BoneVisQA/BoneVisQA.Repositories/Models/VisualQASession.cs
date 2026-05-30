@@ -10,6 +10,7 @@ namespace BoneVisQA.Repositories.Models;
 [Index("StudentId", Name = "idx_visual_qa_sessions_student")]
 [Index("CaseId", Name = "idx_visual_qa_sessions_case")]
 [Index("Status", Name = "idx_visual_qa_sessions_status")]
+[Index("TargetBoneSpecialtyId", Name = "idx_visual_qa_sessions_target_bone_specialty")]
 public partial class VisualQASession
 {
     [Key]
@@ -38,11 +39,17 @@ public partial class VisualQASession
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    [Column("target_bone_specialty_id")]
+    public Guid? TargetBoneSpecialtyId { get; set; }
+
     [Column("promoted_case_id")]
     public Guid? PromotedCaseId { get; set; }
 
     [Column("requested_review_message_id")]
     public Guid? RequestedReviewMessageId { get; set; }
+
+    [Column("review_feedback")]
+    public string? ReviewFeedback { get; set; }
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -61,6 +68,10 @@ public partial class VisualQASession
     [ForeignKey("CaseId")]
     [InverseProperty("VisualQASessions")]
     public virtual MedicalCase? Case { get; set; }
+
+    [ForeignKey("TargetBoneSpecialtyId")]
+    [InverseProperty("TargetVisualQaSessions")]
+    public virtual BoneSpecialty? TargetBoneSpecialty { get; set; }
 
     [ForeignKey("ImageId")]
     [InverseProperty("VisualQASessions")]

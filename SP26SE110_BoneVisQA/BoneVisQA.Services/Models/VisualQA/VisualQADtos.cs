@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
@@ -11,7 +12,10 @@ public class VisualQARequestDto
     [DefaultValue("Does the highlighted red region in the image show signs of a fracture?")]
     public string QuestionText { get; set; } = string.Empty;
 
-    [DefaultValue(null)]
+    /// <summary>
+    /// Server-populated image location (multipart upload URL, case media, or session hydrate). Not accepted from JSON clients.
+    /// </summary>
+    [JsonIgnore]
     public string? ImageUrl { get; set; }
 
     /// <summary>
@@ -22,30 +26,35 @@ public class VisualQARequestDto
     public string? Coordinates { get; set; }
 
     /// <summary>
-    /// Optional Case ID. Leave null for NEW personal uploads.
+    /// Optional Case ID for library / ingested study context. Omit for personal raster uploads (multipart <c>/ask</c>).
     /// </summary>
     public Guid? CaseId { get; set; }
 
     /// <summary>
-    /// Optional Annotation ID. Provide for inquiries on existing cases
-    /// (bounding box will be fetched from DB). Leave null for NEW personal uploads.
+    /// Optional Annotation ID. When set with <see cref="CaseId"/>, coordinates and image are loaded from the catalog annotation.
     /// </summary>
     public Guid? AnnotationId { get; set; }
 
     /// <summary>
-    /// Optional ISO 639-1 language tag (e.g. <c>vi</c>, <c>en</c>). The API merges this with query <c>locale</c>,
-    /// multipart field <c>language</c>, <c>Accept-Language</c>, then defaults to Vietnamese.
+    /// ISO 639-1 tag for Gemini response language, resolved server-side from <c>?locale=</c>, <c>Accept-Language</c>, and Vietnamese question heuristic. Not bound from JSON.
     /// </summary>
-    public string? Language { get; set; }
+    [JsonIgnore]
+    public string? ResolvedResponseLanguage { get; set; }
 
     /// <summary>Optional existing visual QA session id. If null, backend creates/finds by context.</summary>
     public Guid? SessionId { get; set; }
 
-    /// <summary>Optional image id for disambiguating image inside a medical case.</summary>
+    /// <summary>Optional medical image row id when a case has multiple images (disambiguates study slice).</summary>
     public Guid? ImageId { get; set; }
 
     /// <summary>Optional FE-generated request id used for optimistic message correlation and future idempotency.</summary>
     public string? ClientRequestId { get; set; }
+
+    /// <summary>
+    /// Optional DICOM metadata JSON from upload (<c>dicomMetadata</c>) or case ingest.
+    /// When omitted, the server loads <c>case_media.dicom_metadata</c> for <see cref="CaseId"/>.
+    /// </summary>
+    public JsonElement? DicomMetadata { get; set; }
 }
 
 public class CitationItemDto
@@ -199,6 +208,27 @@ public class VisualQaThreadDto
 
     /// <summary>When session is <c>Rejected</c>, lecturer/expert rejection text (same source as history <see cref="VisualQaSessionHistoryItemDto.RejectionReason"/>).</summary>
     public string? RejectionReason { get; set; }
+
+    [JsonPropertyName("sessionStatus")]
+    public string? SessionStatus { get; set; }
+
+    /// <summary>Review note from lecturer/expert on <c>visual_qa_sessions.review_feedback</c>.</summary>
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+}
+
+/// <summary>Session-level review summary for student/history/report views.</summary>
+public class VisualQaSessionReportDto
+{
+    public Guid SessionId { get; set; }
+
+    [JsonPropertyName("sessionStatus")]
+    public string SessionStatus { get; set; } = string.Empty;
+
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+
+    public string? RejectionReason { get; set; }
 }
 
 /// <summary>Summary row for Visual QA session history (student).</summary>
@@ -214,8 +244,14 @@ public class VisualQaSessionHistoryItemDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
 
-    /// <summary>When <see cref="Status"/> is <c>Rejected</c>, latest lecturer message content (rejection reason).</summary>
+    /// <summary>When <see cref="Status"/> is <c>Rejected</c>, rejection text from <c>review_feedback</c> (legacy fallback: latest lecturer/expert message).</summary>
     public string? RejectionReason { get; set; }
+
+    [JsonPropertyName("sessionStatus")]
+    public string SessionStatus { get; set; } = string.Empty;
+
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
 }
 
 public class PagedResultDto<T>

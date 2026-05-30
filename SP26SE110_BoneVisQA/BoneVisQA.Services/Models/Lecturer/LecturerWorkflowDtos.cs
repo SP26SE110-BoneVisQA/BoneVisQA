@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using BoneVisQA.Services.Models.VisualQA;
+using BoneVisQA.Services.Validation;
 
 namespace BoneVisQA.Services.Models.Lecturer;
 
@@ -34,6 +37,13 @@ public class LecturerTriageRowDto
     public string QuestionText { get; set; } = string.Empty;
     public string? AnswerText { get; set; }
     public string Status { get; set; } = "Pending";
+
+    [JsonPropertyName("sessionStatus")]
+    public string? SessionStatus { get; set; }
+
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+
     public double? AiConfidenceScore { get; set; }
     public DateTime? AskedAt { get; set; }
     public bool IsEscalated { get; set; }
@@ -57,6 +67,9 @@ public class LecturerTriageRowDto
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
     public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
+
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 
     /// <summary>Same shape as student Visual QA thread turns (per-turn ROI in <see cref="VisualQaTurnDto.QuestionCoordinates"/>).</summary>
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
@@ -92,6 +105,13 @@ public class LectStudentQuestionDetailDto
     public List<string>? DifferentialDiagnoses { get; set; }
     public string? KeyImagingFindings { get; set; }
     public string? AnswerStatus { get; set; }
+
+    [JsonPropertyName("sessionStatus")]
+    public string? SessionStatus { get; set; }
+
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+
     public double? AiConfidenceScore { get; set; }
     public Guid? ReviewedById { get; set; }
     public string? ReviewedByName { get; set; }
@@ -100,6 +120,9 @@ public class LectStudentQuestionDetailDto
     public string? EscalatedByName { get; set; }
     public DateTime? EscalatedAt { get; set; }
     public List<LectQAMessageDto> Messages { get; set; } = new();
+
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 }
 
 public class LectQAMessageDto
@@ -113,11 +136,21 @@ public class LectQAMessageDto
 
 public class RespondToQuestionRequestDto
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(8000, MinimumLength = 3)]
     public string AnswerText { get; set; } = string.Empty;
+
+    [StringLength(2000)]
     public string? StructuredDiagnosis { get; set; }
+
+    [MaxLength(10)]
     public List<string>? DifferentialDiagnoses { get; set; }
+
     public bool Approve { get; set; } = false;
+
     /// <summary>Optional explicit decision. Supported values: approve_and_escalate, approve_finalize, hold.</summary>
+    [RegularExpression("^$|^(approve_and_escalate|approve_finalize|hold)$",
+        ErrorMessage = "Decision must be approve_and_escalate, approve_finalize, or hold.")]
     public string? Decision { get; set; }
 }
 
@@ -148,13 +181,20 @@ public class ClassStudentProgressDto
 
 public class EscalateAnswerRequestDto
 {
+    [StringLength(2000)]
     public string? ReviewNote { get; set; }
+
+    [JsonPropertyName("specialtyId")]
+    [OptionalNonEmptyGuid]
+    public Guid? SpecialtyId { get; set; }
 }
 
 public class RejectAnswerRequestDto
 {
     /// <summary>JSON body uses <c>reason</c> (camelCase); casing-insensitive binders accept it.</summary>
     [JsonPropertyName("reason")]
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(2000, MinimumLength = 3)]
     public string Reason { get; set; } = string.Empty;
 }
 
@@ -184,4 +224,7 @@ public class EscalatedAnswerDto
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
     public IReadOnlyList<CitationItemDto> Citations { get; set; } = Array.Empty<CitationItemDto>();
+
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 }

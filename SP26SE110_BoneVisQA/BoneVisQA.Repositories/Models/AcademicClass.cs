@@ -25,6 +25,7 @@ public partial class AcademicClass
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    /// <summary>Medical specialty focus for routing experts (Spine, Trauma, …).</summary>
     [Column("class_specialty_id")]
     public Guid? ClassSpecialtyId { get; set; }
 

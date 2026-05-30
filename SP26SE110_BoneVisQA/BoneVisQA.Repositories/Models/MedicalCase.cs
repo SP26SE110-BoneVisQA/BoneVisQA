@@ -66,6 +66,20 @@ public partial class MedicalCase
     [Column("version")]
     public string? Version { get; set; } = "1.0.0";
 
+    /// <summary>Expert library gate semantic version (starts at 1.0.0 on first promotion).</summary>
+    [Column("review_version")]
+    public string? ReviewVersion { get; set; }
+
+    [Column("validated_by")]
+    public Guid? ValidatedByUserId { get; set; }
+
+    [Column("validated_at")]
+    public DateTime? ValidatedAt { get; set; }
+
+    /// <summary>Set when a student ingests a personal DICOM study (<c>ingest_purpose=personal</c>).</summary>
+    [Column("owner_student_id")]
+    public Guid? OwnerStudentId { get; set; }
+
     [Column("bone_specialty_id")]
     public Guid? BoneSpecialtyId { get; set; }
 
@@ -131,4 +145,18 @@ public partial class MedicalCase
 
     [InverseProperty("PromotedCase")]
     public virtual ICollection<VisualQASession> PromotedFromSessions { get; set; } = new List<VisualQASession>();
+
+    [ForeignKey("ValidatedByUserId")]
+    [InverseProperty("ValidatedMedicalCases")]
+    public virtual User? ValidatedByUser { get; set; }
+
+    [ForeignKey("OwnerStudentId")]
+    [InverseProperty("OwnedPersonalMedicalCases")]
+    public virtual User? OwnerStudent { get; set; }
+
+    [InverseProperty("Case")]
+    public virtual CaseMetadata? CaseMetadata { get; set; }
+
+    [InverseProperty("Case")]
+    public virtual ICollection<CaseMedia> CaseMedia { get; set; } = new List<CaseMedia>();
 }
