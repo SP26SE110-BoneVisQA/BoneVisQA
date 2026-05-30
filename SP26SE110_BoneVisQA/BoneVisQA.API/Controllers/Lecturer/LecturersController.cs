@@ -1,4 +1,5 @@
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Interfaces.Expert;
@@ -12,6 +13,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BoneVisQA.Services.Interfaces;
 
 namespace BoneVisQA.API.Controllers.Lecturer;
 
@@ -258,7 +260,16 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> CreateQuiz([FromBody] CreateQuizRequestDto request)
     {
         if (!ModelState.IsValid)
-            return BadRequest(ModelState);
+        {
+            var errors = ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray()
+                );
+            _logger.LogWarning("[CreateQuiz] Validation failed: {Errors}", System.Text.Json.JsonSerializer.Serialize(errors));
+            return BadRequest(new { message = "Validation failed", errors });
+        }
 
         try
         {
@@ -269,6 +280,11 @@ public class LecturersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CreateQuiz] Unexpected error creating quiz");
+            return StatusCode(500, new { message = "An error occurred while creating the quiz", detail = ex.Message });
         }
     }
 
@@ -412,7 +428,7 @@ public class LecturersController : ControllerBase
             if (lecturerId == null)
                 return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-            var deleted = await _lecturerService.DeleteQuizAsync(quizId);
+            var deleted = await _lecturerService.DeleteQuizAsync(quizId, lecturerId.Value);
             if (!deleted)
                 return NotFound(new { message = "Quiz does not exist." });
             return NoContent();
@@ -637,7 +653,12 @@ public class LecturersController : ControllerBase
                         OptionB = q.OptionB,
                         OptionC = q.OptionC,
                         OptionD = q.OptionD,
-                        CorrectAnswer = q.CorrectAnswer
+                        CorrectAnswer = q.CorrectAnswer,
+                        Hint = q.Hint,
+                        Explanation = q.Explanation,
+                        CorrectAnswers = q.CorrectAnswers,
+                        AcceptedAnswers = q.AcceptedAnswers,
+                        MaxScore = 10 // Default maxScore for AI-generated questions
                     };
 
                     await _lecturerService.AddQuizQuestionAsync(quiz.Id, questionRequest);
@@ -666,6 +687,19 @@ public class LecturersController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CaseDto>>> GetAllCases()
     {
         var result = await _lecturerService.GetAllCasesAsync();
+        return Ok(result);
+    }
+
+    [HttpGet("cases/paged")]
+    public async Task<ActionResult<PagedResultDTO<CaseDto>>> GetAllCasesPaged(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        if (pageIndex < 1) pageIndex = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _lecturerService.GetAllCasesPagedAsync(pageIndex, pageSize);
         return Ok(result);
     }
 
@@ -1156,5 +1190,90 @@ public class LecturersController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Đã xảy ra lỗi: " + ex.Message });
         }
     }
+
+    #region Teaching Objectives
+
+    /// <summary>
+    /// Lấy Teaching Objectives của lớp học hiện tại (lớp đầu tiên của Lecturer).
+    /// </summary>
+    [HttpGet("class/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> GetTeachingObjectives()
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetTeachingObjectivesAsync(lecturerId.Value);
+        if (result == null)
+            return NotFound(new { message = "Class not found." });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Lấy Teaching Objectives của một lớp cụ thể.
+    /// </summary>
+    [HttpGet("classes/{classId:guid}/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> GetTeachingObjectivesByClass(Guid classId)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var result = await _lecturerService.GetTeachingObjectivesAsync(lecturerId.Value, classId);
+        if (result == null)
+            return NotFound(new { message = "Class not found or you don't have permission." });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Cập nhật Teaching Objectives của lớp học (thêm, sửa, xóa objectives).
+    /// Lecturer có thể confirm/reject Expert suggestions.
+    /// </summary>
+    [HttpPut("classes/{classId:guid}/objectives")]
+    public async Task<ActionResult<TeachingObjectivesDto>> UpdateTeachingObjectives(
+        Guid classId,
+        [FromBody] UpdateTeachingObjectivesRequestDto request)
+    {
+        var lecturerId = GetLecturerId();
+        if (lecturerId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var result = await _lecturerService.UpdateTeachingObjectivesAsync(lecturerId.Value, classId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+    }
+
+    #endregion
+
+    #region Student Progress
+
+    /// <summary>
+    /// Lấy tổng quan tiến độ học tập của tất cả sinh viên trong một lớp.
+    /// </summary>
+    [HttpGet("classes/{classId:guid}/student-progress-summary")]
+    public async Task<ActionResult<StudentProgressSummaryDto>> GetClassStudentProgressSummary(Guid classId)
+    {
+        try
+        {
+            var result = await _lecturerService.GetClassStudentProgressAsync(classId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    #endregion
 
 }

@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
 namespace BoneVisQA.Services.Services.Expert
@@ -88,9 +87,11 @@ namespace BoneVisQA.Services.Services.Expert
             return $"{cleanBase}{path}";
         }
 
-        public async Task<PagedResult<GetQuizDTO>> GetQuizAsync(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetQuizDTO>> GetAllQuizAsync(int pageIndex, int pageSize)
         {
-            var query = _unitOfWork.QuizRepository.GetAllAsync().Result.AsQueryable();
+            var quizzesData = await _unitOfWork.QuizRepository.GetAllAsync();
+
+            var query = quizzesData.AsQueryable();
 
             // Chỉ lấy quiz do Expert tạo (IsAiGenerated = false), không lấy quiz do AI tạo
             query = query.Where(q => !q.IsAiGenerated);
@@ -114,9 +115,33 @@ namespace BoneVisQA.Services.Services.Expert
                     IsAiGenerated = q.IsAiGenerated,
                     Difficulty = q.Difficulty,
                     Classification = q.Classification,
-                    CreatedAt = q.CreatedAt
+                    CreatedAt = q.CreatedAt,
+                    // Deep classification
+                    BoneSpecialtyId = q.BoneSpecialtyId,
+                    PathologyCategoryId = q.PathologyCategoryId,
+                    // Extended classification
+                    TeachingPoints = q.TeachingPoints,
+                    TargetStudentLevel = q.TargetStudentLevel,
+                    // LearningObjectives stored as JSON string - will be parsed in response
+                    LearningObjectives = null, // Parsed separately to avoid LINQ to Entities issues
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 })
                 .ToList();
+
+            // Parse LearningObjectives for each quiz
+            foreach (var quiz in quizzes)
+            {
+                var quizEntity = query.FirstOrDefault(q => q.Id == quiz.Id);
+                if (quizEntity != null && !string.IsNullOrEmpty(quizEntity.LearningObjectives))
+                {
+                    try
+                    {
+                        quiz.LearningObjectives = System.Text.Json.JsonSerializer.Deserialize<List<string>>(quizEntity.LearningObjectives);
+                    }
+                    catch { }
+                }
+            }
 
             return new PagedResult<GetQuizDTO>
             {
@@ -149,7 +174,21 @@ namespace BoneVisQA.Services.Services.Expert
                 Difficulty = request.Difficulty,
                 Classification = request.Classification,
 
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+
+                // Deep classification
+                BoneSpecialtyId = request.BoneSpecialtyId,
+                PathologyCategoryId = request.PathologyCategoryId,
+
+                // Extended classification
+                TeachingPoints = request.TeachingPoints ?? 0,
+                LearningObjectives = request.LearningObjectives != null
+                    ? System.Text.Json.JsonSerializer.Serialize(request.LearningObjectives)
+                    : null,
+                TargetStudentLevel = request.TargetStudentLevel,
+
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive (default to Exam = 1)
+                QuizMode = request.QuizMode ?? 1
             };
 
             await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -162,6 +201,22 @@ namespace BoneVisQA.Services.Services.Expert
                 var expert = await _unitOfWork.UserRepository.GetByIdAsync(request.CreatedByExpertId.Value);
 
                 expertName = expert?.FullName;
+            }
+
+            // Get bone specialty name
+            string? boneSpecialtyName = null;
+            if (quiz.BoneSpecialtyId.HasValue)
+            {
+                var boneSpec = await _unitOfWork.Context.BoneSpecialties.FindAsync(quiz.BoneSpecialtyId.Value);
+                boneSpecialtyName = boneSpec?.Name;
+            }
+
+            // Get pathology category name
+            string? pathologyCategoryName = null;
+            if (quiz.PathologyCategoryId.HasValue)
+            {
+                var pathCat = await _unitOfWork.Context.PathologyCategories.FindAsync(quiz.PathologyCategoryId.Value);
+                pathologyCategoryName = pathCat?.Name;
             }
 
             return new CreateQuizResponseDTO
@@ -182,7 +237,23 @@ namespace BoneVisQA.Services.Services.Expert
                 Difficulty = quiz.Difficulty,
                 Classification = quiz.Classification,
 
-                CreatedAt = quiz.CreatedAt
+                CreatedAt = quiz.CreatedAt,
+
+                // Deep classification
+                BoneSpecialtyId = quiz.BoneSpecialtyId,
+                BoneSpecialtyName = boneSpecialtyName,
+                PathologyCategoryId = quiz.PathologyCategoryId,
+                PathologyCategoryName = pathologyCategoryName,
+
+                // Extended classification
+                TeachingPoints = quiz.TeachingPoints,
+                LearningObjectives = !string.IsNullOrEmpty(quiz.LearningObjectives)
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(quiz.LearningObjectives)
+                    : null,
+                TargetStudentLevel = quiz.TargetStudentLevel,
+
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = quiz.QuizMode
             };
         }
         public async Task<UpdateQuizResponseDTO> UpdateQuizAsync(UpdateQuizRequestDTO update)
@@ -208,9 +279,42 @@ namespace BoneVisQA.Services.Services.Expert
 
             quiz.Classification = update.Classification;
 
+            // Deep classification
+            quiz.BoneSpecialtyId = update.BoneSpecialtyId;
+            quiz.PathologyCategoryId = update.PathologyCategoryId;
+
+            // Extended classification
+            quiz.TeachingPoints = update.TeachingPoints ?? 0;
+            quiz.LearningObjectives = update.LearningObjectives != null
+                ? System.Text.Json.JsonSerializer.Serialize(update.LearningObjectives)
+                : null;
+            quiz.TargetStudentLevel = update.TargetStudentLevel;
+
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            if (update.QuizMode.HasValue)
+            {
+                quiz.QuizMode = update.QuizMode.Value;
+            }
+
             await _unitOfWork.QuizRepository.UpdateAsync(quiz);
 
             await _unitOfWork.SaveAsync();
+
+            // Get bone specialty name
+            string? boneSpecialtyName = null;
+            if (quiz.BoneSpecialtyId.HasValue)
+            {
+                var boneSpec = await _unitOfWork.Context.BoneSpecialties.FindAsync(quiz.BoneSpecialtyId.Value);
+                boneSpecialtyName = boneSpec?.Name;
+            }
+
+            // Get pathology category name
+            string? pathologyCategoryName = null;
+            if (quiz.PathologyCategoryId.HasValue)
+            {
+                var pathCat = await _unitOfWork.Context.PathologyCategories.FindAsync(quiz.PathologyCategoryId.Value);
+                pathologyCategoryName = pathCat?.Name;
+            }
 
             return new UpdateQuizResponseDTO
             {
@@ -222,7 +326,14 @@ namespace BoneVisQA.Services.Services.Expert
                 PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
                 Difficulty = quiz.Difficulty,
                 Classification = quiz.Classification,
-                CreatedAt = quiz.CreatedAt
+                CreatedAt = quiz.CreatedAt,
+                // Deep classification
+                BoneSpecialtyId = quiz.BoneSpecialtyId,
+                BoneSpecialtyName = boneSpecialtyName,
+                PathologyCategoryId = quiz.PathologyCategoryId,
+                PathologyCategoryName = pathologyCategoryName,
+                // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = quiz.QuizMode
             };
         }
         public async Task<bool> DeleteQuizAsync(Guid quizId)
@@ -266,7 +377,7 @@ namespace BoneVisQA.Services.Services.Expert
         }
 
         //================================================================================================================
-        public async Task<List<GetQuizQuestionDTO>> GetQuizQuestionDTO(Guid quizId)
+        public async Task<List<GetQuizQuestionDTO>> GetQuizQuestionAsync(Guid quizId)
         {
             var quiz = await _unitOfWork.QuizRepository
                 .GetByIdAsync(quizId);
@@ -307,7 +418,9 @@ namespace BoneVisQA.Services.Services.Expert
                     OptionD = q.OptionD,
 
                     CorrectAnswer = q.CorrectAnswer,
-                    ImageUrl = ResolveImageUrl(q.ImageUrl)
+                    ImageUrl = ResolveImageUrl(q.ImageUrl),
+                    Hint = q.Hint,
+                    Explanation = q.Explanation
                 });
             }
 
@@ -341,7 +454,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionC = request.OptionC,
                 OptionD = request.OptionD,
                 CorrectAnswer = request.CorrectAnswer,
-                ImageUrl = request.ImageUrl  // Lưu URL ảnh câu hỏi
+                ImageUrl = request.ImageUrl,  // Lưu URL ảnh câu hỏi
+                Hint = request.Hint,         // Lưu Hint
+                Explanation = request.Explanation  // Lưu Explanation
             };
 
             await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -361,7 +476,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
                 CorrectAnswer = question.CorrectAnswer,
-                ImageUrl = ResolveImageUrl(question.ImageUrl)
+                ImageUrl = ResolveImageUrl(question.ImageUrl),
+                Hint = question.Hint,
+                Explanation = question.Explanation
             };
         }
         public async Task<UpdateQuizQuestionResponseDTO> UpdateQuizQuestionAsync(UpdateQuizQuestionRequestDTO update)
@@ -405,6 +522,8 @@ namespace BoneVisQA.Services.Services.Expert
 
             question.CorrectAnswer = update.CorrectAnswer;
             question.ImageUrl = update.ImageUrl;
+            question.Hint = update.Hint;
+            question.Explanation = update.Explanation;
 
             await _unitOfWork.QuizQuestionRepository.UpdateAsync(question);
 
@@ -432,7 +551,9 @@ namespace BoneVisQA.Services.Services.Expert
                 OptionB = question.OptionB,
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
-                ImageUrl = ResolveImageUrl(question.ImageUrl)
+                ImageUrl = ResolveImageUrl(question.ImageUrl),
+                Hint = question.Hint,
+                Explanation = question.Explanation
             };
         }
         public async Task<bool> DeleteQuizQuestionAsync(Guid questionId)
@@ -452,7 +573,7 @@ namespace BoneVisQA.Services.Services.Expert
 
 
         //================================================================================================================
-        public async Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizDTO(
+        public async Task<PagedResult<ClassQuizSessionDTO>> GetAssignQuizAsync(
     int pageIndex,
     int pageSize)
         {
@@ -608,21 +729,41 @@ namespace BoneVisQA.Services.Services.Expert
 
             int totalQuestions = questions.Count;
 
-            // ✅ FIX: Tính điểm theo ScoreAwarded (bao gồm essay đã chấm)
-            var totalMaxScore = questions.Sum(q => q.MaxScore);
-            var totalScoreAwarded = studentAnswers
-                .Where(a => a.ScoreAwarded.HasValue)
-                .Sum(a => a.ScoreAwarded.Value);
-
-            float score = totalMaxScore == 0 ? 0 :
-                (float)Math.Round((double)totalScoreAwarded / totalMaxScore * 100, 1);
+            // Total quiz score always = 100, divided equally among all questions
+            var pointsPerQuestion = totalQuestions > 0 ? 100f / totalQuestions : 0;
+            
+            // Calculate earned points: MC = full points if correct, 0 if wrong
+            // Essay = full points if graded, 0 if not yet graded
+            float earnedPoints = 0;
+            foreach (var answer in studentAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += (float)(answer.ScoreAwarded ?? 0);
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+            
+            // score = earnedPoints (each point is already worth 1 point since pointsPerQuestion = 100/total)
+            float score = (float)earnedPoints;
+            
+            // Clamp score to 0-100 range
+            score = Math.Max(0, Math.Min(100, score));
 
             // Số câu đúng (chỉ MCQ/TF) - vẫn giữ cho thống kê
             int correctAnswers = studentAnswers.Count(a => a.IsCorrect == true);
 
-            // Kiểm tra xem có essay nào chưa chấm không
-            int ungradedEssayCount = studentAnswers.Count(a =>
-                a.Question.Type == QuestionType.Essay && !a.IsGraded);
+            // Kiểm tra xem có essay nào chưa chấm không (đếm theo questionId distinct để tránh trùng lặp)
+            int ungradedEssayCount = studentAnswers
+                .Where(a => a.Question.Type == QuestionType.Essay && !a.IsGraded)
+                .Select(a => a.QuestionId)
+                .Distinct()
+                .Count();
 
             int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
             bool isPassed = normalizedPassingScore.HasValue && score >= normalizedPassingScore.Value;
@@ -649,7 +790,7 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<PagedResult<GetClassDTO>> GetAllClass(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetClassDTO>> GetAllClassAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.AcademicClassRepository.GetQueryable();
 
@@ -674,7 +815,7 @@ namespace BoneVisQA.Services.Services.Expert
                 PageSize = pageSize
             };
         }
-        public async Task<PagedResult<GetExpertDTO>> GetAllExpert(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetExpertDTO>> GetAllExpertAsync(int pageIndex, int pageSize)
         {
             var query = _unitOfWork.UserRepository
                 .GetQueryable()
@@ -794,7 +935,9 @@ namespace BoneVisQA.Services.Services.Expert
                     ExpertName = q.CreatedByExpert != null ? q.CreatedByExpert.FullName : null,
                     // QUAN TRỌNG: Đếm số câu hỏi trong quiz
                     // Đây là số câu hỏi mà Student sẽ nhận được khi làm quiz
-                    QuestionCount = q.QuizQuestions.Count()
+                    QuestionCount = q.QuizQuestions.Count(),
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 })
                 .ToListAsync();
 
@@ -925,6 +1068,7 @@ namespace BoneVisQA.Services.Services.Expert
                 throw new InvalidOperationException("Chỉ có thể copy quiz từ thư viện Expert.");
 
             // Tạo quiz mới (không có CreatedByExpertId để có thể edit)
+            // Set CreatedByLecturerId để track lecturer nào đã copy quiz này
             var newQuiz = new Quiz
             {
                 Id = Guid.NewGuid(),
@@ -935,11 +1079,14 @@ namespace BoneVisQA.Services.Services.Expert
                 IsAiGenerated = false,
                 IsVerifiedCurriculum = false,
                 CreatedByExpertId = null, // Quan trọng: Lecturer có thể edit
+                CreatedByLecturerId = lecturerId, // Track lecturer đã copy quiz
                 OpenTime = null,
                 CloseTime = null,
                 TimeLimit = originalQuiz.TimeLimit,
                 PassingScore = originalQuiz.PassingScore,
-                CreatedAt = now
+                CreatedAt = now,
+                // Copy QuizMode from original quiz: 1=Exam, 2=Practice, 3=Adaptive
+                QuizMode = originalQuiz.QuizMode
             };
 
             await _unitOfWork.QuizRepository.AddAsync(newQuiz);
@@ -965,7 +1112,7 @@ namespace BoneVisQA.Services.Services.Expert
                     CorrectAnswer = originalQ.CorrectAnswer,
                     ImageUrl = originalQ.ImageUrl,
                     CaseId = originalQ.CaseId,
-                    MaxScore = originalQ.MaxScore,
+                    MaxScore = 1, // Each question is worth 1 point
                     ReferenceAnswer = originalQ.ReferenceAnswer
                 };
 
@@ -983,6 +1130,102 @@ namespace BoneVisQA.Services.Services.Expert
                 QuestionCount = originalQuestions.Count,
                 CreatedAt = now
             };
+        }
+
+        //================================================================================================================
+        // Deep Classification - Lấy dữ liệu cho dropdown trong Create/Edit Quiz
+        //================================================================================================================
+
+        /// <summary>
+        /// Lấy danh sách Bone Specialty dạng tree (hierarchical) để hiển thị dropdown.
+        /// </summary>
+        public async Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesTreeAsync()
+        {
+            var all = await _unitOfWork.Context.BoneSpecialties
+                .Where(bs => bs.IsActive)
+                .OrderBy(bs => bs.DisplayOrder)
+                .ThenBy(bs => bs.Name)
+                .ToListAsync();
+
+            return BuildBoneSpecialtyTree(all, null, 0);
+        }
+
+        /// <summary>
+        /// Lấy danh sách Bone Specialty dạng flat list (không có children) cho Student Practice Quiz.
+        /// </summary>
+        public async Task<List<BoneSpecialtyTreeDto>> GetBoneSpecialtiesFlatAsync()
+        {
+            var all = await _unitOfWork.Context.BoneSpecialties
+                .Where(bs => bs.IsActive)
+                .OrderBy(bs => bs.DisplayOrder)
+                .ThenBy(bs => bs.Name)
+                .ToListAsync();
+
+            return all.Select(bs => new BoneSpecialtyTreeDto
+            {
+                Id = bs.Id,
+                Code = bs.Code,
+                Name = bs.Name,
+                ParentId = bs.ParentId,
+                ParentName = bs.Parent?.Name,
+                Description = bs.Description,
+                DisplayOrder = bs.DisplayOrder,
+                IsActive = bs.IsActive,
+                Level = 0,
+                Children = new List<BoneSpecialtyTreeDto>()
+            }).ToList();
+        }
+
+        private List<BoneSpecialtyTreeDto> BuildBoneSpecialtyTree(List<Repositories.Models.BoneSpecialty> all, Guid? parentId, int level)
+        {
+            var result = new List<BoneSpecialtyTreeDto>();
+
+            var children = all.Where(bs => bs.ParentId == parentId).ToList();
+
+            foreach (var item in children)
+            {
+                var dto = new BoneSpecialtyTreeDto
+                {
+                    Id = item.Id,
+                    Code = item.Code,
+                    Name = item.Name,
+                    ParentId = item.ParentId,
+                    ParentName = item.Parent?.Name,
+                    Description = item.Description,
+                    DisplayOrder = item.DisplayOrder,
+                    IsActive = item.IsActive,
+                    Level = level,
+                    Children = BuildBoneSpecialtyTree(all, item.Id, level + 1)
+                };
+                result.Add(dto);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Lấy danh sách Pathology Category dạng flat list để hiển thị dropdown.
+        /// </summary>
+        public async Task<List<PathologyCategorySimpleDto>> GetPathologyCategoriesAsync()
+        {
+            var categories = await _unitOfWork.Context.PathologyCategories
+                .Include(pc => pc.BoneSpecialty)
+                .Where(pc => pc.IsActive)
+                .OrderBy(pc => pc.DisplayOrder)
+                .ThenBy(pc => pc.Name)
+                .ToListAsync();
+
+            return categories.Select(pc => new PathologyCategorySimpleDto
+            {
+                Id = pc.Id,
+                Code = pc.Code,
+                Name = pc.Name,
+                BoneSpecialtyId = pc.BoneSpecialtyId,
+                BoneSpecialtyName = pc.BoneSpecialty?.Name,
+                Description = pc.Description,
+                DisplayOrder = pc.DisplayOrder,
+                IsActive = pc.IsActive
+            }).ToList();
         }
     }
 }

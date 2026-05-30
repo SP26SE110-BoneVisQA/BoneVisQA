@@ -1571,8 +1571,12 @@ public class StudentService : IStudentService
         var sessions = await _studentRepository.GetQuizzesWithSessionForStudentAsync(studentId, utcNow);
 
         var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
-        var attempts = await _unitOfWork.QuizAttemptRepository
-            .FindByCondition(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
+        
+        // Load attempts WITH answers and questions to recalculate score dynamically
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .ToListAsync();
 
         var questionCounts = await _unitOfWork.Context.QuizQuestions
@@ -1592,6 +1596,41 @@ public class StudentService : IStudentService
         {
             var attempt = attempts.FirstOrDefault(a => a.QuizId == s.QuizId);
             quizzesWithCreatedAt.TryGetValue(s.QuizId, out var createdAt);
+            // AnswersReleased = true khi lecturer đã release đáp án HOẶC quiz đã đóng
+            var answersReleased = s.ReleaseAnswersAt.HasValue ||
+                (s.CloseTime.HasValue && s.CloseTime.Value < utcNow);
+
+            // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+            double? calculatedScore = null;
+            if (attempt != null && attempt.CompletedAt.HasValue)
+            {
+                var totalQuestions = countByQuiz.GetValueOrDefault(s.QuizId);
+                var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+                
+                decimal earnedPoints = 0;
+                foreach (var answer in attempt.StudentQuizAnswers)
+                {
+                    if (answer.Question?.Type == QuestionType.Essay)
+                    {
+                        // Essay: add actual awarded points (can be partial credit)
+                        earnedPoints += answer.ScoreAwarded ?? 0;
+                    }
+                    else
+                    {
+                        // MC/TF/etc: full points if correct, 0 if wrong
+                        earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                    }
+                }
+                
+                calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+                
+                // DEBUG: Log score calculation
+                _logger.LogInformation(
+                    "[SCORE DEBUG] QuizId={QuizId}, TotalQuestions={TotalQ}, PointsPerQ={PointsPerQ}, " +
+                    "EarnedPoints={EarnedPoints}, CalculatedScore={CalculatedScore}, StoredScore={StoredScore}",
+                    s.QuizId, totalQuestions, pointsPerQuestion, earnedPoints, calculatedScore, attempt.Score);
+            }
+
             return new QuizListItemDto
             {
                 QuizId = s.QuizId,
@@ -1604,9 +1643,11 @@ public class StudentService : IStudentService
                 PassingScore = s.PassingScore,
                 TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
-                Score = attempt?.Score,
+                Score = calculatedScore,
                 AttemptId = attempt?.Id,
-                CreatedAt = createdAt
+                CreatedAt = createdAt,
+                AnswersReleased = answersReleased,
+                QuizMode = s.QuizMode
             };
         })
         .OrderByDescending(q => q.CreatedAt.HasValue)  // Items with CreatedAt come first
@@ -1650,7 +1691,15 @@ public class StudentService : IStudentService
         var effectiveOpenTime = classSession?.OpenTime ?? quiz.OpenTime;
         var effectiveCloseTime = classSession?.CloseTime ?? quiz.CloseTime;
 
-        if (effectiveOpenTime.HasValue && effectiveOpenTime.Value > utcNow)
+        // FIX: If no open time is set (both classSession and quiz have null), quiz is NOT accessible
+        // This prevents students from taking quizzes that haven't been properly scheduled
+        if (!effectiveOpenTime.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Quiz is not yet available. The lecturer has not set an open time for this quiz.");
+        }
+
+        if (effectiveOpenTime.Value > utcNow)
         {
             throw new InvalidOperationException(
                 $"Quiz is not open yet. Open time: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (Vietnam time).");
@@ -1706,6 +1755,10 @@ public class StudentService : IStudentService
         }
 
         var shuffleQuestions = classSession?.ShuffleQuestions ?? false;
+        var shuffleOptions = classSession?.ShuffleOptions ?? false;
+        var quizMode = (classSession?.QuizMode ?? quiz.QuizMode);
+        var isPracticeMode = quizMode == 2 || quiz.IsAiGenerated; // 2 = Practice mode, AI quizzes are always practice
+        var allowHints = isPracticeMode;
 
         var questionList = quiz.QuizQuestions.AsEnumerable();
 
@@ -1719,6 +1772,28 @@ public class StudentService : IStudentService
                     .OrderBy(mi => mi.CreatedAt ?? DateTime.MaxValue)
                     .Select(mi => mi.ImageUrl)
                     .FirstOrDefault();
+
+                // Shuffle options if enabled
+                string? optA = q.OptionA;
+                string? optB = q.OptionB;
+                string? optC = q.OptionC;
+                string? optD = q.OptionD;
+
+                if (shuffleOptions && (q.Type == QuestionType.MultipleChoice || q.Type == QuestionType.MultiSelect))
+                {
+                    var options = new List<(string key, string value)>();
+                    if (!string.IsNullOrWhiteSpace(q.OptionA)) options.Add(("A", q.OptionA));
+                    if (!string.IsNullOrWhiteSpace(q.OptionB)) options.Add(("B", q.OptionB));
+                    if (!string.IsNullOrWhiteSpace(q.OptionC)) options.Add(("C", q.OptionC));
+                    if (!string.IsNullOrWhiteSpace(q.OptionD)) options.Add(("D", q.OptionD));
+
+                    var shuffled = options.OrderBy(_ => Random.Shared.Next()).ToList();
+                    optA = shuffled.ElementAtOrDefault(0).value;
+                    optB = shuffled.ElementAtOrDefault(1).value;
+                    optC = shuffled.ElementAtOrDefault(2).value;
+                    optD = shuffled.ElementAtOrDefault(3).value;
+                }
+
                 return new StudentQuizQuestionDto
                 {
                     QuestionId = q.Id,
@@ -1726,11 +1801,18 @@ public class StudentService : IStudentService
                     Type = q.Type?.ToString(),
                     CaseId = q.CaseId,
                     CaseTitle = q.Case?.Title,
-                    OptionA = q.OptionA,
-                    OptionB = q.OptionB,
-                    OptionC = q.OptionC,
-                    OptionD = q.OptionD,
+                    OptionA = optA,
+                    OptionB = optB,
+                    OptionC = optC,
+                    OptionD = optD,
                     ImageUrl = !string.IsNullOrWhiteSpace(q.ImageUrl) ? q.ImageUrl : caseImageUrl,
+                    Hint = allowHints ? q.Hint : null,
+                    HintAvailable = allowHints && !string.IsNullOrWhiteSpace(q.Hint),
+                    CorrectAnswers = q.CorrectAnswers,
+                    AcceptedAnswers = q.AcceptedAnswers,
+                    // Practice Mode: hiển thị đáp án đúng và giải thích sau khi nộp bài
+                    CorrectAnswer = isPracticeMode ? q.CorrectAnswer : null,
+                    Explanation = isPracticeMode ? q.Explanation : null
                 };
             })
             .ToList();
@@ -1741,8 +1823,10 @@ public class StudentService : IStudentService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
+            QuizMode = quizMode,
             TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
             CloseTime = classSession?.CloseTime ?? quiz.CloseTime,
+            AllowHints = allowHints,
             Questions = questionDtos
         };
     }
@@ -1788,11 +1872,13 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == attempt.QuizId &&
                 classIds.Contains(cqs.ClassId) &&
-                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                // FIX: Quiz must have an open time set and it must be in the past
+                (cqs.OpenTime ?? cqs.Quiz!.OpenTime) != null &&
+                (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow &&
                 ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         if (session == null)
-            throw new InvalidOperationException("Quiz attempt time has expired.");
+            throw new InvalidOperationException("Quiz is not available. The lecturer has not set an open time, or the quiz has expired.");
 
         var existing = await _unitOfWork.StudentQuizAnswerRepository
             .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId
@@ -1800,23 +1886,58 @@ public class StudentService : IStudentService
         if (existing != null)
             throw new InvalidOperationException("This question has already been answered.");
 
-        bool isCorrect = string.Equals(
-            submit.StudentAnswer?.Trim(),
-            question.CorrectAnswer?.Trim(),
-            StringComparison.OrdinalIgnoreCase
-        );
+        // Calculate points per question: total quiz score always = 100, divided equally among all questions
+        var totalQuestions = await _unitOfWork.Context.QuizQuestions
+            .CountAsync(q => q.QuizId == attempt.QuizId);
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+        bool isCorrect = false;
+        string? studentAnswerForDb = null;
+
+        // Handle different question types
+        if (question.Type == QuestionType.MultiSelect)
+        {
+            // MultiSelect: compare JSON arrays
+            isCorrect = CheckMultiSelectAnswer(submit.StudentAnswer, question.CorrectAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
+        }
+        else if (question.Type == QuestionType.FillInBlank)
+        {
+            // FillInBlank: check against accepted answers (case-insensitive)
+            isCorrect = CheckFillInBlankAnswer(submit.StudentAnswer, question.AcceptedAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
+        }
+        else
+        {
+            // MultipleChoice, TrueFalse, Essay: standard string comparison
+            isCorrect = string.Equals(
+                submit.StudentAnswer?.Trim(),
+                question.CorrectAnswer?.Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+            studentAnswerForDb = submit.StudentAnswer;
+        }
 
         var studentQuizAnswer = new StudentQuizAnswer
         {
             Id = Guid.NewGuid(),
             AttemptId = submit.AttemptId,
             QuestionId = submit.QuestionId,
-            StudentAnswer = submit.StudentAnswer,
-            IsCorrect = isCorrect
+            StudentAnswer = studentAnswerForDb,
+            IsCorrect = isCorrect,
+            // Calculate score: each question worth 100/totalQuestions points
+            ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
+            IsGraded = true // Auto-graded
         };
 
         await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
         await _unitOfWork.SaveAsync();
+
+        // Determine if hints/explanations can be shown (practice mode)
+        var quizModeVal = session?.QuizMode ?? quiz.QuizMode;
+        var isPracticeMode = quizModeVal == 2; // 2 = Practice mode
+        var showCorrectAnswer = isPracticeMode;
+        var showExplanation = isPracticeMode;
 
         return new StudentSubmitQuestionResponseDto
         {
@@ -1828,10 +1949,68 @@ public class StudentService : IStudentService
             OptionD = question.OptionD,
             StudentAnswer = submit.StudentAnswer?.ToUpper(),
             StudentAnswerText = GetOptionText(question, submit.StudentAnswer),
-            CorrectAnswer = question.CorrectAnswer,
-            CorrectAnswerText = GetOptionText(question, question.CorrectAnswer),
+            CorrectAnswer = showCorrectAnswer ? question.CorrectAnswer : null,
+            CorrectAnswerText = showCorrectAnswer ? GetOptionText(question, question.CorrectAnswer) : null,
             IsCorrect = isCorrect
         };
+    }
+
+    /// <summary>
+    /// Check if the student's multi-select answer matches the correct answers.
+    /// </summary>
+    private bool CheckMultiSelectAnswer(string? studentAnswer, string? correctAnswersJson)
+    {
+        if (string.IsNullOrWhiteSpace(studentAnswer) || string.IsNullOrWhiteSpace(correctAnswersJson))
+            return false;
+
+        try
+        {
+            var studentAnswers = JsonSerializer.Deserialize<List<string>>(studentAnswer)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .OrderBy(a => a)
+                .ToList() ?? new List<string>();
+
+            var correctAnswers = JsonSerializer.Deserialize<List<string>>(correctAnswersJson)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .OrderBy(a => a)
+                .ToList() ?? new List<string>();
+
+            return studentAnswers.SequenceEqual(correctAnswers);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if the student's fill-in-blank answer matches any accepted answer (case-insensitive).
+    /// </summary>
+    private bool CheckFillInBlankAnswer(string? studentAnswer, string? acceptedAnswersJson)
+    {
+        if (string.IsNullOrWhiteSpace(studentAnswer))
+            return false;
+
+        var normalizedStudent = studentAnswer.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(acceptedAnswersJson))
+        {
+            // Fallback to correct_answer field
+            return false; // Would need correct_answer to be set
+        }
+
+        try
+        {
+            var acceptedAnswers = JsonSerializer.Deserialize<List<string>>(acceptedAnswersJson)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .ToList() ?? new List<string>();
+
+            return acceptedAnswers.Contains(normalizedStudent);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     //===================== phan tran =====================   

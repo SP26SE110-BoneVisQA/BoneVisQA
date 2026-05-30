@@ -42,6 +42,14 @@ namespace BoneVisQA.Services.Models.Admin
         public Guid? ClassSpecialtyId { get; set; }
 
         public string? ClassSpecialtyName { get; set; }
+
+        public string? ClassSpecialtyCode { get; set; }
+
+        public string? FocusLevel { get; set; }
+
+        public string? TargetStudentLevel { get; set; }
+
+        public string? TargetPathologyCategories { get; set; }
     }
     public class CreateClassManagementDTO
     {
@@ -55,6 +63,12 @@ namespace BoneVisQA.Services.Models.Admin
 
         /// <summary>Required: class medical specialty for expert routing.</summary>
         public Guid ClassSpecialtyId { get; set; }
+
+        public string? FocusLevel { get; set; }
+
+        public string? TargetStudentLevel { get; set; }
+
+        public List<Guid>? TargetPathologyCategoryIds { get; set; }
     }
     public class UpdateClassManagementDTO
     {
@@ -68,6 +82,12 @@ namespace BoneVisQA.Services.Models.Admin
 
         /// <summary>Required: class medical specialty for expert routing.</summary>
         public Guid ClassSpecialtyId { get; set; }
+
+        public string? FocusLevel { get; set; }
+
+        public string? TargetStudentLevel { get; set; }
+
+        public List<Guid>? TargetPathologyCategoryIds { get; set; }
     }
 
     //=======================================================  ASSIGN CLASS  ===================================================

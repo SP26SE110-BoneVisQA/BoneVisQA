@@ -28,6 +28,8 @@ using BoneVisQA.Services.Services.Expert;
 using BoneVisQA.Services.Services.Lecturer;
 using BoneVisQA.Services.Services.Storage;
 using BoneVisQA.Services.Services.Student;
+using BoneVisQA.Services.Services.Analytics;
+using BoneVisQA.Services.Services.QuizExtensions;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
@@ -46,10 +48,51 @@ builder.Services.AddHttpContextAccessor();
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
 // Study archives (.zip/.rar) may be large; keep in sync with StudyArchiveIngestHelper.StudyArchiveMaxBytes.
 const long maxUploadBodyBytes = 209715200; // 200 MB
-builder.WebHost.ConfigureKestrel(options =>
+
+// In Docker/Production: use HTTP only (no dev cert available)
+// In Development: optionally use HTTPS with dev certificate
+if (builder.Environment.IsDevelopment())
 {
-    options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
-});
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+
+        // HTTPS on localhost:5047 using ASP.NET Core dev certificate
+        options.ListenLocalhost(5047, listenOptions =>
+        {
+            listenOptions.UseHttps();
+        });
+    });
+}
+else
+{
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
+        // Production: respect PORT env variable (Render, Azure, etc.)
+        // Default to 8080 (Render's default) if PORT is not set
+        var port = Environment.GetEnvironmentVariable("PORT");
+        if (!string.IsNullOrEmpty(port) && int.TryParse(port, out var portNum))
+        {
+            options.ListenAnyIP(portNum);
+        }
+        else
+        {
+            // Render default port is 10000, but 8080 is common for Node-like services
+            // Check if ASPNETCORE_URLS is set
+            var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+            if (!string.IsNullOrEmpty(urls))
+            {
+                // ASPNETCORE_URLS is already set by Dockerfile, let Kestrel use defaults
+                options.ListenAnyIP(8080);
+            }
+            else
+            {
+                options.ListenAnyIP(8080);
+            }
+        }
+    });
+}
 
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -78,7 +121,7 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
@@ -91,15 +134,29 @@ builder.Services.AddCors(options =>
                          "https://localhost:3000",
                          "http://localhost:5173",
                          "https://localhost:5173",
-                         "http://localhost:5046"
+                         "https://localhost:5047"
                      })
                 originSet.Add(o);
         }
 
-        policy.WithOrigins(originSet.ToArray())
+        // Note: AllowCredentials is NOT used because:
+        // 1. Authentication uses JWT Bearer tokens in Authorization headers (not cookies)
+        // 2. SetIsOriginAllowed with AllowCredentials causes preflight failures per CORS spec
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+    
+    // Separate policy for SignalR
+    // SignalR requires AllowCredentials, but WithOrigins + AllowCredentials can fail preflight.
+    // Use SetIsOriginAllowed for flexibility while maintaining security through other means (JWT Bearer auth).
+    options.AddPolicy("AllowAllForSignalR", policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowCredentials()
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
@@ -354,6 +411,9 @@ builder.Services.AddScoped<ILecturerAssignmentService, LecturerAssignmentService
 builder.Services.AddScoped<ILecturerDashboardService, LecturerDashboardService>();
 builder.Services.AddScoped<ILecturerTriageService, LecturerTriageService>();
 builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
+builder.Services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
+builder.Services.AddScoped<ILecturerReportService, LecturerReportService>();
+builder.Services.AddScoped<ILecturerGradeBookService, LecturerGradeBookService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
@@ -361,6 +421,9 @@ builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
+builder.Services.AddScoped<IAdminClassDashboardService, AdminClassDashboardService>();
+builder.Services.AddScoped<IClassificationAnalyticsService, ClassificationAnalyticsService>();
+builder.Services.AddScoped<IClassClassificationService, ClassClassificationService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<IDocumentService>(sp => sp.GetRequiredService<DocumentService>());
 builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(client =>
@@ -369,6 +432,7 @@ builder.Services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>(
     client.Timeout = TimeSpan.FromMinutes(60);
 });
 
+builder.Services.AddScoped<ISystemLogService, SystemLogService>();
 builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
@@ -381,6 +445,26 @@ builder.Services.AddScoped<IDocumentQualityService, DocumentQualityService>();
 builder.Services.AddScoped<IDocumentManagementService, DocumentManagementService>();
 builder.Services.AddScoped<ISystemMonitoringService, SystemMonitoringService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IBoneSpecialtyService, BoneSpecialtyService>();
+builder.Services.AddScoped<IPathologyCategoryService, PathologyCategoryService>();
+
+// Learning Analytics Services
+builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddScoped<LecturerAnalyticsService>();
+
+// Quiz Extensions Services
+builder.Services.AddScoped<QuizReviewService>();
+builder.Services.AddScoped<SpacedRepetitionService>();
+builder.Services.AddScoped<AdaptiveQuizService>();
+
+// Flashcard Services
+builder.Services.AddScoped<IFlashcardService, FlashcardService>();
+builder.Services.AddScoped<IFlashcardGeneratorService, FlashcardGeneratorService>();
+builder.Services.AddScoped<IFlashcardRecommendationService, FlashcardRecommendationService>();
+
+// AI Quiz Services
+builder.Services.AddScoped<IQuizHintService, QuizHintService>();
+
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
 builder.Services.AddHostedService<DocumentIndexingBackgroundService>();
@@ -411,7 +495,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications")
-   .RequireCors("AllowAll")
+   .RequireCors("AllowAllForSignalR")
    .RequireAuthorization();
 
 // Ensure uploads directory exists before using PhysicalFileProvider

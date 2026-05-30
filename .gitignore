@@ -87,6 +87,7 @@ dataset.rar
 
 # Uploaded files (user uploads, images, etc.)
 wwwroot/uploads/
+**/uploads/
 
 # Python AI microservice local env (Postgres URL, HF token, etc.)
 BoneVisQA.AI/.env

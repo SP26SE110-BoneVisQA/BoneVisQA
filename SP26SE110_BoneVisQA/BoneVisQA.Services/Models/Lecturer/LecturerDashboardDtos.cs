@@ -10,6 +10,9 @@ public class LecturerDashboardStatsDto
     public int EscalatedItems { get; set; }
     public int PendingReviews { get; set; }
     public double? AverageQuizScore { get; set; }
+    public int TotalQuizAttempts { get; set; }
+    public double? AverageTimeMinutes { get; set; }
+    public double? ParticipationTrendPercent { get; set; }
 }
 
 public class ClassLeaderboardItemDto

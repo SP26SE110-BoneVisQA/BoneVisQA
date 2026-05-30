@@ -30,6 +30,23 @@ public partial class QuizAttempt
     [Column("completed_at")]
     public DateTime? CompletedAt { get; set; }
 
+    // Quiz Extensions
+    [Column("difficulty_level")]
+    [MaxLength(20)]
+    public string DifficultyLevel { get; set; } = "Medium";
+
+    [Column("next_review_date")]
+    public DateOnly? NextReviewDate { get; set; }
+
+    [Column("ease_factor")]
+    public decimal EaseFactor { get; set; } = 2.5m;
+
+    [Column("review_interval")]
+    public int ReviewInterval { get; set; } = 1;
+
+    [Column("current_question_index")]
+    public int CurrentQuestionIndex { get; set; } = 0;
+
     [ForeignKey("QuizId")]
     [InverseProperty("QuizAttempts")]
     public virtual Quiz Quiz { get; set; } = null!;
@@ -40,4 +57,7 @@ public partial class QuizAttempt
 
     [InverseProperty("Attempt")]
     public virtual ICollection<StudentQuizAnswer> StudentQuizAnswers { get; set; } = new List<StudentQuizAnswer>();
+
+    [InverseProperty("Attempt")]
+    public virtual ICollection<QuizReviewItem> QuizReviewItems { get; set; } = new List<QuizReviewItem>();
 }

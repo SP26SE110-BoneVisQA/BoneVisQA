@@ -21,6 +21,10 @@ public class QuizListItemDto
     public Guid? AttemptId { get; set; }
     /// <summary>Thời gian tạo quiz — dùng để sắp xếp theo quiz mới nhất.</summary>
     public DateTime? CreatedAt { get; set; }
+    /// <summary>True nếu lecturer đã release đáp án hoặc quiz đã đóng.</summary>
+    public bool AnswersReleased { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive.</summary>
+    public int? QuizMode { get; set; }
 }
 
 /// <summary>
@@ -42,17 +46,30 @@ public class StudentQuizQuestionDto
 {
     public Guid QuestionId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
+    /// <summary>Question type: MultipleChoice, TrueFalse, MultiSelect, FillInBlank, Essay</summary>
     public string? Type { get; set; }
     public Guid? CaseId { get; set; }
     /// <summary>Tên case (nếu câu hỏi gắn case) — hiển thị trên UI student.</summary>
     public string? CaseTitle { get; set; }
+    /// <summary>Options for MC, TrueFalse, MultiSelect - may be shuffled</summary>
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    /// <summary>Hint - only shown in practice mode</summary>
+    public string? Hint { get; set; }
     public string? ImageUrl { get; set; }
     public int MaxScore { get; set; } = 10;
-    public string? ReferenceAnswer { get; set; } // For essay, shown only after grading if configured
+    /// <summary>Correct answers for MultiSelect - JSON array like ["A", "C"]</summary>
+    public string? CorrectAnswers { get; set; }
+    /// <summary>Accepted answers for FillInBlank - JSON array</summary>
+    public string? AcceptedAnswers { get; set; }
+    /// <summary>Whether hints are allowed (based on quiz mode)</summary>
+    public bool HintAvailable { get; set; }
+    /// <summary>Giải thích đáp án đúng - hiển thị sau khi nộp bài (Practice Mode)</summary>
+    public string? Explanation { get; set; }
+    /// <summary>Đáp án đúng - hiển thị sau khi nộp bài (Practice Mode)</summary>
+    public string? CorrectAnswer { get; set; }
 }
 
 public class QuizSessionDto
@@ -61,10 +78,14 @@ public class QuizSessionDto
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Topic { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int? QuizMode { get; set; }
     /// <summary>Thời giới hạn làm bài (phút), từ quizzes.time_limit — FE dùng cho đồng hồ đếm ngược.</summary>
     public int? TimeLimit { get; set; }
     /// <summary>Thời gian đóng quiz — FE dùng để auto submit khi đến giờ đóng.</summary>
     public DateTime? CloseTime { get; set; }
+    /// <summary>Whether hints are available for this quiz session</summary>
+    public bool AllowHints { get; set; }
     public IReadOnlyList<StudentQuizQuestionDto> Questions { get; set; } = Array.Empty<StudentQuizQuestionDto>();
 }
 
@@ -73,12 +94,22 @@ public class SubmitQuizQuestionAnswerDto
     public Guid QuestionId { get; set; }
     public string? StudentAnswer { get; set; } // For MC/TF
     public string? EssayAnswer { get; set; }   // For essay
+    /// <summary>For MultiSelect - JSON array of selected answers like ["A", "C"]</summary>
+    public string? SelectedAnswers { get; set; }
+    /// <summary>For FillInBlank - text answer</summary>
+    public string? TextAnswer { get; set; }
 }
 
+/// <summary>
+/// Request body for quiz submission. Accepts string IDs for frontend compatibility.
+/// </summary>
 public class SubmitQuizRequestDto
 {
-    public Guid AttemptId { get; set; }
-    public IReadOnlyList<SubmitQuizQuestionAnswerDto> Answers { get; set; } = Array.Empty<SubmitQuizQuestionAnswerDto>();
+    /// <summary>Attempt ID - can be string or Guid</summary>
+    public string AttemptId { get; set; } = string.Empty;
+    
+    /// <summary>List of answers for each question</summary>
+    public List<SubmitQuizQuestionAnswerDto> Answers { get; set; } = new();
 }
 
 public class QuizResultDto
@@ -140,6 +171,8 @@ public class StudentRecentActivityDto
     public DateTime OccurredAt { get; set; }
     /// <summary>Visual QA session id when <see cref="ActivityType"/> is visual QA.</summary>
     public Guid? SessionId { get; set; }
+    /// <summary>Quiz id when <see cref="ActivityType"/> is quiz.</summary>
+    public Guid? QuizId { get; set; }
     /// <summary>Optional deep link (relative). FE may derive from <see cref="SessionId"/> when null.</summary>
     public string? TargetUrl { get; set; }
 }
@@ -149,6 +182,8 @@ public class StudentRecentActivityDto
 /// </summary>
 public class StudentGeneratedQuizAttemptDto
 {
+    public bool Success { get; set; }
+    public string? Message { get; set; }
     public Guid AttemptId { get; set; }
     public Guid QuizId { get; set; }
     public string Title { get; set; } = string.Empty;
@@ -190,6 +225,8 @@ public class QuizAttemptReviewDto
     public int CorrectAnswers { get; set; }
     public bool Passed { get; set; }
     public int? PassingScore { get; set; }
+    /// <summary>True nếu lecturer đã release đáp án hoặc quiz đã đóng.</summary>
+    public bool AnswersReleased { get; set; }
     public IReadOnlyList<QuestionReviewItemDto> Questions { get; set; } = Array.Empty<QuestionReviewItemDto>();
 }
 
@@ -197,14 +234,26 @@ public class QuestionReviewItemDto
 {
     public Guid QuestionId { get; set; }
     public string QuestionText { get; set; } = string.Empty;
+    /// <summary>Question type: MultipleChoice, TrueFalse, MultiSelect, FillInBlank, Essay</summary>
     public string? Type { get; set; }
+    /// <summary>Options shown to student (may be shuffled)</summary>
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
+    /// <summary>Câu trả lời của sinh viên.</summary>
     public string? StudentAnswer { get; set; }
     public string? EssayAnswer { get; set; }
+    /// <summary>MultiSelect student answer - JSON array</summary>
+    public string? StudentSelectedAnswers { get; set; }
+    /// <summary>FillInBlank student answer</summary>
+    public string? StudentTextAnswer { get; set; }
+    /// <summary>Đáp án đúng — chỉ hiển thị khi AnswersReleased = true.</summary>
     public string? CorrectAnswer { get; set; }
+    /// <summary>Correct answers for MultiSelect - JSON array</summary>
+    public string? CorrectAnswers { get; set; }
+    /// <summary>Accepted answers for FillInBlank - JSON array</summary>
+    public string? AcceptedAnswers { get; set; }
     public bool IsCorrect { get; set; }
     public string? ImageUrl { get; set; }
     public string? CaseId { get; set; }
@@ -212,4 +261,8 @@ public class QuestionReviewItemDto
     public string? LecturerFeedback { get; set; }
     public bool IsGraded { get; set; }
     public int MaxScore { get; set; } = 10;
+    /// <summary>Explanation of the correct answer - shown when answers released</summary>
+    public string? Explanation { get; set; }
+    /// <summary>Hint that was used (if any)</summary>
+    public string? Hint { get; set; }
 }

@@ -5,6 +5,7 @@ using BoneVisQA.Services.Constants;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,36 @@ public class LecturerService : ILecturerService
     private readonly IMedicalCaseService _medicalCaseService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LecturerService> _logger;
+
+    /// <summary>Parse answer string: supports JSON array ["A","C"] or comma/newline separated "A, C"</summary>
+    private static List<string> ParseAnswerList(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return new List<string>();
+
+        var trimmed = input.Trim();
+        if (trimmed.StartsWith('['))
+        {
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(trimmed)
+                    ?? new List<string>();
+            }
+            catch
+            {
+                return trimmed.Trim('[', ']')
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim().Trim('"', '\''))
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .ToList();
+            }
+        }
+
+        return trimmed.Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToList();
+    }
 
     public LecturerService(
         IUnitOfWork unitOfWork,
@@ -654,7 +685,13 @@ public class LecturerService : ILecturerService
             OptionC = q.OptionC,
             OptionD = q.OptionD,
             CorrectAnswer = q.CorrectAnswer,
-            ImageUrl = q.ImageUrl
+            ImageUrl = q.ImageUrl,
+            ReferenceAnswer = q.ReferenceAnswer,
+            MaxScore = 1, // Each question is worth 1 point
+            Hint = q.Hint,
+            Explanation = q.Explanation,
+            CorrectAnswers = q.CorrectAnswers,
+            AcceptedAnswers = q.AcceptedAnswers
         }).ToList();
     }
 
@@ -685,7 +722,13 @@ public class LecturerService : ILecturerService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             CorrectAnswer = question.CorrectAnswer,
-            ImageUrl = question.ImageUrl
+            ImageUrl = question.ImageUrl,
+            ReferenceAnswer = question.ReferenceAnswer,
+            MaxScore = 1, // Each question is worth 1 point
+            Hint = question.Hint,
+            Explanation = question.Explanation,
+            CorrectAnswers = question.CorrectAnswers,
+            AcceptedAnswers = question.AcceptedAnswers
         };
     }
 
@@ -709,11 +752,14 @@ public class LecturerService : ILecturerService
             IsAiGenerated = request.IsAiGenerated,
             IsVerifiedCurriculum = request.IsVerifiedCurriculum,
             CreatedByExpertId = null, // Lecturer tạo quiz, không phải Expert
+            CreatedByLecturerId = creatingUserId, // Lưu lecturer đã tạo quiz
             OpenTime = ToUtc(request.OpenTime),
             CloseTime = ToUtc(request.CloseTime),
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore, // Lecturer quiz uses 100-point scale directly
-            CreatedAt = now
+            CreatedAt = now,
+            // Quiz Mode: 1=Exam, 2=Practice, 3=Adaptive (default 1)
+            QuizMode = request.QuizMode > 0 ? request.QuizMode : 1
         };
 
         await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -750,24 +796,43 @@ public class LecturerService : ILecturerService
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
-            CreatedAt = quiz.CreatedAt
+            CreatedAt = quiz.CreatedAt,
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
-    public async Task<bool> DeleteQuizAsync(Guid quizId)
+    public async Task<bool> DeleteQuizAsync(Guid quizId, Guid lecturerId)
     {
         var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId);
         if (quiz == null)
             return false;
 
         // ============================================================
-        // IMPORTANT: Only delete the original Quiz if it belongs to the lecturer
+        // IMPORTANT: Only delete the quiz if it belongs to the lecturer
         // - Expert quizzes (CreatedByExpertId != null) must be kept in Expert Library
-        // - Only remove the class link (ClassQuizSession) and attempt history for expert quizzes
-        // - For lecturer-owned quizzes (CreatedByExpertId == null), delete everything including the quiz itself
+        // - Lecturer-owned quizzes (CreatedByLecturerId == lecturerId) can be deleted
+        // - Legacy quizzes (CreatedByLecturerId == null) can be deleted by any lecturer for backwards compatibility
         // ============================================================
 
         var isExpertQuiz = quiz.CreatedByExpertId.HasValue;
+        var isOwnQuiz = quiz.CreatedByLecturerId == lecturerId;
+        var isLegacyQuiz = quiz.CreatedByLecturerId == null && quiz.CreatedByExpertId == null;
+
+        // Security check: Only allow deletion if:
+        // 1. It's an expert quiz (must not be deleted, only removed from classes)
+        // 2. It's the lecturer's own quiz
+        // 3. It's a legacy quiz (backwards compatibility)
+        if (isExpertQuiz)
+        {
+            throw new InvalidOperationException("Không thể xóa quiz từ thư viện Expert.");
+        }
+
+        if (!isOwnQuiz && !isLegacyQuiz)
+        {
+            throw new InvalidOperationException("Bạn không có quyền xóa quiz này.");
+        }
 
         // 1. Check if quiz is assigned to any class - block deletion if so
         var classSessions = await _unitOfWork.Context.ClassQuizSessions
@@ -787,22 +852,16 @@ public class LecturerService : ILecturerService
         foreach (var attempt in attempts)
             _unitOfWork.Context.QuizAttempts.Remove(attempt);
 
-        // 3. Remove quiz questions (only if we're deleting the quiz itself)
-        if (!isExpertQuiz)
-        {
-            var questions = await _unitOfWork.Context.QuizQuestions
-                .Where(q => q.QuizId == quizId)
-                .ToListAsync();
+        // 3. Remove quiz questions
+        var questions = await _unitOfWork.Context.QuizQuestions
+            .Where(q => q.QuizId == quizId)
+            .ToListAsync();
 
-            foreach (var question in questions)
-                _unitOfWork.Context.QuizQuestions.Remove(question);
-        }
+        foreach (var question in questions)
+            _unitOfWork.Context.QuizQuestions.Remove(question);
 
-        // 4. Delete the original Quiz only if it's NOT an expert quiz
-        if (!isExpertQuiz)
-        {
-            _unitOfWork.Context.Quizzes.Remove(quiz);
-        }
+        // 4. Delete the quiz
+        _unitOfWork.Context.Quizzes.Remove(quiz);
 
         await _unitOfWork.SaveAsync();
 
@@ -849,7 +908,16 @@ public class LecturerService : ILecturerService
             OptionC = request.OptionC,
             OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer,
-            ImageUrl = request.ImageUrl
+            ImageUrl = request.ImageUrl,
+            Hint = request.Hint,
+            Explanation = request.Explanation,
+            MaxScore = 1, // Each question is worth 1 point
+            CorrectAnswers = request.CorrectAnswers != null
+                ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+                : null,
+            AcceptedAnswers = request.AcceptedAnswers != null
+                ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+                : null
         };
 
         await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -869,6 +937,10 @@ public class LecturerService : ILecturerService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             CorrectAnswer = question.CorrectAnswer,
+            Hint = question.Hint,
+            Explanation = question.Explanation,
+            CorrectAnswers = question.CorrectAnswers,
+            AcceptedAnswers = question.AcceptedAnswers,
             ImageUrl = question.ImageUrl
         };
     }
@@ -909,7 +981,16 @@ public class LecturerService : ILecturerService
                 OptionC = request.OptionC,
                 OptionD = request.OptionD,
                 CorrectAnswer = request.CorrectAnswer,
-                ImageUrl = request.ImageUrl
+                ImageUrl = request.ImageUrl,
+                Hint = request.Hint,
+                Explanation = request.Explanation,
+                MaxScore = 1, // Each question is worth 1 point
+                CorrectAnswers = request.CorrectAnswers != null
+                    ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+                    : null,
+                AcceptedAnswers = request.AcceptedAnswers != null
+                    ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+                    : null
             };
 
             questions.Add(question);
@@ -941,7 +1022,11 @@ public class LecturerService : ILecturerService
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
                 CorrectAnswer = question.CorrectAnswer,
-                ImageUrl = question.ImageUrl
+                ImageUrl = question.ImageUrl,
+                Hint = question.Hint,
+                Explanation = question.Explanation,
+                CorrectAnswers = question.CorrectAnswers,
+                AcceptedAnswers = question.AcceptedAnswers
             });
         }
 
@@ -971,6 +1056,16 @@ public class LecturerService : ILecturerService
         entity.OptionD = request.OptionD;
         entity.CorrectAnswer = request.CorrectAnswer;
         entity.ImageUrl = request.ImageUrl;
+        entity.ReferenceAnswer = request.ReferenceAnswer;
+        entity.Hint = request.Hint;
+        entity.Explanation = request.Explanation;
+        entity.MaxScore = 1; // Each question is worth 1 point
+        entity.CorrectAnswers = request.CorrectAnswers != null
+            ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+            : null;
+        entity.AcceptedAnswers = request.AcceptedAnswers != null
+            ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+            : null;
 
         await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
         await _unitOfWork.SaveAsync();
@@ -986,6 +1081,8 @@ public class LecturerService : ILecturerService
             OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer,
             ImageUrl = request.ImageUrl,
+            Hint = request.Hint,
+            Explanation = request.Explanation
         };
     }
 
@@ -1131,6 +1228,48 @@ public class LecturerService : ILecturerService
                 CreatedAt = c.CreatedAt
             })
             .ToList();
+    }
+
+    public async Task<PagedResultDTO<CaseDto>> GetAllCasesPagedAsync(int pageIndex, int pageSize)
+    {
+        var query = _unitOfWork.MedicalCaseRepository
+            .FindByCondition(c => true)
+            .Include(c => c.Category)
+            .OrderByDescending(c => c.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        
+        if (pageIndex > totalPages && totalPages > 0)
+            pageIndex = totalPages;
+
+        var cases = await query
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var items = cases
+            .Select(c => new CaseDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Description = c.Description,
+                Difficulty = c.Difficulty,
+                CategoryName = c.Category?.Name,
+                IsApproved = c.IsApproved ?? false,
+                IsActive = c.IsActive ?? false,
+                CreatedAt = c.CreatedAt
+            })
+            .ToList();
+
+        return new PagedResultDTO<CaseDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            PageIndex = pageIndex,
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+        };
     }
 
     public async Task<ClassStatsDto> GetClassStatsAsync(Guid classId)
@@ -2273,13 +2412,14 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Only unassigned quizzes NOT created by Expert and NOT AI-generated
+        // Only unassigned quizzes created by THIS specific lecturer
         // My Quizzes = quizzes created by lecturer manually (not from Expert Library, not AI)
         var unassignedQuizzes = await _unitOfWork.Context.Quizzes
             .Include(q => q.CreatedByExpert)
             .Where(q => !unassignedQuizIds.Contains(q.Id)
-                && q.CreatedByExpertId == null
-                && q.IsAiGenerated == false)
+                && q.CreatedByLecturerId == lecturerId  // Filter by specific lecturer
+                && q.CreatedByExpertId == null          // Not from Expert Library
+                && q.IsAiGenerated == false)            // Not AI-generated
             .OrderByDescending(q => q.CreatedAt)
             .ToListAsync();
 
@@ -2357,7 +2497,9 @@ public class LecturerService : ILecturerService
         // Get unassigned quizzes created by this lecturer
         var quizzes = await _unitOfWork.Context.Quizzes
             .Where(q =>
-                // Quiz created by this lecturer (not from Expert Library)
+                // Quiz created by this specific lecturer
+                q.CreatedByLecturerId == lecturerId &&
+                // Quiz is not from Expert Library (CreatedByExpertId should be null for lecturer-created quizzes)
                 q.CreatedByExpertId == null &&
                 // Not assigned to any class yet
                 !assignedQuizIds.Contains(q.Id)
@@ -2392,6 +2534,7 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
+                CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
     }
@@ -2408,13 +2551,15 @@ public class LecturerService : ILecturerService
             .Select(cqs => cqs.QuizId)
             .ToListAsync();
 
-        // Get quizzes NOT created by Expert (CreatedByExpertId = null)
+        // Get quizzes created by this specific lecturer
         // My Quizzes = quizzes created by lecturer directly (not from Expert Library)
         var quizzes = await _unitOfWork.Context.Quizzes
             .Where(q =>
+                // Created by this specific lecturer
+                q.CreatedByLecturerId == lecturerId &&
                 // Not AI-generated
                 !q.IsAiGenerated &&
-                // Not created by Expert
+                // Not created by Expert (should be null for lecturer-created quizzes)
                 q.CreatedByExpertId == null &&
                 // Not assigned to any class yet
                 !assignedQuizIds.Contains(q.Id)
@@ -2450,6 +2595,7 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
+                CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
     }
@@ -2520,7 +2666,8 @@ public class LecturerService : ILecturerService
                     CloseTime = s.CloseTime ?? quiz?.CloseTime,
                     QuestionCount = questionCounts.GetValueOrDefault(s.QuizId),
                     CreatorName = creatorName,
-                    CreatorType = creatorType
+                    CreatorType = creatorType,
+                    QuizMode = s.QuizMode
                 };
             })
             .ToList();
@@ -2585,11 +2732,12 @@ public class LecturerService : ILecturerService
                     CreatedAt = quiz.CreatedAt,
                     QuestionCount = questionCounts.GetValueOrDefault(quiz.Id),
                     IsAiGenerated = quiz.IsAiGenerated,
-                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,
+                    IsFromExpertLibrary = quiz.CreatedByExpertId.HasValue,  // True if from Expert Library
                     Difficulty = quiz.Difficulty,
                     CreatorName = creatorName,
                     CreatorType = creatorType,
-                    Classes = classes
+                    Classes = classes,
+                    QuizMode = quiz.QuizMode
                 };
             })
             .ToList();
@@ -2651,7 +2799,10 @@ public class LecturerService : ILecturerService
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
-            IsFromExpertLibrary = isFromExpertLibrary
+            IsFromExpertLibrary = isFromExpertLibrary,
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
@@ -2727,6 +2878,8 @@ public class LecturerService : ILecturerService
         quiz.Topic = request.Topic;
         quiz.Difficulty = request.Difficulty;
         quiz.Classification = request.Classification;
+        // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        quiz.QuizMode = request.QuizMode ?? 1;
 
         _unitOfWork.QuizRepository.Update(quiz);
         await _unitOfWork.SaveAsync();
@@ -2768,7 +2921,10 @@ public class LecturerService : ILecturerService
             CloseTime = quiz.CloseTime,
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
-            CreatedAt = quiz.CreatedAt
+            CreatedAt = quiz.CreatedAt,
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
@@ -2809,7 +2965,10 @@ public class LecturerService : ILecturerService
                     CloseTime = q.CloseTime,
                     TimeLimit = q.TimeLimit,
                     PassingScore = q.PassingScore,
-                    CreatedAt = q.CreatedAt
+                    CreatedAt = q.CreatedAt,
+                    CreatedByLecturerId = q.CreatedByLecturerId,
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 };
             })
             .ToList();
@@ -3268,21 +3427,59 @@ public class LecturerService : ILecturerService
             .Where(e => e.ClassId == quizSession.ClassId)
             .ToListAsync();
 
+        // Get total questions for this quiz to calculate points per question
+        var totalQuestions = await _unitOfWork.Context.QuizQuestions
+            .CountAsync(q => q.QuizId == quizSession.QuizId);
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .Where(a => a.QuizId == quizSession.QuizId)
-            .ToDictionaryAsync(a => a.StudentId);
+            .ToListAsync();
 
-        return quizEnrollments.Select(e => new AssignmentSubmissionDto
-        {
-            StudentId = e.StudentId,
-            StudentName = e.Student?.FullName ?? "Unknown",
-            StudentCode = e.Student?.SchoolCohort,
-            SubmittedAt = attempts.TryGetValue(e.StudentId, out var attempt) ? attempt.CompletedAt : null,
-            Score = attempts.TryGetValue(e.StudentId, out var attempt2) ? attempt2.Score : null,
-            Status = attempts.TryGetValue(e.StudentId, out var attempt3)
-                ? (attempt3.Score.HasValue ? "graded" : "pending")
-                : "not-submitted"
+        // Group by student and get latest attempt
+        var latestAttempts = attempts
+            .GroupBy(a => a.StudentId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(a => a.CompletedAt).First());
+
+        return quizEnrollments.Select(e => {
+            double? calculatedScore = null;
+
+            if (latestAttempts.TryGetValue(e.StudentId, out var attempt) && attempt.CompletedAt.HasValue)
+            {
+                // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+                decimal earnedPoints = 0;
+                foreach (var answer in attempt.StudentQuizAnswers)
+                {
+                    if (answer.Question?.Type == QuestionType.Essay)
+                    {
+                        // Essay: add actual awarded points (can be partial credit)
+                        earnedPoints += answer.ScoreAwarded ?? 0;
+                    }
+                    else
+                    {
+                        // MC/TF/etc: full points if correct, 0 if wrong
+                        earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                    }
+                }
+
+                // Score = earnedPoints (clamped to 0-100)
+                calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+            }
+
+            return new AssignmentSubmissionDto
+            {
+                StudentId = e.StudentId,
+                StudentName = e.Student?.FullName ?? "Unknown",
+                StudentCode = e.Student?.SchoolCohort,
+                SubmittedAt = latestAttempts.TryGetValue(e.StudentId, out var a1) ? a1.CompletedAt : null,
+                Score = calculatedScore,
+                Status = calculatedScore.HasValue ? "graded" : (latestAttempts.ContainsKey(e.StudentId) ? "pending" : "not-submitted")
+            };
         }).ToList();
     }
 
@@ -3299,13 +3496,17 @@ public class LecturerService : ILecturerService
         var studentIds = request.Submissions.Select(s => s.StudentId).ToList();
         var attempts = await _unitOfWork.Context.QuizAttempts
             .Where(a => a.QuizId == quizSession.QuizId && studentIds.Contains(a.StudentId))
-            .ToDictionaryAsync(a => a.StudentId);
+            .GroupBy(a => a.StudentId)
+            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
 
         foreach (var update in request.Submissions)
         {
             if (attempts.TryGetValue(update.StudentId, out var attempt))
             {
-                attempt.Score = update.Score;
+                // Clamp score to 0-100 range
+                attempt.Score = update.Score.HasValue
+                    ? Math.Max(0, Math.Min(100, update.Score.Value))
+                    : (double?)null;
             }
         }
 
@@ -3505,5 +3706,130 @@ public class LecturerService : ILecturerService
         var fileName = $"AllQuizResults_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
 
         return (memoryStream.ToArray(), fileName);
+    }
+
+    // =============================================
+    // Teaching Objectives Methods
+    // =============================================
+
+    public async Task<TeachingObjectivesDto?> GetTeachingObjectivesAsync(Guid lecturerId, Guid? classId = null)
+    {
+        if (classId.HasValue)
+        {
+            await EnsureLecturerOwnsClassAsync(lecturerId, classId.Value);
+            return await GetClassTeachingObjectivesAsync(classId.Value);
+        }
+
+        var classes = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.LecturerId == lecturerId)
+            .Include(c => c.Expert)
+            .ToListAsync();
+
+        if (classes.Count == 0)
+            return null;
+
+        var firstClass = classes.First();
+        var dto = await GetClassTeachingObjectivesAsync(firstClass.Id);
+        return dto;
+    }
+
+    private async Task<TeachingObjectivesDto> GetClassTeachingObjectivesAsync(Guid classId)
+    {
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .Include(c => c.Expert)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new KeyNotFoundException($"Class with ID {classId} not found.");
+
+        var dto = new TeachingObjectivesDto
+        {
+            ClassId = academicClass.Id,
+            ClassName = academicClass.ClassName,
+            LecturerId = academicClass.LecturerId ?? Guid.Empty,
+            ExpertId = academicClass.ExpertId,
+            ExpertName = academicClass.Expert?.FullName,
+            LastUpdated = academicClass.UpdatedAt
+        };
+
+        if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
+        {
+            try
+            {
+                var objectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
+                    academicClass.TeachingObjectives,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                dto.Objectives = objectives ?? new List<TeachingObjectiveItem>();
+            }
+            catch
+            {
+                dto.Objectives = new List<TeachingObjectiveItem>();
+            }
+        }
+
+        return dto;
+    }
+
+    public async Task<TeachingObjectivesDto> UpdateTeachingObjectivesAsync(Guid lecturerId, Guid classId, UpdateTeachingObjectivesRequestDto request)
+    {
+        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
+
+        var academicClass = await _unitOfWork.AcademicClassRepository
+            .FindByCondition(c => c.Id == classId)
+            .FirstOrDefaultAsync();
+
+        if (academicClass == null)
+            throw new KeyNotFoundException($"Class with ID {classId} not found.");
+
+        if (request.ReplaceAll)
+        {
+            var objectivesJson = JsonSerializer.Serialize(request.Objectives);
+            academicClass.TeachingObjectives = objectivesJson;
+            academicClass.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
+        }
+        else
+        {
+            var currentObjectives = new List<TeachingObjectiveItem>();
+            if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
+            {
+                try
+                {
+                    currentObjectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
+                        academicClass.TeachingObjectives,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TeachingObjectiveItem>();
+                }
+                catch { }
+            }
+
+            foreach (var newObj in request.Objectives)
+            {
+                var existing = currentObjectives.FirstOrDefault(o => o.Id == newObj.Id);
+                if (existing != null)
+                {
+                    existing.Topic = newObj.Topic;
+                    existing.Objective = newObj.Objective;
+                    existing.Level = newObj.Level;
+                    existing.Order = newObj.Order;
+                    existing.IsActive = newObj.IsActive;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    newObj.Id = Guid.NewGuid();
+                    newObj.CreatedAt = DateTime.UtcNow;
+                    newObj.UpdatedAt = DateTime.UtcNow;
+                    currentObjectives.Add(newObj);
+                }
+            }
+
+            academicClass.TeachingObjectives = JsonSerializer.Serialize(currentObjectives);
+            academicClass.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
+        }
+
+        await _unitOfWork.SaveAsync();
+        return await GetClassTeachingObjectivesAsync(classId);
     }
 }

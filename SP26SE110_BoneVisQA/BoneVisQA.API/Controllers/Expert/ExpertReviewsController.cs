@@ -21,9 +21,6 @@ public class ExpertReviewsController : ControllerBase
         _expertReviewService = expertReviewService;
     }
 
-    /// <summary>
-    /// Gets the expert's escalated review queue together with the retrieved RAG evidence chunks.
-    /// </summary>
 
     [ProducesResponseType(typeof(IReadOnlyList<ExpertEscalatedAnswerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -76,7 +73,6 @@ public class ExpertReviewsController : ControllerBase
         }
     }
 
-    /// <summary>Full expert-review session (citations merged across assistant turns). FE primary detail URL.</summary>
     [HttpGet("{sessionId:guid}")]
     [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -85,15 +81,11 @@ public class ExpertReviewsController : ControllerBase
     public Task<ActionResult<ExpertEscalatedAnswerDto>> GetEscalatedSessionDetail(Guid sessionId)
         => GetEscalatedSessionDetailCore(sessionId);
 
-    /// <summary>Alternate detail path used by some FE clients.</summary>
     [HttpGet("{sessionId:guid}/session")]
     [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
     public Task<ActionResult<ExpertEscalatedAnswerDto>> GetEscalatedSessionDetailSessionAlias(Guid sessionId)
         => GetEscalatedSessionDetailCore(sessionId);
 
-    /// <summary>
-    /// Resolves an escalated answer and stores the expert-reviewed outcome.
-    /// </summary>
     [ProducesResponseType(typeof(ExpertEscalatedAnswerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -125,7 +117,6 @@ public class ExpertReviewsController : ControllerBase
         }
     }
 
-    /// <summary>Approves / finalizes an expert-reviewed session (status-only action).</summary>
     [HttpPost("{sessionId:guid}/approve")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -221,9 +212,6 @@ public class ExpertReviewsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Flags a retrieved document chunk as low quality for later knowledge base review.
-    /// </summary>
     [HttpPost("chunks/{chunkId:guid}/flag")]
     [HttpPost("~/api/expert/documents/chunks/{chunkId:guid}/flag")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

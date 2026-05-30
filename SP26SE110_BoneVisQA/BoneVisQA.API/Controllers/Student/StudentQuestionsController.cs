@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Services.AiQuizServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,10 +14,12 @@ namespace BoneVisQA.API.Controllers.Student;
 public class StudentQuestionsController : ControllerBase
 {
     private readonly IStudentService _studentService;
+    private readonly IQuizHintService _quizHintService;
 
-    public StudentQuestionsController(IStudentService studentService)
+    public StudentQuestionsController(IStudentService studentService, IQuizHintService quizHintService)
     {
         _studentService = studentService;
+        _quizHintService = quizHintService;
     }
 
     [HttpPost]
@@ -38,6 +41,23 @@ public class StudentQuestionsController : ControllerBase
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
         var result = await _studentService.GetQuestionHistoryAsync(studentId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get AI hint for a quiz question.
+    /// </summary>
+    [HttpGet("{questionId:guid}/hint")]
+    public async Task<ActionResult<QuizHintResultDto>> GetHint(
+        Guid questionId,
+        [FromQuery] Guid? attemptId,
+        [FromQuery] int level = 1)
+    {
+        var result = await _quizHintService.GetHintAsync(questionId, attemptId, level);
+        if (!result.Success)
+        {
+            return BadRequest(new { message = result.ErrorMessage });
+        }
         return Ok(result);
     }
 

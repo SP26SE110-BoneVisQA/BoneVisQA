@@ -35,8 +35,5 @@
     <Watch Remove="**\*.tmp" />
     <Watch Remove="**\*.temp" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="wwwroot\uploads\images\" />
-  </ItemGroup>
 
 </Project>

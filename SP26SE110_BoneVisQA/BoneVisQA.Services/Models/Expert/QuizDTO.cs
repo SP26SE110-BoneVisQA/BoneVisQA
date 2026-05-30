@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.Expert
@@ -24,15 +25,28 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
         public DateTime? CreatedAt { get; set; }
-    }   
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
+        // Classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
+    }
     public class CreateQuizRequestDTO
     {
         public Guid Id { get; set; }
 
         public string Title { get; set; } = null!;
-       
+
         public Guid? CreatedByExpertId { get; set; }
-       
+
         public string? Topic { get; set; }
 
         public DateTime? OpenTime { get; set; }
@@ -41,7 +55,7 @@ namespace BoneVisQA.Services.Models.Expert
 
         public int? TimeLimit { get; set; }
 
-        public int? PassingScore { get; set; }    
+        public int? PassingScore { get; set; }
 
         public bool IsAiGenerated { get; set; }
 
@@ -50,6 +64,20 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Classification { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
+
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
     public class CreateQuizResponseDTO
     {
@@ -76,6 +104,22 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Classification { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
+
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
+
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
     public class UpdateQuizRequestDTO
     {
@@ -88,6 +132,17 @@ namespace BoneVisQA.Services.Models.Expert
         public int? PassingScore { get; set; }
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
     public class UpdateQuizResponseDTO
@@ -101,6 +156,19 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Difficulty { get; set; }
         public string? Classification { get; set; }
         public DateTime? CreatedAt { get; set; }
+        // Deep classification
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public Guid? PathologyCategoryId { get; set; }
+        public string? PathologyCategoryName { get; set; }
+        // Extended classification fields
+        public int? TeachingPoints { get; set; }
+        public List<string>? LearningObjectives { get; set; }
+        public string? TargetStudentLevel { get; set; }
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
 
@@ -122,6 +190,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }   
     public class CreateQuizQuestionRequestDTO
     {
@@ -139,6 +215,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// Ảnh sẽ được upload lên Supabase và lưu URL vào đây
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
     public class CreateQuizQuestionResponseDTO
     {
@@ -158,6 +242,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
     public class UpdateQuizQuestionRequestDTO
     {
@@ -175,6 +267,14 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi (có thể cập nhật ảnh mới)
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
 
     public class UpdateQuizQuestionResponseDTO
@@ -193,23 +293,38 @@ namespace BoneVisQA.Services.Models.Expert
         /// URL của ảnh câu hỏi
         /// </summary>
         public string? ImageUrl { get; set; }
+        /// <summary>
+        /// Gợi ý cho sinh viên - chỉ hiện ở Practice Mode
+        /// </summary>
+        public string? Hint { get; set; }
+        /// <summary>
+        /// Giải thích đáp án đúng
+        /// </summary>
+        public string? Explanation { get; set; }
     }
 
     // Assign Quiz to Class
     public class AssignQuizRequestDTO
     {
+        [JsonPropertyName("classId")]
         public Guid ClassId { get; set; }
 
+        [JsonPropertyName("quizId")]
         public Guid QuizId { get; set; }
 
+        [JsonPropertyName("assignedExpertId")]
         public Guid? AssignedExpertId { get; set; }
 
+        [JsonPropertyName("openTime")]
         public DateTime? OpenTime { get; set; }
 
+        [JsonPropertyName("closeTime")]
         public DateTime? CloseTime { get; set; }
 
+        [JsonPropertyName("passingScore")]
         public int? PassingScore { get; set; }
 
+        [JsonPropertyName("timeLimitMinutes")]
         public int? TimeLimitMinutes { get; set; }
     }
     public class ClassQuizSessionResponseDTO
@@ -306,6 +421,10 @@ namespace BoneVisQA.Services.Models.Expert
         public DateTime? CreatedAt { get; set; }                              // Ngày tạo
         public string? ExpertName { get; set; }                               // Tên Expert đã tạo quiz
         public int QuestionCount { get; set; }                                // SỐ CÂU HỎI - Quan trọng!
+        /// <summary>
+        /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        /// </summary>
+        public int? QuizMode { get; set; }
     }
 
     // Câu hỏi trong quiz - CÓ đáp án đúng + CÓ ảnh
@@ -345,10 +464,51 @@ namespace BoneVisQA.Services.Models.Expert
     // - Nếu không truyền, hệ thống sẽ dùng thông số mặc định từ quiz gốc
     public class AssignExpertQuizRequestDto
     {
+        [JsonPropertyName("titleOverride")]
         public string? TitleOverride { get; set; }                            // Tiêu đề mới cho bản sao (optional)
+        [JsonPropertyName("openTime")]
         public DateTime? OpenTime { get; set; }                               // Thời gian mở quiz (override)
+        [JsonPropertyName("closeTime")]
         public DateTime? CloseTime { get; set; }                              // Thời gian đóng quiz (override)
+        [JsonPropertyName("passingScore")]
         public int? PassingScore { get; set; }                                 // Điểm đạt (override)
+        [JsonPropertyName("timeLimitMinutes")]
         public int? TimeLimitMinutes { get; set; }                            // Thời gian làm bài (override)
+    }
+
+    //================================================================================================================
+    // Deep Classification DTOs - Dùng cho dropdown trong Create/Edit Quiz
+    //================================================================================================================
+
+    /// <summary>
+    /// DTO for Bone Specialty tree (hierarchical structure)
+    /// </summary>
+    public class BoneSpecialtyTreeDto
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public Guid? ParentId { get; set; }
+        public string? ParentName { get; set; }
+        public string? Description { get; set; }
+        public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; }
+        public int Level { get; set; }
+        public List<BoneSpecialtyTreeDto> Children { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Simplified DTO for Pathology Category (flat list)
+    /// </summary>
+    public class PathologyCategorySimpleDto
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public Guid? BoneSpecialtyId { get; set; }
+        public string? BoneSpecialtyName { get; set; }
+        public string? Description { get; set; }
+        public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; }
     }
 }

@@ -80,6 +80,28 @@ public partial class MedicalCase
     [Column("owner_student_id")]
     public Guid? OwnerStudentId { get; set; }
 
+    [Column("bone_specialty_id")]
+    public Guid? BoneSpecialtyId { get; set; }
+
+    [Column("pathology_category_id")]
+    public Guid? PathologyCategoryId { get; set; }
+
+    [Column("severity")]
+    [MaxLength(50)]
+    public string? Severity { get; set; }
+
+    [Column("patient_age_group")]
+    [MaxLength(50)]
+    public string? PatientAgeGroup { get; set; }
+
+    [Column("emergency_level")]
+    [MaxLength(50)]
+    public string? EmergencyLevel { get; set; } = "Low";
+
+    [Column("body_region")]
+    [MaxLength(50)]
+    public string? BodyRegion { get; set; }
+
     [InverseProperty("Case")]
     public virtual ICollection<ClassCase> ClassCases { get; set; } = new List<ClassCase>();
 
@@ -100,6 +122,14 @@ public partial class MedicalCase
     [ForeignKey("AssignedExpertId")]
     [InverseProperty("AssignedMedicalCases")]
     public virtual User? AssignedExpert { get; set; }
+
+    [ForeignKey("BoneSpecialtyId")]
+    [InverseProperty("MedicalCases")]
+    public virtual BoneSpecialty? BoneSpecialty { get; set; }
+
+    [ForeignKey("PathologyCategoryId")]
+    [InverseProperty("MedicalCases")]
+    public virtual PathologyCategory? PathologyCategory { get; set; }
 
     [InverseProperty("Case")]
     public virtual ICollection<MedicalImage> MedicalImages { get; set; } = new List<MedicalImage>();

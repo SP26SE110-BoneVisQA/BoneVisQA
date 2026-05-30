@@ -30,9 +30,16 @@ public class AIQuizQuestionDto
     public string OptionC { get; set; } = string.Empty;
     public string OptionD { get; set; } = string.Empty;
     public string CorrectAnswer { get; set; } = string.Empty;
+    /// <summary>For MultiSelect: JSON array like ["A", "C"]</summary>
+    public string? CorrectAnswers { get; set; }
+    /// <summary>Accepted answers for FillInBlank: JSON array</summary>
+    public string? AcceptedAnswers { get; set; }
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
     public string? ImageUrl { get; set; }
+    /// <summary>Hint for students - only shown in practice mode</summary>
+    public string? Hint { get; set; }
+    /// <summary>Explanation of the correct answer</summary>
     public string? Explanation { get; set; }
 }
 

@@ -29,6 +29,20 @@ public partial class AcademicClass
     [Column("class_specialty_id")]
     public Guid? ClassSpecialtyId { get; set; }
 
+    [Column("focus_level")]
+    [MaxLength(50)]
+    public string? FocusLevel { get; set; } = "Basic";
+
+    [Column("teaching_objectives", TypeName = "jsonb")]
+    public string? TeachingObjectives { get; set; }
+
+    [Column("target_pathology_categories", TypeName = "jsonb")]
+    public string? TargetPathologyCategories { get; set; }
+
+    [Column("target_student_level")]
+    [MaxLength(50)]
+    public string? TargetStudentLevel { get; set; } = "Beginner";
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 
@@ -64,5 +78,8 @@ public partial class AcademicClass
 
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
+
+    [InverseProperty("Class")]
+    public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();
 
 }

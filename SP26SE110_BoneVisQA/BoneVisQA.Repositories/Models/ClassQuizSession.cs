@@ -60,6 +60,26 @@ public partial class ClassQuizSession
     [Column("announcement_id")]
     public Guid? AnnouncementId { get; set; }
 
+    /// <summary>Thời điểm lecturer chủ động release đáp án cho sinh viên xem.</summary>
+    [Column("release_answers_at")]
+    public DateTime? ReleaseAnswersAt { get; set; }
+
+    /// <summary>ID của lecturer đã thực hiện release đáp án.</summary>
+    [Column("released_by_id")]
+    public Guid? ReleasedById { get; set; }
+
+    /// <summary>
+    /// Xáo trộn thứ tự các đáp án A, B, C, D cho mỗi sinh viên.
+    /// </summary>
+    [Column("shuffle_options")]
+    public bool ShuffleOptions { get; set; } = false;
+
+    /// <summary>
+    /// Chế độ quiz: 1=Exam, 2=Practice, 3=Adaptive
+    /// </summary>
+    [Column("quiz_mode")]
+    public int QuizMode { get; set; } = 1;
+
     [ForeignKey("AnnouncementId")]
     [InverseProperty("ClassQuizSessions")]
     public virtual Announcement? Announcement { get; set; }
