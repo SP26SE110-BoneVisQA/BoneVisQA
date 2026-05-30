@@ -101,13 +101,31 @@ public class SupabaseStorageService : ISupabaseStorageService
 
     public async Task<bool> DeleteFileAsync(string bucket, string filePath, CancellationToken cancellationToken = default)
     {
-        var deleteUrl = $"{_supabaseUrl}/storage/v1/object/{bucket}/{filePath}";
+        var normalizedBucket = bucket.Trim();
+        var normalizedPath = filePath.Trim().Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalizedBucket) || string.IsNullOrWhiteSpace(normalizedPath))
+            return false;
+
+        // Supabase Storage REST API: DELETE /object/{bucket} with body { "prefixes": ["path/inside/bucket"] }.
+        // Path-in-URL deletes are not supported and return 400 InvalidRequest.
+        var deleteUrl = $"{_supabaseUrl.TrimEnd('/')}/storage/v1/object/{normalizedBucket}";
 
         using var request = new HttpRequestMessage(HttpMethod.Delete, deleteUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        ApplySupabaseAuthHeaders(request);
+        request.Content = JsonContent.Create(new Dictionary<string, string[]>
+        {
+            ["prefixes"] = [normalizedPath]
+        });
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         return response.IsSuccessStatusCode;
+    }
+
+    private void ApplySupabaseAuthHeaders(HttpRequestMessage request)
+    {
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        request.Headers.Remove("apikey");
+        request.Headers.Add("apikey", _supabaseKey);
     }
 
     public async Task<bool> MoveFileAsync(

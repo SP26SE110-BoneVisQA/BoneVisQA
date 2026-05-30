@@ -4,8 +4,8 @@ namespace BoneVisQA.Services.Interfaces.Expert;
 
 public interface IExpertReviewService
 {
-    Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId);
-    Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId);
+    Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetCaseAnswersAsync(Guid expertId, Guid? specialtyId = null, string? status = null);
+    Task<IReadOnlyList<ExpertEscalatedAnswerDto>> GetEscalatedAnswersAsync(Guid expertId, Guid? specialtyId = null, string? status = null);
 
     /// <summary>Single-session payload (aligned with queue items; citations merged across assistant turns).</summary>
     Task<ExpertEscalatedAnswerDto> GetEscalatedSessionDetailAsync(Guid expertId, Guid sessionId);

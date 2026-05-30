@@ -16,6 +16,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
+using BoneVisQA.Services.Infrastructure;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
@@ -30,6 +31,7 @@ using BoneVisQA.Services.Services.Student;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -42,7 +44,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
-const long maxUploadBodyBytes = 104857600; // 100 MB
+// Study archives (.zip/.rar) may be large; keep in sync with StudyArchiveIngestHelper.StudyArchiveMaxBytes.
+const long maxUploadBodyBytes = 209715200; // 200 MB
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
@@ -101,10 +104,36 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problem = new ValidationProblemDetails(context.ModelState)
+        {
+            Type = "https://datatracker.ietf.org/doc/html/rfc7807",
+            Title = "One or more validation errors occurred.",
+            Status = StatusCodes.Status400BadRequest,
+            Detail = "The request payload failed validation before business logic execution.",
+            Instance = context.HttpContext.Request.Path
+        };
+
+        problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        return new BadRequestObjectResult(problem)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddMemoryCache();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+    };
+});
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
@@ -213,15 +242,18 @@ static string BuildSupabaseConnectionString(IConfiguration configuration)
 }
 
 var supabaseConnectionString = BuildSupabaseConnectionString(builder.Configuration);
-
-builder.Services.AddDbContext<BoneVisQADbContext>(options =>
-    options.UseNpgsql(supabaseConnectionString,
+builder.Services.AddScoped<BoneSpecialtyCacheInvalidationInterceptor>();
+builder.Services.AddDbContext<BoneVisQADbContext>((sp, options) =>
+{
+    options.UseNpgsql(
+        supabaseConnectionString,
         npgsqlOptions =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);
             npgsqlOptions.UseVector();
-        }))
-    .AddScoped<BoneVisQADbContext>();
+        });
+    options.AddInterceptors(sp.GetRequiredService<BoneSpecialtyCacheInvalidationInterceptor>());
+});
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
@@ -298,7 +330,16 @@ builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
 builder.Services.AddScoped<IMedicalCaseIndexingProcessor, MedicalCaseIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
+if (builder.Configuration.GetValue("VisualQa:UseInMemorySessionGate", false))
+{
+    builder.Services.AddSingleton<IVisualQaSessionConcurrencyGate, InMemoryVisualQaSessionConcurrencyGate>();
+}
+else
+{
+    builder.Services.AddSingleton<IVisualQaSessionConcurrencyGate, PostgresVisualQaSessionConcurrencyGate>();
+}
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
+builder.Services.AddScoped<ISpecialtyCatalogService, SpecialtyCatalogService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<IRagExpertAnswerIndexingSignal, NoOpRagExpertAnswerIndexingSignal>();
@@ -439,3 +480,6 @@ document.getElementById('msg').innerHTML=data.success?'<p class=success>'+data.m
 });
 
 app.Run();
+
+/// <summary>Entry point type for <c>WebApplicationFactory</c> integration tests.</summary>
+public partial class Program;

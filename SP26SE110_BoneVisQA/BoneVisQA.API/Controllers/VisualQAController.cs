@@ -5,9 +5,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.VisualQA;
 using BoneVisQA.Services.Exceptions;
 using BoneVisQA.Services.Models.Student;
-using BoneVisQA.Services.Models.VisualQA;
+using BoneVisQA.Services.Services;
 using System.ComponentModel;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -15,7 +16,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -37,10 +37,6 @@ public class VisualQAFileUploadRequest
 
     [FromForm(Name = "clientRequestId")]
     public string? ClientRequestId { get; set; }
-
-    /// <summary>Optional override (ISO 639-1), e.g. <c>vi</c>, <c>en</c>. Resolved together with <c>Accept-Language</c> and query <c>locale</c>.</summary>
-    [FromForm(Name = "language")]
-    public string? Language { get; set; }
 }
 
 [ApiController]
@@ -53,28 +49,121 @@ public class VisualQAController : ControllerBase
     private readonly IStudentService _studentService;
     private readonly IVisualQaAiService _visualQaAiService;
     private readonly ISupabaseStorageService _storageService;
-    private readonly IConfiguration _configuration;
+    private readonly IPythonAiConnectorService _pythonAiConnector;
     private readonly IMemoryCache _cache;
+    private readonly IVisualQaSessionConcurrencyGate _sessionGate;
     private readonly ILogger<VisualQAController> _logger;
 
     public VisualQAController(
         IStudentService studentService,
         IVisualQaAiService visualQaAiService,
         ISupabaseStorageService storageService,
-        IConfiguration configuration,
+        IPythonAiConnectorService pythonAiConnector,
         IMemoryCache cache,
+        IVisualQaSessionConcurrencyGate sessionGate,
         ILogger<VisualQAController> logger)
     {
         _studentService = studentService;
         _visualQaAiService = visualQaAiService;
         _storageService = storageService;
-        _configuration = configuration;
+        _pythonAiConnector = pythonAiConnector;
         _cache = cache;
+        _sessionGate = sessionGate;
         _logger = logger;
     }
 
     /// <summary>
-    /// Response language: query <c>?locale=vi|en|...</c> (highest priority), form field <c>language</c>, JSON <c>language</c> on other endpoints, or <c>Accept-Language</c>. Default Vietnamese.
+    /// Student personal study ingest: upload a DICOM archive, run Python <c>/ingest</c> (<c>ingest_purpose=personal</c>),
+    /// create an active Visual QA session, and return <c>sessionId</c> for immediate <c>POST .../ask-json</c>.
+    /// </summary>
+    [HttpPost("upload-personal")]
+    [RequestSizeLimit(StudyArchiveIngestHelper.StudyArchiveMaxBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = StudyArchiveIngestHelper.StudyArchiveMaxBytes)]
+    [Consumes("multipart/form-data")]
+    [EnableRateLimiting("AiInteractionLimit")]
+    public async Task<ActionResult<StudentPersonalStudyUploadResponse>> UploadPersonalStudy(
+        IFormFile file,
+        [FromForm] string? diagnosisText,
+        CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        var validationError = StudyArchiveIngestHelper.ValidateArchive(file);
+        if (validationError != null)
+            return BadRequest(new { message = validationError });
+
+        string? stagedPath = null;
+        try
+        {
+            stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
+            var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
+                _pythonAiConnector,
+                stagedPath,
+                ingestPurpose: "personal",
+                ownerUserId: studentId,
+                diagnosisText,
+                cancellationToken);
+
+            if (!ingest.Success || !ingest.CaseId.HasValue)
+            {
+                var message = StudyArchiveIngestHelper.ResolveIngestErrorMessage(ingest);
+                if (StudyArchiveIngestHelper.IsClientIngestFailure(ingest))
+                {
+                    return BadRequest(new StudentPersonalStudyUploadResponse
+                    {
+                        IngestOk = false,
+                        IngestError = message,
+                    });
+                }
+
+                return StatusCode(StatusCodes.Status502BadGateway, new StudentPersonalStudyUploadResponse
+                {
+                    IngestOk = false,
+                    IngestError = message,
+                });
+            }
+
+            var sessionRequest = new VisualQARequestDto
+            {
+                CaseId = ingest.CaseId,
+                ImageUrl = ingest.PreviewImageUrl,
+                ImageId = ingest.CatalogImageId,
+                DicomMetadata = ingest.DicomMetadata,
+            };
+
+            Guid sessionId;
+            try
+            {
+                sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, sessionRequest);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+
+            return Ok(new StudentPersonalStudyUploadResponse
+            {
+                SessionId = sessionId,
+                CaseId = ingest.CaseId.Value,
+                MediaId = ingest.MediaId,
+                CatalogImageId = ingest.CatalogImageId,
+                PreviewImageUrl = ingest.PreviewImageUrl ?? string.Empty,
+                DicomMetadata = ingest.DicomMetadata,
+                IngestOk = true,
+            });
+        }
+        finally
+        {
+            StudyArchiveIngestHelper.TryDeleteStagedFile(stagedPath);
+        }
+    }
+
+    /// <summary>
+    /// Multipart Visual QA: optional personal raster in <c>CustomImage</c>, or follow-up via <c>sessionId</c>.
+    /// Image context for catalog cases is resolved from <c>CaseId</c> / session on JSON endpoints. Response language uses <c>?locale=</c> and <c>Accept-Language</c> (default Vietnamese).
+    /// Pipeline: BoneVisQA.AI hybrid RAG (<c>POST /api/v1/qa/ask</c>) then Gemini vision with normalized ROI when <c>Coordinates</c> are present.
     /// </summary>
     [HttpPost("ask")]
     [RequestSizeLimit(MaxVisualImageBytes)]
@@ -269,7 +358,10 @@ public class VisualQAController : ControllerBase
         return Ok(thread);
     }
 
-    /// <summary>Same language resolution as <see cref="Ask"/> (query <c>locale</c>, body <c>language</c>, <c>Accept-Language</c>).</summary>
+    /// <summary>
+    /// JSON Visual QA for ingested / catalog cases: supply <c>caseId</c> (and optional <c>imageId</c> or <c>annotationId</c>); the server resolves the study image from Postgres. Optional <c>sessionId</c> continues a thread.
+    /// Response language: query <c>?locale=</c> and <c>Accept-Language</c> (default Vietnamese). For ad-hoc raster uploads use <c>POST .../ask</c> (multipart).
+    /// </summary>
     [HttpPost("ask-json")]
     [EnableRateLimiting("AiInteractionLimit")]
     public async Task<ActionResult<VisualQaApiResponseDto>> AskJson(
@@ -284,10 +376,13 @@ public class VisualQAController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.QuestionText))
             return BadRequest(BuildInputValidationErrorResponse("MISSING_QUESTION", "Please enter your question or observations."));
 
-        if (!string.IsNullOrWhiteSpace(request.ImageUrl)
-            && !IsSupabaseHostedImageUrl(request.ImageUrl, _configuration["Supabase:Url"]))
+        try
         {
-            return BadRequest(new { message = "Only analysis of images stored in the system is supported." });
+            await _studentService.ValidateVisualQaCaseAccessAsync(studentId, request.CaseId, cancellationToken);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
         }
 
         Guid sessionId;
@@ -299,91 +394,111 @@ public class VisualQAController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        try
-        {
-            await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
-        }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
         }
-        catch (InvalidOperationException ex)
+
+        using (await _sessionGate.AcquireAsync(sessionId, cancellationToken))
         {
-            if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
+            try
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED"));
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
+                    return BadRequest(BuildSessionBlockedResponse("SESSION_EXPIRED"));
+
+                if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
+                    return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY"));
+
+                if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
+                    return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED"));
+
+                return BadRequest(new { message = ex.Message });
             }
 
-            if (string.Equals(ex.Message, "SESSION_READ_ONLY", StringComparison.Ordinal))
+            if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
+                request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(request.ImageUrl))
+                return BadRequest(BuildInputValidationErrorResponse(
+                    "MISSING_IMAGE_CONTEXT",
+                    "No study image could be resolved for this request. Provide caseId (catalog) or use POST upload-personal first, or continue an existing session."));
+
+            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+                request.QuestionText,
+                locale,
+                VisualQaRequestLanguage.Resolve(Request, null, locale));
+
+            VisualQAResponseDto response;
+            if (!string.IsNullOrWhiteSpace(request.ClientRequestId))
             {
-                return BadRequest(BuildSessionBlockedResponse("SESSION_READ_ONLY"));
+                var existing = await _studentService.GetExistingVisualQaResponseAsync(
+                    studentId,
+                    sessionId,
+                    request.ClientRequestId,
+                    cancellationToken);
+                if (existing != null)
+                {
+                    var existingCapabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(
+                        studentId, sessionId, cancellationToken: cancellationToken);
+                    return Ok(ToApiResponse(existing, existingCapabilities));
+                }
             }
 
-            if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
+            try
             {
-                return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED"));
+                request.SessionId = sessionId;
+                response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
+            }
+            catch (AiResponseFormatException ex)
+            {
+                _logger.LogWarning("Visual QA AskJson: AI_RESPONSE_INVALID_FORMAT: {Message}", ex.Message);
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning("Visual QA AskJson: AI_SERVICE_UNAVAILABLE: {Message}", ex.Message);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
             }
 
-            return BadRequest(new { message = ex.Message });
-        }
-        if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
-        {
-            request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
-        }
-
-        request.Language = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
-            request.QuestionText,
-            locale,
-            VisualQaRequestLanguage.Resolve(Request, request.Language, locale));
-
-        VisualQAResponseDto response;
-        if (!string.IsNullOrWhiteSpace(request.ClientRequestId))
-        {
-            var existing = await _studentService.GetExistingVisualQaResponseAsync(
-                studentId,
-                sessionId,
-                request.ClientRequestId,
-                cancellationToken);
-            if (existing != null)
+            if (string.Equals(response.ResponseKind, "error", StringComparison.OrdinalIgnoreCase))
             {
-                var existingCapabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
-                return Ok(ToApiResponse(existing, existingCapabilities));
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = response.AnswerText ?? "Retrieval service is temporarily unavailable. Please try again later."
+                });
             }
-        }
-        try
-        {
-            request.SessionId = sessionId;
-            response = await _visualQaAiService.RunPipelineAsync(request, cancellationToken);
-        }
-        catch (AiResponseFormatException ex)
-        {
-            _logger.LogWarning("Visual QA AskJson: AI_RESPONSE_INVALID_FORMAT: {Message}", ex.Message);
-            return StatusCode(StatusCodes.Status502BadGateway, new
-            {
-                message = ex.Message
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning("Visual QA AskJson: AI_SERVICE_UNAVAILABLE: {Message}", ex.Message);
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                message = ex.Message
-            });
-        }
-        response.SessionId = sessionId;
-        try
-        {
-            await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
-        }
 
-        var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
-        response.UserQuestionText ??= request.QuestionText;
-        return Ok(ToApiResponse(response, capabilities));
+            response.SessionId = sessionId;
+            try
+            {
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+                await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "TURN_LIMIT_EXCEEDED", StringComparison.Ordinal))
+                    return BadRequest(BuildSessionBlockedResponse("TURN_LIMIT_EXCEEDED"));
+
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+            }
+
+            var capabilities = await _studentService.GetVisualQaSessionCapabilitiesAsync(
+                studentId, sessionId, cancellationToken: cancellationToken);
+            response.UserQuestionText ??= request.QuestionText;
+            return Ok(ToApiResponse(response, capabilities));
+        }
     }
 
     /// <summary>
@@ -524,41 +639,23 @@ public class VisualQAController : ControllerBase
 
         var isFollowUpTurn = formRequest.SessionId.HasValue && formRequest.SessionId.Value != Guid.Empty;
 
-        if (!isFollowUpTurn && (formRequest.CustomImage == null || formRequest.CustomImage.Length == 0))
-            return (null, BadRequest(BuildInputValidationErrorResponse("MISSING_IMAGE", "Please attach an image before submitting.")));
-        if (formRequest.CustomImage != null && formRequest.CustomImage.Length > MaxVisualImageBytes)
+        if (formRequest.CustomImage != null && formRequest.CustomImage.Length > 0)
         {
-            return (null, BadRequest(new ProblemDetails
-            {
-                Title = "Invalid request",
-                Status = StatusCodes.Status400BadRequest,
-                Detail = "Image exceeds the 5MB limit.",
-                Instance = HttpContext.Request.Path
-            }));
+            return (null, BadRequest(BuildInputValidationErrorResponse(
+                "USE_DICOM_ARCHIVE_UPLOAD",
+                "Raster image upload is no longer supported. Use POST /api/student/visual-qa/upload-personal with a .zip/.rar study, then POST /ask-json.")));
+        }
+
+        if (!isFollowUpTurn)
+        {
+            return (null, BadRequest(BuildInputValidationErrorResponse(
+                "USE_DICOM_ARCHIVE_UPLOAD",
+                "Start a new study with POST /api/student/visual-qa/upload-personal, then ask via POST /ask-json.")));
         }
 
         string? imageUrl = null;
         string? uploadedBucket = null;
         string? uploadedFilePath = null;
-        if (formRequest.CustomImage != null && formRequest.CustomImage.Length > 0)
-        {
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
-            var extension = Path.GetExtension(formRequest.CustomImage.FileName).ToLowerInvariant();
-            if (!allowedExtensions.Contains(extension))
-                return (null, BadRequest(new { message = "Only JPG, PNG, and WebP images are allowed." }));
-
-            imageUrl = await _storageService.UploadFileAsync(
-                formRequest.CustomImage,
-                "student_uploads",
-                $"images/{studentId}",
-                cancellationToken);
-
-            if (TryExtractSupabaseFilePointer(imageUrl, out var bucket, out var filePath))
-            {
-                uploadedBucket = bucket;
-                uploadedFilePath = filePath;
-            }
-        }
 
         var request = new VisualQARequestDto
         {
@@ -569,10 +666,10 @@ public class VisualQAController : ControllerBase
             CaseId = null,
             AnnotationId = null,
             ClientRequestId = formRequest.ClientRequestId,
-            Language = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+            ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
                 formRequest.QuestionText,
                 locale,
-                VisualQaRequestLanguage.Resolve(Request, formRequest.Language, locale))
+                VisualQaRequestLanguage.Resolve(Request, null, locale))
         };
 
         Guid sessionId;
@@ -616,10 +713,10 @@ public class VisualQAController : ControllerBase
         if (isFollowUpTurn)
         {
             request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
-            request.Language = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
                 formRequest.QuestionText,
                 locale,
-                VisualQaRequestLanguage.Resolve(Request, request.Language, locale));
+                VisualQaRequestLanguage.Resolve(Request, null, locale));
         }
 
         return (new VisualQaMultipartPrepared(sessionId, request, uploadedBucket, uploadedFilePath), null);
@@ -738,26 +835,6 @@ public class VisualQAController : ControllerBase
         {
             return Conflict(new { message = ex.Message });
         }
-    }
-
-    /// <summary>
-    /// SSRF guard: only allow image URLs on the configured Supabase host (same scheme + host as Supabase:Url).
-    /// </summary>
-    private static bool IsSupabaseHostedImageUrl(string imageUrl, string? configuredSupabaseUrl)
-    {
-        if (string.IsNullOrWhiteSpace(configuredSupabaseUrl))
-            return false;
-
-        var trimmedUrl = imageUrl.Trim();
-        if (!Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var imgUri))
-            return false;
-
-        var baseTrim = configuredSupabaseUrl.Trim().TrimEnd('/');
-        if (!Uri.TryCreate(baseTrim, UriKind.Absolute, out var baseUri))
-            return false;
-
-        return string.Equals(imgUri.Scheme, baseUri.Scheme, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(imgUri.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryExtractSupabaseFilePointer(string imageUrl, out string bucket, out string filePath)

@@ -11,12 +11,21 @@ using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace BoneVisQA.Services.Services;
 
 public class VisualQaAiService : IVisualQaAiService
 {
+    private sealed record CaseOntologyPrompt(
+        string Modality,
+        string AnatomySite,
+        string? PathologyGroup,
+        string? Laterality,
+        string? ViewPosition,
+        string? Difficulty,
+        string? SourceType,
+        double? QualityScore);
+
     private sealed record PreparedGeminiPipeline(
         string Prompt,
         string GeminiImagePayload,
@@ -138,13 +147,20 @@ public class VisualQaAiService : IVisualQaAiService
                 .FirstOrDefaultAsync(mc => mc.Id == request.CaseId.Value, cancellationToken);
         }
 
-        var filters = await ResolveHybridMetadataFiltersAsync(request, cancellationToken);
+        var hybrid = await ResolveHybridCaseContextAsync(request, cancellationToken);
+        var dicomMetadata = await ResolveDicomMetadataAsync(request, cancellationToken);
+        var dicomClinicalContext = DicomClinicalContextHelper.BuildPromptBlock(dicomMetadata);
+        var caseMediaId = await ResolveCaseMediaIdAsync(request, cancellationToken);
 
         var rag = await _pythonAi.AskRagAsync(
             ragQueryText,
-            filters.Modality,
-            filters.Anatomy,
-            filters.PathologyGroup,
+            hybrid.Modality,
+            hybrid.Anatomy,
+            hybrid.PathologyGroup,
+            request.CaseId,
+            caseMediaId,
+            imageEmbedding: null,
+            dicomClinicalContext,
             cancellationToken);
 
         if (!rag.Success || string.IsNullOrWhiteSpace(rag.Prompt))
@@ -176,11 +192,18 @@ public class VisualQaAiService : IVisualQaAiService
         var calculatedScore = similarities.Count > 0 ? similarities.Average() : 0.5d;
         var ragContextAdequate = retrievalCount > 0 && maxSimilarity >= MinimumRelevantSimilarity;
 
-        var citationsFromRag = BuildCitationsFromRagContext(rag.Context);
+        var citationsFromRag = await BuildCitationsFromRagContextAsync(rag.Context, cancellationToken);
 
         var (conversationHistory, existingUserTurns) = await BuildConversationHistoryAsync(request.SessionId, cancellationToken);
         var currentTurnNumber = existingUserTurns + 1;
-        var prompt = BuildGeminiPrompt(request, pythonHybridPrompt, ragContextAdequate, predefinedCase, currentTurnNumber);
+        var prompt = BuildGeminiPrompt(
+            request,
+            pythonHybridPrompt,
+            ragContextAdequate,
+            predefinedCase,
+            currentTurnNumber,
+            hybrid.Ontology,
+            dicomClinicalContext);
 
         return (null, new PreparedGeminiPipeline(
             prompt,
@@ -191,100 +214,191 @@ public class VisualQaAiService : IVisualQaAiService
             citationsFromRag));
     }
 
-    private async Task<(string Modality, string Anatomy, string? PathologyGroup)> ResolveHybridMetadataFiltersAsync(
+    private async Task<(string Modality, string Anatomy, string? PathologyGroup, CaseOntologyPrompt? Ontology)> ResolveHybridCaseContextAsync(
         VisualQARequestDto request,
         CancellationToken cancellationToken)
     {
         const string defaultMod = "X-Ray";
         const string defaultAna = "Lower Limb";
         if (request.CaseId is not { } cid || cid == Guid.Empty)
-            return (defaultMod, defaultAna, null);
+            return (defaultMod, defaultAna, null, null);
 
-        var conn = _dbContext.Database.GetDbConnection();
-        var wasOpen = conn.State == System.Data.ConnectionState.Open;
-        if (!wasOpen)
-            await conn.OpenAsync(cancellationToken);
+        var meta = await _dbContext.CaseMetadata
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.CaseId == cid, cancellationToken);
 
-        try
-        {
-            if (conn is not NpgsqlConnection nconn)
-                return (defaultMod, defaultAna, null);
+        if (meta == null)
+            return (defaultMod, defaultAna, null, null);
 
-            await using var cmd = new NpgsqlCommand(
-                """
-                SELECT modality, anatomy, pathology_group
-                FROM case_metadata
-                WHERE case_id = @cid
-                LIMIT 1
-                """,
-                nconn);
-            cmd.Parameters.AddWithValue("cid", cid);
+        var mod = string.IsNullOrWhiteSpace(meta.Modality) ? defaultMod : meta.Modality;
+        var ana = !string.IsNullOrWhiteSpace(meta.AnatomySite)
+            ? meta.AnatomySite.Trim()
+            : (string.IsNullOrWhiteSpace(meta.Anatomy) ? defaultAna : meta.Anatomy);
+        var pg = string.IsNullOrWhiteSpace(meta.PathologyGroup) ? null : meta.PathologyGroup;
 
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
-                return (defaultMod, defaultAna, null);
+        var ontology = new CaseOntologyPrompt(
+            mod,
+            ana,
+            pg,
+            meta.Laterality,
+            meta.ViewPosition,
+            meta.Difficulty,
+            meta.SourceType,
+            meta.QualityScore);
 
-            var mod = reader.IsDBNull(0) ? defaultMod : reader.GetString(0);
-            var ana = reader.IsDBNull(1) ? defaultAna : reader.GetString(1);
-            string? pg = reader.IsDBNull(2) ? null : reader.GetString(2);
-            return (mod, ana, pg);
-        }
-        catch (Exception)
-        {
-            return (defaultMod, defaultAna, null);
-        }
-        finally
-        {
-            if (!wasOpen)
-                await conn.CloseAsync();
-        }
+        return (mod, ana, pg, ontology);
+    }
+
+    private async Task<JsonElement?> ResolveDicomMetadataAsync(
+        VisualQARequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request.DicomMetadata is { ValueKind: not JsonValueKind.Null and not JsonValueKind.Undefined })
+            return request.DicomMetadata;
+
+        if (request.CaseId is not { } caseId || caseId == Guid.Empty)
+            return null;
+
+        var json = await _dbContext.CaseMedia
+            .AsNoTracking()
+            .Where(m => m.CaseId == caseId && m.DicomMetadata != null)
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .Select(m => m.DicomMetadata)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return DicomClinicalContextHelper.TryParseJson(json);
+    }
+
+    private async Task<Guid?> ResolveCaseMediaIdAsync(
+        VisualQARequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request.CaseId is not { } caseId || caseId == Guid.Empty)
+            return null;
+
+        return await _dbContext.CaseMedia
+            .AsNoTracking()
+            .Where(m => m.CaseId == caseId)
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .Select(m => m.Id)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<string?> TryDownloadImageAsBase64Async(string imageUrl, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            return null;
+
+        var trimmed = imageUrl.Trim();
+
         try
         {
-            var client = _httpClientFactory.CreateClient("VisualQaImageFetch");
-            var bytes = await client.GetByteArrayAsync(new Uri(imageUrl), cancellationToken);
-            return bytes.Length == 0 ? null : Convert.ToBase64String(bytes);
+            if (trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                var uri = new Uri(trimmed);
+                var localPath = uri.LocalPath;
+                if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
+                    return null;
+                var fileBytes = await File.ReadAllBytesAsync(localPath, cancellationToken);
+                return fileBytes.Length == 0 ? null : Convert.ToBase64String(fileBytes);
+            }
+
+            if (LooksLikeLocalFilesystemPath(trimmed))
+            {
+                var expanded = Environment.ExpandEnvironmentVariables(trimmed);
+                if (!File.Exists(expanded))
+                    return null;
+                var fileBytes = await File.ReadAllBytesAsync(expanded, cancellationToken);
+                return fileBytes.Length == 0 ? null : Convert.ToBase64String(fileBytes);
+            }
+
+            if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                var client = _httpClientFactory.CreateClient("VisualQaImageFetch");
+                var bytes = await client.GetByteArrayAsync(new Uri(trimmed), cancellationToken);
+                return bytes.Length == 0 ? null : Convert.ToBase64String(bytes);
+            }
+
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out var abs)
+                && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps))
+            {
+                var client = _httpClientFactory.CreateClient("VisualQaImageFetch");
+                var bytes = await client.GetByteArrayAsync(abs, cancellationToken);
+                return bytes.Length == 0 ? null : Convert.ToBase64String(bytes);
+            }
         }
         catch
         {
             return null;
         }
+
+        return null;
     }
 
-    private static List<CitationItemDto> BuildCitationsFromRagContext(IReadOnlyList<RagContextItemDto> blocks)
+    private static bool LooksLikeLocalFilesystemPath(string path)
+    {
+        if (path.Length < 2)
+            return false;
+
+        if (path[0] == '/' && !path.StartsWith("//", StringComparison.Ordinal))
+            return true;
+
+        if (path.Length >= 3
+            && char.IsLetter(path[0])
+            && path[1] == ':'
+            && (path[2] == '\\' || path[2] == '/'))
+            return true;
+
+        return path.StartsWith("\\\\", StringComparison.Ordinal);
+    }
+
+    private async Task<List<CitationItemDto>> BuildCitationsFromRagContextAsync(
+        IReadOnlyList<RagContextItemDto> blocks,
+        CancellationToken cancellationToken)
     {
         var list = new List<CitationItemDto>();
         foreach (var item in blocks)
         {
-            var source = item.Source;
-            var refId = item.RefId;
+            var source = item.Source?.Trim();
+            var refId = item.RefId?.Trim();
             var excerpt = item.Excerpt;
 
-            if (string.IsNullOrWhiteSpace(refId))
+            if (string.IsNullOrWhiteSpace(refId) || !Guid.TryParse(refId, out var refGuid) || refGuid == Guid.Empty)
                 continue;
 
-            var citation = new CitationItemDto
+            if (string.Equals(source, "doc_chunk", StringComparison.OrdinalIgnoreCase))
             {
-                SourceText = excerpt,
-                Snippet = excerpt,
-                Kind = source ?? "doc"
-            };
+                var chunk = await _dbContext.DocumentChunks
+                    .AsNoTracking()
+                    .Include(c => c.Doc)
+                    .FirstOrDefaultAsync(c => c.Id == refGuid, cancellationToken);
+                if (chunk == null)
+                    continue;
 
-            if (string.Equals(source, "doc_chunk", StringComparison.OrdinalIgnoreCase)
-                && Guid.TryParse(refId, out var chunkId))
-            {
-                citation.ChunkId = chunkId;
-            }
-            else if (string.Equals(source, "case_text", StringComparison.OrdinalIgnoreCase)
-                     && Guid.TryParse(refId, out var caseId))
-            {
-                citation.MedicalCaseId = caseId;
+                var citation = VisualQaCitationMetadataBuilder.FromDocumentChunk(chunk);
+                if (!string.IsNullOrWhiteSpace(excerpt))
+                {
+                    citation.SourceText = excerpt;
+                    citation.Snippet = VisualQaCitationMetadataBuilder.BuildSnippet(excerpt);
+                }
+
+                list.Add(citation);
+                continue;
             }
 
-            list.Add(citation);
+            if (string.Equals(source, "case_text", StringComparison.OrdinalIgnoreCase))
+            {
+                var medicalCase = await _dbContext.MedicalCases
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(mc => mc.Id == refGuid, cancellationToken);
+                if (medicalCase == null)
+                    continue;
+
+                list.Add(VisualQaCitationMetadataBuilder.FromMedicalCase(medicalCase, excerpt));
+            }
         }
 
         return list;
@@ -326,46 +440,13 @@ public class VisualQaAiService : IVisualQaAiService
         }
         else
         {
-            if (response.Citations == null || response.Citations.Count == 0)
-            {
-                response.Citations = prepared.CitationsFromRag
-                    .Take(RagTopMerged)
-                    .ToList();
-            }
-            else
-            {
-                response.Citations = FilterCitationsAgainstContext(response.Citations, prepared.CitationsFromRag);
-                var metaByChunkId = prepared.CitationsFromRag
-                    .Where(c => c.MedicalCaseId == null && c.ChunkId != Guid.Empty)
-                    .ToDictionary(c => c.ChunkId, c => c);
-                var metaByCaseId = prepared.CitationsFromRag
-                    .Where(c => c.MedicalCaseId != null)
-                    .ToDictionary(c => c.MedicalCaseId!.Value, c => c);
-                foreach (var citation in response.Citations)
-                {
-                    if (citation.MedicalCaseId.HasValue
-                        && metaByCaseId.TryGetValue(citation.MedicalCaseId.Value, out var metaCase))
-                    {
-                        citation.SourceText = metaCase.SourceText;
-                        citation.ReferenceUrl = metaCase.ReferenceUrl;
-                        citation.PageNumber = metaCase.PageNumber;
-                        citation.StartPage = metaCase.StartPage;
-                        citation.EndPage = metaCase.EndPage;
-                    }
-                    else if (metaByChunkId.TryGetValue(citation.ChunkId, out var meta))
-                    {
-                        citation.SourceText = meta.SourceText;
-                        citation.ReferenceUrl = meta.ReferenceUrl;
-                        citation.PageNumber = meta.PageNumber;
-                        citation.StartPage = meta.StartPage;
-                        citation.EndPage = meta.EndPage;
-                    }
-                }
-
-                response.Citations = response.Citations
-                    .Take(RagTopMerged)
-                    .ToList();
-            }
+            var modelCitations = response.Citations ?? new List<CitationItemDto>();
+            var filteredModelCitations = modelCitations.Count > 0
+                ? FilterCitationsAgainstContext(modelCitations, prepared.CitationsFromRag)
+                : new List<CitationItemDto>();
+            response.Citations = (filteredModelCitations.Count > 0 ? filteredModelCitations : prepared.CitationsFromRag)
+                .Take(RagTopMerged)
+                .ToList();
         }
 
         response.AiConfidenceScore = prepared.CalculatedScore;
@@ -472,11 +553,6 @@ public class VisualQaAiService : IVisualQaAiService
                 : $"{q}\n\n{roiLine}\n{boxHint}";
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ImageUrl))
-        {
-            return $"{q}\n\n[RAG query context: question includes a medical image.]";
-        }
-
         return q;
     }
 
@@ -527,13 +603,29 @@ public class VisualQaAiService : IVisualQaAiService
         string pythonHybridRagPrompt,
         bool ragContextAdequate,
         MedicalCase? predefinedCase,
-        int currentTurnNumber)
+        int currentTurnNumber,
+        CaseOntologyPrompt? caseOntology,
+        string? dicomClinicalContext)
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine("You are a Senior Radiologist.");
+        sb.AppendLine("You are an expert musculoskeletal radiologist.");
         sb.AppendLine("Answer questions based on the provided medical image (if any) and the hybrid-filtered retrieval context from BoneVisQA.AI.");
         sb.AppendLine();
+        sb.AppendLine("## Persona and JSON field boundaries (STRICT)");
+        sb.AppendLine("- The `diagnosis` field MUST contain a declarative clinical statement or your best musculoskeletal assessment.");
+        sb.AppendLine("- DO NOT ask questions in `diagnosis`. Never write interrogative sentences, prompts to the student, or Socratic questions there.");
+        sb.AppendLine("- Put ALL student-facing questions ONLY in `reflective_questions` (array of strings).");
+        sb.AppendLine("- Use `findings` for objective imaging observations and `differential_diagnoses` for ranked alternatives.");
+        sb.AppendLine("- Example WRONG diagnosis: \"What is the exact diagnosis of this case?\" — that belongs in `reflective_questions`, not `diagnosis`.");
+        sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(dicomClinicalContext))
+        {
+            sb.AppendLine("## DICOM-derived clinical context");
+            sb.AppendLine(dicomClinicalContext.Trim());
+            sb.AppendLine();
+        }
 
         if (predefinedCase != null)
         {
@@ -557,8 +649,25 @@ public class VisualQaAiService : IVisualQaAiService
                 sb.AppendLine($"- Reflective questions: {predefinedCase.ReflectiveQuestions}");
             sb.AppendLine("CRITICAL NOTE: DO NOT provide the diagnosis directly to the student immediately.");
             sb.AppendLine("Use the Socratic method; ask guiding questions based on 'ReflectiveQuestions' and 'KeyFindings' to lead the student to think independently.");
+            sb.AppendLine("Socratic / guiding questions MUST go in the JSON `reflective_questions` array — NEVER in `diagnosis`.");
+            sb.AppendLine("Even when withholding the full answer, `diagnosis` must still be a short declarative clinical impression for this turn (not a question).");
             sb.AppendLine($"Current student turn in this session: {currentTurnNumber}.");
             sb.AppendLine("Only provide the final answer when the student reaches turn 3 or gets stuck.");
+            sb.AppendLine();
+        }
+
+        if (caseOntology != null)
+        {
+            sb.AppendLine("## Structured case_metadata (clinical ontology axes)");
+            sb.AppendLine($"- Modality: {caseOntology.Modality}");
+            sb.AppendLine($"- Anatomy site: {caseOntology.AnatomySite}");
+            sb.AppendLine($"- Pathology group: {caseOntology.PathologyGroup ?? "N/A"}");
+            sb.AppendLine($"- Laterality: {caseOntology.Laterality ?? "N/A"}");
+            sb.AppendLine($"- View / position: {caseOntology.ViewPosition ?? "N/A"}");
+            sb.AppendLine($"- Case difficulty: {caseOntology.Difficulty ?? "N/A"}");
+            sb.AppendLine($"- Source type: {caseOntology.SourceType ?? "N/A"}");
+            sb.AppendLine($"- Quality score: {(caseOntology.QualityScore?.ToString("0.###", CultureInfo.InvariantCulture) ?? "N/A")}");
+            sb.AppendLine("Use these axes to structure differential reasoning and to avoid modality/anatomy contradictions.");
             sb.AppendLine();
         }
 
@@ -594,7 +703,23 @@ public class VisualQaAiService : IVisualQaAiService
 
         if (!ragContextAdequate)
         {
-            sb.AppendLine("Note: Retrieved reference similarity is below the system's relevance threshold or chunks are missing. Follow general-knowledge mode.");
+            sb.AppendLine("## Library retrieval status");
+            sb.AppendLine(
+                "No sufficiently similar approved cases or knowledge-base documents were retrieved from the BoneVisQA library for this question. " +
+                "State this clearly to the student in Vietnamese, then answer using the image (if any) and general musculoskeletal reasoning. " +
+                "Do not invent [Doc:...] or [Case:...] citations; return \"citations\": [] only when no real UUIDs appear in the hybrid RAG block above.");
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("## Citation requirement (MANDATORY when library context is provided)");
+            sb.AppendLine(
+                "Medical context from the BoneVisQA database is included in the Hybrid RAG block above. " +
+                "You MUST populate the `citations` array with every [Doc:UUID] and [Case:UUID] reference you relied on from that block. " +
+                "Do NOT return \"citations\": [] when retrieval context lists document or case UUIDs that support your answer. " +
+                "If no retrieved chunk directly matches the question, cite any partially relevant Doc/Case UUIDs from the block; " +
+                "if none apply, state clearly in `diagnosis` that you are relying on standard musculoskeletal medical knowledge and return \"citations\": []. " +
+                "Each citation object must use { \"kind\": \"Doc\"|\"Case\", \"id\": \"<uuid>\" } matching markers in the context.");
             sb.AppendLine();
         }
 
@@ -603,24 +728,39 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("For follow-up questions that verify/compare with previous answers, preserve prior conclusions unless new evidence in image/ROI/context clearly contradicts them.");
         sb.AppendLine("If the user question is social/off-topic and not medical, do not analyze image content and return a refusal according to system policy.");
 
-        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(request.Language);
+        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(request.ResolvedResponseLanguage);
         AppendResponseLanguageInstruction(sb, instructionLang);
 
         sb.AppendLine();
-        sb.AppendLine("Format: Strict JSON only with fields: diagnosis, findings, differential_diagnoses, reflective_questions, citations.");
+        sb.AppendLine("The frontend parser requires EXACTLY five JSON fields in this exact order:");
+        sb.AppendLine("1. diagnosis");
+        sb.AppendLine("2. differential_diagnoses");
+        sb.AppendLine("3. findings");
+        sb.AppendLine("4. reflective_questions");
+        sb.AppendLine("5. citations");
+        sb.AppendLine("Return RAW JSON ONLY. Do not return Markdown, headings, prose wrappers, leading commentary, code fences, or ```json.");
         sb.AppendLine("Use this exact structure (use null for optional fields when refusing or when not applicable):");
         sb.AppendLine("{");
-        sb.Append("  \"diagnosis\": \"Primary diagnosis in ").Append(instructionLang)
-            .AppendLine(". Use a binary lead-in only when the question is truly binary and the evidence is decisive.\",");
-        sb.AppendLine("  \"findings\": [\"Key imaging finding 1\", \"Key imaging finding 2\"],");
+        sb.Append("  \"diagnosis\": \"Main diagnosis in ").Append(instructionLang)
+            .AppendLine(". Must be a declarative clinical statement — never a question.\",");
         sb.AppendLine("  \"differential_diagnoses\": [\"Differential 1\", \"Differential 2\"],");
+        sb.AppendLine("  \"findings\": [\"Key sign 1\", \"Key sign 2\"],");
         sb.AppendLine("  \"reflective_questions\": [\"Question 1\", \"Question 2\"],");
         sb.AppendLine("  \"citations\": [");
         sb.AppendLine("    { \"kind\": \"Doc\", \"id\": \"00000000-0000-0000-0000-000000000000\" },");
         sb.AppendLine("    { \"kind\": \"Case\", \"id\": \"00000000-0000-0000-0000-000000000000\" }");
         sb.AppendLine("  ]");
         sb.AppendLine("}");
-        sb.AppendLine("The \"citations\" array must list every [Doc:...] and [Case:...] marker you relied on (kind is Doc or Case; id is the UUID). Use an empty array [] when no library sources were used.");
+        sb.AppendLine("Every non-refusal answer must include all five keys.");
+        if (ragContextAdequate)
+        {
+            sb.AppendLine("Because library retrieval context was provided, `citations` MUST list the Doc/Case UUIDs you used — do not leave it empty when sources exist.");
+        }
+        else
+        {
+            sb.AppendLine("When no library UUIDs were supplied in context, you MUST return \"citations\": [] (empty array, not null and not omitted).");
+        }
+        sb.AppendLine("The \"citations\" array must list every [Doc:...] and [Case:...] marker you relied on (kind is Doc or Case; id is the UUID).");
 
         return sb.ToString();
     }

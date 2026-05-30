@@ -764,13 +764,16 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>
     [HttpGet("triage")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId, [FromQuery] string? source = null)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList(
+        [FromQuery] Guid classId,
+        [FromQuery] string? source = null,
+        [FromQuery] string? status = null)
     {
         try
         {
             var lecturerId = GetLecturerId()
                 ?? throw new InvalidOperationException("Token does not contain a valid user id.");
-            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source);
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source, status);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -785,13 +788,15 @@ public class LecturersController : ControllerBase
 
     /// <summary>Visual QA only triage list (exclude Case QA rows) for deterministic testing.</summary>
     [HttpGet("triage/visual-qa")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList([FromQuery] Guid classId)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList(
+        [FromQuery] Guid classId,
+        [FromQuery] string? status = null)
     {
         try
         {
             var lecturerId = GetLecturerId()
                 ?? throw new InvalidOperationException("Token does not contain a valid user id.");
-            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa", status);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)

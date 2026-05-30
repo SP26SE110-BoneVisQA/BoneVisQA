@@ -2,6 +2,23 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env before any module reads os.environ (db, Hugging Face, Supabase clients).
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(_ENV_FILE)
+load_dotenv()
+
+if _hf_key := os.environ.get("HUGGINGFACE_API_KEY"):
+    os.environ.setdefault("HF_TOKEN", _hf_key)
+
+import transformers
+
+transformers.logging.set_verbosity_error()
+
 from fastapi import FastAPI
 
 from app.api.ingest import router as ingest_router

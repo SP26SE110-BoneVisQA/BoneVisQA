@@ -1,12 +1,15 @@
 fastapi
 uvicorn
+python-dotenv
 httpx
 pydicom
+rarfile
 pylibjpeg
 pylibjpeg-libjpeg
 numpy
 sentence-transformers
 transformers
+open_clip_torch>=2.23.0
 torch
 Pillow
 psycopg2-binary

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import re
 
-TIER3_VALUES = frozenset(
-    {"Trauma", "Degenerative", "Inflammation", "Tumor", "Congenital"}
-)
+TIER3_VALUES = frozenset({"Trauma", "Degenerative", "Infection", "Tumor", "Congenital"})
 
 # Order matters: first regex match wins (more specific groups before generic trauma).
 _RULES: list[tuple[re.Pattern[str], str]] = [
@@ -26,10 +24,10 @@ _RULES: list[tuple[re.Pattern[str], str]] = [
     ),
     (
         re.compile(
-            r"viêm|nhiễm\s*trùng|abscess|inflammation",
+            r"viêm|nhiễm\s*trùng|abscess|inflammation|infection|septic",
             re.IGNORECASE,
         ),
-        "Inflammation",
+        "Infection",
     ),
     (
         re.compile(
@@ -49,7 +47,7 @@ _RULES: list[tuple[re.Pattern[str], str]] = [
 
 
 def map_pathology_tier3(vi_diagnosis: str | None) -> str:
-    """Map Vietnamese chandoan line to exactly one tier-3 pathology group."""
+    """Map Vietnamese/English diagnosis text to exactly one tier-3 pathology group."""
     s = (vi_diagnosis or "").strip()
     if not s:
         return "Trauma"

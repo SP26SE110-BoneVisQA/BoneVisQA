@@ -2,35 +2,57 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BoneVisQA.Services.Models.VisualQA;
 
 namespace BoneVisQA.Services.Models.Expert;
 
 public class ResolveEscalatedAnswerRequestDto
 {
+    [RegularExpression("^$|^(approve|reject)$", ErrorMessage = "Decision must be approve or reject.")]
     public string Decision { get; set; } = "approve";
+
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(8000, MinimumLength = 3)]
     public string AnswerText { get; set; } = string.Empty;
+
+    [StringLength(2000)]
     public string? StructuredDiagnosis { get; set; }
+
     public JsonElement? DifferentialDiagnoses { get; set; }
+
+    [StringLength(4000)]
     public string? KeyImagingFindings { get; set; }
+
+    [StringLength(4000)]
     public string? ReflectiveQuestions { get; set; }
+
+    [StringLength(2000)]
     public string? ReviewNote { get; set; }
+
+    [MinLength(4)]
+    [MaxLength(4)]
     public double[]? CorrectedRoiBoundingBox { get; set; }
 }
 
 public class FlagChunkRequestDto
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(1000, MinimumLength = 3)]
     public string Reason { get; set; } = string.Empty;
 }
 
 public class ExpertRespondRequestDto
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(8000, MinimumLength = 3)]
     public string Content { get; set; } = string.Empty;
 }
 
 /// <summary>ROI payload for promote-to-library; stored in <c>case_annotations.coordinates</c> (JSON text).</summary>
 public class PromoteCaseAnnotationDto
 {
+    [StringLength(200)]
     public string? Label { get; set; }
 
     /// <summary>BBox / polygon / normalized ROI from FE (object or primitive JSON).</summary>
@@ -40,14 +62,17 @@ public class PromoteCaseAnnotationDto
 public class PromoteToLibraryRequestDto
 {
     /// <summary>Optional; when empty a default community title is used.</summary>
+    [StringLength(256)]
     public string? Title { get; set; }
 
     public Guid? CategoryId { get; set; }
 
     public string? CategoryName { get; set; }
 
-    public string? Difficulty { get; set; }
+    /// <summary>Easy / Medium / Hard (strict ontology).</summary>
+    public string Difficulty { get; set; } = string.Empty;
 
+    [MaxLength(20)]
     public List<string>? TagNames { get; set; }
 
     public List<PromoteCaseAnnotationDto>? TurnAnnotations { get; set; }
@@ -55,16 +80,58 @@ public class PromoteToLibraryRequestDto
     public List<PromoteCaseAnnotationDto>? ImageAnnotations { get; set; }
 
     [Required]
+    [StringLength(4000, MinimumLength = 10)]
     public string KeyFindings { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(4000, MinimumLength = 10)]
     public string ReflectiveQuestions { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(2000, MinimumLength = 3)]
     public string SuggestedDiagnosis { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(8000, MinimumLength = 10)]
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>X-Ray, CT, MRI, or Ultrasound (matches <c>case_metadata.modality</c>).</summary>
+    [Required]
+    [StringLength(50)]
+    public string Modality { get; set; } = string.Empty;
+
+    /// <summary>Fine-grained site (Spine, Knee, …).</summary>
+    [Required]
+    [StringLength(100)]
+    public string AnatomySite { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50)]
+    public string Laterality { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50)]
+    public string ViewPosition { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(100)]
+    public string PathologyGroup { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50)]
+    public string SourceType { get; set; } = string.Empty;
+
+    /// <summary>0.0–1.0 quality score for ontology / DICOM-derived QA.</summary>
+    public float QualityScore { get; set; } = 0.85f;
+
+    [Required]
+    [StringLength(8000, MinimumLength = 10)]
+    public string ClinicalEvidence { get; set; } = string.Empty;
+
+    /// <summary>At least two distinct lines required by the expert promotion gate.</summary>
+    [MinLength(2)]
+    [MaxLength(10)]
+    public List<string> DifferentialDiagnoses { get; set; } = new();
 }
 
 public class ExpertCitationDto
@@ -91,7 +158,11 @@ public class ExpertCitationDto
 
 public class ExpertVisualSessionDraftRequestDto
 {
+    [StringLength(2000)]
     public string? ReviewNote { get; set; }
+
+    [MinLength(4)]
+    [MaxLength(4)]
     public double[]? CorrectedRoiBoundingBox { get; set; }
 }
 
@@ -117,12 +188,26 @@ public class ExpertEscalatedAnswerDto
     public string? CaseSuggestedDiagnosis { get; set; }
     public string? CaseKeyFindings { get; set; }
     public string QuestionText { get; set; } = string.Empty;
+
+    /// <summary>Flattened AI answer for expert triage UI (includes structured fields when <c>Content</c> is empty).</summary>
+    [JsonPropertyName("answerText")]
+    public string? AnswerText { get; set; }
+
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
     public string? DifferentialDiagnoses { get; set; }
     public string? KeyImagingFindings { get; set; }
     public string? ReflectiveQuestions { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    /// <summary>Workflow status on <c>visual_qa_sessions.status</c> (alias of <see cref="Status"/> for FE clarity).</summary>
+    [JsonPropertyName("sessionStatus")]
+    public string SessionStatus { get; set; } = string.Empty;
+
+    /// <summary>Human review note on <c>visual_qa_sessions.review_feedback</c>; separate from AI assistant JSON fields.</summary>
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+
     public Guid? EscalatedById { get; set; }
     public DateTime? EscalatedAt { get; set; }
     public double? AiConfidenceScore { get; set; }
@@ -140,6 +225,9 @@ public class ExpertEscalatedAnswerDto
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
+
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 }
 
 public class ExpertDashboardStatsDto

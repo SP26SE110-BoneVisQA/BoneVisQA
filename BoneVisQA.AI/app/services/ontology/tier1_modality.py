@@ -1,8 +1,8 @@
-"""Tier 1: Modality — map DICOM Modality to exactly one of X-ray, CT, MRI."""
+"""Tier 1: Modality — map DICOM Modality to exactly one of X-ray, CT, MRI, Ultrasound."""
 
 from __future__ import annotations
 
-TIER1_VALUES = frozenset({"X-ray", "CT", "MRI"})
+TIER1_VALUES = frozenset({"X-ray", "CT", "MRI", "Ultrasound"})
 
 
 def map_modality_tier1(raw: str | None) -> str:
@@ -16,6 +16,8 @@ def map_modality_tier1(raw: str | None) -> str:
         return "CT"
     if m in ("MR", "MRI"):
         return "MRI"
+    if m in ("US", "USD"):
+        return "Ultrasound"
     # Radiographs and everything else → X-ray
     if m in (
         "DX",
@@ -24,7 +26,6 @@ def map_modality_tier1(raw: str | None) -> str:
         "XA",
         "RF",
         "MG",
-        "US",
         "PT",
         "NM",
         "OT",

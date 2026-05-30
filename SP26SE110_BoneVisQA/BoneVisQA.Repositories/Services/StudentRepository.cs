@@ -22,7 +22,7 @@ public class StudentRepository : IStudentRepository
     {
         return await _unitOfWork.MedicalCaseRepository
 
-            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
@@ -35,7 +35,7 @@ public class StudentRepository : IStudentRepository
     {
         var query = _unitOfWork.MedicalCaseRepository
 
-            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)

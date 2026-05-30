@@ -242,10 +242,10 @@ namespace BoneVisQA.Services.Services.Admin
                     throw new InvalidOperationException("User is not Expert.");
                 if (!classEntity.ClassSpecialtyId.HasValue)
                     throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
-                var expertMatchesClassFocus = await _unitOfWork.Context.ExpertSpecialties
-                    .AnyAsync(es =>
-                        es.ExpertId == dto.ExpertId.Value &&
-                        es.BoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                var expertMatchesClassFocus = await _unitOfWork.Context.Users
+                    .AnyAsync(u =>
+                        u.Id == dto.ExpertId.Value &&
+                        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
                 if (!expertMatchesClassFocus)
                     throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;
@@ -343,10 +343,10 @@ namespace BoneVisQA.Services.Services.Admin
                     throw new InvalidOperationException("User is not Expert.");
                 if (!classEntity.ClassSpecialtyId.HasValue)
                     throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
-                var expertMatchesClassFocus = await _unitOfWork.Context.ExpertSpecialties
-                    .AnyAsync(es =>
-                        es.ExpertId == dto.ExpertId.Value &&
-                        es.BoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                var expertMatchesClassFocus = await _unitOfWork.Context.Users
+                    .AnyAsync(u =>
+                        u.Id == dto.ExpertId.Value &&
+                        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
                 if (!expertMatchesClassFocus)
                     throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;

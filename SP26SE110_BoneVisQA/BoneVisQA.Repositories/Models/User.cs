@@ -55,6 +55,9 @@ public partial class User
     [MaxLength(256)]
     public string? Specialty { get; set; }
 
+    [Column("primary_bone_specialty_id")]
+    public Guid? PrimaryBoneSpecialtyId { get; set; }
+
     [Column("date_of_birth")]
     public DateOnly? DateOfBirth { get; set; }
 
@@ -111,6 +114,10 @@ public partial class User
     [InverseProperty("UsersVerifiedByThisUser")]
     public virtual User? Verifier { get; set; }
 
+    [ForeignKey("PrimaryBoneSpecialtyId")]
+    [InverseProperty("PrimaryExperts")]
+    public virtual BoneSpecialty? PrimaryBoneSpecialty { get; set; }
+
     [InverseProperty("Verifier")]
     public virtual ICollection<User> UsersVerifiedByThisUser { get; set; } = new List<User>();
 
@@ -125,6 +132,12 @@ public partial class User
 
     [InverseProperty("CreatedByExpert")]
     public virtual ICollection<MedicalCase> CreatedMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("OwnerStudent")]
+    public virtual ICollection<MedicalCase> OwnedPersonalMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("ValidatedByUser")]
+    public virtual ICollection<MedicalCase> ValidatedMedicalCases { get; set; } = new List<MedicalCase>();
 
     [InverseProperty("AssignedExpert")]
     public virtual ICollection<MedicalCase> AssignedMedicalCases { get; set; } = new List<MedicalCase>();

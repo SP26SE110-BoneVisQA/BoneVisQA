@@ -18,6 +18,12 @@ public partial class BoneSpecialty
     [InverseProperty("BoneSpecialty")]
     public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
 
+    [InverseProperty("PrimaryBoneSpecialty")]
+    public virtual ICollection<User> PrimaryExperts { get; set; } = new List<User>();
+
     [InverseProperty("ClassSpecialty")]
     public virtual ICollection<AcademicClass> AcademicClasses { get; set; } = new List<AcademicClass>();
+
+    [InverseProperty("TargetBoneSpecialty")]
+    public virtual ICollection<VisualQASession> TargetVisualQaSessions { get; set; } = new List<VisualQASession>();
 }
