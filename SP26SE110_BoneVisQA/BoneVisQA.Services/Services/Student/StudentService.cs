@@ -1671,7 +1671,7 @@ public class StudentService : IStudentService
         if (!await _studentRepository.IsStudentEligibleForAssignedQuizAsync(studentId, quizId, utcNow))
         {
             throw new InvalidOperationException(
-                "Unable to start quiz. Please try again or contact support.");
+                "You are not assigned this quiz through an enrolled class, or the quiz is outside its availability window.");
         }
 
         // Fetch session to check allow_retake BEFORE processing retake
@@ -1696,19 +1696,19 @@ public class StudentService : IStudentService
         if (!effectiveOpenTime.HasValue)
         {
             throw new InvalidOperationException(
-                "Quiz not available. Lecturer has not set an open time.");
+                "Quiz is not yet available. The lecturer has not set an open time for this quiz.");
         }
 
         if (effectiveOpenTime.Value > utcNow)
         {
             throw new InvalidOperationException(
-                $"Quiz not open yet. Opens at: {effectiveOpenTime.Value:HH:mm, dd/MM/yyyy} (Vietnam time).");
+                $"Quiz is not open yet. Open time: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (Vietnam time).");
         }
 
         if (effectiveCloseTime.HasValue && effectiveCloseTime.Value <= utcNow)
         {
             throw new InvalidOperationException(
-                "Quiz is closed. You cannot start or continue.");
+                "Quiz is closed. You cannot start or continue this attempt.");
         }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
@@ -1724,7 +1724,7 @@ public class StudentService : IStudentService
                 if (!globalRetake && !lecturerRetake)
                 {
                     throw new InvalidOperationException(
-                        "Quiz already submitted. Lecturer will enable retake when needed.");
+                        "You have already submitted this quiz. Your lecturer will enable retake when needed.");
                 }
 
                 // Retake allowed: clear previous answers and reset
@@ -1891,39 +1891,25 @@ public class StudentService : IStudentService
             .CountAsync(q => q.QuizId == attempt.QuizId);
         var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
-        bool? isCorrect = false;
-        // Determine question type - handle both enum and string representation
-        var qTypeStr = question.Type?.ToString()?.ToLowerInvariant() ?? "";
-        var isEssay = question.Type == QuestionType.Essay || qTypeStr == "essay";
-        var isMultiSelect = question.Type == QuestionType.MultiSelect || qTypeStr == "multiselect" || qTypeStr == "multi-select";
-        var isFillInBlank = question.Type == QuestionType.FillInBlank || qTypeStr == "fillinblank" || qTypeStr == "fill-in-blank";
-
+        bool isCorrect = false;
         string? studentAnswerForDb = null;
-        string? essayAnswerForDb = null;
 
         // Handle different question types
-        if (isMultiSelect)
+        if (question.Type == QuestionType.MultiSelect)
         {
             // MultiSelect: compare JSON arrays
-            isCorrect = CheckMultiSelectAnswer(submit.SelectedAnswers ?? submit.StudentAnswer, question.CorrectAnswers);
-            studentAnswerForDb = submit.SelectedAnswers ?? submit.StudentAnswer;
+            isCorrect = CheckMultiSelectAnswer(submit.StudentAnswer, question.CorrectAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
         }
-        else if (isFillInBlank)
+        else if (question.Type == QuestionType.FillInBlank)
         {
-            // FillInBlank: use TextAnswer field if available, check against accepted answers (case-insensitive)
-            var textAnswer = !string.IsNullOrWhiteSpace(submit.TextAnswer) ? submit.TextAnswer : submit.StudentAnswer;
-            isCorrect = CheckFillInBlankAnswer(textAnswer, question.AcceptedAnswers);
-            studentAnswerForDb = textAnswer;
-        }
-        else if (isEssay)
-        {
-            // Essay: store essay answer, no auto-grading
-            essayAnswerForDb = submit.EssayAnswer;
-            isCorrect = null; // Essay not auto-graded
+            // FillInBlank: check against accepted answers (case-insensitive)
+            isCorrect = CheckFillInBlankAnswer(submit.StudentAnswer, question.AcceptedAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
         }
         else
         {
-            // MultipleChoice, TrueFalse: standard string comparison
+            // MultipleChoice, TrueFalse, Essay: standard string comparison
             isCorrect = string.Equals(
                 submit.StudentAnswer?.Trim(),
                 question.CorrectAnswer?.Trim(),
@@ -1938,11 +1924,10 @@ public class StudentService : IStudentService
             AttemptId = submit.AttemptId,
             QuestionId = submit.QuestionId,
             StudentAnswer = studentAnswerForDb,
-            EssayAnswer = essayAnswerForDb,
             IsCorrect = isCorrect,
             // Calculate score: each question worth 100/totalQuestions points
-            ScoreAwarded = isEssay ? (decimal?)null : (isCorrect == true ? pointsPerQuestion : 0),
-            IsGraded = !isEssay // Auto-graded except for Essay
+            ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
+            IsGraded = true // Auto-graded
         };
 
         await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);

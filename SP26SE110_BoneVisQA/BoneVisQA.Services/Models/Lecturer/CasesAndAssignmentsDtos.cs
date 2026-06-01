@@ -72,7 +72,6 @@ public class CaseDto
     public bool IsApproved { get; set; }
     public bool IsActive { get; set; }
     public DateTime? CreatedAt { get; set; }
-    public string? ImageUrl { get; set; }
 }
 
 public class AssignCasesToClassRequestDto

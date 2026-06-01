@@ -248,8 +248,7 @@ public class AuthsController : ControllerBase
         {
             new Claim(JwtRegisteredClaimNames.Sub, authResult.UserId?.ToString() ?? string.Empty),
             new Claim(JwtRegisteredClaimNames.Email, authResult.Email ?? string.Empty),
-            new Claim(JwtRegisteredClaimNames.UniqueName, authResult.FullName ?? string.Empty),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(JwtRegisteredClaimNames.UniqueName, authResult.FullName ?? string.Empty)
         };
 
         if (authResult.Roles != null)
@@ -264,7 +263,7 @@ public class AuthsController : ControllerBase
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(24), // Extended from 1 hour to 24 hours
+            expires: DateTime.UtcNow.AddHours(1),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

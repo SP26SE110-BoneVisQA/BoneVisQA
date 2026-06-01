@@ -74,7 +74,7 @@ public class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status401Unauthorized,
                 "Unauthorized",
                 ProblemTypeFor(StatusCodes.Status401Unauthorized),
-                "Access denied. Please log in again.",
+                "Access denied.",
                 EmptyExtensions()),
 
             OperationCanceledException or TaskCanceledException => (

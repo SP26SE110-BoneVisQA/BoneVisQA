@@ -38,20 +38,12 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
-
-// Disable configuration file watching in containerized/production environments
-// to avoid hitting Linux inotify limits (default 1024 instances)
-if (!builder.Environment.IsDevelopment())
-{
-    builder.Configuration.AddEnvironmentVariables();
-}
 
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
 // Study archives (.zip/.rar) may be large; keep in sync with StudyArchiveIngestHelper.StudyArchiveMaxBytes.
@@ -108,12 +100,8 @@ builder.Services.Configure<FormOptions>(options =>
     options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
 });
 
-// Add User Secrets for development only (Google OAuth credentials)
-// In production, use environment variables instead
-if (builder.Environment.IsDevelopment())
-{
-    builder.Configuration.AddUserSecrets<Program>();
-}
+// Add User Secrets cho development (Google OAuth credentials)
+builder.Configuration.AddUserSecrets<Program>();
 
 builder.Services.AddCors(options =>
 {
@@ -172,13 +160,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        // Frontend (axios) sends camelCase, but .NET DTOs use PascalCase
-        // Use JsonPropertyNameAttribute on DTOs to handle this
-        options.JsonSerializerOptions.PropertyNamingPolicy = null;
-    });
+builder.Services.AddControllers();
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -345,7 +327,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuer = false,
             ValidateAudience = false,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minutes of clock drift
+            ClockSkew = TimeSpan.Zero
         };
 
         options.Events = new JwtBearerEvents
@@ -361,25 +343,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     context.Token = accessToken;
                 }
 
-                return Task.CompletedTask;
-            },
-            OnAuthenticationFailed = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
-                logger?.LogWarning(
-                    "JWT authentication failed for {Path}: {Error}",
-                    context.HttpContext.Request.Path,
-                    context.Exception.Message);
-                return Task.CompletedTask;
-            },
-            OnChallenge = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
-                logger?.LogWarning(
-                    "JWT challenge for {Path}: Error={Error}, ErrorDescription={Description}",
-                    context.HttpContext.Request.Path,
-                    context.Error,
-                    context.ErrorDescription);
                 return Task.CompletedTask;
             }
         };
