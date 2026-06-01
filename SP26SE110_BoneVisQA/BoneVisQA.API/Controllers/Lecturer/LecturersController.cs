@@ -2,6 +2,7 @@ using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
+using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
@@ -26,17 +27,20 @@ public class LecturersController : ControllerBase
     private readonly ILecturerService _lecturerService;
     private readonly IAIQuizService _aiQuizService;
     private readonly IQuizsService _quizService;
+    private readonly IProfileService _profileService;
     private readonly ILogger<LecturersController> _logger;
 
     public LecturersController(
         ILecturerService lecturerService,
         IAIQuizService aiQuizService,
         IQuizsService quizService,
+        IProfileService profileService,
         ILogger<LecturersController> logger)
     {
         _lecturerService = lecturerService;
         _aiQuizService = aiQuizService;
         _quizService = quizService;
+        _profileService = profileService;
         _logger = logger;
     }
 
@@ -1267,6 +1271,54 @@ public class LecturersController : ControllerBase
         {
             var result = await _lecturerService.GetClassStudentProgressAsync(classId);
             return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    #endregion
+
+    #region Profile
+
+    /// <summary>
+    /// Lấy thông tin profile của giảng viên hiện tại.
+    /// </summary>
+    [HttpGet("profile")]
+    [ProducesResponseType(typeof(StudentProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<StudentProfileDto>> GetProfile()
+    {
+        var userId = TryGetJwtUserId(User);
+        if (userId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var profile = await _profileService.GetProfileAsync(userId.Value);
+        return Ok(profile);
+    }
+
+    /// <summary>
+    /// Cập nhật thông tin profile của giảng viên hiện tại.
+    /// </summary>
+    [HttpPut("profile")]
+    [ProducesResponseType(typeof(StudentProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<StudentProfileDto>> UpdateProfile([FromBody] UpdateStudentProfileRequestDto request)
+    {
+        var userId = TryGetJwtUserId(User);
+        if (userId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        try
+        {
+            var profile = await _profileService.UpdateProfileAsync(userId.Value, request);
+            return Ok(profile);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {
