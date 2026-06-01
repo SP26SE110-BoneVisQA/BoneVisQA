@@ -38,6 +38,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Npgsql;
@@ -327,7 +328,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuer = false,
             ValidateAudience = false,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
+            ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minutes of clock drift
         };
 
         options.Events = new JwtBearerEvents
@@ -343,6 +344,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     context.Token = accessToken;
                 }
 
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+                logger?.LogWarning(
+                    "JWT authentication failed for {Path}: {Error}",
+                    context.HttpContext.Request.Path,
+                    context.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnChallenge = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+                logger?.LogWarning(
+                    "JWT challenge for {Path}: Error={Error}, ErrorDescription={Description}",
+                    context.HttpContext.Request.Path,
+                    context.Error,
+                    context.ErrorDescription);
                 return Task.CompletedTask;
             }
         };

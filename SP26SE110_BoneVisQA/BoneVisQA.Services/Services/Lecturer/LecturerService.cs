@@ -1211,6 +1211,7 @@ public class LecturerService : ILecturerService
         var cases = await _unitOfWork.MedicalCaseRepository
             .FindByCondition(c => true)
             .Include(c => c.Category)
+            .Include(c => c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
 
@@ -1225,7 +1226,8 @@ public class LecturerService : ILecturerService
                 IsApproved = c.IsApproved ?? false,
 
                 IsActive = c.IsActive ?? false,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                ImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl
             })
             .ToList();
     }
@@ -1235,6 +1237,7 @@ public class LecturerService : ILecturerService
         var query = _unitOfWork.MedicalCaseRepository
             .FindByCondition(c => true)
             .Include(c => c.Category)
+            .Include(c => c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id))
             .OrderByDescending(c => c.CreatedAt);
 
         var totalCount = await query.CountAsync();
@@ -1258,7 +1261,8 @@ public class LecturerService : ILecturerService
                 CategoryName = c.Category?.Name,
                 IsApproved = c.IsApproved ?? false,
                 IsActive = c.IsActive ?? false,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                ImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl
             })
             .ToList();
 
