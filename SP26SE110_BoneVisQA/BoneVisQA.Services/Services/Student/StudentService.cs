@@ -1671,7 +1671,7 @@ public class StudentService : IStudentService
         if (!await _studentRepository.IsStudentEligibleForAssignedQuizAsync(studentId, quizId, utcNow))
         {
             throw new InvalidOperationException(
-                "You are not assigned this quiz through an enrolled class, or the quiz is outside its availability window.");
+                "Unable to start quiz. Please try again or contact support.");
         }
 
         // Fetch session to check allow_retake BEFORE processing retake
@@ -1696,19 +1696,19 @@ public class StudentService : IStudentService
         if (!effectiveOpenTime.HasValue)
         {
             throw new InvalidOperationException(
-                "Quiz is not yet available. The lecturer has not set an open time for this quiz.");
+                "Quiz not available. Lecturer has not set an open time.");
         }
 
         if (effectiveOpenTime.Value > utcNow)
         {
             throw new InvalidOperationException(
-                $"Quiz is not open yet. Open time: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (Vietnam time).");
+                $"Quiz not open yet. Opens at: {effectiveOpenTime.Value:HH:mm, dd/MM/yyyy} (Vietnam time).");
         }
 
         if (effectiveCloseTime.HasValue && effectiveCloseTime.Value <= utcNow)
         {
             throw new InvalidOperationException(
-                "Quiz is closed. You cannot start or continue this attempt.");
+                "Quiz is closed. You cannot start or continue.");
         }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
@@ -1724,7 +1724,7 @@ public class StudentService : IStudentService
                 if (!globalRetake && !lecturerRetake)
                 {
                     throw new InvalidOperationException(
-                        "You have already submitted this quiz. Your lecturer will enable retake when needed.");
+                        "Quiz already submitted. Lecturer will enable retake when needed.");
                 }
 
                 // Retake allowed: clear previous answers and reset

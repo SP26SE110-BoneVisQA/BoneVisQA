@@ -1229,8 +1229,11 @@ public class StudentLearningService : IStudentLearningService
             var result = new List<StudentTopicStatDto>();
             foreach (var kvp in topicStats)
             {
+                // Clamp to [0, 100] since essay bonus points can inflate the numerator
                 var accuracyRate = kvp.Value.TotalQuestions > 0
-                    ? Math.Round((double)kvp.Value.TotalEarnedPoints / kvp.Value.TotalQuestions * 100, 2)
+                    ? Math.Clamp(
+                        Math.Round((double)kvp.Value.TotalEarnedPoints / kvp.Value.TotalQuestions * 100, 2),
+                        0, 100)
                     : 0;
 
                 result.Add(new StudentTopicStatDto

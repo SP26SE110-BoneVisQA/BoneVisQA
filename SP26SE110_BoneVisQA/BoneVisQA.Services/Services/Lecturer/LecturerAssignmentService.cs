@@ -747,11 +747,18 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     public async Task<IReadOnlyList<StudentQuizAttemptDto>> GetClassQuizAttemptsAsync(
         Guid lecturerId, Guid classId, Guid quizId)
     {
-        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+        var session = await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
 
+        // Get student IDs in this class via ClassEnrollments
+        var studentIdsInClass = await _unitOfWork.Context.ClassEnrollments
+            .Where(ce => ce.ClassId == classId)
+            .Select(ce => ce.StudentId)
+            .ToListAsync();
+
+        // Get attempts for this quiz AND for students in this class (filter by class via student enrollment)
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
-            .Where(a => a.QuizId == quizId)
+            .Where(a => a.QuizId == quizId && studentIdsInClass.Contains(a.StudentId))
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers)
                 .ThenInclude(sa => sa.Question)
@@ -759,13 +766,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ThenBy(a => a.StartedAt)
             .ToListAsync();
 
-        var questionCounts = await _unitOfWork.Context.QuizQuestions
-            .Where(q => q.QuizId == quizId)
-            .GroupBy(_ => 1)
-            .Select(g => new { Count = g.Count() })
-            .FirstOrDefaultAsync();
-
-        var totalQuestions = questionCounts?.Count ?? 0;
+        var totalQuestions = session.Quiz?.QuizQuestions?.Count ?? 0;
         var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
         return attempts.Select(a => {
@@ -813,29 +814,59 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     public async Task<QuizAttemptDetailDto> GetQuizAttemptDetailAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId)
     {
-        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+        // Optimize: Use returned session to avoid redundant queries
+        var session = await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
 
-        var attempt = await _unitOfWork.Context.QuizAttempts
+        // Optimize: Project directly to avoid complex Include chains that can cause connection issues
+        var attemptData = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.Id == attemptId && a.QuizId == quizId)
-            .Include(a => a.Student)
-            .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
+            .Select(a => new 
+            {
+                a.Id,
+                a.QuizId,
+                a.StudentId,
+                a.StartedAt,
+                a.CompletedAt,
+                StudentName = a.Student != null ? a.Student.FullName : "Student",
+                StudentQuizAnswers = a.StudentQuizAnswers
+                    .Select(sa => new
+                    {
+                        sa.Id,
+                        sa.QuestionId,
+                        sa.StudentAnswer,
+                        sa.EssayAnswer,
+                        sa.IsCorrect,
+                        sa.ScoreAwarded,
+                        sa.LecturerFeedback,
+                        sa.IsGraded,
+                        Question = sa.Question != null ? new
+                        {
+                            sa.Question.QuestionText,
+                            sa.Question.Type,
+                            sa.Question.OptionA,
+                            sa.Question.OptionB,
+                            sa.Question.OptionC,
+                            sa.Question.OptionD,
+                            sa.Question.CorrectAnswer,
+                            sa.Question.ReferenceAnswer,
+                            sa.Question.ImageUrl
+                        } : null
+                    })
+            })
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Student submission not found.");
 
-        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+        // Get quiz from session (already loaded via Include) or from repository
+        var quiz = session.Quiz ?? await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Quiz not found.");
 
-        var session = await _unitOfWork.Context.ClassQuizSessions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
-
         // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
-        var totalQuestions = attempt.StudentQuizAnswers.Count;
+        var totalQuestions = attemptData.StudentQuizAnswers.Count();
         var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
         decimal earnedPoints = 0;
-        foreach (var answer in attempt.StudentQuizAnswers)
+        foreach (var answer in attemptData.StudentQuizAnswers)
         {
             if (answer.Question?.Type == QuestionType.Essay)
             {
@@ -854,27 +885,27 @@ public class LecturerAssignmentService : ILecturerAssignmentService
 
         return new QuizAttemptDetailDto
         {
-            AttemptId = attempt.Id,
-            QuizId = attempt.QuizId,
+            AttemptId = attemptData.Id,
+            QuizId = attemptData.QuizId,
             QuizTitle = quiz.Title,
-            StudentId = attempt.StudentId,
-            StudentName = attempt.Student?.FullName ?? "Student",
+            StudentId = attemptData.StudentId,
+            StudentName = attemptData.StudentName,
             Score = calculatedScore, // Use calculated score instead of saved score
-            StartedAt = attempt.StartedAt,
-            CompletedAt = attempt.CompletedAt,
-            PassingScore = NormalizePassingScore(session?.PassingScore, quiz.IsAiGenerated),
-            Questions = attempt.StudentQuizAnswers
-                .OrderBy(sa => sa.Question.QuestionText)
+            StartedAt = attemptData.StartedAt,
+            CompletedAt = attemptData.CompletedAt,
+            PassingScore = NormalizePassingScore(session.PassingScore, quiz.IsAiGenerated),
+            Questions = attemptData.StudentQuizAnswers
+                .OrderBy(sa => sa.Question?.QuestionText)
                 .Select(sa => new QuestionWithAnswerDto
                 {
                     QuestionId = sa.QuestionId,
-                    QuestionText = sa.Question.QuestionText,
-                    Type = sa.Question.Type?.ToString(),
-                    OptionA = sa.Question.OptionA,
-                    OptionB = sa.Question.OptionB,
-                    OptionC = sa.Question.OptionC,
-                    OptionD = sa.Question.OptionD,
-                    CorrectAnswer = sa.Question.CorrectAnswer,
+                    QuestionText = sa.Question?.QuestionText ?? string.Empty,
+                    Type = sa.Question?.Type?.ToString(),
+                    OptionA = sa.Question?.OptionA,
+                    OptionB = sa.Question?.OptionB,
+                    OptionC = sa.Question?.OptionC,
+                    OptionD = sa.Question?.OptionD,
+                    CorrectAnswer = sa.Question?.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
                     EssayAnswer = sa.EssayAnswer,
                     // FIX: Use IsCorrect from DB which is properly set:
@@ -882,12 +913,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                     // - Essay: null until lecturer grades (so IsCorrect stays null)
                     IsCorrect = sa.IsCorrect,
                     AnswerId = sa.Id,
-                    MaxScore = 1, // Each question is worth 1 point
+                    MaxScore = (int)Math.Round(pointsPerQuestion), // Each question is worth pointsPerQuestion points (100/total)
                     ScoreAwarded = sa.ScoreAwarded,
                     LecturerFeedback = sa.LecturerFeedback,
                     IsGraded = sa.IsGraded,
-                    ReferenceAnswer = sa.Question.ReferenceAnswer,
-                    ImageUrl = sa.Question.ImageUrl
+                    ReferenceAnswer = sa.Question?.ReferenceAnswer,
+                    ImageUrl = sa.Question?.ImageUrl
                 }).ToList()
         };
     }
@@ -977,16 +1008,24 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return await GetQuizAttemptDetailAsync(lecturerId, classId, quizId, attemptId);
     }
 
-    private async Task EnsureQuizSessionExistsForClassAsync(Guid lecturerId, Guid classId, Guid quizId)
+    private async Task<ClassQuizSession> EnsureQuizSessionExistsForClassAsync(Guid lecturerId, Guid classId, Guid quizId)
     {
-        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
-
+        // Optimize: Use single query with Include instead of 2 separate queries
         var session = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
+            .Include(s => s.Class)
+            .Include(s => s.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
         if (session == null)
             throw new KeyNotFoundException("This quiz has not been assigned to a class.");
+
+        // Check lecturer ownership inline (avoid separate query to AcademicClasses)
+        if (session.Class == null || session.Class.LecturerId != lecturerId)
+            throw new KeyNotFoundException("No class under this lecturer was found.");
+
+        return session;
     }
 
     private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
