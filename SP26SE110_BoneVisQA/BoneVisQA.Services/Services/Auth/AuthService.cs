@@ -549,6 +549,8 @@ public class AuthService : IAuthService
         }
 
         var isGuest = user.UserRoles.Any(ur => ur.Role.Name == "Guest");
+        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
+
         if (isGuest)
         {
             return new AuthResultDto
@@ -556,6 +558,9 @@ public class AuthService : IAuthService
                 Success = true,
                 Message = "Account is pending medical verification. Please complete your information.",
                 UserId = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                Roles = roles,
                 RequiresMedicalVerification = true
             };
         }
@@ -564,8 +569,6 @@ public class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.UserRepository.UpdateAsync(user);
         await _unitOfWork.SaveAsync();
-
-        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
 
         return new AuthResultDto
         {
