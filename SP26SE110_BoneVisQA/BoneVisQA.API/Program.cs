@@ -161,7 +161,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Frontend (axios) sends camelCase, but .NET DTOs use PascalCase
+        // Use JsonPropertyNameAttribute on DTOs to handle this
+        options.JsonSerializerOptions.PropertyNamingPolicy = null;
+    });
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>

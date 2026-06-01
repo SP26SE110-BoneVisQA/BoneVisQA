@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Student;
 
@@ -91,12 +92,17 @@ public class QuizSessionDto
 
 public class SubmitQuizQuestionAnswerDto
 {
+    [JsonPropertyName("questionId")]
     public Guid QuestionId { get; set; }
+    [JsonPropertyName("studentAnswer")]
     public string? StudentAnswer { get; set; } // For MC/TF
+    [JsonPropertyName("essayAnswer")]
     public string? EssayAnswer { get; set; }   // For essay
     /// <summary>For MultiSelect - JSON array of selected answers like ["A", "C"]</summary>
+    [JsonPropertyName("selectedAnswers")]
     public string? SelectedAnswers { get; set; }
     /// <summary>For FillInBlank - text answer</summary>
+    [JsonPropertyName("textAnswer")]
     public string? TextAnswer { get; set; }
 }
 
@@ -106,9 +112,11 @@ public class SubmitQuizQuestionAnswerDto
 public class SubmitQuizRequestDto
 {
     /// <summary>Attempt ID - can be string or Guid</summary>
+    [JsonPropertyName("attemptId")]
     public string AttemptId { get; set; } = string.Empty;
     
     /// <summary>List of answers for each question</summary>
+    [JsonPropertyName("answers")]
     public List<SubmitQuizQuestionAnswerDto> Answers { get; set; } = new();
 }
 

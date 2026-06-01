@@ -305,8 +305,14 @@ public class StudentLearningService : IStudentLearningService
 
             var existing = attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == answer.QuestionId);
 
+            // Determine question type - handle both enum and string representation
+            var qTypeStr = question.Type?.ToString()?.ToLowerInvariant() ?? "";
+            var isEssay = question.Type == QuestionType.Essay || qTypeStr == "essay";
+            var isMultiSelect = question.Type == QuestionType.MultiSelect || qTypeStr == "multiselect" || qTypeStr == "multi-select";
+            var isFillInBlank = question.Type == QuestionType.FillInBlank || qTypeStr == "fillinblank" || qTypeStr == "fill-in-blank";
+
             // Handle different question types
-            if (question.Type == QuestionType.Essay)
+            if (isEssay)
             {
                 // Essay: store essay answer, no auto-grading
                 if (existing == null)
@@ -337,13 +343,23 @@ public class StudentLearningService : IStudentLearningService
             else // MultipleChoice, TrueFalse, MultiSelect, FillInBlank: auto-grade
             {
                 var isCorrect = false;
-                if (question.Type == QuestionType.MultiSelect)
+                
+                // Determine what to store in StudentAnswer based on question type
+                string? studentAnswerToStore = null;
+                
+                if (isMultiSelect)
                 {
                     isCorrect = CheckMultiSelectAnswer(answer.SelectedAnswers, question.CorrectAnswers);
+                    studentAnswerToStore = answer.SelectedAnswers; // Store selected answers as JSON
                 }
-                else if (question.Type == QuestionType.FillInBlank)
+                else if (isFillInBlank)
                 {
-                    isCorrect = CheckFillInBlankAnswer(answer.StudentAnswer, question.AcceptedAnswers);
+                    // Use TextAnswer field for Fill-in-Blank questions, fallback to StudentAnswer
+                    var textAnswer = !string.IsNullOrWhiteSpace(answer.TextAnswer) 
+                        ? answer.TextAnswer 
+                        : answer.StudentAnswer;
+                    isCorrect = CheckFillInBlankAnswer(textAnswer, question.AcceptedAnswers);
+                    studentAnswerToStore = textAnswer;
                 }
                 else
                 {
@@ -351,6 +367,7 @@ public class StudentLearningService : IStudentLearningService
                         answer.StudentAnswer?.Trim(),
                         question.CorrectAnswer?.Trim(),
                         StringComparison.OrdinalIgnoreCase);
+                    studentAnswerToStore = answer.StudentAnswer;
                 }
 
                 if (existing == null)
@@ -360,8 +377,8 @@ public class StudentLearningService : IStudentLearningService
                         Id = Guid.NewGuid(),
                         AttemptId = attempt.Id,
                         QuestionId = answer.QuestionId,
-                        StudentAnswer = answer.StudentAnswer,
-                        EssayAnswer = null,
+                        StudentAnswer = studentAnswerToStore,
+                        EssayAnswer = isEssay ? answer.EssayAnswer : null,
                         IsCorrect = isCorrect,
                         ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
                         IsGraded = true // Auto-graded
@@ -371,8 +388,8 @@ public class StudentLearningService : IStudentLearningService
                 }
                 else
                 {
-                    existing.StudentAnswer = answer.StudentAnswer;
-                    existing.EssayAnswer = null;
+                    existing.StudentAnswer = studentAnswerToStore;
+                    existing.EssayAnswer = isEssay ? answer.EssayAnswer : null;
                     existing.IsCorrect = isCorrect;
                     existing.ScoreAwarded = isCorrect ? pointsPerQuestion : 0;
                     existing.IsGraded = true;

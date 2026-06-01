@@ -306,9 +306,18 @@ public class QuizScoreResultDto
 public class StudentSubmitQuestionDto
 {
     public Guid StudentId { get; set; }
+    [JsonPropertyName("attemptId")]
     public Guid AttemptId { get; set; }
+    [JsonPropertyName("questionId")]
     public Guid QuestionId { get; set; }
+    [JsonPropertyName("studentAnswer")]
     public string? StudentAnswer { get; set; }
+    [JsonPropertyName("essayAnswer")]
+    public string? EssayAnswer { get; set; }
+    [JsonPropertyName("selectedAnswers")]
+    public string? SelectedAnswers { get; set; }
+    [JsonPropertyName("textAnswer")]
+    public string? TextAnswer { get; set; }
 }
 
 // StudentSubmitQuestionResponseDto - Response for student quiz submission

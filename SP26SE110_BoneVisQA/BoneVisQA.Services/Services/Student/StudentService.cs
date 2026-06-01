@@ -1892,24 +1892,38 @@ public class StudentService : IStudentService
         var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
         bool isCorrect = false;
+        // Determine question type - handle both enum and string representation
+        var qTypeStr = question.Type?.ToString()?.ToLowerInvariant() ?? "";
+        var isEssay = question.Type == QuestionType.Essay || qTypeStr == "essay";
+        var isMultiSelect = question.Type == QuestionType.MultiSelect || qTypeStr == "multiselect" || qTypeStr == "multi-select";
+        var isFillInBlank = question.Type == QuestionType.FillInBlank || qTypeStr == "fillinblank" || qTypeStr == "fill-in-blank";
+
         string? studentAnswerForDb = null;
+        string? essayAnswerForDb = null;
 
         // Handle different question types
-        if (question.Type == QuestionType.MultiSelect)
+        if (isMultiSelect)
         {
             // MultiSelect: compare JSON arrays
-            isCorrect = CheckMultiSelectAnswer(submit.StudentAnswer, question.CorrectAnswers);
-            studentAnswerForDb = submit.StudentAnswer;
+            isCorrect = CheckMultiSelectAnswer(submit.SelectedAnswers ?? submit.StudentAnswer, question.CorrectAnswers);
+            studentAnswerForDb = submit.SelectedAnswers ?? submit.StudentAnswer;
         }
-        else if (question.Type == QuestionType.FillInBlank)
+        else if (isFillInBlank)
         {
-            // FillInBlank: check against accepted answers (case-insensitive)
-            isCorrect = CheckFillInBlankAnswer(submit.StudentAnswer, question.AcceptedAnswers);
-            studentAnswerForDb = submit.StudentAnswer;
+            // FillInBlank: use TextAnswer field if available, check against accepted answers (case-insensitive)
+            var textAnswer = !string.IsNullOrWhiteSpace(submit.TextAnswer) ? submit.TextAnswer : submit.StudentAnswer;
+            isCorrect = CheckFillInBlankAnswer(textAnswer, question.AcceptedAnswers);
+            studentAnswerForDb = textAnswer;
+        }
+        else if (isEssay)
+        {
+            // Essay: store essay answer, no auto-grading
+            essayAnswerForDb = submit.EssayAnswer;
+            isCorrect = null; // Essay not auto-graded
         }
         else
         {
-            // MultipleChoice, TrueFalse, Essay: standard string comparison
+            // MultipleChoice, TrueFalse: standard string comparison
             isCorrect = string.Equals(
                 submit.StudentAnswer?.Trim(),
                 question.CorrectAnswer?.Trim(),
@@ -1924,10 +1938,11 @@ public class StudentService : IStudentService
             AttemptId = submit.AttemptId,
             QuestionId = submit.QuestionId,
             StudentAnswer = studentAnswerForDb,
+            EssayAnswer = essayAnswerForDb,
             IsCorrect = isCorrect,
             // Calculate score: each question worth 100/totalQuestions points
-            ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
-            IsGraded = true // Auto-graded
+            ScoreAwarded = isEssay ? (decimal?)null : (isCorrect == true ? pointsPerQuestion : 0),
+            IsGraded = !isEssay // Auto-graded except for Essay
         };
 
         await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
