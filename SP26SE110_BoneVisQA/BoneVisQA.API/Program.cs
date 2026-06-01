@@ -46,6 +46,13 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
+// Disable configuration file watching in containerized/production environments
+// to avoid hitting Linux inotify limits (default 1024 instances)
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddEnvironmentVariables();
+}
+
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
 // Study archives (.zip/.rar) may be large; keep in sync with StudyArchiveIngestHelper.StudyArchiveMaxBytes.
 const long maxUploadBodyBytes = 209715200; // 200 MB
@@ -101,8 +108,12 @@ builder.Services.Configure<FormOptions>(options =>
     options.MemoryBufferThreshold = 1048576; // 1 MB — default-style buffering; larger parts use OS temp as needed.
 });
 
-// Add User Secrets cho development (Google OAuth credentials)
-builder.Configuration.AddUserSecrets<Program>();
+// Add User Secrets for development only (Google OAuth credentials)
+// In production, use environment variables instead
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>();
+}
 
 builder.Services.AddCors(options =>
 {

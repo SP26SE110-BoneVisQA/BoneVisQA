@@ -39,6 +39,11 @@ ENV PORT=${PORT:-8080}
 ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
 ENV ASPNETCORE_ENVIRONMENT=Production
 
+# Disable configuration file watching to prevent hitting Linux inotify limits
+# This prevents: "The configured user limit (1024) on the number of inotify instances has been reached"
+# Double underscore maps to nested property: hostBuilder:reloadConfigOnChange
+ENV ASPNETCORE_hostBuilder__reloadConfigOnChange=false
+
 # Copy published files from build stage
 COPY --from=build /app/publish .
 
