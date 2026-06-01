@@ -1891,7 +1891,7 @@ public class StudentService : IStudentService
             .CountAsync(q => q.QuizId == attempt.QuizId);
         var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
-        bool isCorrect = false;
+        bool? isCorrect = false;
         // Determine question type - handle both enum and string representation
         var qTypeStr = question.Type?.ToString()?.ToLowerInvariant() ?? "";
         var isEssay = question.Type == QuestionType.Essay || qTypeStr == "essay";
