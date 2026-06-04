@@ -170,6 +170,15 @@ public static class VisualQaSessionTurnsMapper
     {
         var actorRole = MapResponderRole(message.Role) ?? "system";
         var (targetAssistantId, displayContent) = VisualQaReviewFeedbackRouting.Resolve(message);
+        var isExpertClinicalAnswer = string.Equals(message.Role, "Expert", StringComparison.OrdinalIgnoreCase)
+            && (!string.IsNullOrWhiteSpace(message.SuggestedDiagnosis)
+                || !string.IsNullOrWhiteSpace(message.KeyImagingFindings)
+                || !string.IsNullOrWhiteSpace(message.DifferentialDiagnoses));
+        var isLecturerClinicalAnswer = string.Equals(message.Role, "Lecturer", StringComparison.OrdinalIgnoreCase)
+            && (!string.IsNullOrWhiteSpace(message.SuggestedDiagnosis)
+                || !string.IsNullOrWhiteSpace(message.KeyImagingFindings)
+                || !string.IsNullOrWhiteSpace(message.DifferentialDiagnoses));
+
         return new VisualQaTurnDto
         {
             SessionId = sessionId,
@@ -183,11 +192,17 @@ public static class VisualQaSessionTurnsMapper
             MessageText = displayContent,
             AnswerText = displayContent,
             TargetAssistantMessageId = targetAssistantId,
-            Diagnosis = message.SuggestedDiagnosis,
-            Findings = SplitMultilineField(message.KeyImagingFindings),
-            DifferentialDiagnoses = DeserializeJsonArrayToList(message.DifferentialDiagnoses),
-            ReflectiveQuestions = SplitMultilineField(message.ReflectiveQuestions),
-            Citations = ResolveMessageCitations(message),
+            Diagnosis = isExpertClinicalAnswer || isLecturerClinicalAnswer ? message.SuggestedDiagnosis : null,
+            Findings = isExpertClinicalAnswer || isLecturerClinicalAnswer
+                ? SplitMultilineField(message.KeyImagingFindings)
+                : Array.Empty<string>(),
+            DifferentialDiagnoses = isExpertClinicalAnswer || isLecturerClinicalAnswer
+                ? DeserializeJsonArrayToList(message.DifferentialDiagnoses)
+                : Array.Empty<string>(),
+            ReflectiveQuestions = isExpertClinicalAnswer || isLecturerClinicalAnswer
+                ? SplitMultilineField(message.ReflectiveQuestions)
+                : Array.Empty<string>(),
+            Citations = Array.Empty<CitationItemDto>(),
             CreatedAt = message.CreatedAt,
             ResponseKind = "review_update",
             PolicyReason = null,

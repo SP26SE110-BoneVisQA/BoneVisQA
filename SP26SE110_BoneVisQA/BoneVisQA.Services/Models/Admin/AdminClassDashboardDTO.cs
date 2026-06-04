@@ -5,13 +5,12 @@ namespace BoneVisQA.Services.Models.Admin
 {
     /// <summary>
     /// DTO cho trang Admin Dashboard - Quản lý Class toàn diện
-    /// Bao gồm thông tin đầy đủ về Expert Specialty
     /// </summary>
 
     //======================================================= CLASS DASHBOARD ===================================================
     
     /// <summary>
-    /// Class với thông tin đầy đủ: Lecturer, Expert, Expert's Specialties
+    /// Class với thông tin đầy đủ: Lecturer, Expert
     /// </summary>
     public class ClassDashboardDto
     {
@@ -38,9 +37,6 @@ namespace BoneVisQA.Services.Models.Admin
         public string? ExpertName { get; set; }
         public string? ExpertEmail { get; set; }
 
-        // Expert Specialties - FULL DETAIL
-        public List<ExpertSpecialtyInfoDto> ExpertSpecialties { get; set; } = new();
-
         // Student Count
         public int StudentCount { get; set; }
 
@@ -49,46 +45,16 @@ namespace BoneVisQA.Services.Models.Admin
         public int TotalQuizzes { get; set; }
     }
 
-    /// <summary>
-    /// Thông tin chuyên môn của Expert (đầy đủ)
-    /// </summary>
-    public class ExpertSpecialtyInfoDto
-    {
-        public Guid Id { get; set; }
-        public Guid BoneSpecialtyId { get; set; }
-        public string? BoneSpecialtyName { get; set; }
-        public string? BoneSpecialtyCode { get; set; }
-        public Guid? PathologyCategoryId { get; set; }
-        public string? PathologyCategoryName { get; set; }
-        public int ProficiencyLevel { get; set; }
-        public int? YearsExperience { get; set; }
-        public string? Certifications { get; set; }
-        public bool IsPrimary { get; set; }
-    }
-
     //======================================================= EXPERT DROPDOWN ===================================================
     
     /// <summary>
-    /// Expert cho dropdown - có thêm thông tin specialties để hiển thị
+    /// Expert cho dropdown
     /// </summary>
     public class ExpertDropdownDto
     {
         public Guid Id { get; set; }
         public string FullName { get; set; } = null!;
         public string? Email { get; set; }
-        public List<ExpertSpecialtyBriefDto> Specialties { get; set; } = new();
-    }
-
-    /// <summary>
-    /// Chuyên môn ngắn gọn cho dropdown
-    /// </summary>
-    public class ExpertSpecialtyBriefDto
-    {
-        public Guid BoneSpecialtyId { get; set; }
-        public string? BoneSpecialtyName { get; set; }
-        public string? PathologyCategoryName { get; set; }
-        public int ProficiencyLevel { get; set; }
-        public bool IsPrimary { get; set; }
     }
 
     //======================================================= LECTURER DROPDOWN ===================================================
@@ -151,7 +117,7 @@ namespace BoneVisQA.Services.Models.Admin
         // Lecturer
         public LecturerInfoDto? Lecturer { get; set; }
 
-        // Expert với Specialties
+        // Expert
         public ExpertInfoDto? Expert { get; set; }
 
         // Students enrolled
@@ -173,7 +139,6 @@ namespace BoneVisQA.Services.Models.Admin
         public Guid Id { get; set; }
         public string FullName { get; set; } = null!;
         public string? Email { get; set; }
-        public List<ExpertSpecialtyInfoDto> Specialties { get; set; } = new();
     }
 
     public class StudentInfoDto

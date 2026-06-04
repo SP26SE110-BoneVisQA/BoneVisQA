@@ -41,17 +41,10 @@ public class QuizDto
     /// <summary>ID của lecturer đã tạo quiz này. Null nếu quiz từ Expert Library.</summary>
     public Guid? CreatedByLecturerId { get; set; }
 
-    /// <summary>Deep classification - Bone Specialty ID</summary>
-    public Guid? BoneSpecialtyId { get; set; }
-
-    /// <summary>Deep classification - Bone Specialty Name</summary>
-    public string? BoneSpecialtyName { get; set; }
-
-    /// <summary>Deep classification - Pathology Category ID</summary>
-    public Guid? PathologyCategoryId { get; set; }
-
-    /// <summary>Deep classification - Pathology Category Name</summary>
-    public string? PathologyCategoryName { get; set; }
+    /// <summary>
+    /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+    /// </summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 // Update Quiz Request Dto — dùng JsonPropertyName để nhận cả PascalCase (BE) lẫn camelCase (FE)
@@ -81,13 +74,9 @@ public class UpdateQuizRequestDto
     [JsonPropertyName("classification")]
     public string? Classification { get; set; }
 
-    /// <summary>Deep classification - Bone Specialty ID</summary>
-    [JsonPropertyName("boneSpecialtyId")]
-    public Guid? BoneSpecialtyId { get; set; }
-
-    /// <summary>Deep classification - Pathology Category ID</summary>
-    [JsonPropertyName("pathologyCategoryId")]
-    public Guid? PathologyCategoryId { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    [JsonPropertyName("quizMode")]
+    public int? QuizMode { get; set; }
 }
 
 public class UpdateQuizQuestionRequestDto
@@ -122,6 +111,8 @@ public class ClassQuizDto
     public string? CreatorName { get; set; }
     /// <summary>Loại người tạo: "Lecturer" hoặc "Expert"</summary>
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 // CreateQuizQuestionDto - For creating questions (with individual options)
@@ -162,6 +153,20 @@ public class CreateQuizQuestionDto
 
     [JsonPropertyName("maxScore")]
     public int MaxScore { get; set; } = 10;
+
+    [JsonPropertyName("hint")]
+    public string? Hint { get; set; }
+
+    [JsonPropertyName("explanation")]
+    public string? Explanation { get; set; }
+
+    /// <summary>JSON array for MultiSelect correct answers like ["A", "C"] or comma/newline separated string</summary>
+    [JsonPropertyName("correctAnswers")]
+    public string? CorrectAnswers { get; set; }
+
+    /// <summary>JSON array for FillInBlank accepted answers or comma/newline separated string</summary>
+    [JsonPropertyName("acceptedAnswers")]
+    public string? AcceptedAnswers { get; set; }
 }
 
 // UpdateQuizsQuestionRequestDto - For updating questions (expert style)
@@ -194,8 +199,23 @@ public class UpdateQuizsQuestionRequestDto
     [JsonPropertyName("referenceAnswer")]
     public string? ReferenceAnswer { get; set; }
 
+    [JsonPropertyName("essayAnswer")]
+    public string? EssayAnswer { get; set; }
+
+    [JsonPropertyName("hint")]
+    public string? Hint { get; set; }
+
+    [JsonPropertyName("explanation")]
+    public string? Explanation { get; set; }
+
     [JsonPropertyName("maxScore")]
     public int MaxScore { get; set; } = 10;
+
+    [JsonPropertyName("correctAnswers")]
+    public string? CorrectAnswers { get; set; }
+
+    [JsonPropertyName("acceptedAnswers")]
+    public string? AcceptedAnswers { get; set; }
 }
 
 // UpdateQuizsQuestionResponseDto - Response for updating questions
@@ -210,6 +230,8 @@ public class UpdateQuizsQuestionResponseDto
     public string? OptionC { get; set; }
     public string? OptionD { get; set; }
     public string? ImageUrl { get; set; }
+    public string? Hint { get; set; }
+    public string? Explanation { get; set; }
 }
 
 public class AssignedQuizDto
@@ -227,6 +249,8 @@ public class AssignedQuizDto
     public bool IsFromExpertLibrary { get; set; }
     public string? CreatorName { get; set; }
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 // QuizQuestionDto - For quiz questions with individual options
@@ -238,6 +262,7 @@ public class QuizQuestionDto
     public Guid? CaseId { get; set; }
     public string? CaseTitle { get; set; }
     public string QuestionText { get; set; } = null!;
+    /// <summary>Question type: MultipleChoice, TrueFalse, MultiSelect, FillInBlank, Essay</summary>
     public string? Type { get; set; }
     public string? OptionA { get; set; }
     public string? OptionB { get; set; }
@@ -247,6 +272,14 @@ public class QuizQuestionDto
     public string? ImageUrl { get; set; }
     public string? ReferenceAnswer { get; set; }
     public int MaxScore { get; set; } = 10;
+    /// <summary>Hint for the question</summary>
+    public string? Hint { get; set; }
+    /// <summary>Explanation of the correct answer</summary>
+    public string? Explanation { get; set; }
+    /// <summary>Correct answers for MultiSelect - JSON array</summary>
+    public string? CorrectAnswers { get; set; }
+    /// <summary>Accepted answers for FillInBlank - JSON array</summary>
+    public string? AcceptedAnswers { get; set; }
 }
 
 // QuizScoreResultDto - Used for quiz score calculation
@@ -325,13 +358,8 @@ public class CreateQuizRequestDto
     /// <summary>Lớp cần gán quiz (optional). Để trống / Guid.Empty nếu chỉ tạo quiz chưa gán lớp.</summary>
     public Guid ClassId { get; set; }
 
-    /// <summary>Deep classification - Bone Specialty ID</summary>
-    [JsonPropertyName("boneSpecialtyId")]
-    public Guid? BoneSpecialtyId { get; set; }
-
-    /// <summary>Deep classification - Pathology Category ID</summary>
-    [JsonPropertyName("pathologyCategoryId")]
-    public Guid? PathologyCategoryId { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
 }
 
 /// <summary>
@@ -387,6 +415,8 @@ public class MyQuizWithClassesDto
     public string? CreatorName { get; set; }
     /// <summary>Loại người tạo: "Lecturer" hoặc "Expert"</summary>
     public string? CreatorType { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
     /// <summary>Danh sách lớp đã gán quiz này</summary>
     public List<MyQuizClassInfoDto> Classes { get; set; } = new();
 }

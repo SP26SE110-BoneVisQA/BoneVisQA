@@ -127,8 +127,17 @@ public partial class User
     [InverseProperty("Expert")]
     public virtual ICollection<AcademicClass> ExpertAcademicClasses { get; set; } = new List<AcademicClass>();
 
+    [InverseProperty("Expert")]
+    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
+
     [InverseProperty("CreatedByExpert")]
     public virtual ICollection<MedicalCase> CreatedMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("OwnerStudent")]
+    public virtual ICollection<MedicalCase> OwnedPersonalMedicalCases { get; set; } = new List<MedicalCase>();
+
+    [InverseProperty("ValidatedByUser")]
+    public virtual ICollection<MedicalCase> ValidatedMedicalCases { get; set; } = new List<MedicalCase>();
 
     [InverseProperty("AssignedExpert")]
     public virtual ICollection<MedicalCase> AssignedMedicalCases { get; set; } = new List<MedicalCase>();
@@ -157,12 +166,6 @@ public partial class User
     [InverseProperty("Expert")]
     public virtual ICollection<ExpertReview> ExpertReviews { get; set; } = new List<ExpertReview>();
 
-    [InverseProperty("Expert")]
-    public virtual ICollection<ExpertSpecialty> ExpertSpecialties { get; set; } = new List<ExpertSpecialty>();
-
-    [InverseProperty("Expert")]
-    public virtual ICollection<ClassExpertAssignment> ExpertClassAssignments { get; set; } = new List<ClassExpertAssignment>();
-
     [InverseProperty("FlaggedByExpert")]
     public virtual ICollection<DocumentChunk> FlaggedDocumentChunks { get; set; } = new List<DocumentChunk>();
 
@@ -186,10 +189,4 @@ public partial class User
    
     [InverseProperty("GradedByUser")]
     public virtual ICollection<StudentQuizAnswer> GradedStudentQuizAnswers { get; set; } = new List<StudentQuizAnswer>();
-
-    [InverseProperty("Expert")]
-    public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
-
-    [InverseProperty("Reviewer")]
-    public virtual ICollection<TeachingObjectiveSuggestion> ReviewedSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
 }

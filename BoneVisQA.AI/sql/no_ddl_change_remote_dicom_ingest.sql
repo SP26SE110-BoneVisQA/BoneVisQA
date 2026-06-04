@@ -1,0 +1,3 @@
+-- BoneVisQA.AI ingest: remote DICOM URLs (Supabase Storage, etc.)
+-- No DDL changes required for HTTP(S) dicom_path values.
+-- Existing columns accept URLs: public.case_media.media_url (text), storage_path (text).

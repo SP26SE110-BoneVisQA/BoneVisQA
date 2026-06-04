@@ -747,11 +747,18 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     public async Task<IReadOnlyList<StudentQuizAttemptDto>> GetClassQuizAttemptsAsync(
         Guid lecturerId, Guid classId, Guid quizId)
     {
-        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+        var session = await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
 
+        // Get student IDs in this class via ClassEnrollments
+        var studentIdsInClass = await _unitOfWork.Context.ClassEnrollments
+            .Where(ce => ce.ClassId == classId)
+            .Select(ce => ce.StudentId)
+            .ToListAsync();
+
+        // Get attempts for this quiz AND for students in this class (filter by class via student enrollment)
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
-            .Where(a => a.QuizId == quizId)
+            .Where(a => a.QuizId == quizId && studentIdsInClass.Contains(a.StudentId))
             .Include(a => a.Student)
             .Include(a => a.StudentQuizAnswers)
                 .ThenInclude(sa => sa.Question)
@@ -759,28 +766,48 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             .ThenBy(a => a.StartedAt)
             .ToListAsync();
 
-        var questionCounts = await _unitOfWork.Context.QuizQuestions
-            .Where(q => q.QuizId == quizId)
-            .GroupBy(_ => 1)
-            .Select(g => new { Count = g.Count() })
-            .FirstOrDefaultAsync();
+        var totalQuestions = session.Quiz?.QuizQuestions?.Count ?? 0;
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
 
-        var totalQuestions = questionCounts?.Count ?? 0;
+        return attempts.Select(a => {
+            // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+            decimal earnedPoints = 0;
+            foreach (var answer in a.StudentQuizAnswers)
+            {
+                if (answer.Question?.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
 
-        return attempts.Select(a => new StudentQuizAttemptDto
-        {
-            AttemptId = a.Id,
-            StudentId = a.StudentId,
-            StudentName = a.Student.FullName ?? "Student",
-            StudentEmail = a.Student.Email ?? "",
-            Score = a.Score,
-            StartedAt = a.StartedAt,
-            CompletedAt = a.CompletedAt,
-            TotalQuestions = totalQuestions,
-            CorrectCount = a.StudentQuizAnswers.Count(sa =>
-                sa.Question != null
-                && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer)),
-            IsGraded = a.Score.HasValue
+            // Score = earnedPoints (clamped to 0-100)
+            double calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+
+            return new StudentQuizAttemptDto
+            {
+                AttemptId = a.Id,
+                StudentId = a.StudentId,
+                StudentName = a.Student.FullName ?? "Student",
+                StudentEmail = a.Student.Email ?? "",
+                Score = calculatedScore, // Use calculated score instead of saved score
+                StartedAt = a.StartedAt,
+                CompletedAt = a.CompletedAt,
+                TotalQuestions = totalQuestions,
+                // FIX: CorrectCount uses IsCorrect flag so it reflects lecturer edits.
+                // Essay answers are excluded from the correct-count because correctness for essays is
+                // managed manually (null/IsCorrect) and does not match the question's CorrectAnswer text.
+                CorrectCount = a.StudentQuizAnswers.Count(sa =>
+                    sa.Question != null
+                    && sa.Question.Type != QuestionType.Essay
+                    && sa.IsCorrect == true),
+                IsGraded = a.Score.HasValue
+            };
         }).ToList();
     }
 
@@ -788,56 +815,111 @@ public class LecturerAssignmentService : ILecturerAssignmentService
     public async Task<QuizAttemptDetailDto> GetQuizAttemptDetailAsync(
         Guid lecturerId, Guid classId, Guid quizId, Guid attemptId)
     {
-        await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
+        // Optimize: Use returned session to avoid redundant queries
+        var session = await EnsureQuizSessionExistsForClassAsync(lecturerId, classId, quizId);
 
-        var attempt = await _unitOfWork.Context.QuizAttempts
+        // Optimize: Project directly to avoid complex Include chains that can cause connection issues
+        var attemptData = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
             .Where(a => a.Id == attemptId && a.QuizId == quizId)
-            .Include(a => a.Student)
-            .Include(a => a.StudentQuizAnswers).ThenInclude(sa => sa.Question)
+            .Select(a => new 
+            {
+                a.Id,
+                a.QuizId,
+                a.StudentId,
+                a.StartedAt,
+                a.CompletedAt,
+                StudentName = a.Student != null ? a.Student.FullName : "Student",
+                StudentQuizAnswers = a.StudentQuizAnswers
+                    .Select(sa => new
+                    {
+                        sa.Id,
+                        sa.QuestionId,
+                        sa.StudentAnswer,
+                        sa.EssayAnswer,
+                        sa.IsCorrect,
+                        sa.ScoreAwarded,
+                        sa.LecturerFeedback,
+                        sa.IsGraded,
+                        Question = sa.Question != null ? new
+                        {
+                            sa.Question.QuestionText,
+                            sa.Question.Type,
+                            sa.Question.OptionA,
+                            sa.Question.OptionB,
+                            sa.Question.OptionC,
+                            sa.Question.OptionD,
+                            sa.Question.CorrectAnswer,
+                            sa.Question.ReferenceAnswer,
+                            sa.Question.ImageUrl
+                        } : null
+                    })
+            })
             .FirstOrDefaultAsync()
             ?? throw new KeyNotFoundException("Student submission not found.");
 
-        var quiz = await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
+        // Get quiz from session (already loaded via Include) or from repository
+        var quiz = session.Quiz ?? await _unitOfWork.QuizRepository.GetByIdAsync(quizId)
             ?? throw new KeyNotFoundException("Quiz not found.");
 
-        var session = await _unitOfWork.Context.ClassQuizSessions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
+        // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+        var totalQuestions = attemptData.StudentQuizAnswers.Count();
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+        decimal earnedPoints = 0;
+        foreach (var answer in attemptData.StudentQuizAnswers)
+        {
+            if (answer.Question?.Type == QuestionType.Essay)
+            {
+                // Essay: add actual awarded points (can be partial credit)
+                earnedPoints += answer.ScoreAwarded ?? 0;
+            }
+            else
+            {
+                // MC/TF/etc: full points if correct, 0 if wrong
+                earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+            }
+        }
+
+        // Score = earnedPoints (clamped to 0-100)
+        double calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
 
         return new QuizAttemptDetailDto
         {
-            AttemptId = attempt.Id,
-            QuizId = attempt.QuizId,
+            AttemptId = attemptData.Id,
+            QuizId = attemptData.QuizId,
             QuizTitle = quiz.Title,
-            StudentId = attempt.StudentId,
-            StudentName = attempt.Student?.FullName ?? "Student",
-            Score = attempt.Score,
-            StartedAt = attempt.StartedAt,
-            CompletedAt = attempt.CompletedAt,
-            PassingScore = NormalizePassingScore(session?.PassingScore, quiz.IsAiGenerated),
-            Questions = attempt.StudentQuizAnswers
-                .OrderBy(sa => sa.Question.QuestionText)
+            StudentId = attemptData.StudentId,
+            StudentName = attemptData.StudentName,
+            Score = calculatedScore, // Use calculated score instead of saved score
+            StartedAt = attemptData.StartedAt,
+            CompletedAt = attemptData.CompletedAt,
+            PassingScore = NormalizePassingScore(session.PassingScore, quiz.IsAiGenerated),
+            Questions = attemptData.StudentQuizAnswers
+                .OrderBy(sa => sa.Question?.QuestionText)
                 .Select(sa => new QuestionWithAnswerDto
                 {
                     QuestionId = sa.QuestionId,
-                    QuestionText = sa.Question.QuestionText,
-                    Type = sa.Question.Type?.ToString(),
-                    OptionA = sa.Question.OptionA,
-                    OptionB = sa.Question.OptionB,
-                    OptionC = sa.Question.OptionC,
-                    OptionD = sa.Question.OptionD,
-                    CorrectAnswer = sa.Question.CorrectAnswer,
+                    QuestionText = sa.Question?.QuestionText ?? string.Empty,
+                    Type = sa.Question?.Type?.ToString(),
+                    OptionA = sa.Question?.OptionA,
+                    OptionB = sa.Question?.OptionB,
+                    OptionC = sa.Question?.OptionC,
+                    OptionD = sa.Question?.OptionD,
+                    CorrectAnswer = sa.Question?.CorrectAnswer,
                     StudentAnswer = sa.StudentAnswer,
                     EssayAnswer = sa.EssayAnswer,
-                    IsCorrect = sa.Question != null && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer),
+                    // FIX: Use IsCorrect from DB which is properly set:
+                    // - MC/TF/etc: auto-set during submission
+                    // - Essay: null until lecturer grades (so IsCorrect stays null)
+                    IsCorrect = sa.IsCorrect,
                     AnswerId = sa.Id,
-                    MaxScore = sa.Question.MaxScore,
+                    MaxScore = (int)Math.Round(pointsPerQuestion), // Each question is worth pointsPerQuestion points (100/total)
                     ScoreAwarded = sa.ScoreAwarded,
                     LecturerFeedback = sa.LecturerFeedback,
                     IsGraded = sa.IsGraded,
-                    ReferenceAnswer = sa.Question.ReferenceAnswer,
-                    ImageUrl = sa.Question.ImageUrl
+                    ReferenceAnswer = sa.Question?.ReferenceAnswer,
+                    ImageUrl = sa.Question?.ImageUrl
                 }).ToList()
         };
     }
@@ -875,7 +957,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                         answer.IsCorrect = update.IsCorrect.Value;
                     if (update.ScoreAwarded.HasValue)
                     {
-                        answer.ScoreAwarded = update.ScoreAwarded.Value;
+                        // Validate: Essay score cannot exceed points for 1 question (100 / totalQuestions)
+                        var totalQ = attempt.StudentQuizAnswers.Count;
+                        var maxEssayPoints = totalQ > 0 ? 100m / totalQ : 100m;
+                        answer.ScoreAwarded = (int)Math.Min(update.ScoreAwarded.Value, maxEssayPoints);
                         answer.IsGraded = true;
                         answer.GradedAt = DateTime.UtcNow;
                     }
@@ -891,11 +976,32 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             }
 
             // Recalculate attempt score based on updated essay scores
-            var totalMaxScore = attempt.StudentQuizAnswers.Sum(a => a.Question.MaxScore);
-            var totalScoreAwarded = attempt.StudentQuizAnswers
-                .Where(a => a.ScoreAwarded.HasValue)
-                .Sum(a => a.ScoreAwarded.Value);
-            attempt.Score = totalMaxScore == 0 ? 0 : (double)(totalScoreAwarded * 100 / totalMaxScore);
+            // Total quiz score always = 100, divided equally among all questions
+            var totalQuestions = attempt.StudentQuizAnswers.Count;
+            var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+            
+            // Calculate earned points: MC = full points if correct, 0 if wrong
+            // Essay = full points if graded, 0 if not yet graded
+            decimal earnedPoints = 0;
+            foreach (var answer in attempt.StudentQuizAnswers)
+            {
+                if (answer.Question.Type == QuestionType.Essay)
+                {
+                    // Essay: add actual awarded points (can be partial credit)
+                    earnedPoints += answer.ScoreAwarded ?? 0;
+                }
+                else
+                {
+                    // MC/TF/etc: full points if correct, 0 if wrong
+                    earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                }
+            }
+            
+            // score = earnedPoints (each point is already worth 1 point since pointsPerQuestion = 100/total)
+            double calculatedScore = (double)earnedPoints;
+            
+            // Clamp score to 0-100 range
+            attempt.Score = Math.Max(0, Math.Min(100, calculatedScore));
         }
 
         await _unitOfWork.SaveAsync();
@@ -903,16 +1009,24 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         return await GetQuizAttemptDetailAsync(lecturerId, classId, quizId, attemptId);
     }
 
-    private async Task EnsureQuizSessionExistsForClassAsync(Guid lecturerId, Guid classId, Guid quizId)
+    private async Task<ClassQuizSession> EnsureQuizSessionExistsForClassAsync(Guid lecturerId, Guid classId, Guid quizId)
     {
-        await EnsureLecturerOwnsClassAsync(lecturerId, classId);
-
+        // Optimize: Use single query with Include instead of 2 separate queries
         var session = await _unitOfWork.Context.ClassQuizSessions
             .AsNoTracking()
+            .Include(s => s.Class)
+            .Include(s => s.Quiz)
+                .ThenInclude(q => q!.QuizQuestions)
             .FirstOrDefaultAsync(s => s.ClassId == classId && s.QuizId == quizId);
 
         if (session == null)
             throw new KeyNotFoundException("This quiz has not been assigned to a class.");
+
+        // Check lecturer ownership inline (avoid separate query to AcademicClasses)
+        if (session.Class == null || session.Class.LecturerId != lecturerId)
+            throw new KeyNotFoundException("No class under this lecturer was found.");
+
+        return session;
     }
 
     private static bool QuizAnswerTextMatches(string? correctAnswer, string? studentAnswer)
@@ -1326,7 +1440,10 @@ public class LecturerAssignmentService : ILecturerAssignmentService
         {
             if (attempts.TryGetValue(update.StudentId, out var attempt))
             {
-                attempt.Score = update.Score;
+                // Clamp score to 0-100 range
+                attempt.Score = update.Score.HasValue
+                    ? Math.Max(0, Math.Min(100, update.Score.Value))
+                    : (double?)null;
             }
         }
 
@@ -1872,14 +1989,12 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             var questions = quiz?.QuizQuestions?.ToList() ?? new List<QuizQuestion>();
             var mcCount = questions.Count(q => q.Type == QuestionType.MultipleChoice);
             var essayCount = questions.Count(q => q.Type == QuestionType.Essay);
-            var maxScore = questions.Sum(q => q.MaxScore);
+            var totalQuestions = questions.Count;
             var passingScore = session.PassingScore ?? 50.0;
 
             foreach (var attempt in attempts)
             {
-                var percentage = maxScore > 0 && attempt.Score.HasValue
-                    ? (attempt.Score.Value / maxScore) * 100
-                    : 0;
+                var percentage = attempt.Score ?? 0;
                 var isPass = percentage >= passingScore;
                 var timeTaken = attempt.CompletedAt.HasValue && attempt.StartedAt.HasValue
                     ? Math.Round((attempt.CompletedAt.Value - attempt.StartedAt.Value).TotalMinutes, 1)
@@ -1889,7 +2004,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 detailSheet.Cell(dataRow, 2).Value = attempt.Student?.FullName ?? "Unknown Student";
                 detailSheet.Cell(dataRow, 3).Value = attempt.Student?.Email ?? "";
                 detailSheet.Cell(dataRow, 4).Value = attempt.Score ?? 0;
-                detailSheet.Cell(dataRow, 5).Value = maxScore;
+                detailSheet.Cell(dataRow, 5).Value = totalQuestions;
                 detailSheet.Cell(dataRow, 6).Value = Math.Round(percentage, 1);
                 detailSheet.Cell(dataRow, 7).Value = isPass ? "Pass" : "Fail";
                 detailSheet.Cell(dataRow, 7).Style.Font.Bold = true;

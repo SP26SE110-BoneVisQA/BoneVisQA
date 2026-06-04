@@ -38,7 +38,7 @@ namespace BoneVisQA.Services.Models.Admin
         /// <summary>Number of student enrollment rows for this class.</summary>
         public int StudentCount { get; set; }
 
-        // Classification fields
+        /// <summary>FK to <c>bone_specialties</c>; routes experts by medical focus (e.g. Spine, Trauma).</summary>
         public Guid? ClassSpecialtyId { get; set; }
 
         public string? ClassSpecialtyName { get; set; }
@@ -61,8 +61,8 @@ namespace BoneVisQA.Services.Models.Admin
 
         public DateTime? CreatedAt { get; set; }
 
-        // Classification fields
-        public Guid? ClassSpecialtyId { get; set; }
+        /// <summary>Required: class medical specialty for expert routing.</summary>
+        public Guid ClassSpecialtyId { get; set; }
 
         public string? FocusLevel { get; set; }
 
@@ -80,8 +80,8 @@ namespace BoneVisQA.Services.Models.Admin
 
         public DateTime? UpdatedAt { get; set; }
 
-        // Classification fields
-        public Guid? ClassSpecialtyId { get; set; }
+        /// <summary>Required: class medical specialty for expert routing.</summary>
+        public Guid ClassSpecialtyId { get; set; }
 
         public string? FocusLevel { get; set; }
 

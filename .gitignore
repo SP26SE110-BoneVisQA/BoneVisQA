@@ -89,6 +89,11 @@ dataset.rar
 wwwroot/uploads/
 **/uploads/
 
+# Python AI microservice local env (Postgres URL, HF token, etc.)
+BoneVisQA.AI/.env
+BoneVisQA.AI/**/__pycache__/
+BoneVisQA.AI/**/*.pyc
+
 # -----------------------------------------------------------------------------
 # Configuration: tracked vs ignored (explicit)
 # -----------------------------------------------------------------------------

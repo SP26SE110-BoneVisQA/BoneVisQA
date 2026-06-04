@@ -78,6 +78,24 @@ namespace BoneVisQA.Repositories.Basic
             _context.Entry(entity).State = EntityState.Modified;
         }
 
+        // Update với explicit control - không attach nếu đã tracked
+        public virtual void Update(TEntity entity, bool attachIfNotTracked = true)
+        {
+            var entry = _context.Entry(entity);
+            if (entry.State == EntityState.Detached)
+            {
+                if (attachIfNotTracked)
+                {
+                    _dbSet.Attach(entity);
+                }
+                entry.State = EntityState.Modified;
+            }
+            else if (entry.State == EntityState.Unchanged)
+            {
+                entry.State = EntityState.Modified;
+            }
+        }
+
         // Add/Update/Remove (Async)
         // Add single entity asynchronously
         public virtual async Task AddAsync(TEntity entity)
@@ -110,6 +128,27 @@ namespace BoneVisQA.Repositories.Basic
         {
             _dbSet.Attach(entity);
             _context.Entry(entity).State = EntityState.Modified;
+            return Task.CompletedTask;
+        }
+
+        // Update với explicit control - không attach nếu đã tracked
+        public virtual Task UpdateAsync(TEntity entity, bool attachIfNotTracked = true)
+        {
+            var entry = _context.Entry(entity);
+            if (entry.State == EntityState.Detached)
+            {
+                if (attachIfNotTracked)
+                {
+                    _dbSet.Attach(entity);
+                }
+                entry.State = EntityState.Modified;
+            }
+            // Nếu đã tracked rồi (Unchanged/Modified), chỉ cần ensure nó là Modified
+            else if (entry.State == EntityState.Unchanged)
+            {
+                entry.State = EntityState.Modified;
+            }
+            // Nếu đã là Modified thì không cần làm gì
             return Task.CompletedTask;
         }
 

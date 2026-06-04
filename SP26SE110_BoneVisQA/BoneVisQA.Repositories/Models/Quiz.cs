@@ -78,6 +78,12 @@ public partial class Quiz
     [Column("spaced_repetition_enabled")]
     public bool SpacedRepetitionEnabled { get; set; } = false;
 
+    /// <summary>
+    /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+    /// </summary>
+    [Column("quiz_mode")]
+    public int QuizMode { get; set; } = 1;
+
     [Column("created_at")]
     public DateTime? CreatedAt { get; set; }
 

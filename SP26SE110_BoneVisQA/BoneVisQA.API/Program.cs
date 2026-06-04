@@ -16,7 +16,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Interfaces.Expert;
-using BoneVisQA.Services.Interfaces.Admin;
+using BoneVisQA.Services.Infrastructure;
 using BoneVisQA.Services.Services;
 using BoneVisQA.Services.Services.Admin;
 using BoneVisQA.Services.Services.DocumentUpload;
@@ -33,6 +33,7 @@ using BoneVisQA.Services.Services.QuizExtensions;
 using Google.Apis.Auth.AspNetCore3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -45,7 +46,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 
 // Large multipart uploads: default Kestrel ~28MB drops the connection (ERR_CONNECTION_RESET).
-const long maxUploadBodyBytes = 104857600; // 100 MB
+// Study archives (.zip/.rar) may be large; keep in sync with StudyArchiveIngestHelper.StudyArchiveMaxBytes.
+const long maxUploadBodyBytes = 209715200; // 200 MB
 
 // In Docker/Production: use HTTP only (no dev cert available)
 // In Development: optionally use HTTPS with dev certificate
@@ -67,8 +69,28 @@ else
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Limits.MaxRequestBodySize = maxUploadBodyBytes;
-        // Production: HTTP on all interfaces (0.0.0.0) so Render can detect port
-        options.ListenAnyIP(5047);
+        // Production: respect PORT env variable (Render, Azure, etc.)
+        // Default to 8080 (Render's default) if PORT is not set
+        var port = Environment.GetEnvironmentVariable("PORT");
+        if (!string.IsNullOrEmpty(port) && int.TryParse(port, out var portNum))
+        {
+            options.ListenAnyIP(portNum);
+        }
+        else
+        {
+            // Render default port is 10000, but 8080 is common for Node-like services
+            // Check if ASPNETCORE_URLS is set
+            var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+            if (!string.IsNullOrEmpty(urls))
+            {
+                // ASPNETCORE_URLS is already set by Dockerfile, let Kestrel use defaults
+                options.ListenAnyIP(8080);
+            }
+            else
+            {
+                options.ListenAnyIP(8080);
+            }
+        }
     });
 }
 
@@ -117,18 +139,58 @@ builder.Services.AddCors(options =>
                 originSet.Add(o);
         }
 
-        policy.WithOrigins(originSet.ToArray())
+        // Note: AllowCredentials is NOT used because:
+        // 1. Authentication uses JWT Bearer tokens in Authorization headers (not cookies)
+        // 2. SetIsOriginAllowed with AllowCredentials causes preflight failures per CORS spec
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+    
+    // Separate policy for SignalR
+    // SignalR requires AllowCredentials, but WithOrigins + AllowCredentials can fail preflight.
+    // Use SetIsOriginAllowed for flexibility while maintaining security through other means (JWT Bearer auth).
+    options.AddPolicy("AllowAllForSignalR", policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowCredentials()
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problem = new ValidationProblemDetails(context.ModelState)
+        {
+            Type = "https://datatracker.ietf.org/doc/html/rfc7807",
+            Title = "One or more validation errors occurred.",
+            Status = StatusCodes.Status400BadRequest,
+            Detail = "The request payload failed validation before business logic execution.",
+            Instance = context.HttpContext.Request.Path
+        };
+
+        problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        return new BadRequestObjectResult(problem)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddMemoryCache();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+    };
+});
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BoneVisQA API", Version = "v1" });
@@ -237,15 +299,18 @@ static string BuildSupabaseConnectionString(IConfiguration configuration)
 }
 
 var supabaseConnectionString = BuildSupabaseConnectionString(builder.Configuration);
-
-builder.Services.AddDbContext<BoneVisQADbContext>(options =>
-    options.UseNpgsql(supabaseConnectionString,
+builder.Services.AddScoped<BoneSpecialtyCacheInvalidationInterceptor>();
+builder.Services.AddDbContext<BoneVisQADbContext>((sp, options) =>
+{
+    options.UseNpgsql(
+        supabaseConnectionString,
         npgsqlOptions =>
         {
             npgsqlOptions.SetPostgresVersion(15, 0);
             npgsqlOptions.UseVector();
-        }))
-    .AddScoped<BoneVisQADbContext>();
+        });
+    options.AddInterceptors(sp.GetRequiredService<BoneSpecialtyCacheInvalidationInterceptor>());
+});
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "THIS_IS_DEMO_SECRET_KEY_CHANGE_ME";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
@@ -294,14 +359,21 @@ builder.Services.AddHttpClient(PdfProcessingService.HttpClientName, client =>
     // Background ingestion downloads PDF from storage (bucket max 50 MB); allow slow links.
     client.Timeout = TimeSpan.FromMinutes(60);
 });
-builder.Services.AddHttpClient(HuggingFaceEmbeddingService.HttpClientName, client =>
+builder.Services.AddHttpClient<IPythonAiConnectorService, PythonAiConnectorService>((sp, client) =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = cfg["AiMicroservice:BaseUrl"];
+    if (string.IsNullOrWhiteSpace(baseUrl))
+        baseUrl = "http://localhost:8000";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
+
+builder.Services.AddHttpClient("VisualQaImageFetch", client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
-}).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
-
-builder.Services.AddHttpClient<IImageProcessingService, ImageProcessingService>();
+});
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
-builder.Services.Configure<HuggingFaceSettings>(builder.Configuration.GetSection(HuggingFaceSettings.SectionName));
 builder.Services.AddHttpClient(GeminiService.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
@@ -312,11 +384,19 @@ builder.Services.AddHttpClient(QuizGeminiService.HttpClientName, client =>
 }).AddPolicyHandler(AiHttpRetryPolicy.CreatePolicy());
 builder.Services.AddSingleton<IIndexingExecutionGate, IndexingExecutionGate>();
 builder.Services.AddScoped<IGeminiService, GeminiService>();
-builder.Services.AddScoped<IEmbeddingService, HuggingFaceEmbeddingService>();
 builder.Services.AddScoped<IDocumentIndexingProcessor, DocumentIndexingProcessor>();
 builder.Services.AddScoped<IMedicalCaseIndexingProcessor, MedicalCaseIndexingProcessor>();
 builder.Services.AddScoped<IPdfProcessingService, PdfProcessingService>();
+if (builder.Configuration.GetValue("VisualQa:UseInMemorySessionGate", false))
+{
+    builder.Services.AddSingleton<IVisualQaSessionConcurrencyGate, InMemoryVisualQaSessionConcurrencyGate>();
+}
+else
+{
+    builder.Services.AddSingleton<IVisualQaSessionConcurrencyGate, PostgresVisualQaSessionConcurrencyGate>();
+}
 builder.Services.AddScoped<IVisualQaAiService, VisualQaAiService>();
+builder.Services.AddScoped<ISpecialtyCatalogService, SpecialtyCatalogService>();
 builder.Services.AddScoped<IQuizGeminiService, QuizGeminiService>();
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<IRagExpertAnswerIndexingSignal, NoOpRagExpertAnswerIndexingSignal>();
@@ -340,7 +420,6 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IStudentProfileService, StudentProfileService>();
 builder.Services.AddScoped<IStudentLearningService, StudentLearningService>();
 builder.Services.AddScoped<IAIQuizService, AIQuizService>();
-builder.Services.AddScoped<IClassExpertAssignmentService, ClassExpertAssignmentService>();
 builder.Services.AddScoped<IClassManagementService, ClassManagementService>();
 builder.Services.AddScoped<IAdminClassDashboardService, AdminClassDashboardService>();
 builder.Services.AddScoped<IClassificationAnalyticsService, ClassificationAnalyticsService>();
@@ -358,7 +437,6 @@ builder.Services.AddScoped<IMedicalCaseService, MedicalCaseService>();
 builder.Services.AddScoped<IExpertReviewService, ExpertReviewService>();
 builder.Services.AddScoped<IExpertDashboardService, ExpertDashboardService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
-builder.Services.AddScoped<ITeachingObjectiveService, TeachingObjectiveService>();
 builder.Services.AddScoped<IQuizsService, QuizsService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAdminProfileService, AdminProfileService>();
@@ -378,6 +456,14 @@ builder.Services.AddScoped<LecturerAnalyticsService>();
 builder.Services.AddScoped<QuizReviewService>();
 builder.Services.AddScoped<SpacedRepetitionService>();
 builder.Services.AddScoped<AdaptiveQuizService>();
+
+// Flashcard Services
+builder.Services.AddScoped<IFlashcardService, FlashcardService>();
+builder.Services.AddScoped<IFlashcardGeneratorService, FlashcardGeneratorService>();
+builder.Services.AddScoped<IFlashcardRecommendationService, FlashcardRecommendationService>();
+
+// AI Quiz Services
+builder.Services.AddScoped<IQuizHintService, QuizHintService>();
 
 builder.Services.AddHostedService<OrphanSessionCleanupService>();
 builder.Services.AddHostedService<StartupReindexingHostedService>();
@@ -409,7 +495,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications")
-   .RequireCors("AllowAll")
+   .RequireCors("AllowAllForSignalR")
    .RequireAuthorization();
 
 // Ensure uploads directory exists before using PhysicalFileProvider
@@ -478,3 +564,6 @@ document.getElementById('msg').innerHTML=data.success?'<p class=success>'+data.m
 });
 
 app.Run();
+
+/// <summary>Entry point type for <c>WebApplicationFactory</c> integration tests.</summary>
+public partial class Program;

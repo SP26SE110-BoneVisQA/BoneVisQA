@@ -22,7 +22,7 @@ public class StudentRepository : IStudentRepository
     {
         return await _unitOfWork.MedicalCaseRepository
 
-            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
@@ -35,7 +35,7 @@ public class StudentRepository : IStudentRepository
     {
         var query = _unitOfWork.MedicalCaseRepository
 
-            .FindByCondition(c => c.IsApproved == true && c.IsActive == true)
+            .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
@@ -211,7 +211,9 @@ public class StudentRepository : IStudentRepository
                 // Session có thể null: fallback sang cấu hình trên bản ghi quiz (giống lecturer UI).
                 TimeLimitMinutes = cqs.TimeLimitMinutes ?? (cqs.Quiz != null ? cqs.Quiz.TimeLimit : null),
                 PassingScore = cqs.PassingScore ?? (cqs.Quiz != null ? cqs.Quiz.PassingScore : null),
-                ReleaseAnswersAt = cqs.ReleaseAnswersAt
+                ReleaseAnswersAt = cqs.ReleaseAnswersAt,
+                // QuizMode: ưu tiên session, fallback sang quiz
+                QuizMode = cqs.QuizMode
             })
             .ToListAsync();
     }
@@ -230,8 +232,10 @@ public class StudentRepository : IStudentRepository
             .Include(cqs => cqs.Quiz)
             .AnyAsync(cqs => cqs.QuizId == quizId
                 && classIds.Contains(cqs.ClassId)
-                && ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null
-                    || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow)
+                // FIX: Quiz must have an open time set (either in class session or quiz itself)
+                // If open time is null, student cannot access the quiz
+                && (cqs.OpenTime ?? cqs.Quiz!.OpenTime) != null
+                && (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow
                 && ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null
                     || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) > utcNow));
     }

@@ -260,7 +260,16 @@ public class LecturersController : ControllerBase
     public async Task<IActionResult> CreateQuiz([FromBody] CreateQuizRequestDto request)
     {
         if (!ModelState.IsValid)
-            return BadRequest(ModelState);
+        {
+            var errors = ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray()
+                );
+            _logger.LogWarning("[CreateQuiz] Validation failed: {Errors}", System.Text.Json.JsonSerializer.Serialize(errors));
+            return BadRequest(new { message = "Validation failed", errors });
+        }
 
         try
         {
@@ -271,6 +280,11 @@ public class LecturersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CreateQuiz] Unexpected error creating quiz");
+            return StatusCode(500, new { message = "An error occurred while creating the quiz", detail = ex.Message });
         }
     }
 
@@ -639,7 +653,12 @@ public class LecturersController : ControllerBase
                         OptionB = q.OptionB,
                         OptionC = q.OptionC,
                         OptionD = q.OptionD,
-                        CorrectAnswer = q.CorrectAnswer
+                        CorrectAnswer = q.CorrectAnswer,
+                        Hint = q.Hint,
+                        Explanation = q.Explanation,
+                        CorrectAnswers = q.CorrectAnswers,
+                        AcceptedAnswers = q.AcceptedAnswers,
+                        MaxScore = 10 // Default maxScore for AI-generated questions
                     };
 
                     await _lecturerService.AddQuizQuestionAsync(quiz.Id, questionRequest);
@@ -779,13 +798,16 @@ public class LecturersController : ControllerBase
 
     /// <summary>Danh sách câu trả lời cần triage cho một lớp (cho trang QA Triage).</summary>
     [HttpGet("triage")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList([FromQuery] Guid classId, [FromQuery] string? source = null)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetTriageList(
+        [FromQuery] Guid classId,
+        [FromQuery] string? source = null,
+        [FromQuery] string? status = null)
     {
         try
         {
             var lecturerId = GetLecturerId()
                 ?? throw new InvalidOperationException("Token does not contain a valid user id.");
-            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source);
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, source, status);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -800,13 +822,15 @@ public class LecturersController : ControllerBase
 
     /// <summary>Visual QA only triage list (exclude Case QA rows) for deterministic testing.</summary>
     [HttpGet("triage/visual-qa")]
-    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList([FromQuery] Guid classId)
+    public async Task<ActionResult<IReadOnlyList<LecturerTriageRowDto>>> GetVisualQaTriageList(
+        [FromQuery] Guid classId,
+        [FromQuery] string? status = null)
     {
         try
         {
             var lecturerId = GetLecturerId()
                 ?? throw new InvalidOperationException("Token does not contain a valid user id.");
-            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa");
+            var result = await _lecturerService.GetTriageListAsync(lecturerId, classId, "visual-qa", status);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -1217,49 +1241,6 @@ public class LecturersController : ControllerBase
         try
         {
             var result = await _lecturerService.UpdateTeachingObjectivesAsync(lecturerId.Value, classId, request);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Lấy danh sách Expert Suggestions đang chờ duyệt cho một lớp.
-    /// </summary>
-    [HttpGet("classes/{classId:guid}/objectives/suggestions")]
-    public async Task<ActionResult<List<TeachingObjectiveSuggestionDto>>> GetExpertSuggestions(Guid classId)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token does not contain a valid user id." });
-
-        var result = await _lecturerService.GetExpertSuggestionsAsync(classId);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Lecturer duyệt hoặc từ chối một Expert Suggestion.
-    /// </summary>
-    [HttpPost("classes/{classId:guid}/objectives/suggestions/{suggestionId:guid}/confirm")]
-    public async Task<ActionResult<TeachingObjectiveSuggestionDto>> ConfirmSuggestion(
-        Guid classId,
-        Guid suggestionId,
-        [FromBody] ConfirmSuggestionRequestDto request)
-    {
-        var lecturerId = GetLecturerId();
-        if (lecturerId == null)
-            return Unauthorized(new { message = "Token does not contain a valid user id." });
-
-        request.SuggestionId = suggestionId;
-        try
-        {
-            var result = await _lecturerService.ConfirmSuggestionAsync(lecturerId.Value, suggestionId, request);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)

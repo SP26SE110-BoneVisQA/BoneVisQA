@@ -66,10 +66,10 @@ namespace BoneVisQA.Services.Services.Admin
 
         #endregion
 
-        #region Class List with Expert Specialties
+        #region Class List
 
         /// <summary>
-        /// Lấy danh sách Class với thông tin Expert Specialty đầy đủ
+        /// Lấy danh sách Class với thông tin đầy đủ
         /// </summary>
         public async Task<AdminPagedResult<ClassDashboardDto>> GetClassesDashboardAsync(
             int pageIndex = 1,
@@ -81,11 +81,6 @@ namespace BoneVisQA.Services.Services.Admin
             var query = _unitOfWork.AcademicClassRepository.GetQueryable()
                 .Include(c => c.Lecturer)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
-                .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.PathologyCategory)
                 .Include(c => c.ClassSpecialty)
                 .Include(c => c.ClassEnrollments)
                 .AsQueryable();
@@ -144,25 +139,6 @@ namespace BoneVisQA.Services.Services.Admin
                 ExpertName = c.Expert?.FullName,
                 ExpertEmail = c.Expert?.Email,
 
-                // Expert Specialties - FULL DETAIL
-                ExpertSpecialties = c.Expert?.ExpertSpecialties
-                    .Where(es => es.IsActive)
-                    .OrderByDescending(es => es.IsPrimary)
-                    .ThenByDescending(es => es.ProficiencyLevel)
-                    .Select(es => new ExpertSpecialtyInfoDto
-                    {
-                        Id = es.Id,
-                        BoneSpecialtyId = es.BoneSpecialtyId,
-                        BoneSpecialtyName = es.BoneSpecialty?.Name,
-                        BoneSpecialtyCode = es.BoneSpecialty?.Code,
-                        PathologyCategoryId = es.PathologyCategoryId,
-                        PathologyCategoryName = es.PathologyCategory?.Name,
-                        ProficiencyLevel = es.ProficiencyLevel,
-                        YearsExperience = es.YearsExperience,
-                        Certifications = es.Certifications,
-                        IsPrimary = es.IsPrimary
-                    }).ToList() ?? new List<ExpertSpecialtyInfoDto>(),
-
                 // Stats
                 StudentCount = c.ClassEnrollments.Count,
                 TotalCases = c.ClassCases?.Count ?? 0,
@@ -190,11 +166,6 @@ namespace BoneVisQA.Services.Services.Admin
             var c = await _unitOfWork.AcademicClassRepository.GetQueryable()
                 .Include(cl => cl.Lecturer)
                 .Include(cl => cl.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
-                .Include(cl => cl.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.PathologyCategory)
                 .Include(cl => cl.ClassEnrollments)
                     .ThenInclude(en => en.Student)
                 .Include(cl => cl.ClassCases)
@@ -220,28 +191,12 @@ namespace BoneVisQA.Services.Services.Admin
                     Email = c.Lecturer.Email
                 } : null,
 
-                // Expert với Specialties
+                // Expert
                 Expert = c.Expert != null ? new ExpertInfoDto
                 {
                     Id = c.Expert.Id,
                     FullName = c.Expert.FullName,
-                    Email = c.Expert.Email,
-                    Specialties = c.Expert.ExpertSpecialties
-                        .Where(es => es.IsActive)
-                        .OrderByDescending(es => es.IsPrimary)
-                        .Select(es => new ExpertSpecialtyInfoDto
-                        {
-                            Id = es.Id,
-                            BoneSpecialtyId = es.BoneSpecialtyId,
-                            BoneSpecialtyName = es.BoneSpecialty?.Name,
-                            BoneSpecialtyCode = es.BoneSpecialty?.Code,
-                            PathologyCategoryId = es.PathologyCategoryId,
-                            PathologyCategoryName = es.PathologyCategory?.Name,
-                            ProficiencyLevel = es.ProficiencyLevel,
-                            YearsExperience = es.YearsExperience,
-                            Certifications = es.Certifications,
-                            IsPrimary = es.IsPrimary
-                        }).ToList()
+                    Email = c.Expert.Email
                 } : null,
 
                 // Students
@@ -288,38 +243,22 @@ namespace BoneVisQA.Services.Services.Admin
         }
 
         /// <summary>
-        /// Lấy danh sách Experts cho dropdown - có kèm Specialties
+        /// Lấy danh sách Experts cho dropdown
         /// </summary>
         public async Task<List<ExpertDropdownDto>> GetExpertsAsync()
         {
-            var experts = await _unitOfWork.UserRepository.GetQueryable()
+            return await _unitOfWork.UserRepository.GetQueryable()
                 .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                .Include(u => u.ExpertSpecialties)
-                    .ThenInclude(es => es.BoneSpecialty)
-                .Include(u => u.ExpertSpecialties)
-                    .ThenInclude(es => es.PathologyCategory)
                 .Where(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name == "Expert"))
+                .Select(u => new ExpertDropdownDto
+                {
+                    Id = u.Id,
+                    FullName = u.FullName,
+                    Email = u.Email
+                })
+                .OrderBy(u => u.FullName)
                 .ToListAsync();
-
-            return experts.Select(e => new ExpertDropdownDto
-            {
-                Id = e.Id,
-                FullName = e.FullName,
-                Email = e.Email,
-                Specialties = e.ExpertSpecialties
-                    .Where(es => es.IsActive)
-                    .OrderByDescending(es => es.IsPrimary)
-                    .ThenByDescending(es => es.ProficiencyLevel)
-                    .Select(es => new ExpertSpecialtyBriefDto
-                    {
-                        BoneSpecialtyId = es.BoneSpecialtyId,
-                        BoneSpecialtyName = es.BoneSpecialty?.Name,
-                        PathologyCategoryName = es.PathologyCategory?.Name,
-                        ProficiencyLevel = es.ProficiencyLevel,
-                        IsPrimary = es.IsPrimary
-                    }).ToList()
-            }).OrderBy(e => e.FullName).ToList();
         }
 
         #endregion
@@ -437,11 +376,6 @@ namespace BoneVisQA.Services.Services.Admin
             var entity = await _unitOfWork.AcademicClassRepository.GetQueryable()
                 .Include(c => c.Lecturer)
                 .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.BoneSpecialty)
-                .Include(c => c.Expert)
-                    .ThenInclude(e => e.ExpertSpecialties)
-                        .ThenInclude(es => es.PathologyCategory)
                 .Include(c => c.ClassEnrollments)
                 .FirstOrDefaultAsync(c => c.Id == request.ClassId);
 

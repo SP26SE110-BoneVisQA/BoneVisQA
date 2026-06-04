@@ -25,6 +25,7 @@ public partial class AcademicClass
     [Column("expert_id")]
     public Guid? ExpertId { get; set; }
 
+    /// <summary>Medical specialty focus for routing experts (Spine, Trauma, …).</summary>
     [Column("class_specialty_id")]
     public Guid? ClassSpecialtyId { get; set; }
 
@@ -77,12 +78,6 @@ public partial class AcademicClass
 
     [InverseProperty("Class")]
     public virtual ICollection<ClassQuizSession> ClassQuizSessions { get; set; } = new List<ClassQuizSession>();
-
-    [InverseProperty("Class")]
-    public virtual ICollection<ClassExpertAssignment> ClassExpertAssignments { get; set; } = new List<ClassExpertAssignment>();
-
-    [InverseProperty("Class")]
-    public virtual ICollection<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; } = new List<TeachingObjectiveSuggestion>();
 
     [InverseProperty("Class")]
     public virtual ICollection<CaseViewLog> CaseViewLogs { get; set; } = new List<CaseViewLog>();

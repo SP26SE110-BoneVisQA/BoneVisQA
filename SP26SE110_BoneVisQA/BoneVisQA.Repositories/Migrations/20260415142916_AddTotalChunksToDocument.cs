@@ -19,7 +19,7 @@ namespace BoneVisQA.Repositories.Migrations
                 name: "expert_reviews_answer_id_fkey",
                 table: "expert_reviews");
 
-            migrationBuilder.DropIndex(
+            migrationBuilder.DropUniqueConstraint(
                 name: "citations_answer_id_chunk_id_key",
                 table: "citations");
 
@@ -762,11 +762,10 @@ namespace BoneVisQA.Repositories.Migrations
                 oldType: "uuid",
                 oldNullable: true);
 
-            migrationBuilder.CreateIndex(
+            migrationBuilder.AddUniqueConstraint(
                 name: "citations_answer_id_chunk_id_key",
                 table: "citations",
-                columns: new[] { "answer_id", "chunk_id" },
-                unique: true);
+                columns: new[] { "answer_id", "chunk_id" });
 
             migrationBuilder.AddForeignKey(
                 name: "citations_answer_id_fkey",

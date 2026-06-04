@@ -39,6 +39,9 @@ public interface IStudentService
         CancellationToken cancellationToken = default);
     Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
 
+    /// <summary>Throws <see cref="KeyNotFoundException"/> when the case is missing or not accessible to the student.</summary>
+    Task ValidateVisualQaCaseAccessAsync(Guid studentId, Guid? caseId, CancellationToken cancellationToken = default);
+
     Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null);
     Task RequestSupportAsync(Guid studentId, Guid answerId, CancellationToken cancellationToken = default);
 

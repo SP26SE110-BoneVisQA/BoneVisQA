@@ -169,6 +169,10 @@ public class StudentService : IStudentService
             return null;
         }
 
+        // Catalog cases require approval; personal ingest rows are scoped by owner_student_id.
+        if (entity.IsApproved != true && entity.OwnerStudentId != studentId)
+            return null;
+
         var viewLog = new CaseViewLog
         {
             Id = Guid.NewGuid(),
@@ -338,7 +342,12 @@ public class StudentService : IStudentService
                 .FirstOrDefaultAsync(s => s.Id == request.SessionId.Value && s.StudentId == studentId);
             if (existing != null)
                 return existing.Id;
+
+            throw new KeyNotFoundException("Q&A session not found.");
         }
+
+        if (request.CaseId is { } newCaseId && newCaseId != Guid.Empty)
+            await ValidateVisualQaCaseAccessAsync(studentId, newCaseId);
 
         string? coordsToSave = BoundingBoxParser.TryParseFromJson(request.Coordinates) is { } b
             ? BoundingBoxParser.Serialize(b)
@@ -368,6 +377,46 @@ public class StudentService : IStudentService
             if (string.IsNullOrWhiteSpace(request.ImageUrl) && annotation.Image != null)
             {
                 request.ImageUrl = annotation.Image.ImageUrl;
+            }
+
+            imageUrlToSave = request.ImageUrl;
+        }
+        else if (request.CaseId is { } catalogCaseId && catalogCaseId != Guid.Empty)
+        {
+            if (string.IsNullOrWhiteSpace(request.ImageUrl))
+            {
+                if (request.ImageId is { } imgId && imgId != Guid.Empty)
+                {
+                    var mi = await _unitOfWork.Context.MedicalImages
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(m => m.Id == imgId && m.CaseId == catalogCaseId);
+                    if (mi != null)
+                        request.ImageUrl = mi.ImageUrl;
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    request.ImageUrl = await _unitOfWork.Context.MedicalImages
+                        .AsNoTracking()
+                        .Where(m => m.CaseId == catalogCaseId)
+                        .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
+                        .ThenBy(m => m.Id)
+                        .Select(m => m.ImageUrl)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ImageUrl))
+                {
+                    var mediaUrl = await _unitOfWork.Context.CaseMedia
+                        .AsNoTracking()
+                        .Where(c => c.CaseId == catalogCaseId)
+                        .OrderBy(c => c.Id)
+                        .Select(c =>
+                            !string.IsNullOrWhiteSpace(c.MediaUrl) ? c.MediaUrl : c.StoragePath)
+                        .FirstOrDefaultAsync();
+                    if (!string.IsNullOrWhiteSpace(mediaUrl))
+                        request.ImageUrl = mediaUrl;
+                }
             }
 
             imageUrlToSave = request.ImageUrl;
@@ -688,6 +737,32 @@ public class StudentService : IStudentService
         return enrolledWithLecturer.Any(classIdsForCase.Contains);
     }
 
+    public async Task ValidateVisualQaCaseAccessAsync(
+        Guid studentId,
+        Guid? caseId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!caseId.HasValue || caseId.Value == Guid.Empty)
+            return;
+
+        var medicalCase = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == caseId.Value, cancellationToken);
+
+        if (medicalCase == null)
+            throw new KeyNotFoundException("Medical case not found.");
+
+        if (medicalCase.OwnerStudentId.HasValue)
+        {
+            if (medicalCase.OwnerStudentId != studentId)
+                throw new KeyNotFoundException("Medical case not found.");
+            return;
+        }
+
+        if (medicalCase.IsApproved != true || medicalCase.IsActive != true)
+            throw new KeyNotFoundException("Medical case not found.");
+    }
+
     public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
@@ -695,6 +770,9 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId);
         if (session == null)
             throw new KeyNotFoundException("Q&A session not found.");
+
+        if (session.CaseId.HasValue)
+            await ValidateVisualQaCaseAccessAsync(studentId, session.CaseId);
 
         var lastActivity = session.UpdatedAt ?? session.CreatedAt;
         var inactiveTime = DateTime.UtcNow - lastActivity;
@@ -935,9 +1013,22 @@ public class StudentService : IStudentService
             .Where(s => s.StudentId == studentId);
 
         if (hasCaseSession.HasValue)
-            baseQuery = hasCaseSession.Value
-                ? baseQuery.Where(s => s.CaseId != null)
-                : baseQuery.Where(s => s.CaseId == null);
+        {
+            if (hasCaseSession.Value)
+            {
+                baseQuery = baseQuery.Where(s =>
+                    s.CaseId != null &&
+                    _unitOfWork.Context.MedicalCases.Any(mc =>
+                        mc.Id == s.CaseId && mc.IsApproved == true && mc.OwnerStudentId == null));
+            }
+            else
+            {
+                baseQuery = baseQuery.Where(s =>
+                    s.CaseId != null &&
+                    _unitOfWork.Context.MedicalCases.Any(mc =>
+                        mc.Id == s.CaseId && mc.OwnerStudentId == studentId));
+            }
+        }
 
         var orderedQuery = baseQuery.OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt);
 
@@ -977,21 +1068,29 @@ public class StudentService : IStudentService
             .ToDictionaryAsync(x => x.SessionId, x => x.Role, cancellationToken);
 
         var rejectedSessionIds = sessions.Where(x => string.Equals(x.Status, "Rejected", StringComparison.Ordinal)).Select(x => x.Id).ToList();
-        Dictionary<Guid, string> rejectionReasonBySession = new();
+        Dictionary<Guid, string> rejectionReasonBySession = sessions
+            .Where(s => !string.IsNullOrWhiteSpace(s.ReviewFeedback))
+            .ToDictionary(s => s.Id, s => s.ReviewFeedback!.Trim());
+
         if (rejectedSessionIds.Count > 0)
         {
-            var lecturerRows = await _unitOfWork.Context.QaMessages
-                .AsNoTracking()
-                .Where(m =>
-                    rejectedSessionIds.Contains(m.SessionId) &&
-                    (m.Role == "Lecturer" || m.Role == "Expert"))
-                .Select(m => new { m.SessionId, m.Content, m.CreatedAt, m.Id })
-                .ToListAsync(cancellationToken);
-            rejectionReasonBySession = lecturerRows
-                .GroupBy(x => x.SessionId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First().Content.Trim());
+            var missingRejectIds = rejectedSessionIds.Where(id => !rejectionReasonBySession.ContainsKey(id)).ToList();
+            if (missingRejectIds.Count > 0)
+            {
+                var lecturerRows = await _unitOfWork.Context.QaMessages
+                    .AsNoTracking()
+                    .Where(m =>
+                        missingRejectIds.Contains(m.SessionId) &&
+                        (m.Role == "Lecturer" || m.Role == "Expert"))
+                    .Select(m => new { m.SessionId, m.Content, m.CreatedAt, m.Id })
+                    .ToListAsync(cancellationToken);
+                foreach (var group in lecturerRows.GroupBy(x => x.SessionId))
+                {
+                    var legacy = group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First().Content.Trim();
+                    if (!string.IsNullOrWhiteSpace(legacy))
+                        rejectionReasonBySession[group.Key] = legacy;
+                }
+            }
         }
 
         foreach (var s in sessions)
@@ -1010,6 +1109,8 @@ public class StudentService : IStudentService
                 SessionId = s.Id,
                 CaseId = s.CaseId,
                 Status = s.Status,
+                SessionStatus = s.Status,
+                ReviewFeedback = s.ReviewFeedback,
                 UpdatedAt = s.UpdatedAt ?? s.CreatedAt,
                 QuestionSnippet = snippet,
                 ImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(
@@ -1017,8 +1118,9 @@ public class StudentService : IStudentService
                     cancellationToken),
                 ReviewState = MapReviewState(s.Status),
                 LastResponderRole = MapResponderRole(lastResponderBySession.TryGetValue(s.Id, out var lastRole) ? lastRole : null),
-                RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal) && rejectionReasonBySession.TryGetValue(s.Id, out var rr)
-                    ? rr
+                RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal)
+                    ? (s.ReviewFeedback?.Trim()
+                       ?? (rejectionReasonBySession.TryGetValue(s.Id, out var rr) ? rr : null))
                     : null
             });
         }
@@ -1074,15 +1176,18 @@ public class StudentService : IStudentService
         string? rejectionReason = null;
         if (string.Equals(session.Status, "Rejected", StringComparison.Ordinal))
         {
-            var rr = messages
-                .Where(m =>
-                    string.Equals(m.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(m.Role, "Expert", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(m => m.CreatedAt)
-                .ThenByDescending(m => m.Id)
-                .Select(m => (m.Content ?? string.Empty).Trim())
-                .FirstOrDefault(t => t.Length > 0);
-            rejectionReason = string.IsNullOrWhiteSpace(rr) ? null : rr;
+            rejectionReason = string.IsNullOrWhiteSpace(session.ReviewFeedback)
+                ? messages
+                    .Where(m =>
+                        string.Equals(m.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(m.Role, "Expert", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(m => m.CreatedAt)
+                    .ThenByDescending(m => m.Id)
+                    .Select(m => (m.Content ?? string.Empty).Trim())
+                    .FirstOrDefault(t => t.Length > 0)
+                : session.ReviewFeedback.Trim();
+            if (string.IsNullOrWhiteSpace(rejectionReason))
+                rejectionReason = null;
         }
 
         return new VisualQaThreadDto
@@ -1099,7 +1204,9 @@ public class StudentService : IStudentService
             ReviewState = reviewState,
             LastResponderRole = ResolveLastResponderRole(messages, capabilities.Reason),
             BlockingNotice = blockingNotice,
-            RejectionReason = rejectionReason
+            RejectionReason = rejectionReason,
+            SessionStatus = session.Status,
+            ReviewFeedback = session.ReviewFeedback
         };
     }
 
@@ -1464,8 +1571,12 @@ public class StudentService : IStudentService
         var sessions = await _studentRepository.GetQuizzesWithSessionForStudentAsync(studentId, utcNow);
 
         var quizIds = sessions.Select(s => s.QuizId).Distinct().ToList();
-        var attempts = await _unitOfWork.QuizAttemptRepository
-            .FindByCondition(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
+        
+        // Load attempts WITH answers and questions to recalculate score dynamically
+        var attempts = await _unitOfWork.Context.QuizAttempts
+            .Where(a => a.StudentId == studentId && quizIds.Contains(a.QuizId))
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .ToListAsync();
 
         var questionCounts = await _unitOfWork.Context.QuizQuestions
@@ -1488,6 +1599,38 @@ public class StudentService : IStudentService
             // AnswersReleased = true khi lecturer đã release đáp án HOẶC quiz đã đóng
             var answersReleased = s.ReleaseAnswersAt.HasValue ||
                 (s.CloseTime.HasValue && s.CloseTime.Value < utcNow);
+
+            // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+            double? calculatedScore = null;
+            if (attempt != null && attempt.CompletedAt.HasValue)
+            {
+                var totalQuestions = countByQuiz.GetValueOrDefault(s.QuizId);
+                var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+                
+                decimal earnedPoints = 0;
+                foreach (var answer in attempt.StudentQuizAnswers)
+                {
+                    if (answer.Question?.Type == QuestionType.Essay)
+                    {
+                        // Essay: add actual awarded points (can be partial credit)
+                        earnedPoints += answer.ScoreAwarded ?? 0;
+                    }
+                    else
+                    {
+                        // MC/TF/etc: full points if correct, 0 if wrong
+                        earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                    }
+                }
+                
+                calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+                
+                // DEBUG: Log score calculation
+                _logger.LogInformation(
+                    "[SCORE DEBUG] QuizId={QuizId}, TotalQuestions={TotalQ}, PointsPerQ={PointsPerQ}, " +
+                    "EarnedPoints={EarnedPoints}, CalculatedScore={CalculatedScore}, StoredScore={StoredScore}",
+                    s.QuizId, totalQuestions, pointsPerQuestion, earnedPoints, calculatedScore, attempt.Score);
+            }
+
             return new QuizListItemDto
             {
                 QuizId = s.QuizId,
@@ -1500,10 +1643,11 @@ public class StudentService : IStudentService
                 PassingScore = s.PassingScore,
                 TotalQuestions = countByQuiz.GetValueOrDefault(s.QuizId),
                 IsCompleted = attempt?.CompletedAt != null,
-                Score = attempt?.Score,
+                Score = calculatedScore,
                 AttemptId = attempt?.Id,
                 CreatedAt = createdAt,
-                AnswersReleased = answersReleased
+                AnswersReleased = answersReleased,
+                QuizMode = s.QuizMode
             };
         })
         .OrderByDescending(q => q.CreatedAt.HasValue)  // Items with CreatedAt come first
@@ -1527,7 +1671,7 @@ public class StudentService : IStudentService
         if (!await _studentRepository.IsStudentEligibleForAssignedQuizAsync(studentId, quizId, utcNow))
         {
             throw new InvalidOperationException(
-                "You are not assigned this quiz through an enrolled class, or the quiz is outside its availability window.");
+                "Unable to start quiz. Please try again or contact support.");
         }
 
         // Fetch session to check allow_retake BEFORE processing retake
@@ -1547,16 +1691,24 @@ public class StudentService : IStudentService
         var effectiveOpenTime = classSession?.OpenTime ?? quiz.OpenTime;
         var effectiveCloseTime = classSession?.CloseTime ?? quiz.CloseTime;
 
-        if (effectiveOpenTime.HasValue && effectiveOpenTime.Value > utcNow)
+        // FIX: If no open time is set (both classSession and quiz have null), quiz is NOT accessible
+        // This prevents students from taking quizzes that haven't been properly scheduled
+        if (!effectiveOpenTime.HasValue)
         {
             throw new InvalidOperationException(
-                $"Quiz is not open yet. Open time: {effectiveOpenTime.Value:dd/MM/yyyy HH:mm} (Vietnam time).");
+                "Quiz not available. Lecturer has not set an open time.");
+        }
+
+        if (effectiveOpenTime.Value > utcNow)
+        {
+            throw new InvalidOperationException(
+                $"Quiz not open yet. Opens at: {effectiveOpenTime.Value:HH:mm, dd/MM/yyyy} (Vietnam time).");
         }
 
         if (effectiveCloseTime.HasValue && effectiveCloseTime.Value <= utcNow)
         {
             throw new InvalidOperationException(
-                "Quiz is closed. You cannot start or continue this attempt.");
+                "Quiz is closed. You cannot start or continue.");
         }
 
         var existingAttempt = await _studentRepository.GetQuizAttemptAsync(studentId, quizId);
@@ -1572,7 +1724,7 @@ public class StudentService : IStudentService
                 if (!globalRetake && !lecturerRetake)
                 {
                     throw new InvalidOperationException(
-                        "You have already submitted this quiz. Your lecturer will enable retake when needed.");
+                        "Quiz already submitted. Lecturer will enable retake when needed.");
                 }
 
                 // Retake allowed: clear previous answers and reset
@@ -1603,6 +1755,10 @@ public class StudentService : IStudentService
         }
 
         var shuffleQuestions = classSession?.ShuffleQuestions ?? false;
+        var shuffleOptions = classSession?.ShuffleOptions ?? false;
+        var quizMode = (classSession?.QuizMode ?? quiz.QuizMode);
+        var isPracticeMode = quizMode == 2 || quiz.IsAiGenerated; // 2 = Practice mode, AI quizzes are always practice
+        var allowHints = isPracticeMode;
 
         var questionList = quiz.QuizQuestions.AsEnumerable();
 
@@ -1616,6 +1772,28 @@ public class StudentService : IStudentService
                     .OrderBy(mi => mi.CreatedAt ?? DateTime.MaxValue)
                     .Select(mi => mi.ImageUrl)
                     .FirstOrDefault();
+
+                // Shuffle options if enabled
+                string? optA = q.OptionA;
+                string? optB = q.OptionB;
+                string? optC = q.OptionC;
+                string? optD = q.OptionD;
+
+                if (shuffleOptions && (q.Type == QuestionType.MultipleChoice || q.Type == QuestionType.MultiSelect))
+                {
+                    var options = new List<(string key, string value)>();
+                    if (!string.IsNullOrWhiteSpace(q.OptionA)) options.Add(("A", q.OptionA));
+                    if (!string.IsNullOrWhiteSpace(q.OptionB)) options.Add(("B", q.OptionB));
+                    if (!string.IsNullOrWhiteSpace(q.OptionC)) options.Add(("C", q.OptionC));
+                    if (!string.IsNullOrWhiteSpace(q.OptionD)) options.Add(("D", q.OptionD));
+
+                    var shuffled = options.OrderBy(_ => Random.Shared.Next()).ToList();
+                    optA = shuffled.ElementAtOrDefault(0).value;
+                    optB = shuffled.ElementAtOrDefault(1).value;
+                    optC = shuffled.ElementAtOrDefault(2).value;
+                    optD = shuffled.ElementAtOrDefault(3).value;
+                }
+
                 return new StudentQuizQuestionDto
                 {
                     QuestionId = q.Id,
@@ -1623,11 +1801,18 @@ public class StudentService : IStudentService
                     Type = q.Type?.ToString(),
                     CaseId = q.CaseId,
                     CaseTitle = q.Case?.Title,
-                    OptionA = q.OptionA,
-                    OptionB = q.OptionB,
-                    OptionC = q.OptionC,
-                    OptionD = q.OptionD,
+                    OptionA = optA,
+                    OptionB = optB,
+                    OptionC = optC,
+                    OptionD = optD,
                     ImageUrl = !string.IsNullOrWhiteSpace(q.ImageUrl) ? q.ImageUrl : caseImageUrl,
+                    Hint = allowHints ? q.Hint : null,
+                    HintAvailable = allowHints && !string.IsNullOrWhiteSpace(q.Hint),
+                    CorrectAnswers = q.CorrectAnswers,
+                    AcceptedAnswers = q.AcceptedAnswers,
+                    // Practice Mode: hiển thị đáp án đúng và giải thích sau khi nộp bài
+                    CorrectAnswer = isPracticeMode ? q.CorrectAnswer : null,
+                    Explanation = isPracticeMode ? q.Explanation : null
                 };
             })
             .ToList();
@@ -1638,8 +1823,10 @@ public class StudentService : IStudentService
             QuizId = quiz.Id,
             Title = quiz.Title,
             Topic = quiz.Topic,
+            QuizMode = quizMode,
             TimeLimit = classSession?.TimeLimitMinutes ?? quiz.TimeLimit,
             CloseTime = classSession?.CloseTime ?? quiz.CloseTime,
+            AllowHints = allowHints,
             Questions = questionDtos
         };
     }
@@ -1685,11 +1872,13 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(cqs =>
                 cqs.QuizId == attempt.QuizId &&
                 classIds.Contains(cqs.ClassId) &&
-                ((cqs.OpenTime ?? cqs.Quiz!.OpenTime) == null || (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow) &&
+                // FIX: Quiz must have an open time set and it must be in the past
+                (cqs.OpenTime ?? cqs.Quiz!.OpenTime) != null &&
+                (cqs.OpenTime ?? cqs.Quiz!.OpenTime) <= utcNow &&
                 ((cqs.CloseTime ?? cqs.Quiz!.CloseTime) == null || (cqs.CloseTime ?? cqs.Quiz!.CloseTime) >= utcNow));
 
         if (session == null)
-            throw new InvalidOperationException("Quiz attempt time has expired.");
+            throw new InvalidOperationException("Quiz is not available. The lecturer has not set an open time, or the quiz has expired.");
 
         var existing = await _unitOfWork.StudentQuizAnswerRepository
             .FirstOrDefaultAsync(a => a.AttemptId == submit.AttemptId
@@ -1697,23 +1886,58 @@ public class StudentService : IStudentService
         if (existing != null)
             throw new InvalidOperationException("This question has already been answered.");
 
-        bool isCorrect = string.Equals(
-            submit.StudentAnswer?.Trim(),
-            question.CorrectAnswer?.Trim(),
-            StringComparison.OrdinalIgnoreCase
-        );
+        // Calculate points per question: total quiz score always = 100, divided equally among all questions
+        var totalQuestions = await _unitOfWork.Context.QuizQuestions
+            .CountAsync(q => q.QuizId == attempt.QuizId);
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
+        bool isCorrect = false;
+        string? studentAnswerForDb = null;
+
+        // Handle different question types
+        if (question.Type == QuestionType.MultiSelect)
+        {
+            // MultiSelect: compare JSON arrays
+            isCorrect = CheckMultiSelectAnswer(submit.StudentAnswer, question.CorrectAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
+        }
+        else if (question.Type == QuestionType.FillInBlank)
+        {
+            // FillInBlank: check against accepted answers (case-insensitive)
+            isCorrect = CheckFillInBlankAnswer(submit.StudentAnswer, question.AcceptedAnswers);
+            studentAnswerForDb = submit.StudentAnswer;
+        }
+        else
+        {
+            // MultipleChoice, TrueFalse, Essay: standard string comparison
+            isCorrect = string.Equals(
+                submit.StudentAnswer?.Trim(),
+                question.CorrectAnswer?.Trim(),
+                StringComparison.OrdinalIgnoreCase
+            );
+            studentAnswerForDb = submit.StudentAnswer;
+        }
 
         var studentQuizAnswer = new StudentQuizAnswer
         {
             Id = Guid.NewGuid(),
             AttemptId = submit.AttemptId,
             QuestionId = submit.QuestionId,
-            StudentAnswer = submit.StudentAnswer,
-            IsCorrect = isCorrect
+            StudentAnswer = studentAnswerForDb,
+            IsCorrect = isCorrect,
+            // Calculate score: each question worth 100/totalQuestions points
+            ScoreAwarded = isCorrect ? pointsPerQuestion : 0,
+            IsGraded = true // Auto-graded
         };
 
         await _unitOfWork.StudentQuizAnswerRepository.AddAsync(studentQuizAnswer);
         await _unitOfWork.SaveAsync();
+
+        // Determine if hints/explanations can be shown (practice mode)
+        var quizModeVal = session?.QuizMode ?? quiz.QuizMode;
+        var isPracticeMode = quizModeVal == 2; // 2 = Practice mode
+        var showCorrectAnswer = isPracticeMode;
+        var showExplanation = isPracticeMode;
 
         return new StudentSubmitQuestionResponseDto
         {
@@ -1725,10 +1949,68 @@ public class StudentService : IStudentService
             OptionD = question.OptionD,
             StudentAnswer = submit.StudentAnswer?.ToUpper(),
             StudentAnswerText = GetOptionText(question, submit.StudentAnswer),
-            CorrectAnswer = question.CorrectAnswer,
-            CorrectAnswerText = GetOptionText(question, question.CorrectAnswer),
+            CorrectAnswer = showCorrectAnswer ? question.CorrectAnswer : null,
+            CorrectAnswerText = showCorrectAnswer ? GetOptionText(question, question.CorrectAnswer) : null,
             IsCorrect = isCorrect
         };
+    }
+
+    /// <summary>
+    /// Check if the student's multi-select answer matches the correct answers.
+    /// </summary>
+    private bool CheckMultiSelectAnswer(string? studentAnswer, string? correctAnswersJson)
+    {
+        if (string.IsNullOrWhiteSpace(studentAnswer) || string.IsNullOrWhiteSpace(correctAnswersJson))
+            return false;
+
+        try
+        {
+            var studentAnswers = JsonSerializer.Deserialize<List<string>>(studentAnswer)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .OrderBy(a => a)
+                .ToList() ?? new List<string>();
+
+            var correctAnswers = JsonSerializer.Deserialize<List<string>>(correctAnswersJson)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .OrderBy(a => a)
+                .ToList() ?? new List<string>();
+
+            return studentAnswers.SequenceEqual(correctAnswers);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if the student's fill-in-blank answer matches any accepted answer (case-insensitive).
+    /// </summary>
+    private bool CheckFillInBlankAnswer(string? studentAnswer, string? acceptedAnswersJson)
+    {
+        if (string.IsNullOrWhiteSpace(studentAnswer))
+            return false;
+
+        var normalizedStudent = studentAnswer.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(acceptedAnswersJson))
+        {
+            // Fallback to correct_answer field
+            return false; // Would need correct_answer to be set
+        }
+
+        try
+        {
+            var acceptedAnswers = JsonSerializer.Deserialize<List<string>>(acceptedAnswersJson)?
+                .Select(a => a.Trim().ToUpperInvariant())
+                .ToList() ?? new List<string>();
+
+            return acceptedAnswers.Contains(normalizedStudent);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     //===================== phan tran =====================   
@@ -2156,4 +2438,5 @@ public class StudentService : IStudentService
 
         _logger.LogInformation("[RequestRetakeAsync] Student {StudentId} requested retake for quiz {QuizId}", studentId, quizId);
     }
+
 }

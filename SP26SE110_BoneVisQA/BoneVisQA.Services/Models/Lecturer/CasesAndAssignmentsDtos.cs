@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Lecturer;
@@ -71,6 +72,7 @@ public class CaseDto
     public bool IsApproved { get; set; }
     public bool IsActive { get; set; }
     public DateTime? CreatedAt { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 public class AssignCasesToClassRequestDto
@@ -104,9 +106,21 @@ public class LectStudentQuestionDto
     public DateTime? CreatedAt { get; set; }
     public string? AnswerText { get; set; }
     public string? AnswerStatus { get; set; }
+
+    /// <summary>Same as <see cref="AnswerStatus"/> — explicit session workflow status for triage/history UIs.</summary>
+    [JsonPropertyName("sessionStatus")]
+    public string? SessionStatus { get; set; }
+
+    /// <summary>Lecturer/expert review note stored on <c>visual_qa_sessions.review_feedback</c> (never mixed into AI message JSON).</summary>
+    [JsonPropertyName("reviewFeedback")]
+    public string? ReviewFeedback { get; set; }
+
     public Guid? EscalatedById { get; set; }
     public DateTime? EscalatedAt { get; set; }
     public double? AiConfidenceScore { get; set; }
+
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 }
 
 public class AssignCasesRequestDto

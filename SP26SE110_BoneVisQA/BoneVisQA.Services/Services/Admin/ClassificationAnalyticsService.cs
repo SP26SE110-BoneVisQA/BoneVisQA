@@ -62,29 +62,10 @@ namespace BoneVisQA.Services.Services.Admin
                         .CountAsync(q => q.BoneSpecialtyId == specialty.Id),
                     TotalMedicalCases = await _unitOfWork.MedicalCaseRepository.GetQueryable()
                         .CountAsync(m => m.BoneSpecialtyId == specialty.Id),
-                    TotalExperts = await _unitOfWork.ExpertSpecialtyRepository.GetQueryable()
-                        .CountAsync(e => e.BoneSpecialtyId == specialty.Id && e.IsActive)
+                    TotalExperts = 0
                 };
                 specialtyStats.Add(stats);
             }
-
-            // Get experts by specialty
-            var expertBySpecialty = await _unitOfWork.ExpertSpecialtyRepository.GetQueryable()
-                .Include(e => e.BoneSpecialty)
-                .Where(e => e.IsActive)
-                .ToListAsync();
-
-            var expertsBySpecialty = expertBySpecialty
-                .GroupBy(e => e.BoneSpecialtyId)
-                .Select(g => new ExpertBySpecialtyDto
-                {
-                    SpecialtyId = g.Key,
-                    SpecialtyName = g.FirstOrDefault()?.BoneSpecialty?.Name ?? "Unknown",
-                    TotalExperts = g.Select(e => e.ExpertId).Distinct().Count(),
-                    PrimaryExperts = g.Count(e => e.IsPrimary),
-                    AverageProficiencyLevel = g.Average(e => e.ProficiencyLevel)
-                })
-                .ToList();
 
             return new ClassificationAnalyticsDto
             {
@@ -94,7 +75,7 @@ namespace BoneVisQA.Services.Services.Admin
                 TotalQuizzes = totalQuizzes,
                 TotalMedicalCases = totalMedicalCases,
                 SpecialtyStats = specialtyStats,
-                ExpertsBySpecialty = expertsBySpecialty
+                ExpertsBySpecialty = new List<ExpertBySpecialtyDto>()
             };
         }
 

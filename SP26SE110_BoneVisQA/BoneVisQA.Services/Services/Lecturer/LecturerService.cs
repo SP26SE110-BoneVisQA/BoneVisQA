@@ -27,6 +27,36 @@ public class LecturerService : ILecturerService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LecturerService> _logger;
 
+    /// <summary>Parse answer string: supports JSON array ["A","C"] or comma/newline separated "A, C"</summary>
+    private static List<string> ParseAnswerList(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return new List<string>();
+
+        var trimmed = input.Trim();
+        if (trimmed.StartsWith('['))
+        {
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(trimmed)
+                    ?? new List<string>();
+            }
+            catch
+            {
+                return trimmed.Trim('[', ']')
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim().Trim('"', '\''))
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .ToList();
+            }
+        }
+
+        return trimmed.Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToList();
+    }
+
     public LecturerService(
         IUnitOfWork unitOfWork,
         IEmailService emailService,
@@ -655,7 +685,13 @@ public class LecturerService : ILecturerService
             OptionC = q.OptionC,
             OptionD = q.OptionD,
             CorrectAnswer = q.CorrectAnswer,
-            ImageUrl = q.ImageUrl
+            ImageUrl = q.ImageUrl,
+            ReferenceAnswer = q.ReferenceAnswer,
+            MaxScore = 1, // Each question is worth 1 point
+            Hint = q.Hint,
+            Explanation = q.Explanation,
+            CorrectAnswers = q.CorrectAnswers,
+            AcceptedAnswers = q.AcceptedAnswers
         }).ToList();
     }
 
@@ -686,7 +722,13 @@ public class LecturerService : ILecturerService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             CorrectAnswer = question.CorrectAnswer,
-            ImageUrl = question.ImageUrl
+            ImageUrl = question.ImageUrl,
+            ReferenceAnswer = question.ReferenceAnswer,
+            MaxScore = 1, // Each question is worth 1 point
+            Hint = question.Hint,
+            Explanation = question.Explanation,
+            CorrectAnswers = question.CorrectAnswers,
+            AcceptedAnswers = question.AcceptedAnswers
         };
     }
 
@@ -716,9 +758,8 @@ public class LecturerService : ILecturerService
             TimeLimit = request.TimeLimit,
             PassingScore = request.PassingScore, // Lecturer quiz uses 100-point scale directly
             CreatedAt = now,
-            // Deep classification fields
-            BoneSpecialtyId = request.BoneSpecialtyId,
-            PathologyCategoryId = request.PathologyCategoryId
+            // Quiz Mode: 1=Exam, 2=Practice, 3=Adaptive (default 1)
+            QuizMode = request.QuizMode > 0 ? request.QuizMode : 1
         };
 
         await _unitOfWork.QuizRepository.AddAsync(quiz);
@@ -756,9 +797,9 @@ public class LecturerService : ILecturerService
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
-            BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId,
-            CreatedByLecturerId = quiz.CreatedByLecturerId
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
@@ -867,7 +908,16 @@ public class LecturerService : ILecturerService
             OptionC = request.OptionC,
             OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer,
-            ImageUrl = request.ImageUrl
+            ImageUrl = request.ImageUrl,
+            Hint = request.Hint,
+            Explanation = request.Explanation,
+            MaxScore = 1, // Each question is worth 1 point
+            CorrectAnswers = request.CorrectAnswers != null
+                ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+                : null,
+            AcceptedAnswers = request.AcceptedAnswers != null
+                ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+                : null
         };
 
         await _unitOfWork.QuizQuestionRepository.AddAsync(question);
@@ -887,6 +937,10 @@ public class LecturerService : ILecturerService
             OptionC = question.OptionC,
             OptionD = question.OptionD,
             CorrectAnswer = question.CorrectAnswer,
+            Hint = question.Hint,
+            Explanation = question.Explanation,
+            CorrectAnswers = question.CorrectAnswers,
+            AcceptedAnswers = question.AcceptedAnswers,
             ImageUrl = question.ImageUrl
         };
     }
@@ -927,7 +981,16 @@ public class LecturerService : ILecturerService
                 OptionC = request.OptionC,
                 OptionD = request.OptionD,
                 CorrectAnswer = request.CorrectAnswer,
-                ImageUrl = request.ImageUrl
+                ImageUrl = request.ImageUrl,
+                Hint = request.Hint,
+                Explanation = request.Explanation,
+                MaxScore = 1, // Each question is worth 1 point
+                CorrectAnswers = request.CorrectAnswers != null
+                    ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+                    : null,
+                AcceptedAnswers = request.AcceptedAnswers != null
+                    ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+                    : null
             };
 
             questions.Add(question);
@@ -959,7 +1022,11 @@ public class LecturerService : ILecturerService
                 OptionC = question.OptionC,
                 OptionD = question.OptionD,
                 CorrectAnswer = question.CorrectAnswer,
-                ImageUrl = question.ImageUrl
+                ImageUrl = question.ImageUrl,
+                Hint = question.Hint,
+                Explanation = question.Explanation,
+                CorrectAnswers = question.CorrectAnswers,
+                AcceptedAnswers = question.AcceptedAnswers
             });
         }
 
@@ -989,6 +1056,16 @@ public class LecturerService : ILecturerService
         entity.OptionD = request.OptionD;
         entity.CorrectAnswer = request.CorrectAnswer;
         entity.ImageUrl = request.ImageUrl;
+        entity.ReferenceAnswer = request.ReferenceAnswer;
+        entity.Hint = request.Hint;
+        entity.Explanation = request.Explanation;
+        entity.MaxScore = 1; // Each question is worth 1 point
+        entity.CorrectAnswers = request.CorrectAnswers != null
+            ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.CorrectAnswers))
+            : null;
+        entity.AcceptedAnswers = request.AcceptedAnswers != null
+            ? System.Text.Json.JsonSerializer.Serialize(ParseAnswerList(request.AcceptedAnswers))
+            : null;
 
         await _unitOfWork.QuizQuestionRepository.UpdateAsync(entity);
         await _unitOfWork.SaveAsync();
@@ -1004,6 +1081,8 @@ public class LecturerService : ILecturerService
             OptionD = request.OptionD,
             CorrectAnswer = request.CorrectAnswer,
             ImageUrl = request.ImageUrl,
+            Hint = request.Hint,
+            Explanation = request.Explanation
         };
     }
 
@@ -1132,6 +1211,7 @@ public class LecturerService : ILecturerService
         var cases = await _unitOfWork.MedicalCaseRepository
             .FindByCondition(c => true)
             .Include(c => c.Category)
+            .Include(c => c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
 
@@ -1146,7 +1226,8 @@ public class LecturerService : ILecturerService
                 IsApproved = c.IsApproved ?? false,
 
                 IsActive = c.IsActive ?? false,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                ImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl
             })
             .ToList();
     }
@@ -1156,6 +1237,7 @@ public class LecturerService : ILecturerService
         var query = _unitOfWork.MedicalCaseRepository
             .FindByCondition(c => true)
             .Include(c => c.Category)
+            .Include(c => c.MedicalImages.OrderBy(m => m.CreatedAt ?? DateTime.MinValue).ThenBy(m => m.Id))
             .OrderByDescending(c => c.CreatedAt);
 
         var totalCount = await query.CountAsync();
@@ -1179,7 +1261,8 @@ public class LecturerService : ILecturerService
                 CategoryName = c.Category?.Name,
                 IsApproved = c.IsApproved ?? false,
                 IsActive = c.IsActive ?? false,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                ImageUrl = c.MedicalImages.FirstOrDefault()?.ImageUrl
             })
             .ToList();
 
@@ -1188,7 +1271,8 @@ public class LecturerService : ILecturerService
             Items = items,
             TotalCount = totalCount,
             PageIndex = pageIndex,
-            PageSize = pageSize
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
         };
     }
 
@@ -1391,7 +1475,11 @@ public class LecturerService : ILecturerService
             .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
     }
 
-    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(Guid lecturerId, Guid classId, string? source = null)
+    public async Task<IReadOnlyList<LecturerTriageRowDto>> GetTriageListAsync(
+        Guid lecturerId,
+        Guid classId,
+        string? source = null,
+        string? status = null)
     {
         var ownsClass = await _unitOfWork.AcademicClassRepository
             .FindByCondition(c => c.Id == classId && c.LecturerId == lecturerId)
@@ -1410,6 +1498,8 @@ public class LecturerService : ILecturerService
                             || string.Equals(normalizedSource, "all", StringComparison.Ordinal)
                             || string.Equals(normalizedSource, "caseqa", StringComparison.Ordinal)
                             || string.Equals(normalizedSource, "case-qa", StringComparison.Ordinal);
+        var visualQaStatuses = LecturerTriageStatusFilter.ResolveVisualQaStatuses(status);
+        var caseQaStatuses = LecturerTriageStatusFilter.ResolveCaseQaStatuses(status);
 
         var studentIds = await _unitOfWork.ClassEnrollmentRepository
             .FindByCondition(e => e.ClassId == classId)
@@ -1428,13 +1518,15 @@ public class LecturerService : ILecturerService
                 .Include(s => s.Student)
                 .Include(s => s.Case!)
                     .ThenInclude(c => c.MedicalImages)
+                .Include(s => s.Case!)
+                    .ThenInclude(c => c.CaseMedia)
                 .Include(s => s.Image)
                 .Include(s => s.Messages)
                     .ThenInclude(m => m.Citations)
                         .ThenInclude(c => c.Chunk)
                             .ThenInclude(ch => ch.Doc)
                 .Where(s => studentIds.Contains(s.StudentId))
-                .Where(s => s.Status == "PendingExpertReview")
+                .Where(s => visualQaStatuses.Contains(s.Status))
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
 
@@ -1452,6 +1544,7 @@ public class LecturerService : ILecturerService
                         turns);
                     var flatImageUrl = ResolveSessionImageUrl(s);
                     var mc = s.Case;
+                    var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(mc);
 
                     return new LecturerTriageRowDto
                     {
@@ -1472,6 +1565,8 @@ public class LecturerService : ILecturerService
                         QuestionText = userMessage?.Content ?? string.Empty,
                         AnswerText = assistantMessage?.Content,
                         Status = s.Status,
+                        SessionStatus = s.Status,
+                        ReviewFeedback = s.ReviewFeedback,
                         AiConfidenceScore = assistantMessage?.AiConfidenceScore,
                         AskedAt = s.CreatedAt,
                         IsEscalated = string.Equals(s.Status, "EscalatedToExpert", StringComparison.Ordinal),
@@ -1490,6 +1585,7 @@ public class LecturerService : ILecturerService
                         SelectedUserMessageId = userMessage?.Id,
                         SelectedAssistantMessageId = assistantMessage?.Id,
                         Citations = ResolveLecturerCitations(assistantMessage),
+                        DicomMetadata = dicomMetadata,
                         Turns = turns
                     };
                 })
@@ -1508,9 +1604,12 @@ public class LecturerService : ILecturerService
                     .ThenInclude(q => q.Case!)
                         .ThenInclude(c => c!.MedicalImages)
                 .Include(a => a.Question!)
+                    .ThenInclude(q => q.Case!)
+                        .ThenInclude(c => c!.CaseMedia)
+                .Include(a => a.Question!)
                     .ThenInclude(q => q.Annotation!)
                     .ThenInclude(an => an!.Image)
-                .Where(a => a.Status == CaseAnswerStatuses.RequiresLecturerReview)
+                .Where(a => caseQaStatuses.Contains(a.Status))
                 .Where(a => a.Question != null && studentIds.Contains(a.Question.StudentId))
                 .OrderByDescending(a => a.GeneratedAt)
                 .ToListAsync();
@@ -1519,6 +1618,7 @@ public class LecturerService : ILecturerService
             {
                 var q = a.Question!;
                 var flat = ResolveStudentQuestionImageUrl(q);
+                var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(q.Case);
                 return new LecturerTriageRowDto
                 {
                     AnswerId = a.Id,
@@ -1551,7 +1651,8 @@ public class LecturerService : ILecturerService
                     CustomImageUrl = q.CustomImageUrl,
                     RequestedReviewMessageId = null,
                     SelectedUserMessageId = q.Id,
-                    SelectedAssistantMessageId = a.Id
+                    SelectedAssistantMessageId = a.Id,
+                    DicomMetadata = dicomMetadata
                 };
             }).ToList();
         }
@@ -1587,6 +1688,8 @@ public class LecturerService : ILecturerService
             .Include(s => s.Student)
             .Include(s => s.Case!)
                 .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMedia)
             .Include(s => s.Image)
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == questionId);
@@ -1607,6 +1710,7 @@ public class LecturerService : ILecturerService
 
         var (userMessage, latestAssistant) = ResolveRequestedReviewPair(session);
         var detailImageUrl = ResolveSessionImageUrl(session);
+        var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
 
         return new LectStudentQuestionDetailDto
         {
@@ -1631,6 +1735,8 @@ public class LecturerService : ILecturerService
             DifferentialDiagnoses = DeserializeJsonArray(latestAssistant?.DifferentialDiagnoses),
             KeyImagingFindings = latestAssistant?.KeyImagingFindings,
             AnswerStatus = session.Status,
+            SessionStatus = session.Status,
+            ReviewFeedback = session.ReviewFeedback,
             AiConfidenceScore = latestAssistant?.AiConfidenceScore,
             ReviewedById = null,
             ReviewedByName = null,
@@ -1638,6 +1744,7 @@ public class LecturerService : ILecturerService
             IsEscalated = string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal),
             EscalatedByName = null,
             EscalatedAt = null,
+            DicomMetadata = dicomMetadata,
             Messages = orderedMessages.Select(m => new LectQAMessageDto
             {
                 Id = m.Id,
@@ -1702,6 +1809,7 @@ public class LecturerService : ILecturerService
                 break;
         }
         session.UpdatedAt = DateTime.UtcNow;
+        session.ReviewFeedback = request.AnswerText.Trim();
 
         await _unitOfWork.SaveAsync();
 
@@ -1972,6 +2080,8 @@ public class LecturerService : ILecturerService
             .Include(q => q.Student)
             .Include(q => q.Case)
                 .ThenInclude(c => c!.MedicalImages)
+            .Include(q => q.Case)
+                .ThenInclude(c => c!.CaseMedia)
             .Include(q => q.CaseAnswers)
             .AsQueryable();
 
@@ -1990,6 +2100,7 @@ public class LecturerService : ILecturerService
                     .OrderByDescending(a => a.GeneratedAt ?? DateTime.MinValue)
                     .ThenByDescending(a => a.Id)
                     .FirstOrDefault();
+                var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(q.Case);
 
                 return new LectStudentQuestionDto
             {
@@ -2008,7 +2119,8 @@ public class LecturerService : ILecturerService
                     AnswerStatus = latestAnswer?.Status,
                     EscalatedById = latestAnswer?.EscalatedById,
                     EscalatedAt = latestAnswer?.EscalatedAt,
-                    AiConfidenceScore = latestAnswer?.AiConfidenceScore
+                    AiConfidenceScore = latestAnswer?.AiConfidenceScore,
+                    DicomMetadata = dicomMetadata
                 };
             })
             .ToList();
@@ -2038,9 +2150,12 @@ public class LecturerService : ILecturerService
             CreatedAt = r.AskedAt,
             AnswerText = r.AnswerText,
             AnswerStatus = r.Status,
+            SessionStatus = r.Status,
+            ReviewFeedback = r.ReviewFeedback,
             EscalatedById = null,
             EscalatedAt = r.EscalatedAt,
-            AiConfidenceScore = r.AiConfidenceScore
+            AiConfidenceScore = r.AiConfidenceScore,
+            DicomMetadata = r.DicomMetadata
         }).ToList();
     }
 
@@ -2423,8 +2538,6 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
-                BoneSpecialtyId = q.BoneSpecialtyId,
-                PathologyCategoryId = q.PathologyCategoryId,
                 CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
@@ -2486,8 +2599,6 @@ public class LecturerService : ILecturerService
                 TimeLimit = q.TimeLimit,
                 PassingScore = q.PassingScore,
                 CreatedAt = q.CreatedAt,
-                BoneSpecialtyId = q.BoneSpecialtyId,
-                PathologyCategoryId = q.PathologyCategoryId,
                 CreatedByLecturerId = q.CreatedByLecturerId,
             })
             .ToList();
@@ -2559,7 +2670,8 @@ public class LecturerService : ILecturerService
                     CloseTime = s.CloseTime ?? quiz?.CloseTime,
                     QuestionCount = questionCounts.GetValueOrDefault(s.QuizId),
                     CreatorName = creatorName,
-                    CreatorType = creatorType
+                    CreatorType = creatorType,
+                    QuizMode = s.QuizMode
                 };
             })
             .ToList();
@@ -2628,7 +2740,8 @@ public class LecturerService : ILecturerService
                     Difficulty = quiz.Difficulty,
                     CreatorName = creatorName,
                     CreatorType = creatorType,
-                    Classes = classes
+                    Classes = classes,
+                    QuizMode = quiz.QuizMode
                 };
             })
             .ToList();
@@ -2691,9 +2804,9 @@ public class LecturerService : ILecturerService
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
             IsFromExpertLibrary = isFromExpertLibrary,
-            BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId,
-            CreatedByLecturerId = quiz.CreatedByLecturerId
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
@@ -2769,9 +2882,8 @@ public class LecturerService : ILecturerService
         quiz.Topic = request.Topic;
         quiz.Difficulty = request.Difficulty;
         quiz.Classification = request.Classification;
-        // Deep classification fields
-        quiz.BoneSpecialtyId = request.BoneSpecialtyId;
-        quiz.PathologyCategoryId = request.PathologyCategoryId;
+        // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+        quiz.QuizMode = request.QuizMode ?? 1;
 
         _unitOfWork.QuizRepository.Update(quiz);
         await _unitOfWork.SaveAsync();
@@ -2814,9 +2926,9 @@ public class LecturerService : ILecturerService
             TimeLimit = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
             CreatedAt = quiz.CreatedAt,
-            BoneSpecialtyId = quiz.BoneSpecialtyId,
-            PathologyCategoryId = quiz.PathologyCategoryId,
-            CreatedByLecturerId = quiz.CreatedByLecturerId
+            CreatedByLecturerId = quiz.CreatedByLecturerId,
+            // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+            QuizMode = quiz.QuizMode
         };
     }
 
@@ -2858,9 +2970,9 @@ public class LecturerService : ILecturerService
                     TimeLimit = q.TimeLimit,
                     PassingScore = q.PassingScore,
                     CreatedAt = q.CreatedAt,
-                    BoneSpecialtyId = q.BoneSpecialtyId,
-                    PathologyCategoryId = q.PathologyCategoryId,
-                    CreatedByLecturerId = q.CreatedByLecturerId
+                    CreatedByLecturerId = q.CreatedByLecturerId,
+                    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+                    QuizMode = q.QuizMode
                 };
             })
             .ToList();
@@ -3319,22 +3431,59 @@ public class LecturerService : ILecturerService
             .Where(e => e.ClassId == quizSession.ClassId)
             .ToListAsync();
 
+        // Get total questions for this quiz to calculate points per question
+        var totalQuestions = await _unitOfWork.Context.QuizQuestions
+            .CountAsync(q => q.QuizId == quizSession.QuizId);
+        var pointsPerQuestion = totalQuestions > 0 ? 100m / totalQuestions : 0;
+
         var attempts = await _unitOfWork.Context.QuizAttempts
             .AsNoTracking()
+            .Include(a => a.StudentQuizAnswers)
+                .ThenInclude(sa => sa.Question)
             .Where(a => a.QuizId == quizSession.QuizId)
-            .GroupBy(a => a.StudentId)
-            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(a => a.CompletedAt).First());
+            .ToListAsync();
 
-        return quizEnrollments.Select(e => new AssignmentSubmissionDto
-        {
-            StudentId = e.StudentId,
-            StudentName = e.Student?.FullName ?? "Unknown",
-            StudentCode = e.Student?.SchoolCohort,
-            SubmittedAt = attempts.TryGetValue(e.StudentId, out var attempt) ? attempt.CompletedAt : null,
-            Score = attempts.TryGetValue(e.StudentId, out var attempt2) ? attempt2.Score : null,
-            Status = attempts.TryGetValue(e.StudentId, out var attempt3)
-                ? (attempt3.Score.HasValue ? "graded" : "pending")
-                : "not-submitted"
+        // Group by student and get latest attempt
+        var latestAttempts = attempts
+            .GroupBy(a => a.StudentId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(a => a.CompletedAt).First());
+
+        return quizEnrollments.Select(e => {
+            double? calculatedScore = null;
+
+            if (latestAttempts.TryGetValue(e.StudentId, out var attempt) && attempt.CompletedAt.HasValue)
+            {
+                // Calculate score dynamically: total quiz score always = 100, divided equally among all questions
+                decimal earnedPoints = 0;
+                foreach (var answer in attempt.StudentQuizAnswers)
+                {
+                    if (answer.Question?.Type == QuestionType.Essay)
+                    {
+                        // Essay: add actual awarded points (can be partial credit)
+                        earnedPoints += answer.ScoreAwarded ?? 0;
+                    }
+                    else
+                    {
+                        // MC/TF/etc: full points if correct, 0 if wrong
+                        earnedPoints += (answer.IsCorrect == true) ? pointsPerQuestion : 0;
+                    }
+                }
+
+                // Score = earnedPoints (clamped to 0-100)
+                calculatedScore = Math.Max(0, Math.Min(100, (double)earnedPoints));
+            }
+
+            return new AssignmentSubmissionDto
+            {
+                StudentId = e.StudentId,
+                StudentName = e.Student?.FullName ?? "Unknown",
+                StudentCode = e.Student?.SchoolCohort,
+                SubmittedAt = latestAttempts.TryGetValue(e.StudentId, out var a1) ? a1.CompletedAt : null,
+                Score = calculatedScore,
+                Status = calculatedScore.HasValue ? "graded" : (latestAttempts.ContainsKey(e.StudentId) ? "pending" : "not-submitted")
+            };
         }).ToList();
     }
 
@@ -3358,7 +3507,10 @@ public class LecturerService : ILecturerService
         {
             if (attempts.TryGetValue(update.StudentId, out var attempt))
             {
-                attempt.Score = update.Score;
+                // Clamp score to 0-100 range
+                attempt.Score = update.Score.HasValue
+                    ? Math.Max(0, Math.Min(100, update.Score.Value))
+                    : (double?)null;
             }
         }
 
@@ -3683,110 +3835,5 @@ public class LecturerService : ILecturerService
 
         await _unitOfWork.SaveAsync();
         return await GetClassTeachingObjectivesAsync(classId);
-    }
-
-    public async Task<List<TeachingObjectiveSuggestionDto>> GetExpertSuggestionsAsync(Guid classId)
-    {
-        var suggestions = await _unitOfWork.Context.TeachingObjectiveSuggestions
-            .AsNoTracking()
-            .Include(s => s.Expert)
-            .Include(s => s.Class)
-            .Where(s => s.ClassId == classId)
-            .OrderByDescending(s => s.CreatedAt)
-            .ToListAsync();
-
-        return suggestions.Select(s => new TeachingObjectiveSuggestionDto
-        {
-            Id = s.Id,
-            ClassId = s.ClassId,
-            ClassName = s.Class?.ClassName,
-            ExpertId = s.ExpertId,
-            ExpertName = s.Expert?.FullName,
-            Topic = s.Topic,
-            Objective = s.Objective,
-            Level = s.Level,
-            Status = s.Status,
-            RejectionReason = s.RejectionReason,
-            CreatedAt = s.CreatedAt,
-            ReviewedAt = s.ReviewedAt
-        }).ToList();
-    }
-
-    public async Task<TeachingObjectiveSuggestionDto> ConfirmSuggestionAsync(Guid lecturerId, Guid suggestionId, ConfirmSuggestionRequestDto request)
-    {
-        var suggestion = await _unitOfWork.Context.TeachingObjectiveSuggestions
-            .Include(s => s.Class)
-            .FirstOrDefaultAsync(s => s.Id == suggestionId);
-
-        if (suggestion == null)
-            throw new KeyNotFoundException($"Suggestion with ID {suggestionId} not found.");
-
-        var academicClass = await _unitOfWork.AcademicClassRepository
-            .FindByCondition(c => c.Id == suggestion.ClassId)
-            .FirstOrDefaultAsync();
-
-        if (academicClass == null || academicClass.LecturerId != lecturerId)
-            throw new UnauthorizedAccessException("You do not have permission to review this suggestion.");
-
-        suggestion.Status = request.Approve ? "Approved" : "Rejected";
-        suggestion.ReviewedAt = DateTime.UtcNow;
-        suggestion.ReviewedBy = lecturerId;
-
-        if (!request.Approve && !string.IsNullOrEmpty(request.RejectionReason))
-        {
-            suggestion.RejectionReason = request.RejectionReason;
-        }
-
-        _unitOfWork.Context.TeachingObjectiveSuggestions.Update(suggestion);
-
-        if (request.Approve)
-        {
-            var currentObjectives = new List<TeachingObjectiveItem>();
-            if (!string.IsNullOrEmpty(academicClass.TeachingObjectives))
-            {
-                try
-                {
-                    currentObjectives = JsonSerializer.Deserialize<List<TeachingObjectiveItem>>(
-                        academicClass.TeachingObjectives,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TeachingObjectiveItem>();
-                }
-                catch { }
-            }
-
-            var order = request.Order ?? currentObjectives.Count + 1;
-            var newObjective = new TeachingObjectiveItem
-            {
-                Id = Guid.NewGuid(),
-                Topic = suggestion.Topic,
-                Objective = suggestion.Objective,
-                Level = suggestion.Level,
-                Order = order,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            currentObjectives.Add(newObjective);
-            academicClass.TeachingObjectives = JsonSerializer.Serialize(currentObjectives);
-            academicClass.UpdatedAt = DateTime.UtcNow;
-            await _unitOfWork.AcademicClassRepository.UpdateAsync(academicClass);
-        }
-
-        await _unitOfWork.SaveAsync();
-
-        return new TeachingObjectiveSuggestionDto
-        {
-            Id = suggestion.Id,
-            ClassId = suggestion.ClassId,
-            ClassName = suggestion.Class?.ClassName,
-            ExpertId = suggestion.ExpertId,
-            Topic = suggestion.Topic,
-            Objective = suggestion.Objective,
-            Level = suggestion.Level,
-            Status = suggestion.Status,
-            RejectionReason = suggestion.RejectionReason,
-            CreatedAt = suggestion.CreatedAt,
-            ReviewedAt = suggestion.ReviewedAt
-        };
     }
 }

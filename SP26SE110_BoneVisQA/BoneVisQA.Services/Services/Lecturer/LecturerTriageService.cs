@@ -26,7 +26,12 @@ public class LecturerTriageService : ILecturerTriageService
             .Include(s => s.Student)
             .Include(s => s.Case!)
                 .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMedia)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMetadata)
             .Include(s => s.Image)
+            .Include(s => s.TargetBoneSpecialty)
             .Include(s => s.Messages)
                 .ThenInclude(m => m.Citations)
                     .ThenInclude(c => c.Chunk)
@@ -45,11 +50,11 @@ public class LecturerTriageService : ILecturerTriageService
         if (enrollments.Count == 0)
             throw new InvalidOperationException("The lecturer does not have permission to escalate this answer.");
 
-        var withExpert = enrollments
-            .Where(e => e.Class != null && e.Class.ExpertId.HasValue)
+        var eligibleEnrollments = enrollments
+            .Where(e => e.Class != null)
             .ToList();
-        if (withExpert.Count == 0)
-            throw new InvalidOperationException("This class has not been assigned an expert for escalation yet.");
+        if (eligibleEnrollments.Count == 0)
+            throw new InvalidOperationException("The lecturer does not have permission to escalate this answer.");
 
         ClassEnrollment classEnrollment;
         if (session.CaseId.HasValue && session.CaseId.Value != Guid.Empty)
@@ -61,13 +66,45 @@ public class LecturerTriageService : ILecturerTriageService
                 .ToListAsync();
 
             var preferred = caseClassIds.Count > 0
-                ? withExpert.FirstOrDefault(e => caseClassIds.Contains(e.ClassId))
+                ? eligibleEnrollments.FirstOrDefault(e => caseClassIds.Contains(e.ClassId))
                 : null;
-            classEnrollment = preferred ?? withExpert.First();
+            classEnrollment = preferred ?? eligibleEnrollments.First();
         }
         else
         {
-            classEnrollment = withExpert.First();
+            classEnrollment = eligibleEnrollments.First();
+        }
+
+        var selectedSpecialtyId = await ResolveTargetSpecialtyIdAsync(
+            request?.SpecialtyId,
+            session.Case?.CaseMetadata?.BoneSpecialtyId,
+            classEnrollment.Class?.ClassSpecialtyId);
+
+        Guid? routedExpertId = null;
+        if (selectedSpecialtyId.HasValue)
+        {
+            var specialtyHasExpert = await ExistsExpertForSpecialtyAsync(selectedSpecialtyId.Value);
+            if (!specialtyHasExpert)
+                throw new InvalidOperationException("No expert is configured for the selected specialty.");
+
+            if (classEnrollment.Class?.ExpertId is Guid classExpertId
+                && await ExpertMatchesSpecialtyAsync(classExpertId, selectedSpecialtyId.Value))
+            {
+                routedExpertId = classExpertId;
+            }
+        }
+        else
+        {
+            var withExpert = eligibleEnrollments
+                .Where(e => e.Class?.ExpertId.HasValue == true)
+                .ToList();
+            if (withExpert.Count == 0)
+                throw new InvalidOperationException("This class has not been assigned an expert for escalation yet.");
+
+            if (!withExpert.Contains(classEnrollment))
+                classEnrollment = withExpert.First();
+
+            routedExpertId = classEnrollment.Class!.ExpertId!.Value;
         }
 
         if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.Ordinal))
@@ -76,8 +113,11 @@ public class LecturerTriageService : ILecturerTriageService
             throw new ConflictException($"Cannot escalate a session from status '{session.Status}'.");
 
         session.Status = "EscalatedToExpert";
-        session.ExpertId = classEnrollment.Class!.ExpertId!.Value;
+        session.ExpertId = routedExpertId;
+        session.TargetBoneSpecialtyId = selectedSpecialtyId;
         session.LecturerId = lecturerId;
+        if (!string.IsNullOrWhiteSpace(request?.ReviewNote))
+            session.ReviewFeedback = request.ReviewNote.Trim();
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
 
@@ -101,6 +141,7 @@ public class LecturerTriageService : ILecturerTriageService
             .LastOrDefault();
         var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session);
         EnsureSelectedPairConsistency(session, targetUser, targetAssistant);
+        var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
 
         return new EscalatedAnswerDto
         {
@@ -130,7 +171,8 @@ public class LecturerTriageService : ILecturerTriageService
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = targetUser?.Id,
             SelectedAssistantMessageId = targetAssistant?.Id,
-            Citations = ResolveLecturerCitations(targetAssistant)
+            Citations = ResolveLecturerCitations(targetAssistant),
+            DicomMetadata = dicomMetadata
         };
     }
 
@@ -157,22 +199,9 @@ public class LecturerTriageService : ILecturerTriageService
 
         session.Status = "Rejected";
         session.LecturerId = lecturerId;
+        session.ReviewFeedback = reason.Trim();
         session.UpdatedAt = DateTime.UtcNow;
 
-        var (_, assistantForFeedback) = ResolveRequestedReviewPair(session);
-
-        var rejectionMessage = new QAMessage
-        {
-            Id = Guid.NewGuid(),
-            SessionId = session.Id,
-            Role = "Lecturer",
-            Content = reason.Trim(),
-            CreatedAt = DateTime.UtcNow,
-            // Align with escalate/triage: prefer the review target assistant when set; otherwise latest assistant turn.
-            TargetAssistantMessageId = assistantForFeedback?.Id
-        };
-
-        await _unitOfWork.Context.QaMessages.AddAsync(rejectionMessage);
         await _unitOfWork.SaveAsync();
 
         var preview = reason.Trim();
@@ -282,4 +311,29 @@ public class LecturerTriageService : ILecturerTriageService
 
         return true;
     }
+
+    private async Task<Guid?> ResolveTargetSpecialtyIdAsync(Guid? requestedSpecialtyId, Guid? caseSpecialtyId, Guid? classSpecialtyId)
+    {
+        var specialtyId = requestedSpecialtyId ?? caseSpecialtyId ?? classSpecialtyId;
+        if (!specialtyId.HasValue)
+            return null;
+
+        var exists = await _unitOfWork.Context.BoneSpecialties
+            .AnyAsync(s => s.Id == specialtyId.Value);
+        if (!exists)
+            throw new InvalidOperationException("Selected specialty does not exist.");
+
+        return specialtyId.Value;
+    }
+
+    private Task<bool> ExistsExpertForSpecialtyAsync(Guid specialtyId) =>
+        _unitOfWork.Context.Users
+            .AnyAsync(u =>
+                u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name == "Expert")
+                && u.PrimaryBoneSpecialtyId == specialtyId);
+
+    private Task<bool> ExpertMatchesSpecialtyAsync(Guid expertId, Guid specialtyId) =>
+        _unitOfWork.Context.Users
+            .Where(u => u.Id == expertId)
+            .AnyAsync(u => u.PrimaryBoneSpecialtyId == specialtyId);
 }

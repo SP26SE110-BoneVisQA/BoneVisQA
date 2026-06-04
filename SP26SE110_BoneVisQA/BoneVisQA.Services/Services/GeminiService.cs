@@ -30,9 +30,13 @@ public class GeminiService : IGeminiService
     {
         var ragPolicy = ragContextAdequate
             ? "Only when the image (if any) is valid medical data, the question is related to musculoskeletal medicine, and context is sufficient should you fill diagnosis, differential_diagnoses, findings, reflective_questions, and citations.\n" +
-              "Always prioritize RAG context. If context is insufficient, set diagnosis exactly to: '" + NoContextAnswer + "' and set differential_diagnoses, findings, reflective_questions, and citations ([]) to null or empty.\n"
-            : "The document library (RAG context) may be weak or empty. Still answer in professional medical Vietnamese using general musculoskeletal knowledge and the image when present.\n" +
-              "If there are NO clear radiographic signs (e.g. no definite fracture in the ROI), say so in plain short Vietnamese in the diagnosis field only — do NOT paste long template disclaimers, do NOT invent citations, and leave citations as [] unless RAG chunks were actually used.\n" +
+              "Always prioritize RAG context. The `diagnosis` field MUST be a declarative clinical statement — never a question. Put all student-facing questions in `reflective_questions` only.\n" +
+              "When library retrieval context is provided, you MUST populate `citations` with Doc/Case UUIDs from that context that you relied on. Do not return an empty citations array when supporting UUIDs were supplied.\n" +
+              "If context is insufficient, set diagnosis exactly to: '" + NoContextAnswer + "' and set differential_diagnoses, findings, reflective_questions, and citations ([]) to null or empty.\n"
+            : "The document library (RAG context) may be weak or empty — explicitly state in Vietnamese that no sufficiently similar cases or documents were found in the BoneVisQA library for this question.\n" +
+              "You may still answer using the provided image and base musculoskeletal medical knowledge. The `diagnosis` field MUST be a declarative clinical statement — never a question; put questions in `reflective_questions` only.\n" +
+              "citations MUST remain [] unless real library chunk/case UUIDs were supplied in the retrieval context.\n" +
+              "If there are NO clear radiographic signs (e.g. no definite fracture in the ROI), say so in plain short Vietnamese in the diagnosis field only — do NOT paste long template disclaimers and do NOT invent citations.\n" +
               "Do not fill findings/differential/citations with boilerplate or restate the prompt; use null or empty arrays when there is nothing meaningful to add.\n";
 
         return
@@ -595,7 +599,7 @@ public class GeminiService : IGeminiService
 
     private async Task<(string? base64, string? mimeType)> ResolveImageToBase64Async(string imageUrlOrBase64, CancellationToken ct)
     {
-        // Accept raw base64 (our ImageProcessingService output) OR an HTTP(s) URL.
+        // Accept raw base64 or an HTTP(s) URL.
         if (imageUrlOrBase64.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             imageUrlOrBase64.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -656,16 +660,23 @@ public class GeminiService : IGeminiService
         }
         catch (JsonException ex)
         {
-            var sanitized = SanitizeJsonCandidateText(raw);
-            if (string.IsNullOrWhiteSpace(sanitized))
-                throw new AiResponseFormatException("AI response was not valid JSON.", ex);
+            string extractedJson;
             try
             {
-                doc = JsonDocument.Parse(sanitized);
+                extractedJson = ExtractJsonObjectSubstringOrThrow(raw);
+            }
+            catch (AiResponseFormatException)
+            {
+                throw new AiResponseFormatException("AI response was not valid JSON.", ex);
+            }
+
+            try
+            {
+                doc = JsonDocument.Parse(extractedJson);
             }
             catch (JsonException ex2)
             {
-                throw new AiResponseFormatException("AI response JSON could not be parsed after sanitize.", ex2);
+                throw new AiResponseFormatException("AI response JSON could not be parsed after object extraction.", ex2);
             }
         }
 
@@ -764,14 +775,12 @@ public class GeminiService : IGeminiService
             };
         }
 
-        var sanitizedText = SanitizeJsonCandidateText(text);
-        if (string.IsNullOrWhiteSpace(sanitizedText))
-            throw new AiResponseFormatException("AI response did not contain a valid JSON object.");
+        var extractedJson = ExtractJsonObjectSubstringOrThrow(text);
 
         JsonDocument parsed;
         try
         {
-            parsed = JsonDocument.Parse(sanitizedText);
+            parsed = JsonDocument.Parse(extractedJson);
         }
         catch (JsonException ex)
         {
@@ -894,7 +903,7 @@ public class GeminiService : IGeminiService
     private static IReadOnlyList<CitationItemDto> ReadStrictCitations(JsonElement result)
     {
         if (!result.TryGetProperty("citations", out var citationsEl))
-            throw new AiResponseFormatException("AI response is missing 'citations'.");
+            return Array.Empty<CitationItemDto>();
 
         if (citationsEl.ValueKind == JsonValueKind.Null)
             return Array.Empty<CitationItemDto>();
@@ -976,10 +985,10 @@ public class GeminiService : IGeminiService
         return string.Empty;
     }
 
-    private static string SanitizeJsonCandidateText(string rawData)
+    private static string ExtractJsonObjectSubstringOrThrow(string rawData)
     {
         if (string.IsNullOrWhiteSpace(rawData))
-            return string.Empty;
+            throw new AiResponseFormatException("AI response was empty and did not contain a JSON object.");
 
         var cleaned = rawData
             .Replace("```json", string.Empty, StringComparison.OrdinalIgnoreCase)
@@ -988,10 +997,14 @@ public class GeminiService : IGeminiService
 
         var start = cleaned.IndexOf('{');
         var end = cleaned.LastIndexOf('}');
-        if (start >= 0 && end > start)
-            cleaned = cleaned.Substring(start, end - start + 1);
+        if (start < 0 || end <= start)
+            throw new AiResponseFormatException("AI response did not contain a complete JSON object.");
 
-        return cleaned.Trim();
+        var extracted = cleaned.Substring(start, end - start + 1).Trim();
+        if (string.IsNullOrWhiteSpace(extracted))
+            throw new AiResponseFormatException("AI response JSON object was empty after extraction.");
+
+        return extracted;
     }
 
     private static bool IsTransient(System.Net.HttpStatusCode statusCode)

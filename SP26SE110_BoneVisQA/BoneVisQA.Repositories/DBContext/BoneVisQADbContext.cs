@@ -20,9 +20,15 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<BoneSpecialty> BoneSpecialties { get; set; }
 
+    public virtual DbSet<ExpertSpecialty> ExpertSpecialties { get; set; }
+
     public virtual DbSet<Announcement> Announcements { get; set; }
 
     public virtual DbSet<CaseAnnotation> CaseAnnotations { get; set; }
+
+    public virtual DbSet<CaseMedia> CaseMedia { get; set; }
+
+    public virtual DbSet<CaseMetadata> CaseMetadata { get; set; }
 
     public virtual DbSet<CaseAnswer> CaseAnswers { get; set; }
     public virtual DbSet<CaseTag> CaseTags { get; set; }
@@ -46,8 +52,6 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<PendingDocumentChunk> PendingDocumentChunks { get; set; }
 
     public virtual DbSet<DocumentTag> DocumentTags { get; set; }
-
-    public virtual DbSet<ExpertSpecialty> ExpertSpecialties { get; set; }
 
     public virtual DbSet<ExpertReview> ExpertReviews { get; set; }
 
@@ -86,8 +90,6 @@ public partial class BoneVisQADbContext : DbContext
 
     public virtual DbSet<PathologyCategory> PathologyCategories { get; set; }
 
-    public virtual DbSet<ClassExpertAssignment> ClassExpertAssignments { get; set; }
-
     public virtual DbSet<SystemLog> SystemLogs { get; set; }
 
     public virtual DbSet<SystemConfig> SystemConfigs { get; set; }
@@ -106,8 +108,12 @@ public partial class BoneVisQADbContext : DbContext
     public virtual DbSet<ReviewSchedule> ReviewSchedules { get; set; }
     public virtual DbSet<QuizReviewItem> QuizReviewItems { get; set; }
 
-    // Teaching Objectives
-    public virtual DbSet<TeachingObjectiveSuggestion> TeachingObjectiveSuggestions { get; set; }
+    // Flashcard
+    public virtual DbSet<FlashcardDeck> FlashcardDecks { get; set; }
+    public virtual DbSet<Flashcard> Flashcards { get; set; }
+
+    // Question Trends
+    public virtual DbSet<QuestionTrend> QuestionTrends { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,6 +140,7 @@ public partial class BoneVisQADbContext : DbContext
         modelBuilder.Entity<AcademicClass>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("academic_classes_pkey");
+            entity.HasIndex(e => e.ClassSpecialtyId, "idx_academic_classes_class_specialty_id");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
@@ -149,8 +156,9 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("academic_classes_expert_id_fkey");
 
             entity.HasOne(d => d.ClassSpecialty).WithMany(p => p.AcademicClasses)
+                .HasForeignKey(d => d.ClassSpecialtyId)
                 .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("academic_classes_specialty_fkey");
+                .HasConstraintName("academic_classes_class_specialty_id_fkey");
         });
 
         modelBuilder.Entity<BoneSpecialty>(entity =>
@@ -169,6 +177,21 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("bone_specialties_parent_id_fkey");
         });
 
+        modelBuilder.Entity<ExpertSpecialty>(entity =>
+        {
+            entity.HasKey(e => new { e.ExpertId, e.BoneSpecialtyId }).HasName("expert_specialties_pkey");
+
+            entity.HasOne(d => d.Expert).WithMany(p => p.ExpertSpecialties)
+                .HasForeignKey(d => d.ExpertId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("expert_specialties_expert_id_fkey");
+
+            entity.HasOne(d => d.BoneSpecialty).WithMany(p => p.ExpertSpecialties)
+                .HasForeignKey(d => d.BoneSpecialtyId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("expert_specialties_bone_specialty_id_fkey");
+        });
+
         modelBuilder.Entity<PathologyCategory>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("pathology_categories_pkey");
@@ -183,61 +206,6 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.BoneSpecialtyId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("pathology_categories_bone_specialty_id_fkey");
-        });
-
-        modelBuilder.Entity<ExpertSpecialty>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("expert_specialties_pkey");
-
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
-
-            entity.HasOne(d => d.Expert)
-                .WithMany(p => p.ExpertSpecialties)
-                .HasForeignKey(d => d.ExpertId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("expert_specialties_expert_id_fkey");
-
-            entity.HasOne(d => d.BoneSpecialty)
-                .WithMany(p => p.ExpertSpecialties)
-                .HasForeignKey(d => d.BoneSpecialtyId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("expert_specialties_bone_specialty_id_fkey");
-
-            entity.HasOne(d => d.PathologyCategory)
-                .WithMany(p => p.ExpertSpecialties)
-                .HasForeignKey(d => d.PathologyCategoryId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("expert_specialties_pathology_category_id_fkey");
-        });
-
-        modelBuilder.Entity<ClassExpertAssignment>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("class_expert_assignments_pkey");
-
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
-            entity.Property(e => e.AssignedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
-
-            entity.HasOne(d => d.Class)
-                .WithMany(p => p.ClassExpertAssignments)
-                .HasForeignKey(d => d.ClassId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("class_expert_assignments_class_id_fkey");
-
-            entity.HasOne(d => d.Expert)
-                .WithMany(p => p.ExpertClassAssignments)
-                .HasForeignKey(d => d.ExpertId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("class_expert_assignments_expert_id_fkey");
-
-            entity.HasOne(d => d.BoneSpecialty)
-                .WithMany(p => p.ClassExpertAssignments)
-                .HasForeignKey(d => d.BoneSpecialtyId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("class_expert_assignments_bone_specialty_id_fkey");
         });
 
         modelBuilder.Entity<Announcement>(entity =>
@@ -387,6 +355,11 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.ShuffleQuestions).HasDefaultValue(false);
             entity.Property(e => e.AllowRetake).HasDefaultValue(false);
+            entity.Property(e => e.ShuffleOptions).HasDefaultValue(false);
+            entity.Property(e => e.QuizMode).HasColumnType("int").HasDefaultValue(1);
+            // Explicit column types to match database schema
+            entity.Property(e => e.TimeLimitMinutes).HasColumnType("int");
+            entity.Property(e => e.PassingScore).HasColumnType("int");
 
             entity.HasOne(d => d.Class).WithMany(p => p.ClassQuizSessions)
                 .HasForeignKey(d => d.ClassId)
@@ -543,16 +516,105 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.PathologyCategoryId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("medical_cases_pathology_fkey");
+
+            entity.HasOne(d => d.ValidatedByUser).WithMany(p => p.ValidatedMedicalCases)
+                .HasForeignKey(d => d.ValidatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("medical_cases_validated_by_fkey");
+
+            entity.HasOne(d => d.OwnerStudent).WithMany(p => p.OwnedPersonalMedicalCases)
+                .HasForeignKey(d => d.OwnerStudentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("medical_cases_owner_student_id_fkey");
+
+            entity.HasIndex(e => e.OwnerStudentId, "idx_medical_cases_owner_student_id");
+
+            entity.HasMany(d => d.ClassCases)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("class_cases_case_id_fkey");
+
+            entity.HasMany(d => d.CaseTags)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("case_tags_case_id_fkey");
+
+            entity.HasMany(d => d.CaseViewLogs)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("case_view_logs_case_id_fkey");
+
+            entity.HasMany(d => d.MedicalImages)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("medical_images_case_id_fkey");
+
+            entity.HasMany(d => d.QuizQuestions)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("quiz_questions_case_id_fkey");
+
+            entity.HasMany(d => d.StudentQuestions)
+                .WithOne(p => p.Case)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("student_questions_case_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseMetadata>(entity =>
+        {
+            entity.HasKey(e => e.CaseId).HasName("case_metadata_pkey");
+            entity.HasIndex(e => e.BoneSpecialtyId, "idx_case_metadata_bone_specialty_id");
+
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Modality).HasDefaultValue("Other");
+            entity.Property(e => e.Anatomy).HasDefaultValue("Other");
+            entity.Property(e => e.PathologyGroup).HasDefaultValue("Other");
+
+            entity.HasOne(d => d.Case).WithOne(p => p.CaseMetadata)
+                .HasForeignKey<CaseMetadata>(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("case_metadata_case_id_fkey");
+        });
+
+        modelBuilder.Entity<CaseMedia>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("case_media_pkey");
+            entity.HasIndex(e => e.CaseId, "idx_case_media_case_id");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.MediaType).HasDefaultValue("Image");
+            entity.Property(e => e.Modality).HasDefaultValue("Other");
+            entity.Property(e => e.Anatomy).HasDefaultValue("Other");
+
+            entity.HasOne(d => d.Case).WithMany(p => p.CaseMedia)
+                .HasForeignKey(d => d.CaseId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("case_media_case_id_fkey");
         });
 
         modelBuilder.Entity<MedicalImage>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("medical_images_pkey");
+            entity.HasIndex(e => e.CaseId, "idx_medical_images_case");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-
-            entity.HasOne(d => d.Case).WithMany(p => p.MedicalImages).HasConstraintName("medical_images_case_id_fkey");
+            
+            // Note: Case relationship is configured in MedicalCase entity with cascade delete
+            
+            // Cascade delete for CaseAnnotation when MedicalImage is deleted
+            entity.HasMany(d => d.CaseAnnotations)
+                .WithOne(p => p.Image)
+                .HasForeignKey(d => d.ImageId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("case_annotations_image_id_fkey");
         });
 
         modelBuilder.Entity<Notification>(entity =>
@@ -586,6 +648,10 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsAiGenerated).HasDefaultValue(false);
             entity.Property(e => e.Mode).HasDefaultValue("'multiple_choice'::text");
+            // Explicit column types to match database schema
+            entity.Property(e => e.TimeLimit).HasColumnType("int");
+            entity.Property(e => e.PassingScore).HasColumnType("int");
+            entity.Property(e => e.QuizMode).HasColumnType("int").HasDefaultValue(1);
 
             entity.HasOne(d => d.CreatedByExpert).WithMany(p => p.CreatedQuizzes)
                 .HasForeignKey(d => d.CreatedByExpertId)
@@ -616,6 +682,11 @@ public partial class BoneVisQADbContext : DbContext
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.StartedAt).HasDefaultValueSql("now()");
+            // Explicit column types to match database schema
+            entity.Property(e => e.DifficultyLevel).HasColumnType("varchar(20)");
+            entity.Property(e => e.EaseFactor).HasColumnType("decimal(4,2)");
+            entity.Property(e => e.ReviewInterval).HasColumnType("int");
+            entity.Property(e => e.CurrentQuestionIndex).HasColumnType("int");
 
             entity.HasOne(d => d.Quiz).WithMany(p => p.QuizAttempts).HasConstraintName("quiz_attempts_quiz_id_fkey");
 
@@ -639,11 +710,20 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Type)
                 .HasConversion<int?>()
                 .HasColumnType("int");
+
+            // Configure JSON columns for multi-select and fill-in-blank
+            entity.Property(e => e.CorrectAnswers)
+                .HasColumnType("jsonb");
+
+            entity.Property(e => e.AcceptedAnswers)
+                .HasColumnType("jsonb");
         });
 
         modelBuilder.Entity<QAMessage>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("qa_messages_pkey");
+            entity.HasIndex(e => e.SessionId, "idx_qa_messages_session_id");
+            entity.HasIndex(e => new { e.SessionId, e.CreatedAt }, "idx_qa_messages_session_created_at");
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.ClientRequestId).HasMaxLength(100);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
@@ -653,15 +733,6 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.SessionId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("qa_messages_session_id_fkey");
-        });
-
-        modelBuilder.Entity<VisualQASession>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("visual_qa_sessions_pkey");
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.Status).HasMaxLength(40).HasDefaultValue("Active");
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -724,6 +795,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
 
+            entity.HasIndex(e => e.PrimaryBoneSpecialtyId, "idx_users_primary_bone_specialty_id");
+
             entity.HasOne(d => d.Verifier)
                 .WithMany(p => p.UsersVerifiedByThisUser)
                 .HasForeignKey(d => d.VerifiedBy)
@@ -734,7 +807,7 @@ public partial class BoneVisQADbContext : DbContext
                 .WithMany(p => p.UsersWithPrimarySpecialty)
                 .HasForeignKey(d => d.PrimaryBoneSpecialtyId)
                 .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("users_primary_specialty_fkey");
+                .HasConstraintName("users_primary_bone_specialty_id_fkey");
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -755,7 +828,9 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.Status).HasMaxLength(40);
+            entity.Property(e => e.Status).HasMaxLength(40).HasDefaultValue("Active");
+
+            entity.HasIndex(e => e.TargetBoneSpecialtyId, "idx_visual_qa_sessions_target_bone_specialty");
 
             entity.HasOne(d => d.Student).WithMany(p => p.VisualQASessions)
                 .HasForeignKey(d => d.StudentId)
@@ -766,6 +841,11 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.CaseId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("visual_qa_sessions_case_id_fkey");
+
+            entity.HasOne(d => d.TargetBoneSpecialty).WithMany(p => p.TargetVisualQaSessions)
+                .HasForeignKey(d => d.TargetBoneSpecialtyId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("visual_qa_sessions_target_bone_specialty_id_fkey");
 
             entity.HasOne(d => d.Image).WithMany(p => p.VisualQASessions)
                 .HasForeignKey(d => d.ImageId)
@@ -989,38 +1069,12 @@ public partial class BoneVisQADbContext : DbContext
                 .HasConstraintName("quiz_review_items_question_id_fkey");
         });
 
-        modelBuilder.Entity<TeachingObjectiveSuggestion>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("teaching_objective_suggestions_pkey");
-
-            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.Status).HasDefaultValue("Pending");
-
-            entity.HasOne(d => d.Class)
-                .WithMany(p => p.TeachingObjectiveSuggestions)
-                .HasForeignKey(d => d.ClassId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("teaching_objective_suggestions_class_id_fkey");
-
-            entity.HasOne(d => d.Expert)
-                .WithMany(p => p.TeachingObjectiveSuggestions)
-                .HasForeignKey(d => d.ExpertId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("teaching_objective_suggestions_expert_id_fkey");
-
-            entity.HasOne(d => d.Reviewer)
-                .WithMany(p => p.ReviewedSuggestions)
-                .HasForeignKey(d => d.ReviewedBy)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("teaching_objective_suggestions_reviewer_id_fkey");
-        });
-
         // Update Quiz model configuration
         modelBuilder.Entity<Quiz>(entity =>
         {
             entity.Property(e => e.AdaptiveDifficulty).HasDefaultValue(false);
             entity.Property(e => e.SpacedRepetitionEnabled).HasDefaultValue(false);
+            entity.Property(e => e.QuizMode).HasDefaultValue(1);
         });
 
         // Update QuizAttempt model configuration
@@ -1030,6 +1084,49 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.EaseFactor).HasDefaultValue(2.5m);
             entity.Property(e => e.ReviewInterval).HasDefaultValue(1);
             entity.Property(e => e.CurrentQuestionIndex).HasDefaultValue(0);
+        });
+
+        // Flashcard Deck configuration
+        modelBuilder.Entity<FlashcardDeck>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("flashcard_decks_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Student)
+                .WithMany()
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("flashcard_decks_student_id_fkey");
+        });
+
+        // Flashcard configuration
+        modelBuilder.Entity<Flashcard>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("flashcards_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.EaseFactor).HasDefaultValue(2.5m);
+            entity.Property(e => e.IntervalDays).HasDefaultValue(1);
+
+            entity.HasOne(d => d.Deck)
+                .WithMany(p => p.Flashcards)
+                .HasForeignKey(d => d.DeckId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("flashcards_deck_id_fkey");
+        });
+
+        // Question Trend configuration
+        modelBuilder.Entity<QuestionTrend>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("question_trends_pkey");
+            entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.TopicType).HasDefaultValue("bone_specialty").HasMaxLength(20);
+            entity.Property(e => e.TrendDirection).HasDefaultValue("stable").HasMaxLength(10);
+            entity.Property(e => e.ChangePercentage).HasDefaultValue(0m);
         });
 
         OnModelCreatingPartial(modelBuilder);

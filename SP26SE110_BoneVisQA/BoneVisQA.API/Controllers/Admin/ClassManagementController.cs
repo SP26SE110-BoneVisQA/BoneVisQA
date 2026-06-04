@@ -40,8 +40,15 @@ namespace BoneVisQA.API.Controllers.Admin
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateClassManagementDTO dto)
         {
-            var result = await _classservice.CreateAcademicClassAsync(dto);
-            return Ok(result);
+            try
+            {
+                var result = await _classservice.CreateAcademicClassAsync(dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpPut]

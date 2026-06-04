@@ -8,6 +8,10 @@
   "App": {
     "BaseUrl": "http://localhost:5046"
   },
+  "AiMicroservice": {
+    "BaseUrl": "http://localhost:8000"
+  },
+  "_AiMicroserviceProductionNote": "On Render set env AiMicroservice__BaseUrl=https://YOUR-SERVICE.up.railway.app (no trailing slash). See BoneVisQA.AI/RAILWAY_SETUP.md",
   "Gemini": {
     "Models": [
       "gemini-2.5-flash-lite",
