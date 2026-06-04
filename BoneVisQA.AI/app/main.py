@@ -15,10 +15,6 @@ load_dotenv()
 if _hf_key := os.environ.get("HUGGINGFACE_API_KEY"):
     os.environ.setdefault("HF_TOKEN", _hf_key)
 
-import transformers
-
-transformers.logging.set_verbosity_error()
-
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

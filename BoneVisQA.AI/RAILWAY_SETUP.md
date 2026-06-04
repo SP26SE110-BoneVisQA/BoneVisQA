@@ -76,7 +76,7 @@ Sau khi thêm Variables → **Redeploy** (Deployments → ⋮ → Redeploy).
 
 **Settings → Networking → Generate Domain**
 
-Ví dụ: `https://bonevisqa-ai-production.up.railway.app`
+Domain hiện tại: `https://bonevisqa-production.up.railway.app`
 
 Kiểm tra:
 
@@ -98,12 +98,12 @@ Trên **Render** → Web Service **BoneVisQA.API** → **Environment**:
 
 | Key (Render) | Value |
 |--------------|--------|
-| `AiMicroservice__BaseUrl` | `https://<railway-domain>` (không có `/` cuối) |
+| `AiMicroservice__BaseUrl` | `https://bonevisqa-production.up.railway.app` (không có `/` cuối) |
 
-Ví dụ:
+Repo đã cấu hình sẵn trong `appsettings.json`. Trên Render chỉ cần set biến này nếu bạn muốn **ghi đè** (ví dụ đổi domain sau này):
 
 ```text
-AiMicroservice__BaseUrl=https://bonevisqa-ai-production.up.railway.app
+AiMicroservice__BaseUrl=https://bonevisqa-production.up.railway.app
 ```
 
 Save → Render restart.
@@ -127,7 +127,7 @@ Luồng: **FE (Vercel) → C# (Render) → Python (Railway) → Postgres/Supabas
 | Log / triệu chứng | Cách xử lý |
 |-------------------|------------|
 | `ModuleNotFoundError: app` | Sai **Root Directory** — phải là `BoneVisQA.AI` |
-| Build OOM / process killed | Billing/RAM; deploy lại sau khi nạp |
+| Build/startup OOM (CUDA / 1GB) | `requirements.txt` dùng `--extra-index-url` PyTorch **CPU-only**; nạp Billing Developer (~$5) để RAM tới ~8GB; model chỉ load khi có request ingest/QA (không load lúc `/health`) |
 | `could not connect to server` (DB) | Kiểm tra `DATABASE_URL`, pooler host, password |
 | HF 401 / model download fail | Thêm `HUGGINGFACE_API_KEY` |
 | Deploy chậm 10+ phút lần đầu | Bình thường — tải model embedding |

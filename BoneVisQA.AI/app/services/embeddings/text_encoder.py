@@ -1,15 +1,20 @@
-﻿"""Text embedding encoder using sentence-transformers (module-level singleton)."""
+﻿"""Text embedding encoder using sentence-transformers (lazy-loaded singleton)."""
 
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 _TEXT_MODEL_NAME = os.environ.get("TEXT_EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
 
-_TEXT_MODEL = SentenceTransformer(_TEXT_MODEL_NAME)
+
+@lru_cache(maxsize=1)
+def _load_model():
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(_TEXT_MODEL_NAME)
 
 
 def encode_text(text: str) -> np.ndarray:
@@ -18,7 +23,7 @@ def encode_text(text: str) -> np.ndarray:
     if not normalized:
         normalized = "no diagnosis"
 
-    vec = _TEXT_MODEL.encode(
+    vec = _load_model().encode(
         normalized,
         normalize_embeddings=True,
         convert_to_numpy=True,
