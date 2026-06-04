@@ -1,0 +1,9 @@
+# Paste each line as Railway Variable (name = value). Fill from your local .env.
+# Do NOT commit this file after filling real secrets — keep placeholders only in git.
+
+DATABASE_URL=
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
+HUGGINGFACE_API_KEY=
+IMAGE_EMBEDDING_MODEL=microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
+TEXT_EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2
