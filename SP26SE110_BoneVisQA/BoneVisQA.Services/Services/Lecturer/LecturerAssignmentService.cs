@@ -799,12 +799,13 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                 StartedAt = a.StartedAt,
                 CompletedAt = a.CompletedAt,
                 TotalQuestions = totalQuestions,
-                // FIX: CorrectCount should only count non-Essay questions that are correct
-                // Essay questions don't have CorrectAnswer text, so they should NOT be counted
+                // FIX: CorrectCount uses IsCorrect flag so it reflects lecturer edits.
+                // Essay answers are excluded from the correct-count because correctness for essays is
+                // managed manually (null/IsCorrect) and does not match the question's CorrectAnswer text.
                 CorrectCount = a.StudentQuizAnswers.Count(sa =>
                     sa.Question != null
-                    && sa.Question.Type != QuestionType.Essay  // Exclude Essay from correct count
-                    && QuizAnswerTextMatches(sa.Question.CorrectAnswer, sa.StudentAnswer)),
+                    && sa.Question.Type != QuestionType.Essay
+                    && sa.IsCorrect == true),
                 IsGraded = a.Score.HasValue
             };
         }).ToList();

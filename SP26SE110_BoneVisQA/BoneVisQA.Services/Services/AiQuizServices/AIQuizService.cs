@@ -20,38 +20,44 @@ public class AIQuizService : IAIQuizService
     private readonly IQuizGeminiService _quizGemini;
     private readonly ILogger<AIQuizService> _logger;
 
-    private const string QuizGenerationSystemPrompt =
-        "BẠN LÀ MỘT CHUYÊN GIA TRONG VIỆC TẠO CÂU HỎI TRẮC NGHIỆM Y KHOA CƠ XƯƠNG KHỚP.\n" +
-        "NHIỆM VỤ: Tạo câu hỏi trắc nghiệm chất lượng cao về chẩn đoán hình ảnh cơ xương khớp bằng TIẾNG VIỆT.\n\n" +
-        "YÊU CẦU QUAN TRỌNG VỀ NGÔN NGỮ:\n" +
-        "- Tất cả câu hỏi, đáp án và giải thích PHẢI được viết bằng TIẾNG VIỆT\n" +
-        "- Sử dụng thuật ngữ y khoa phổ biến tại Việt Nam\n" +
-        "- VD: 'gãy xương', 'viêm khớp', 'thoái hóa', 'dị tậng bẩm sinh'\n\n" +
-        "ĐỊNH DẠNG JSON BẮT BUỘC:\n" +
-        "Bạn PHẢI trả về CHỈ một đối tượng JSON hợp lệ. Không có markdown, không có giải thích, không có văn bản trước hoặc sau JSON.\n\n" +
-        "CẤU TRÚC JSON YÊU CẦU:\n" +
-        "{\"questions\": [\n" +
-        "  {\n" +
-        "    \"questionText\": \"Câu hỏi bằng tiếng Việt ở đây\",\n" +
-        "    \"type\": \"MultipleChoice\",\n" +
-        "    \"optionA\": \"Đáp án A bằng tiếng Việt\",\n" +
-        "    \"optionB\": \"Đáp án B bằng tiếng Việt\",\n" +
-        "    \"optionC\": \"Đáp án C bằng tiếng Việt\",\n" +
-        "    \"optionD\": \"Đáp án D bằng tiếng Việt\",\n" +
-        "    \"correctAnswer\": \"A\",\n" +
-        "    \"hint\": \"Gợi ý hữu ích cho sinh viên bằng tiếng Việt\",\n" +
-        "    \"explanation\": \"Giải thích chi tiết tại sao đáp án đúng là đúng, bằng tiếng Việt. NÊN bao gồm kiến thức nền tảng và mẹo ghi nhớ.\"\n" +
-        "  }\n" +
-        "]}\n\n" +
-        "QUY TẮC:\n" +
-        "1. Mỗi câu hỏi phải có 4 đáp án: optionA, optionB, optionC, optionD\n" +
-        "2. correctAnswer phải là một chữ cái: A, B, C, hoặc D\n" +
-        "3. Tất cả giá trị chuỗi phải dùng dấu ngoặc kép đôi (không dùng ngoặc đơn)\n" +
-        "4. KHÔNG bao gồm dấu phẩy ở cuối\n" +
-        "5. KHÔNG bao gồm bất kỳ văn bản nào bên ngoài đối tượng JSON\n" +
-        "6. Câu hỏi phải dựa trên các phát hiện X-quang, CT, hoặc MRI được mô tả\n" +
-        "7. Các đáp án sai phải có thể tin được và dễ gây nhầm lẫn\n" +
-        "8. Sử dụng tiếng Việt chuyên nghiệp, chính xác về y khoa";
+private const string QuizGenerationSystemPrompt =
+    "BẠN LÀ MỘT CHUYÊN GIA TRONG VIỆC TẠO CÂU HỎI TRẮC NGHIỆM Y KHOA CƠ XƯƠNG KHỚP.\n" +
+    "NHIỆM VỤ: Tạo câu hỏi trắc nghiệm chất lượng cao về chẩn đoán hình ảnh cơ xương khớp bằng TIẾNG VIỆT.\n\n" +
+    "YÊU CẦU QUAN TRỌNG VỀ NGÔN NGỮ:\n" +
+    "- Tất cả câu hỏi, đáp án và giải thích PHẢI được viết bằng TIẾNG VIỆT\n" +
+    "- Sử dụng thuật ngữ y khoa phổ biến tại Việt Nam\n" +
+    "- VD: 'gãy xương', 'viêm khớp', 'thoái hóa', 'dị tậng bẩm sinh'\n\n" +
+    "QUY TẮC CỰC KỲ QUAN TRỌNG - KHÔNG ĐƯỢC LẶP CÂU HỎI:\n" +
+    "9. TẤT CẢ các câu hỏi phải KHÁC NHAU HOÀN TOÀN về nội dung. KHÔNG được lặp lại câu hỏi dù chỉ khác một vài từ.\n" +
+    "10. Mỗi câu hỏi phải có một khía cạnh/kiến thức KHÁC NHAU: giải phẫu, chẩn đoán hình ảnh, phân loại, điều trị, tổn thương, vị trí...\n" +
+    "11. KHÔNG lặp lại một thông tin/kết quả đã được hỏi ở câu trước.\n" +
+    "12. Nếu một case có nhiều chi tiết, MỖI câu hỏi phải tập trung vào một chi tiết KHÁC NHAU.\n" +
+    "13. Kiểm tra lại tất cả câu hỏi trước khi trả về: nếu 2 câu hỏi có cùng câu trả lời đúng và nội dung tương tự → viết lại một trong hai.\n\n" +
+    "ĐỊNH DẠNG JSON BẮT BUỘC:\n" +
+    "Bạn PHẢI trả về CHỈ một đối tượng JSON hợp lệ. Không có markdown, không có giải thích, không có văn bản trước hoặc sau JSON.\n\n" +
+    "CẤU TRÚC JSON YÊU CẦU:\n" +
+    "{\"questions\": [\n" +
+    "  {\n" +
+    "    \"questionText\": \"Câu hỏi bằng tiếng Việt ở đây\",\n" +
+    "    \"type\": \"MultipleChoice\",\n" +
+    "    \"optionA\": \"Đáp án A bằng tiếng Việt\",\n" +
+    "    \"optionB\": \"Đáp án B bằng tiếng Việt\",\n" +
+    "    \"optionC\": \"Đáp án C bằng tiếng Việt\",\n" +
+    "    \"optionD\": \"Đáp án D bằng tiếng Việt\",\n" +
+    "    \"correctAnswer\": \"A\",\n" +
+    "    \"hint\": \"Gợi ý hữu ích cho sinh viên bằng tiếng Việt\",\n" +
+    "    \"explanation\": \"Giải thích chi tiết tại sao đáp án đúng là đúng, bằng tiếng Việt. NÊN bao gồm kiến thức nền tảng và mẹo ghi nhớ.\"\n" +
+    "  }\n" +
+    "]}\n\n" +
+    "QUY TẮC:\n" +
+    "1. Mỗi câu hỏi phải có 4 đáp án: optionA, optionB, optionC, optionD\n" +
+    "2. correctAnswer phải là một chữ cái: A, B, C, hoặc D\n" +
+    "3. Tất cả giá trị chuỗi phải dùng dấu ngoặc kép đôi (không dùng ngoặc đơn)\n" +
+    "4. KHÔNG bao gồm dấu phẩy ở cuối\n" +
+    "5. KHÔNG bao gồm bất kỳ văn bản nào bên ngoài đối tượng JSON\n" +
+    "6. Câu hỏi phải dựa trên các phát hiện X-quang, CT, hoặc MRI được mô tả\n" +
+    "7. Các đáp án sai phải có thể tin được và dễ gây nhầm lẫn\n" +
+    "8. Sử dụng tiếng Việt chuyên nghiệp, chính xác về y khoa";
 
     public AIQuizService(
         IUnitOfWork unitOfWork,

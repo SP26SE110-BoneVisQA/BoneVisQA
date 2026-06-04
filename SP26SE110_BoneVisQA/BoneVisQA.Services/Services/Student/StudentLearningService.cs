@@ -241,6 +241,9 @@ public class StudentLearningService : IStudentLearningService
 
     public async Task<QuizResultDto> SubmitQuizAttemptAsync(Guid studentId, SubmitQuizRequestDto request)
     {
+        _logger.LogInformation("[SubmitQuiz] Started. StudentId={StudentId}, AttemptId={AttemptId}, QuestionCount={QuestionCount}", 
+            studentId, request.AttemptId, request.Answers?.Count ?? 0);
+        
         // Convert string AttemptId to Guid
         if (!Guid.TryParse(request.AttemptId, out var attemptId))
             throw new InvalidOperationException("Invalid attempt ID format.");
@@ -251,9 +254,42 @@ public class StudentLearningService : IStudentLearningService
                 .ThenInclude(sa => sa.Question)
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.StudentId == studentId)
             ?? throw new KeyNotFoundException("Quiz attempt not found.");
+        
+        _logger.LogInformation("[SubmitQuiz] Found attempt. QuizId={QuizId}, ExistingAnswers={ExistingAnswerCount}", 
+            attempt.QuizId, attempt.StudentQuizAnswers?.Count ?? 0);
 
         if (attempt.CompletedAt.HasValue)
-            throw new InvalidOperationException("This quiz has already been submitted.");
+        {
+            _logger.LogInformation(
+                "[Quiz] Idempotent submit: attempt {AttemptId} already completed at {CompletedAt}. Returning existing result.",
+                attemptId, attempt.CompletedAt);
+
+            // Re-load quiz questions for DTO building (attempt.Quiz is already loaded)
+            var existingQuiz = await _unitOfWork.Context.Quizzes
+                .Include(q => q.QuizQuestions)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(q => q.Id == attempt.QuizId);
+
+            if (existingQuiz == null)
+                throw new KeyNotFoundException("Quiz not found.");
+
+            return new QuizResultDto
+            {
+                AttemptId = attempt.Id,
+                QuizId = existingQuiz.Id,
+                Score = attempt.Score ?? 0,
+                PassingScore = NormalizePassingScore(existingQuiz.PassingScore, existingQuiz.IsAiGenerated),
+                Passed = (attempt.Score ?? 0) >= (NormalizePassingScore(existingQuiz.PassingScore, existingQuiz.IsAiGenerated) ?? 0),
+                TotalQuestions = existingQuiz.QuizQuestions.Count,
+                CorrectAnswers = existingQuiz.QuizQuestions.Count(q =>
+                    attempt.StudentQuizAnswers.FirstOrDefault(a => a.QuestionId == q.Id)?.IsCorrect == true),
+                UngradedEssayCount = attempt.StudentQuizAnswers
+                    .Where(a => a.Question?.Type == QuestionType.Essay && !a.IsGraded)
+                    .Select(a => a.QuestionId)
+                    .Distinct()
+                    .Count()
+            };
+        }
 
         if (attempt.Quiz == null)
             throw new KeyNotFoundException("Quiz not found.");
@@ -502,56 +538,59 @@ public class StudentLearningService : IStudentLearningService
         await _unitOfWork.QuizAttemptRepository.UpdateAsync(attempt);
         await _unitOfWork.SaveAsync();
 
-        // Send email notification if quiz contains essay questions
-        try
+        // Send email notification if quiz contains essay questions - run in background to avoid timeout
+        _ = Task.Run(async () =>
         {
-            var hasEssay = quiz.QuizQuestions.Any(q => q.Type == QuestionType.Essay);
-            if (hasEssay)
+            try
             {
-                // Get lecturers for the class
-                var classIds = await _unitOfWork.Context.ClassEnrollments
-                    .Where(e => e.StudentId == studentId)
-                    .Select(e => e.ClassId)
-                    .ToListAsync();
-
-                foreach (var classId in classIds.Distinct())
+                var hasEssay = quiz.QuizQuestions.Any(q => q.Type == QuestionType.Essay);
+                if (hasEssay)
                 {
-                    var academicClass = await _unitOfWork.Context.AcademicClasses
-                        .FirstOrDefaultAsync(c => c.Id == classId);
+                    // Get lecturers for the class
+                    var classIds = await _unitOfWork.Context.ClassEnrollments
+                        .Where(e => e.StudentId == studentId)
+                        .Select(e => e.ClassId)
+                        .ToListAsync();
 
-                    if (academicClass != null)
+                    foreach (var classId in classIds.Distinct())
                     {
-                        var lecturerIds = new List<Guid?>();
-                        if (academicClass.LecturerId.HasValue)
-                            lecturerIds.Add(academicClass.LecturerId);
-                        if (academicClass.ExpertId.HasValue)
-                            lecturerIds.Add(academicClass.ExpertId);
+                        var academicClass = await _unitOfWork.Context.AcademicClasses
+                            .FirstOrDefaultAsync(c => c.Id == classId);
 
-                        foreach (var lecturerId in lecturerIds.Distinct().Where(id => id.HasValue).Cast<Guid>())
+                        if (academicClass != null)
                         {
-                            var lecturer = await _unitOfWork.Context.Users
-                                .FirstOrDefaultAsync(u => u.Id == lecturerId);
+                            var lecturerIds = new List<Guid?>();
+                            if (academicClass.LecturerId.HasValue)
+                                lecturerIds.Add(academicClass.LecturerId);
+                            if (academicClass.ExpertId.HasValue)
+                                lecturerIds.Add(academicClass.ExpertId);
 
-                            if (lecturer != null && !string.IsNullOrEmpty(lecturer.Email))
+                            foreach (var lecturerId in lecturerIds.Distinct().Where(id => id.HasValue).Cast<Guid>())
                             {
-                                var attemptDetailUrl = $"/lecturer/classes/{classId}/assignments/quizzes/{quiz.Id}/attempts/{attempt.Id}";
-                                await _emailService.SendEssaySubmittedNotificationAsync(
-                                    lecturer.Email,
-                                    lecturer.FullName ?? "Lecturer",
-                                    attempt.Student?.FullName ?? "Student",
-                                    quiz.Title,
-                                    academicClass.ClassName,
-                                    attemptDetailUrl);
+                                var lecturer = await _unitOfWork.Context.Users
+                                    .FirstOrDefaultAsync(u => u.Id == lecturerId);
+
+                                if (lecturer != null && !string.IsNullOrEmpty(lecturer.Email))
+                                {
+                                    var attemptDetailUrl = $"/lecturer/classes/{classId}/assignments/quizzes/{quiz.Id}/attempts/{attempt.Id}";
+                                    await _emailService.SendEssaySubmittedNotificationAsync(
+                                        lecturer.Email,
+                                        lecturer.FullName ?? "Lecturer",
+                                        attempt.Student?.FullName ?? "Student",
+                                        quiz.Title,
+                                        academicClass.ClassName,
+                                        attemptDetailUrl);
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[StudentLearningService] Failed to send essay submission notification");
-        }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[StudentLearningService] Failed to send essay submission notification (background task)");
+            }
+        });
 
         // Chuẩn hóa PassingScore về thang 100 trước khi so sánh
         int? normalizedPassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated);
@@ -562,6 +601,9 @@ public class StudentLearningService : IStudentLearningService
             .Select(a => a.QuestionId)
             .Distinct()
             .Count();
+
+        _logger.LogInformation("[SubmitQuiz] Completed successfully. Score={Score}, Passed={Passed}, TotalQuestions={Total}, UngradedEssays={EssayCount}", 
+            score, score >= (normalizedPassingScore ?? 0), quiz.QuizQuestions.Count, ungradedEssayCount);
 
         return new QuizResultDto
         {
@@ -1378,6 +1420,10 @@ public class StudentLearningService : IStudentLearningService
         foreach (var attempt in incompleteAttempts)
         {
             if (attempt.Quiz == null) continue;
+
+            // Skip quizzes that are not assigned through any class — cannot auto-submit without class session
+            if (attempt.Quiz.ClassQuizSessions == null || !attempt.Quiz.ClassQuizSessions.Any())
+                continue;
 
             // Lấy thông tin session và quiz
             var session = attempt.Quiz.ClassQuizSessions?.FirstOrDefault();
