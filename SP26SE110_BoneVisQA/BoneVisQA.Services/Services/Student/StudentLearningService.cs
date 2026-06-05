@@ -8,8 +8,10 @@ using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Quiz;
 using BoneVisQA.Services.Models.Student;
+using BoneVisQA.Services.Services.Analytics;
 using BoneVisQA.Services.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace BoneVisQA.Services.Services.Student;
@@ -18,12 +20,14 @@ public class StudentLearningService : IStudentLearningService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<StudentLearningService> _logger;
 
-    public StudentLearningService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<StudentLearningService> logger)
+    public StudentLearningService(IUnitOfWork unitOfWork, IEmailService emailService, IServiceScopeFactory serviceScopeFactory, ILogger<StudentLearningService> logger)
     {
         _unitOfWork = unitOfWork;
         _emailService = emailService;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
     }
 
@@ -604,6 +608,20 @@ public class StudentLearningService : IStudentLearningService
 
         _logger.LogInformation("[SubmitQuiz] Completed successfully. Score={Score}, Passed={Passed}, TotalQuestions={Total}, UngradedEssays={EssayCount}", 
             score, score >= (normalizedPassingScore ?? 0), quiz.QuizQuestions.Count, ungradedEssayCount);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var analyticsService = scope.ServiceProvider.GetRequiredService<AnalyticsService>();
+                await analyticsService.AnalyzeQuizAttemptAndUpdateAnalyticsAsync(attempt.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[StudentLearningService] Failed to update analytics for attempt {AttemptId}", attempt.Id);
+            }
+        });
 
         return new QuizResultDto
         {
