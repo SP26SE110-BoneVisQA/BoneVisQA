@@ -9,12 +9,14 @@ using BoneVisQA.Services.Models.Lecturer;
 using BoneVisQA.Services.Models.Notification;
 using BoneVisQA.Services.Models.Student;
 using BoneVisQA.Services.Models.VisualQA;
+using BoneVisQA.Services.Services.Analytics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -27,6 +29,9 @@ public class StudentService : IStudentService
     private readonly ILogger<StudentService> _logger;
     private readonly IStudentLearningService _studentLearningService;
     private readonly ISupabaseStorageService _storageService;
+    private readonly INotificationService _notificationService;
+    private readonly IEmailService _emailService;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public StudentService(
         IStudentRepository studentRepository,
@@ -35,7 +40,8 @@ public class StudentService : IStudentService
         IStudentLearningService studentLearningService,
         ISupabaseStorageService storageService,
         INotificationService notificationService,
-        IEmailService emailService)
+        IEmailService emailService,
+        IServiceScopeFactory serviceScopeFactory)
     {
         _studentRepository = studentRepository;
         _unitOfWork = unitOfWork;
@@ -44,10 +50,8 @@ public class StudentService : IStudentService
         _storageService = storageService;
         _notificationService = notificationService;
         _emailService = emailService;
+        _serviceScopeFactory = serviceScopeFactory;
     }
-
-    private readonly INotificationService _notificationService;
-    private readonly IEmailService _emailService;
 
     /// <summary>
     /// Passing score luôn ở thang 100 (0-100). Identity function.
@@ -1938,6 +1942,21 @@ public class StudentService : IStudentService
         var isPracticeMode = quizModeVal == 2; // 2 = Practice mode
         var showCorrectAnswer = isPracticeMode;
         var showExplanation = isPracticeMode;
+
+        // Update analytics for this attempt (runs in background to avoid blocking response)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var analyticsService = scope.ServiceProvider.GetRequiredService<AnalyticsService>();
+                await analyticsService.AnalyzeQuizAttemptAndUpdateAnalyticsAsync(attempt.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[StudentService] Failed to update analytics for attempt {AttemptId}", attempt.Id);
+            }
+        });
 
         return new StudentSubmitQuestionResponseDto
         {

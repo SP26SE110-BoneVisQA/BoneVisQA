@@ -118,4 +118,11 @@ public class AnalyticsController : ControllerBase
         await _analyticsService.AnalyzeQuizAttemptAndUpdateAnalyticsAsync(attemptId);
         return Ok(new { message = "Analysis completed" });
     }
+
+    [HttpPost("student/{studentId}/backfill")]
+    public async Task<IActionResult> BackfillStudentAnalytics(Guid studentId)
+    {
+        var results = await _analyticsService.BackfillStudentAnalyticsAsync(studentId);
+        return Ok(new { message = $"Backfill completed. Processed {results.processed} attempts, {results.updated} analytics records.", processed = results.processed, updated = results.updated });
+    }
 }

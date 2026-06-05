@@ -302,4 +302,30 @@ public class AnalyticsService
             }
         }
     }
+
+    public async Task<(int processed, int updated)> BackfillStudentAnalyticsAsync(Guid studentId)
+    {
+        var completedAttempts = await _unitOfWork.QuizAttemptRepository
+            .GetQueryable()
+            .Where(a => a.StudentId == studentId && a.CompletedAt.HasValue)
+            .Select(a => a.Id)
+            .ToListAsync();
+
+        int updated = 0;
+        foreach (var attemptId in completedAttempts)
+        {
+            try
+            {
+                await AnalyzeQuizAttemptAndUpdateAnalyticsAsync(attemptId);
+                updated++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Backfill] Failed to analyze attempt {AttemptId}", attemptId);
+            }
+        }
+
+        _logger.LogInformation("[Backfill] Student {StudentId}: processed {Processed}, updated {Updated}", studentId, completedAttempts.Count, updated);
+        return (completedAttempts.Count, updated);
+    }
 }
