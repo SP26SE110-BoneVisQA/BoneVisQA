@@ -77,6 +77,7 @@ namespace BoneVisQA.Services.Models.Expert
         /// <summary>
         /// Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
         /// </summary>
+        [JsonPropertyName("quizMode")]
         public int? QuizMode { get; set; }
     }
     public class CreateQuizResponseDTO

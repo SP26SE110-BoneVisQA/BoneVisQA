@@ -776,6 +776,7 @@ public class LecturerService : ILecturerService
                 CloseTime = ToUtc(request.CloseTime),
                 TimeLimitMinutes = request.TimeLimit,
                 PassingScore = request.PassingScore,
+                QuizMode = quiz.QuizMode,
                 CreatedAt = now
             };
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(classQuizSession);
@@ -2768,7 +2769,8 @@ public class LecturerService : ILecturerService
                 TimeLimit = cqs.TimeLimitMinutes,
                 PassingScore = (int?)cqs.PassingScore,
                 CreatedAt = cqs.CreatedAt,
-                IsFromExpertLibrary = cqs.Quiz != null && cqs.Quiz.CreatedByExpertId.HasValue
+                IsFromExpertLibrary = cqs.Quiz != null && cqs.Quiz.CreatedByExpertId.HasValue,
+                QuizMode = cqs.Quiz?.QuizMode ?? cqs.QuizMode
             })
             .ToList();
     }
@@ -2901,6 +2903,7 @@ public class LecturerService : ILecturerService
                 session.CloseTime = ToUtc(request.CloseTime);
                 session.TimeLimitMinutes = request.TimeLimit;
                 session.PassingScore = NormalizePassingScore(request.PassingScore, quiz.IsAiGenerated);
+                session.QuizMode = quiz.QuizMode;
             }
             _unitOfWork.Context.ClassQuizSessions.UpdateRange(classSessions);
             await _unitOfWork.SaveAsync();
@@ -3021,6 +3024,7 @@ public class LecturerService : ILecturerService
             CloseTime = quiz.CloseTime,
             TimeLimitMinutes = quiz.TimeLimit,
             PassingScore = NormalizePassingScore(quiz.PassingScore, quiz.IsAiGenerated),
+            QuizMode = quiz.QuizMode,
             CreatedAt = DateTime.UtcNow
         };
 
