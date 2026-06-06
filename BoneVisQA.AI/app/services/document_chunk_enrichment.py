@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from typing import Any
 from uuid import UUID
@@ -17,6 +18,8 @@ from app.services.document_chunk_metadata import (
     section_metadata_from_heading,
 )
 from app.services.embeddings.text_encoder import encode_texts, text_model_name
+
+_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "24"))
 
 
 def _fit_pgvector(vec: np.ndarray, *, expected_dim: int = 768) -> np.ndarray:
@@ -48,14 +51,14 @@ def _load_document_defaults(conn: PGConnection, doc_id: UUID) -> tuple[str, str 
         return default_modality, default_pathology
 
 
-def enrich_document_chunks(
+def _fetch_batch_rows(
     conn: PGConnection,
     *,
     doc_id: UUID,
-    only_missing_embedding: bool = False,
-) -> dict[str, Any]:
-    default_modality, default_pathology = _load_document_defaults(conn, doc_id)
-
+    only_missing_embedding: bool,
+    after_chunk_order: int,
+    batch_size: int,
+) -> list[tuple[Any, str, int]]:
     with conn.cursor() as cur:
         if only_missing_embedding:
             cur.execute(
@@ -64,9 +67,11 @@ def enrich_document_chunks(
                 FROM public.document_chunks
                 WHERE doc_id = %s::uuid
                   AND embedding IS NULL
-                ORDER BY chunk_order;
+                  AND chunk_order > %s
+                ORDER BY chunk_order
+                LIMIT %s;
                 """,
-                (str(doc_id),),
+                (str(doc_id), after_chunk_order, batch_size),
             )
         else:
             cur.execute(
@@ -74,29 +79,68 @@ def enrich_document_chunks(
                 SELECT id, content, chunk_order
                 FROM public.document_chunks
                 WHERE doc_id = %s::uuid
-                ORDER BY chunk_order;
+                  AND chunk_order > %s
+                ORDER BY chunk_order
+                LIMIT %s;
                 """,
-                (str(doc_id),),
+                (str(doc_id), after_chunk_order, batch_size),
             )
-        rows = cur.fetchall()
+        return cur.fetchall()
+
+
+def _count_null_embeddings(conn: PGConnection, doc_id: UUID) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*)::int
+            FROM public.document_chunks
+            WHERE doc_id = %s::uuid AND embedding IS NULL;
+            """,
+            (str(doc_id),),
+        )
+        return int(cur.fetchone()[0])
+
+
+def enrich_document_chunks(
+    conn: PGConnection,
+    *,
+    doc_id: UUID,
+    only_missing_embedding: bool = False,
+    batch_size: int = _DEFAULT_BATCH_SIZE,
+    after_chunk_order: int = -1,
+    section_anatomy: str | None = None,
+    section_pathology: str | None = None,
+) -> dict[str, Any]:
+    batch_size = max(1, min(int(batch_size), 64))
+    default_modality, default_pathology = _load_document_defaults(conn, doc_id)
+    rows = _fetch_batch_rows(
+        conn,
+        doc_id=doc_id,
+        only_missing_embedding=only_missing_embedding,
+        after_chunk_order=after_chunk_order,
+        batch_size=batch_size,
+    )
 
     if not rows:
+        null_remaining = _count_null_embeddings(conn, doc_id)
         return {
             "doc_id": str(doc_id),
             "chunks_processed": 0,
             "embedding_model": text_model_name(),
             "anatomy_distribution": {},
             "pathology_distribution": {},
-            "null_embedding_remaining": 0,
+            "null_embedding_remaining": null_remaining,
+            "last_chunk_order": after_chunk_order,
+            "section_anatomy": section_anatomy,
+            "section_pathology": section_pathology,
+            "has_more": False,
         }
 
-    section_anatomy: str | None = None
-    section_pathology: str | None = None
     anatomy_counts: Counter[str] = Counter()
     pathology_counts: Counter[str] = Counter()
-
     chunk_rows: list[tuple[Any, str, int]] = []
     metadata_by_id: dict[str, tuple[str, str, str]] = {}
+    last_chunk_order = after_chunk_order
 
     for chunk_id, content, chunk_order in rows:
         text = str(content or "")
@@ -120,13 +164,14 @@ def enrich_document_chunks(
         metadata_by_id[chunk_id_s] = (modality, anatomy, pathology)
         anatomy_counts[anatomy] += 1
         pathology_counts[pathology] += 1
+        last_chunk_order = int(chunk_order)
 
     texts = [text or " " for _, text, _ in chunk_rows]
     vectors = encode_texts(texts)
 
     processed = 0
     with conn.cursor() as cur:
-        for (chunk_id, text, _chunk_order), vec_raw in zip(chunk_rows, vectors, strict=True):
+        for (chunk_id, _text, _chunk_order), vec_raw in zip(chunk_rows, vectors, strict=True):
             modality, anatomy, pathology = metadata_by_id[str(chunk_id)]
             vec = _fit_pgvector(vec_raw)
 
@@ -143,16 +188,11 @@ def enrich_document_chunks(
             )
             processed += 1
 
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT COUNT(*)::int
-            FROM public.document_chunks
-            WHERE doc_id = %s::uuid AND embedding IS NULL;
-            """,
-            (str(doc_id),),
-        )
-        null_remaining = int(cur.fetchone()[0])
+    null_remaining = _count_null_embeddings(conn, doc_id)
+    has_more = processed > 0 and (
+        (only_missing_embedding and null_remaining > 0)
+        or (not only_missing_embedding and processed >= batch_size)
+    )
 
     return {
         "doc_id": str(doc_id),
@@ -161,6 +201,10 @@ def enrich_document_chunks(
         "anatomy_distribution": dict(anatomy_counts),
         "pathology_distribution": dict(pathology_counts),
         "null_embedding_remaining": null_remaining,
+        "last_chunk_order": last_chunk_order,
+        "section_anatomy": section_anatomy,
+        "section_pathology": section_pathology,
+        "has_more": has_more,
     }
 
 
@@ -168,10 +212,18 @@ def enrich_document_chunks_by_id(
     doc_id: UUID,
     *,
     only_missing_embedding: bool = False,
+    batch_size: int = _DEFAULT_BATCH_SIZE,
+    after_chunk_order: int = -1,
+    section_anatomy: str | None = None,
+    section_pathology: str | None = None,
 ) -> dict[str, Any]:
     with get_connection() as conn:
         return enrich_document_chunks(
             conn,
             doc_id=doc_id,
             only_missing_embedding=only_missing_embedding,
+            batch_size=batch_size,
+            after_chunk_order=after_chunk_order,
+            section_anatomy=section_anatomy,
+            section_pathology=section_pathology,
         )

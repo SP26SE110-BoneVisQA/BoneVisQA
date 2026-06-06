@@ -33,7 +33,7 @@ def encode_texts(texts: list[str]) -> list[np.ndarray]:
         normalize_embeddings=True,
         convert_to_numpy=True,
         show_progress_bar=False,
-        batch_size=min(32, len(normalized)),
+        batch_size=min(8, len(normalized)),
     )
     return [v.astype(np.float32) for v in vecs]
 

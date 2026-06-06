@@ -447,54 +447,145 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
 
     /// <inheritdoc />
-
     public async Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
-
         Guid documentId,
-
         bool onlyMissingEmbedding = false,
-
         CancellationToken cancellationToken = default)
-
     {
-
         if (documentId == Guid.Empty)
-
             return EnrichFail(documentId, 400, "documentId is required.");
 
-
+        var batchSize = Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 24), 1, 64);
+        var afterChunkOrder = -1;
+        string? sectionAnatomy = null;
+        string? sectionPathology = null;
+        var totalProcessed = 0;
+        string? embeddingModel = null;
+        var anatomyDistribution = new Dictionary<string, int>(StringComparer.Ordinal);
+        var pathologyDistribution = new Dictionary<string, int>(StringComparer.Ordinal);
+        var nullRemaining = 0;
 
         try
-
         {
+            while (true)
+            {
+                var batch = await PostEnrichBatchAsync(
+                    documentId,
+                    onlyMissingEmbedding,
+                    batchSize,
+                    afterChunkOrder,
+                    sectionAnatomy,
+                    sectionPathology,
+                    cancellationToken);
 
+                if (!batch.Success)
+                {
+                    if (totalProcessed > 0)
+                    {
+                        return new DocumentChunkEnrichmentResultDto(
+                            false,
+                            batch.StatusCode,
+                            batch.ErrorMessage,
+                            documentId,
+                            totalProcessed,
+                            embeddingModel,
+                            anatomyDistribution,
+                            pathologyDistribution,
+                            nullRemaining);
+                    }
+
+                    return batch;
+                }
+
+                totalProcessed += batch.ChunksProcessed;
+                embeddingModel = batch.EmbeddingModel ?? embeddingModel;
+                nullRemaining = batch.NullEmbeddingRemaining;
+                MergeCountDictionary(anatomyDistribution, batch.AnatomyDistribution);
+                MergeCountDictionary(pathologyDistribution, batch.PathologyDistribution);
+
+                if (batch.LastChunkOrder > afterChunkOrder)
+                    afterChunkOrder = batch.LastChunkOrder;
+                sectionAnatomy = batch.SectionAnatomy ?? sectionAnatomy;
+                sectionPathology = batch.SectionPathology ?? sectionPathology;
+
+                if (!batch.HasMore)
+                    break;
+            }
+
+            if (nullRemaining > 0)
+            {
+                return EnrichFail(
+                    documentId,
+                    500,
+                    $"{nullRemaining} chunk(s) still missing embeddings after batched enrichment.");
+            }
+
+            return new DocumentChunkEnrichmentResultDto(
+                Success: true,
+                StatusCode: 200,
+                ErrorMessage: null,
+                DocumentId: documentId,
+                ChunksProcessed: totalProcessed,
+                EmbeddingModel: embeddingModel,
+                AnatomyDistribution: anatomyDistribution,
+                PathologyDistribution: pathologyDistribution,
+                NullEmbeddingRemaining: 0);
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Python document enrich timed out.");
+            return EnrichFail(documentId, 0, "Request timed out.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Python document enrich request failed.");
+            return EnrichFail(documentId, 0, ex.Message);
+        }
+    }
+
+    private async Task<DocumentChunkEnrichmentResultDto> PostEnrichBatchAsync(
+        Guid documentId,
+        bool onlyMissingEmbedding,
+        int batchSize,
+        int afterChunkOrder,
+        string? sectionAnatomy,
+        string? sectionPathology,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 4;
+        static bool IsRetryable(int statusCode) =>
+            statusCode is 502 or 503 or 504;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
             using var resp = await _httpClient.PostAsJsonAsync(
-
                 "api/v1/documents/enrich-chunks",
-
-                new EnrichChunksPayload(documentId, onlyMissingEmbedding),
-
+                new EnrichChunksPayload(
+                    documentId,
+                    onlyMissingEmbedding,
+                    batchSize,
+                    afterChunkOrder,
+                    sectionAnatomy,
+                    sectionPathology),
                 SerializerSnakeWrite,
-
                 cancellationToken);
-
-
 
             var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
-
-
             if (!resp.IsSuccessStatusCode)
-
             {
-
                 _logger.LogWarning(
-
-                    "Python document enrich failed: {Status} {Body}",
-
+                    "Python document enrich batch failed (attempt {Attempt}/{MaxAttempts}): {Status} {Body}",
+                    attempt,
+                    maxAttempts,
                     (int)resp.StatusCode,
-
                     body.Length > 800 ? body[..800] + "…" : body);
+
+                if (attempt < maxAttempts && IsRetryable((int)resp.StatusCode))
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(4 * attempt), cancellationToken);
+                    continue;
+                }
 
                 var detail = TryExtractFastApiErrorDetail(body);
                 return EnrichFail(
@@ -503,81 +594,55 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
                     string.IsNullOrWhiteSpace(detail)
                         ? $"HTTP {(int)resp.StatusCode}"
                         : detail);
-
             }
-
-
 
             EnrichApiBody? parsed;
-
             try
-
             {
-
                 parsed = JsonSerializer.Deserialize<EnrichApiBody>(body, SerializerSnakeRead);
-
             }
-
             catch (JsonException jex)
-
             {
-
                 _logger.LogWarning(jex, "Python document enrich JSON parse failed.");
-
                 return EnrichFail(documentId, (int)resp.StatusCode, "Invalid JSON from AI service.");
-
             }
-
-
 
             if (parsed == null)
-
                 return EnrichFail(documentId, (int)resp.StatusCode, "Empty enrich response.");
 
-
-
             return new DocumentChunkEnrichmentResultDto(
-
                 Success: true,
-
                 StatusCode: (int)resp.StatusCode,
-
                 ErrorMessage: null,
-
                 DocumentId: documentId,
-
                 ChunksProcessed: parsed.ChunksProcessed,
-
                 EmbeddingModel: parsed.EmbeddingModel,
-
                 AnatomyDistribution: parsed.AnatomyDistribution,
-
                 PathologyDistribution: parsed.PathologyDistribution,
-
-                NullEmbeddingRemaining: parsed.NullEmbeddingRemaining);
-
+                NullEmbeddingRemaining: parsed.NullEmbeddingRemaining,
+                LastChunkOrder: parsed.LastChunkOrder,
+                SectionAnatomy: parsed.SectionAnatomy,
+                SectionPathology: parsed.SectionPathology,
+                HasMore: parsed.HasMore);
         }
 
-        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        return EnrichFail(documentId, 502, "HTTP 502");
+    }
 
+    private static void MergeCountDictionary(
+        Dictionary<string, int> target,
+        IReadOnlyDictionary<string, int>? source)
+    {
+        if (source == null)
+            return;
+
+        foreach (var (key, value) in source)
         {
-
-            _logger.LogWarning(ex, "Python document enrich timed out.");
-
-            return EnrichFail(documentId, 0, "Request timed out.");
-
+            if (target.TryGetValue(key, out var existing))
+                target[key] = existing + value;
+            else
+                target[key] = value;
         }
-
-        catch (Exception ex)
-
-        {
-
-            _logger.LogError(ex, "Python document enrich request failed.");
-
-            return EnrichFail(documentId, 0, ex.Message);
-
-        }
-
     }
 
 
@@ -644,12 +709,17 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
 
     private static DocumentChunkEnrichmentResultDto EnrichFail(Guid documentId, int statusCode, string message) =>
-
-        new(false, statusCode, message, documentId, 0, null, null, null, 0);
-
+        new(false, statusCode, message, documentId, 0, null, null, null, 0, -1, null, null, false);
 
 
-    private sealed record EnrichChunksPayload(Guid DocId, bool OnlyMissingEmbedding);
+
+    private sealed record EnrichChunksPayload(
+        Guid DocId,
+        bool OnlyMissingEmbedding,
+        int BatchSize,
+        int AfterChunkOrder,
+        string? SectionAnatomy,
+        string? SectionPathology);
 
 
 
@@ -668,6 +738,14 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
         public Dictionary<string, int>? PathologyDistribution { get; set; }
 
         public int NullEmbeddingRemaining { get; set; }
+
+        public int LastChunkOrder { get; set; }
+
+        public string? SectionAnatomy { get; set; }
+
+        public string? SectionPathology { get; set; }
+
+        public bool HasMore { get; set; }
 
     }
 

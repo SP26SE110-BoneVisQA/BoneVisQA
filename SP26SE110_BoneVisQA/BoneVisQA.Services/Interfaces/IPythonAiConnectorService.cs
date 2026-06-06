@@ -80,4 +80,8 @@ public sealed record DocumentChunkEnrichmentResultDto(
     string? EmbeddingModel,
     IReadOnlyDictionary<string, int>? AnatomyDistribution,
     IReadOnlyDictionary<string, int>? PathologyDistribution,
-    int NullEmbeddingRemaining);
+    int NullEmbeddingRemaining,
+    int LastChunkOrder = -1,
+    string? SectionAnatomy = null,
+    string? SectionPathology = null,
+    bool HasMore = false);

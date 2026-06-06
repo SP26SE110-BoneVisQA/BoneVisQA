@@ -357,7 +357,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     "Enriching metadata and embeddings...",
                     cancellationToken);
 
-                var enrich = await _pythonAi.EnrichDocumentChunksAsync(documentId, onlyMissingEmbedding: false, cancellationToken);
+                var enrich = await _pythonAi.EnrichDocumentChunksAsync(documentId, onlyMissingEmbedding: true, cancellationToken);
                 if (!enrich.Success || enrich.NullEmbeddingRemaining > 0)
                 {
                     var detail = enrich.ErrorMessage ?? $"null_embeddings={enrich.NullEmbeddingRemaining}";
