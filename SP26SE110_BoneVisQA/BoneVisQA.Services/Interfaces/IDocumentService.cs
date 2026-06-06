@@ -10,6 +10,10 @@ public class DocumentUploadDto
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
     public List<Guid> TagIds { get; set; } = new();
+    /// <summary>Canonical modality inherited by all chunks (X-Ray, CT, MRI, Ultrasound).</summary>
+    public string? DefaultModality { get; set; }
+    /// <summary>Optional pathology fallback when chunk inference is inconclusive.</summary>
+    public string? DefaultPathologyGroup { get; set; }
 }
 
 public class DocumentChunkCitationFrequencyDto
@@ -39,6 +43,8 @@ public class DocumentDto
     public int TotalPages { get; set; }
     public int TotalChunks { get; set; }
     public int CurrentPageIndexing { get; set; }
+    public string? DefaultModality { get; set; }
+    public string? DefaultPathologyGroup { get; set; }
 }
 
 public class DocumentIngestionStatusDto
@@ -96,6 +102,10 @@ public interface IDocumentService
     Task<IReadOnlyList<DocumentChunkCitationFrequencyDto>> GetChunkCitationFrequencyAsync(
         Guid? documentId = null,
         int top = 100,
+        CancellationToken cancellationToken = default);
+    Task<DocumentChunkEnrichmentResultDto> ReEnrichDocumentChunksAsync(
+        Guid? documentId = null,
+        bool onlyMissingEmbedding = false,
         CancellationToken cancellationToken = default);
     string MapStatusForApi(string? rawStatus);
 }

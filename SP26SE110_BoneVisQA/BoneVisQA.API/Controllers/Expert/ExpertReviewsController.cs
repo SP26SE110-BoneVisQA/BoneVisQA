@@ -118,20 +118,25 @@ public class ExpertReviewsController : ControllerBase
     }
 
     [HttpPost("{sessionId:guid}/approve")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ApprovePost(Guid sessionId)
+    public async Task<IActionResult> ApprovePost(Guid sessionId, [FromBody] PromoteToLibraryRequestDto request)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
         try
         {
             await _expertReviewService.ApproveSessionAsync(expertId.Value, sessionId);
-            return NoContent();
+            var caseId = await _expertReviewService.PromoteToLibraryAsync(expertId.Value, sessionId, request);
+            return Ok(new { caseId });
         }
         catch (KeyNotFoundException ex)
         {
@@ -139,7 +144,9 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
         catch (ConflictException ex)
         {

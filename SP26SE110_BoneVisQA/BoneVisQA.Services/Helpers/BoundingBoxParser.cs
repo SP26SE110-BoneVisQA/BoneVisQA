@@ -11,7 +11,8 @@ public static class BoundingBoxParser
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
     };
 
     public readonly record struct NormalizedBoundingBox(double X, double Y, double Width, double Height)
@@ -44,6 +45,10 @@ public static class BoundingBoxParser
         var canonical = new { x = box.X, y = box.Y, width = box.Width, height = box.Height };
         return JsonSerializer.Serialize(canonical, JsonOptions);
     }
+
+    /// <summary>Parse and re-serialize as canonical double-precision JSON, or null when not a valid rectangle.</summary>
+    public static string? NormalizeCoordinatesJson(string? json) =>
+        TryParseFromJson(json) is { } box ? Serialize(box) : null;
 
     /// <summary>Returns null if JSON is not a valid rectangle with positive width/height.</summary>
     public static NormalizedBoundingBox? TryParseFromJson(string? json)

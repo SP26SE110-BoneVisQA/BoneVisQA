@@ -78,6 +78,30 @@ public class NotificationsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Mark all notifications as read for the current user.</summary>
+    [HttpPut("read-all")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MarkAllAsRead()
+    {
+        var userId = GetUserId();
+        if (userId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var unread = await _unitOfWork.Context.Notifications
+            .Where(n => n.UserId == userId.Value && !n.IsRead)
+            .ToListAsync();
+
+        if (unread.Count == 0)
+            return NoContent();
+
+        foreach (var entity in unread)
+            entity.IsRead = true;
+
+        await _unitOfWork.SaveAsync();
+        return NoContent();
+    }
+
     private Guid? GetUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);

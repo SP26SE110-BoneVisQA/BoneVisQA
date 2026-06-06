@@ -44,6 +44,15 @@ public partial class DocumentChunk
     [Column("end_page")]
     public int? EndPage { get; set; } = 0;
 
+    [Column("modality")]
+    public string Modality { get; set; } = "Other";
+
+    [Column("anatomy")]
+    public string Anatomy { get; set; } = "Other";
+
+    [Column("pathology_group")]
+    public string PathologyGroup { get; set; } = "Other";
+
     [InverseProperty("Chunk")]
     public virtual ICollection<Citation> Citations { get; set; } = new List<Citation>();
 

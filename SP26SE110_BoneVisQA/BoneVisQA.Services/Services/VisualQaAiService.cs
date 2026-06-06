@@ -161,6 +161,7 @@ public class VisualQaAiService : IVisualQaAiService
             caseMediaId,
             imageEmbedding: null,
             dicomClinicalContext,
+            dicomMetadata,
             cancellationToken);
 
         if (!rag.Success || string.IsNullOrWhiteSpace(rag.Prompt))

@@ -487,7 +487,8 @@ public class StudentService : IStudentService
                 return;
         }
 
-        var coordJson = TryParseCoordinatesJson(request.Coordinates);
+        var coordJson = BoundingBoxParser.NormalizeCoordinatesJson(request.Coordinates)
+            ?? TryParseCoordinatesJson(request.Coordinates);
         if (string.IsNullOrWhiteSpace(coordJson))
         {
             coordJson = await _unitOfWork.Context.QaMessages
