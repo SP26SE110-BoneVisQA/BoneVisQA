@@ -174,7 +174,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
             if (totalExtractedCharacters <= 0)
             {
                 _logger.LogError(NoExtractableTextLog);
-                await MarkFailedAsync(documentId, cancellationToken);
+                await MarkFailedAsync(documentId, NoExtractableTextLog, cancellationToken);
                 failoverMarked = true;
                 return;
             }
@@ -185,7 +185,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
             if (chunkPayload.Count == 0 || chunkPayload.Sum(c => c.Content.Length) == 0)
             {
                 _logger.LogError(NoExtractableTextLog);
-                await MarkFailedAsync(documentId, cancellationToken);
+                await MarkFailedAsync(documentId, NoExtractableTextLog, cancellationToken);
                 failoverMarked = true;
                 return;
             }
@@ -330,8 +330,9 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     finalDoc.PendingTargetVersion = null;
                 }
 
-                finalDoc.IndexingStatus = DocumentIndexingStatuses.Completed;
-                finalDoc.IndexingProgress = 100;
+                finalDoc.IndexingStatus = DocumentIndexingStatuses.Processing;
+                finalDoc.IndexingProgress = 95;
+                finalDoc.IndexingErrorMessage = null;
                 finalDoc.IsOutdated = false;
                 finalDoc.UpdatedAt = DateTime.UtcNow;
                 if (finalDoc.TotalPages > 0)
@@ -361,17 +362,31 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 {
                     var detail = enrich.ErrorMessage ?? $"null_embeddings={enrich.NullEmbeddingRemaining}";
                     _logger.LogError(
-                        "[DocumentIndexing] Chunk enrichment failed for document {DocumentId}: {Detail}",
+                        "[DocumentIndexing] Chunk enrichment failed for document {DocumentId}. Provider response: {Detail}",
                         documentId,
                         detail);
-                    throw new InvalidOperationException(
-                        $"Chunk metadata/embedding enrichment failed: {detail}");
+                    await MarkFailedAsync(documentId, $"Chunk metadata/embedding enrichment failed: {detail}", cancellationToken);
+                    completed = true;
+                    failoverMarked = true;
+                    return;
                 }
 
                 _logger.LogInformation(
                     "[DocumentIndexing] Enriched {Count} chunks for document {DocumentId}.",
                     enrich.ChunksProcessed,
                     documentId);
+
+                var completedDoc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId);
+                if (completedDoc != null)
+                {
+                    completedDoc.IndexingStatus = DocumentIndexingStatuses.Completed;
+                    completedDoc.IndexingProgress = 100;
+                    completedDoc.IndexingErrorMessage = null;
+                    completedDoc.UpdatedAt = DateTime.UtcNow;
+                    await _unitOfWork.DocumentRepository.UpdateAsync(completedDoc);
+                    await _unitOfWork.SaveAsync();
+                    finalDoc = completedDoc;
+                }
 
                 var completedAt = finalDoc.UpdatedAt ?? DateTime.UtcNow;
                 await _progressNotifier.NotifyIndexingCompletedAsync(
@@ -397,7 +412,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     "Completed.",
                     cancellationToken);
             }
-            catch
+            catch (Exception swapEx)
             {
                 try { await swapTransaction.RollbackAsync(CancellationToken.None); } catch { }
                 try
@@ -408,6 +423,8 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                         CancellationToken.None);
                 }
                 catch { }
+
+                _logger.LogError(swapEx, "[DocumentIndexing] Atomic swap failed for document {DocumentId}.", documentId);
                 throw;
             }
 
@@ -417,14 +434,14 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         catch (OperationCanceledException)
         {
             _logger.LogWarning("[DocumentIndexing] Processing cancelled for {DocumentId}.", documentId);
-            await MarkFailedAsync(documentId, CancellationToken.None);
+            await MarkFailedAsync(documentId, "Processing cancelled.", CancellationToken.None);
             failoverMarked = true;
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[DocumentIndexing] Fatal error for document {DocumentId}.", documentId);
-            await MarkFailedAsync(documentId, cancellationToken);
+            await MarkFailedAsync(documentId, ex.Message, cancellationToken);
             failoverMarked = true;
         }
         finally
@@ -433,7 +450,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 TryDeleteTempPdf(tempPdfPath);
 
             if (!completed && !failoverMarked)
-                await MarkFailedAsync(documentId, CancellationToken.None);
+                await MarkFailedAsync(documentId, "Indexing did not complete.", CancellationToken.None);
         }
     }
 
@@ -457,16 +474,24 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private async Task MarkFailedAsync(Guid documentId, CancellationToken cancellationToken)
+    private async Task MarkFailedAsync(Guid documentId, string? errorMessage, CancellationToken cancellationToken)
     {
+        var safeError = string.IsNullOrWhiteSpace(errorMessage)
+            ? "Document indexing failed."
+            : errorMessage.Trim();
+        if (safeError.Length > 2000)
+            safeError = safeError[..2000];
+
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
+            var notifier = scope.ServiceProvider.GetRequiredService<IDocumentIndexingProgressNotifier>();
             var doc = await uow.DocumentRepository.GetByIdAsync(documentId);
             var cacheStatus = DocumentIndexingStatuses.Failed;
             var cacheOperation = "Failed.";
+            string? persistedError = safeError;
             if (doc != null)
             {
                 try
@@ -486,8 +511,10 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     doc.PendingTargetVersion = null;
                     doc.IndexingStatus = DocumentIndexingStatuses.Completed;
                     doc.IndexingProgress = 100;
+                    doc.IndexingErrorMessage = null;
                     cacheStatus = DocumentIndexingStatuses.Completed;
-                    cacheOperation = "Reindexing failed; kept previous version active.";
+                    cacheOperation = null;
+                    persistedError = "Reindexing failed; kept previous version active. " + safeError;
 
                     if (TryExtractSupabaseFilePointer(pendingPath, out var pendingBucket, out var pendingObjectPath))
                     {
@@ -506,10 +533,23 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     doc.PendingTargetVersion = null;
                     doc.IndexingStatus = DocumentIndexingStatuses.Failed;
                     doc.IndexingProgress = 100;
+                    doc.IndexingErrorMessage = safeError;
                 }
 
                 await uow.DocumentRepository.UpdateAsync(doc);
                 await uow.SaveAsync();
+
+                if (string.Equals(cacheStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase))
+                {
+                    await notifier.NotifyIndexingFailedAsync(
+                        documentId,
+                        cacheStatus,
+                        safeError,
+                        doc.TotalPages,
+                        doc.TotalChunks,
+                        doc.CurrentPageIndexing,
+                        CancellationToken.None);
+                }
             }
 
             cache.Set(
@@ -521,7 +561,10 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     CurrentOperation = cacheOperation,
                     TotalPages = doc?.TotalPages ?? 0,
                     TotalChunks = doc?.TotalChunks ?? 0,
-                    CurrentPageIndexing = doc?.CurrentPageIndexing ?? 0
+                    CurrentPageIndexing = doc?.CurrentPageIndexing ?? 0,
+                    ErrorMessage = string.Equals(cacheStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
+                        ? safeError
+                        : persistedError
                 },
                 TimeSpan.FromHours(4));
         }
@@ -571,10 +614,15 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         {
             Status = statusLabel,
             ProgressPercentage = Math.Clamp(percentage, 0, 100),
-            CurrentOperation = operation,
+            CurrentOperation = string.Equals(statusLabel, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : operation,
             TotalPages = totalPages,
             TotalChunks = totalChunks,
-            CurrentPageIndexing = currentPageIndexing
+            CurrentPageIndexing = currentPageIndexing,
+            ErrorMessage = string.Equals(statusLabel, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
+                ? operation
+                : null
         };
         _memoryCache.Set(GetProgressCacheKey(documentId), value, TimeSpan.FromHours(4));
     }

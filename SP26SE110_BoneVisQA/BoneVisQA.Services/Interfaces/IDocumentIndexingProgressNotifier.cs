@@ -18,4 +18,13 @@ public interface IDocumentIndexingProgressNotifier
         string version,
         DateTime lastUpdatedUtc,
         CancellationToken cancellationToken = default);
+
+    Task NotifyIndexingFailedAsync(
+        Guid documentId,
+        string status,
+        string errorMessage,
+        int totalPages,
+        int totalChunks,
+        int currentPageIndexing,
+        CancellationToken cancellationToken = default);
 }

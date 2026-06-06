@@ -158,6 +158,13 @@ public class VisualQaApiResponseDto
     public VisualQaTurnDto? LatestTurn { get; set; }
 }
 
+public class VisualQaTurnMessageDto
+{
+    public string Role { get; set; } = "system";
+    public string Content { get; set; } = string.Empty;
+    public Guid? MessageId { get; set; }
+}
+
 public class VisualQaTurnDto
 {
     public Guid SessionId { get; set; }
@@ -183,6 +190,8 @@ public class VisualQaTurnDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
+
+    public IReadOnlyList<VisualQaTurnMessageDto> Messages { get; set; } = Array.Empty<VisualQaTurnMessageDto>();
 
     /// <summary>1-based order within the session thread (Turn #1, #2, …).</summary>
     [JsonPropertyName("turnIndex")]

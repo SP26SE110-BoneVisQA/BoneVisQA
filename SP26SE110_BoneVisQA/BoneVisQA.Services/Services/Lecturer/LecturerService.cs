@@ -1774,12 +1774,14 @@ public class LecturerService : ILecturerService
         if (enrollment.Class?.LecturerId != lecturerId)
             throw new InvalidOperationException("The lecturer does not have permission to answer this question.");
 
+        var humanFeedback = VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(request.AnswerText);
+
         var answer = new QAMessage
         {
             Id = Guid.NewGuid(),
             SessionId = session.Id,
             Role = "Lecturer",
-            Content = request.AnswerText,
+            Content = humanFeedback ?? request.AnswerText.Trim(),
             SuggestedDiagnosis = request.StructuredDiagnosis,
             DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses),
             CreatedAt = DateTime.UtcNow,
@@ -1810,7 +1812,7 @@ public class LecturerService : ILecturerService
                 break;
         }
         session.UpdatedAt = DateTime.UtcNow;
-        session.ReviewFeedback = request.AnswerText.Trim();
+        session.ReviewFeedback = humanFeedback;
 
         await _unitOfWork.SaveAsync();
 

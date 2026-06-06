@@ -51,10 +51,11 @@ public class DocumentIngestionStatusDto
 {
     public string Status { get; set; } = "Processing";
     public int ProgressPercentage { get; set; }
-    public string CurrentOperation { get; set; } = string.Empty;
+    public string? CurrentOperation { get; set; }
     public int TotalPages { get; set; }
     public int TotalChunks { get; set; }
     public int CurrentPageIndexing { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 /// <summary>One row from a batch admin document upload.</summary>

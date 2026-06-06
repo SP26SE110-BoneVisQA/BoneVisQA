@@ -814,11 +814,21 @@ public class ExpertReviewService : IExpertReviewService
         }
 
         var isReject = IsRejectDecision(request.Decision);
+        if (isReject)
+        {
+            var rejectionNote = request.ReviewNote?.Trim();
+            if (string.IsNullOrWhiteSpace(rejectionNote))
+                throw new InvalidOperationException("ReviewNote is required when rejecting an escalated session.");
+
+            if (VisualQaEducatorFeedbackHelper.IsLikelyAiStructuredBlock(rejectionNote))
+                throw new InvalidOperationException("Rejection reason must be a human note, not copied AI structured output.");
+        }
+
         QAMessage? expertMessage = null;
         var reviewFeedbackText = isReject
-            ? ResolveExpertRejectDisplayMessage(request)
+            ? request.ReviewNote!.Trim()
             : (string.IsNullOrWhiteSpace(request.ReviewNote?.Trim())
-                ? request.AnswerText?.Trim() ?? string.Empty
+                ? VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(request.AnswerText)
                 : request.ReviewNote.Trim());
 
         expertMessage = new QAMessage
@@ -826,7 +836,9 @@ public class ExpertReviewService : IExpertReviewService
             Id = Guid.NewGuid(),
             SessionId = session.Id,
             Role = "Expert",
-            Content = isReject ? reviewFeedbackText : request.AnswerText,
+            Content = isReject
+                ? reviewFeedbackText ?? string.Empty
+                : request.AnswerText ?? string.Empty,
             SuggestedDiagnosis = isReject ? null : request.StructuredDiagnosis,
             DifferentialDiagnoses = isReject ? null : SerializeJsonArray(request.DifferentialDiagnoses),
             KeyImagingFindings = isReject ? null : request.KeyImagingFindings,
@@ -843,7 +855,9 @@ public class ExpertReviewService : IExpertReviewService
 
             session.Status = isReject ? CaseAnswerStatuses.Rejected : CaseAnswerStatuses.ExpertApproved;
             session.ExpertId = expertId;
-            session.ReviewFeedback = reviewFeedbackText;
+            session.ReviewFeedback = isReject
+                ? reviewFeedbackText
+                : VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(reviewFeedbackText);
             session.UpdatedAt = now;
 
             var correctedRoiJson = SerializeCorrectedRoi(request.CorrectedRoiBoundingBox);

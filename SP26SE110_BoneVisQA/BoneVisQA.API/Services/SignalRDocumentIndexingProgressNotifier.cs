@@ -50,7 +50,35 @@ public sealed class SignalRDocumentIndexingProgressNotifier : IDocumentIndexingP
                 documentId,
                 status,
                 version,
-                lastUpdated = lastUpdatedUtc
+                lastUpdated = lastUpdatedUtc,
+                progressPercentage = 100,
+                operation = (string?)null,
+                errorMessage = (string?)null
+            },
+            cancellationToken);
+    }
+
+    public Task NotifyIndexingFailedAsync(
+        Guid documentId,
+        string status,
+        string errorMessage,
+        int totalPages,
+        int totalChunks,
+        int currentPageIndexing,
+        CancellationToken cancellationToken = default)
+    {
+        return _hubContext.Clients.All.SendAsync(
+            "DocumentIndexingProgressUpdated",
+            new
+            {
+                documentId,
+                totalPages,
+                totalChunks,
+                currentPageIndexing,
+                progressPercentage = 100,
+                status,
+                operation = "Failed.",
+                errorMessage
             },
             cancellationToken);
     }

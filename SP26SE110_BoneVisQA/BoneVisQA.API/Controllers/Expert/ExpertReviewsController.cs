@@ -113,6 +113,10 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            if (ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("human note", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = ex.Message });
+
             return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
     }

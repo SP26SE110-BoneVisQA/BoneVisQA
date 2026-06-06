@@ -63,6 +63,9 @@ public partial class Document
     [Column("indexing_progress")]
     public int IndexingProgress { get; set; } = 0;
 
+    [Column("indexing_error_message")]
+    public string? IndexingErrorMessage { get; set; }
+
     [Column("content_hash")]
     [StringLength(64)]
     public string? ContentHash { get; set; }

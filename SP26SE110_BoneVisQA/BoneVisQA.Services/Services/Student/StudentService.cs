@@ -1222,9 +1222,6 @@ public class StudentService : IStudentService
         var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
         var blockingNotice = BuildBlockingNotice(capabilities.Reason);
 
-        var hasEducatorFeedbackTurn = turns.Any(t =>
-            string.Equals(t.ResponseKind, "review_update", StringComparison.OrdinalIgnoreCase));
-
         var sessionImageRaw = ResolveVisualQaSessionRawImageUrl(session);
         var sessionImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(sessionImageRaw, cancellationToken);
 
@@ -1271,7 +1268,9 @@ public class StudentService : IStudentService
             BlockingNotice = blockingNotice,
             RejectionReason = rejectionReason,
             SessionStatus = session.Status,
-            ReviewFeedback = hasEducatorFeedbackTurn ? null : session.ReviewFeedback
+            ReviewFeedback = VisualQaEducatorFeedbackHelper.IsAwaitingHumanReview(session.Status)
+                ? null
+                : VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(session.ReviewFeedback)
         };
     }
 

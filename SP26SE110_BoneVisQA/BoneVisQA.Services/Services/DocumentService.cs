@@ -368,39 +368,54 @@ public class DocumentService : IDocumentService
             return null;
 
         var normalizedStatus = NormalizeApiStatus(document.IndexingStatus);
-        if (_memoryCache.TryGetValue(GetProgressCacheKey(id), out DocumentIngestionStatusDto? progress)
-            && progress != null)
+        var fromDocument = BuildIngestionStatusFromDocument(document, normalizedStatus);
+
+        if (!_memoryCache.TryGetValue(GetProgressCacheKey(id), out DocumentIngestionStatusDto? progress)
+            || progress == null)
+            return fromDocument;
+
+        if (IsTerminalIndexingStatus(normalizedStatus))
+            return fromDocument;
+
+        return new DocumentIngestionStatusDto
         {
-            if (!string.Equals(normalizedStatus, DocumentIndexingStatuses.Processing, StringComparison.OrdinalIgnoreCase))
-            {
-                progress.Status = normalizedStatus;
-                if (string.Equals(normalizedStatus, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase))
-                    progress.ProgressPercentage = 100;
-                else if (string.Equals(normalizedStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase))
-                    progress.ProgressPercentage = Math.Min(progress.ProgressPercentage, 99);
-            }
+            Status = DocumentIndexingStatuses.Processing,
+            ProgressPercentage = progress.ProgressPercentage,
+            CurrentOperation = progress.CurrentOperation,
+            TotalPages = progress.TotalPages > 0 ? progress.TotalPages : document.TotalPages,
+            TotalChunks = progress.TotalChunks > 0 ? progress.TotalChunks : document.TotalChunks,
+            CurrentPageIndexing = progress.CurrentPageIndexing > 0 ? progress.CurrentPageIndexing : document.CurrentPageIndexing,
+            ErrorMessage = progress.ErrorMessage
+        };
+    }
 
-            return progress;
-        }
+    private static bool IsTerminalIndexingStatus(string status) =>
+        string.Equals(status, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase);
 
+    private static DocumentIngestionStatusDto BuildIngestionStatusFromDocument(Document document, string normalizedStatus)
+    {
         return new DocumentIngestionStatusDto
         {
             Status = normalizedStatus,
             ProgressPercentage = string.Equals(normalizedStatus, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase)
                 ? 100
-                : document.IndexingProgress,
+                : string.Equals(normalizedStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
+                    ? 100
+                    : document.IndexingProgress,
             CurrentOperation = string.Equals(normalizedStatus, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase)
-                ? "Completed."
+                ? null
                 : string.Equals(normalizedStatus, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
                     ? "Failed."
                     : string.Equals(normalizedStatus, DocumentIndexingStatuses.Reindexing, StringComparison.OrdinalIgnoreCase)
                         ? "Queued for zero-downtime re-indexing..."
-                    : string.Equals(normalizedStatus, DocumentIndexingStatuses.Pending, StringComparison.OrdinalIgnoreCase)
-                        ? "Queued for indexing..."
-                        : "Indexing...",
+                        : string.Equals(normalizedStatus, DocumentIndexingStatuses.Pending, StringComparison.OrdinalIgnoreCase)
+                            ? "Queued for indexing..."
+                            : "Indexing...",
             TotalPages = document.TotalPages,
             TotalChunks = document.TotalChunks,
-            CurrentPageIndexing = document.CurrentPageIndexing
+            CurrentPageIndexing = document.CurrentPageIndexing,
+            ErrorMessage = document.IndexingErrorMessage
         };
     }
 
@@ -565,7 +580,9 @@ public class DocumentService : IDocumentService
         {
             Status = statusLabel,
             ProgressPercentage = Math.Clamp(percentage, 0, 100),
-            CurrentOperation = operation
+            CurrentOperation = string.Equals(statusLabel, DocumentIndexingStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : operation
         };
 
         _memoryCache.Set(GetProgressCacheKey(docId), value, TimeSpan.FromHours(4));

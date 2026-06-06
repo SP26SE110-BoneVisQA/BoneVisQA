@@ -18,6 +18,7 @@ public static class VisualQaSessionTurnsMapper
             .ToList();
 
         var reviewState = MapReviewState(sessionStatus);
+        var suppressEducatorFeedback = VisualQaEducatorFeedbackHelper.IsAwaitingHumanReview(sessionStatus);
         var turns = new List<VisualQaTurnDto>();
         QAMessage? pendingUser = null;
 
@@ -54,7 +55,9 @@ public static class VisualQaSessionTurnsMapper
             if (string.Equals(message.Role, "Lecturer", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(message.Role, "Expert", StringComparison.OrdinalIgnoreCase))
             {
-                turns.Add(MapReviewUpdateTurn(sessionId, message));
+                if (!suppressEducatorFeedback)
+                    turns.Add(MapReviewUpdateTurn(sessionId, message));
+                continue;
             }
         }
 
@@ -131,8 +134,34 @@ public static class VisualQaSessionTurnsMapper
                 assistantMessage.Id == requestedReviewMessageId.Value),
             LastResponderRole = assistantMessage == null ? "system" : "assistant",
             IsReviewTarget = assistantMessage != null && requestedReviewMessageId.HasValue &&
-                             assistantMessage.Id == requestedReviewMessageId.Value
+                             assistantMessage.Id == requestedReviewMessageId.Value,
+            Messages = BuildAnalysisTurnMessages(userMessage, assistantMessage)
         };
+    }
+
+    private static IReadOnlyList<VisualQaTurnMessageDto> BuildAnalysisTurnMessages(QAMessage userMessage, QAMessage? assistantMessage)
+    {
+        var list = new List<VisualQaTurnMessageDto>
+        {
+            new()
+            {
+                Role = VisualQaEducatorFeedbackHelper.MapMessageRoleForApi(userMessage.Role),
+                Content = userMessage.Content ?? string.Empty,
+                MessageId = userMessage.Id
+            }
+        };
+
+        if (assistantMessage != null)
+        {
+            list.Add(new VisualQaTurnMessageDto
+            {
+                Role = "assistant",
+                Content = ResolveAssistantPlainText(assistantMessage) ?? string.Empty,
+                MessageId = assistantMessage.Id
+            });
+        }
+
+        return list;
     }
 
     private static VisualQaTurnDto MapStandaloneAssistantTurn(
@@ -173,6 +202,7 @@ public static class VisualQaSessionTurnsMapper
     {
         var actorRole = MapResponderRole(message.Role) ?? "system";
         var (targetAssistantId, displayContent) = VisualQaReviewFeedbackRouting.Resolve(message);
+        displayContent = VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(displayContent) ?? string.Empty;
         var isExpertClinicalAnswer = string.Equals(message.Role, "Expert", StringComparison.OrdinalIgnoreCase)
             && (!string.IsNullOrWhiteSpace(message.SuggestedDiagnosis)
                 || !string.IsNullOrWhiteSpace(message.KeyImagingFindings)
@@ -211,7 +241,18 @@ public static class VisualQaSessionTurnsMapper
             PolicyReason = null,
             ReviewState = "none",
             LastResponderRole = actorRole,
-            IsReviewTarget = false
+            IsReviewTarget = false,
+            Messages = string.IsNullOrWhiteSpace(displayContent)
+                ? Array.Empty<VisualQaTurnMessageDto>()
+                : new[]
+                {
+                    new VisualQaTurnMessageDto
+                    {
+                        Role = VisualQaEducatorFeedbackHelper.MapMessageRoleForApi(message.Role),
+                        Content = displayContent,
+                        MessageId = message.Id
+                    }
+                }
         };
     }
 
