@@ -306,7 +306,7 @@ public class AdminDocumentsController : ControllerBase
         string? defaultPathology;
         try
         {
-            defaultModality = DocumentMetadataValidation.RequireModality(request.DefaultModality);
+            defaultModality = DocumentMetadataValidation.ResolveModality(request.DefaultModality);
             defaultPathology = DocumentMetadataValidation.NormalizeOptionalPathology(request.DefaultPathologyGroup);
         }
         catch (InvalidOperationException ex)
@@ -473,6 +473,25 @@ public class AdminDocumentsController : ControllerBase
         [FromQuery] bool onlyMissingEmbedding = false,
         CancellationToken cancellationToken = default)
     {
+        return await ReindexMetadataForDocument(documentId, onlyMissingEmbedding, cancellationToken);
+    }
+
+    /// <summary>FE-compatible alias: <c>POST /api/admin/documents/{id}/reindex-metadata</c>.</summary>
+    [HttpPost("{id:guid}/reindex-metadata")]
+    [ProducesResponseType(typeof(DocumentChunkEnrichmentResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DocumentChunkEnrichmentResultDto>> ReindexMetadataById(
+        Guid id,
+        [FromQuery] bool onlyMissingEmbedding = false,
+        CancellationToken cancellationToken = default)
+    {
+        return await ReindexMetadataForDocument(id, onlyMissingEmbedding, cancellationToken);
+    }
+
+    private async Task<ActionResult<DocumentChunkEnrichmentResultDto>> ReindexMetadataForDocument(
+        Guid? documentId,
+        bool onlyMissingEmbedding,
+        CancellationToken cancellationToken)
+    {
         var result = await _documentService.ReEnrichDocumentChunksAsync(
             documentId,
             onlyMissingEmbedding,
@@ -519,7 +538,7 @@ public class DocumentUploadRequest
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
     public List<Guid> TagIds { get; set; } = new();
-    /// <summary>Required: X-Ray, CT, MRI, or Ultrasound — inherited by all chunks.</summary>
+    /// <summary>Required: X-Ray, CT, MRI, or Ultrasound — inherited by all chunks. Omitted → X-Ray (DX).</summary>
     public string? DefaultModality { get; set; }
     /// <summary>Optional pathology fallback when chunk text inference is inconclusive.</summary>
     public string? DefaultPathologyGroup { get; set; }

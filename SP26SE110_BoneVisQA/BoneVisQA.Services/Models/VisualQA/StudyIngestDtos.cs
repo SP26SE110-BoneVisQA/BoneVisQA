@@ -1,6 +1,18 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 
 namespace BoneVisQA.Services.Models.VisualQA;
+
+/// <summary>Multipart body for <c>POST /api/expert/cases/upload-dicom</c>.</summary>
+public sealed class ExpertDicomStudyUploadForm
+{
+    public IFormFile? File { get; set; }
+    public IFormFile? DicomFile { get; set; }
+    public IFormFile? Archive { get; set; }
+    public string? DiagnosisText { get; set; }
+
+    public IFormFile? ResolveFile() => File ?? DicomFile ?? Archive;
+}
 
 public sealed class ExpertDicomStudyUploadResponse
 {

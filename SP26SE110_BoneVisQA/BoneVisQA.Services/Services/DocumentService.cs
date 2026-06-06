@@ -45,7 +45,7 @@ public class DocumentService : IDocumentService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var contentHash = await ComputeSha256HashAsync(file, cancellationToken);
-        var defaultModality = DocumentMetadataValidation.RequireModality(metadata.DefaultModality);
+        var defaultModality = DocumentMetadataValidation.ResolveModality(metadata.DefaultModality);
         var defaultPathology = DocumentMetadataValidation.NormalizeOptionalPathology(metadata.DefaultPathologyGroup);
 
         var documentId = Guid.NewGuid();

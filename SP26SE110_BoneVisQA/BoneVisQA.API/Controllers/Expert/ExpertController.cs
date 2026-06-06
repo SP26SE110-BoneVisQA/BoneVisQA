@@ -43,8 +43,18 @@ namespace BoneVisQA.API.Controllers.Expert
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
         {
-            var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize, expertId);
             return Ok(result);
+        }
+
+        private Guid ResolveCurrentExpertId()
+        {
+            var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.TryParse(expertIdStr, out var expertId) ? expertId : Guid.Empty;
         }
 
         [HttpGet("cases/{id:guid}")]
@@ -52,7 +62,11 @@ namespace BoneVisQA.API.Controllers.Expert
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetMedicalCaseById([FromRoute] Guid id)
         {
-            var result = await _medicalcaseService.GetMedicalCaseByIdAsync(id);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.GetMedicalCaseByIdAsync(id, expertId);
             if (result == null)
             {
                 return NotFound(new ProblemDetails
@@ -160,10 +174,10 @@ namespace BoneVisQA.API.Controllers.Expert
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(ExpertDicomStudyUploadResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDicomStudyToLibrary(
-            IFormFile file,
-            [FromForm] string? diagnosisText,
+            [FromForm] ExpertDicomStudyUploadForm form,
             CancellationToken cancellationToken)
         {
+            var file = form.ResolveFile();
             var validationError = StudyArchiveIngestHelper.ValidateArchive(file);
             if (validationError != null)
                 return BadRequest(new { message = validationError });
@@ -177,7 +191,7 @@ namespace BoneVisQA.API.Controllers.Expert
                     stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,
-                    diagnosisText,
+                    form.DiagnosisText,
                     cancellationToken);
 
                 if (!ingest.Success || !ingest.CaseId.HasValue)

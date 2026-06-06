@@ -202,6 +202,17 @@ public class LecturerTriageService : ILecturerTriageService
         session.ReviewFeedback = reason.Trim();
         session.UpdatedAt = DateTime.UtcNow;
 
+        var lecturerMessage = new QAMessage
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Lecturer",
+            Content = reason.Trim(),
+            CreatedAt = DateTime.UtcNow,
+            TargetAssistantMessageId = session.RequestedReviewMessageId
+        };
+        await _unitOfWork.Context.QaMessages.AddAsync(lecturerMessage);
+
         await _unitOfWork.SaveAsync();
 
         var preview = reason.Trim();

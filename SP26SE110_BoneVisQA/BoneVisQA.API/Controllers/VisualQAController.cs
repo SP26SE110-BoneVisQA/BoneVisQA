@@ -444,7 +444,7 @@ public class VisualQAController : ControllerBase
         {
             try
             {
-                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId);
             }
             catch (KeyNotFoundException ex)
             {
@@ -520,7 +520,7 @@ public class VisualQAController : ControllerBase
             response.SessionId = sessionId;
             try
             {
-                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId);
                 await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
             }
             catch (KeyNotFoundException ex)
@@ -725,7 +725,7 @@ public class VisualQAController : ControllerBase
 
         try
         {
-            await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+            await _studentService.ValidateSessionStateAsync(studentId, sessionId);
         }
         catch (KeyNotFoundException ex)
         {
@@ -977,7 +977,7 @@ public class VisualQAController : ControllerBase
                 IsReadOnly = reason is "SESSION_READ_ONLY" or "SESSION_EXPIRED",
                 CanRequestReview = false,
                 TurnsUsed = 0,
-                TurnLimit = 3,
+                TurnLimit = null,
                 Reason = reason
             },
             latestTurn = new
@@ -1005,7 +1005,7 @@ public class VisualQAController : ControllerBase
                 IsReadOnly = false,
                 CanRequestReview = false,
                 TurnsUsed = 0,
-                TurnLimit = 3,
+                TurnLimit = null,
                 Reason = null
             },
             latestTurn = new

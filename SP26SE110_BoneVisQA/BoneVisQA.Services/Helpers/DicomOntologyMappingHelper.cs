@@ -95,6 +95,15 @@ public static class DicomOntologyMappingHelper
         return "Other";
     }
 
+    public static bool TryMapModality(string? dicomCode, out string canonicalModality)
+    {
+        canonicalModality = string.Empty;
+        if (string.IsNullOrWhiteSpace(dicomCode))
+            return false;
+
+        return ModalityMap.TryGetValue(dicomCode.Trim(), out canonicalModality!);
+    }
+
     public static IReadOnlyDictionary<string, string> GetDicomModalityMap() => ModalityMap;
 
     public static IReadOnlyDictionary<string, string> GetDicomBodyPartMap() => BodyPartMap;

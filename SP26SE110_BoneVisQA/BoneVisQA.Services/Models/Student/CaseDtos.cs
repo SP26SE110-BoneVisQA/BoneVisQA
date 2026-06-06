@@ -57,10 +57,24 @@ public class CaseDetailDto
     public string? CategoryDisplay => CategoryName;
 
     public string? ExpertSummary { get; set; }
+
+    [JsonPropertyName("suggestedDiagnosis")]
+    public string? SuggestedDiagnosis => ExpertSummary;
+
     public string? KeyFindings { get; set; }
 
     [JsonPropertyName("primaryImageUrl")]
     public string? PrimaryImageUrl { get; set; }
+
+    [JsonPropertyName("imageUrl")]
+    public string? ImageUrl => PrimaryImageUrl;
+
+    [JsonPropertyName("thumbnailUrl")]
+    public string? ThumbnailUrl => PrimaryImageUrl;
+
+    /// <summary>Alias for <see cref="Images"/> (FE catalog workspace).</summary>
+    [JsonPropertyName("medicalImages")]
+    public IReadOnlyList<MedicalImageDto> MedicalImages => Images;
 
     /// <summary>First ingested DICOM study row (<c>case_media.id</c>) when present.</summary>
     [JsonPropertyName("mediaId")]

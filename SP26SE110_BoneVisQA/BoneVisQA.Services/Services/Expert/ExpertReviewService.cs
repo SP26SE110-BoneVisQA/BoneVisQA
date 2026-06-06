@@ -821,22 +821,19 @@ public class ExpertReviewService : IExpertReviewService
                 ? request.AnswerText?.Trim() ?? string.Empty
                 : request.ReviewNote.Trim());
 
-        if (!isReject)
+        expertMessage = new QAMessage
         {
-            expertMessage = new QAMessage
-            {
-                Id = Guid.NewGuid(),
-                SessionId = session.Id,
-                Role = "Expert",
-                Content = request.AnswerText,
-                SuggestedDiagnosis = request.StructuredDiagnosis,
-                DifferentialDiagnoses = SerializeJsonArray(request.DifferentialDiagnoses),
-                KeyImagingFindings = request.KeyImagingFindings,
-                ReflectiveQuestions = request.ReflectiveQuestions,
-                CreatedAt = now,
-                TargetAssistantMessageId = session.RequestedReviewMessageId
-            };
-        }
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            Role = "Expert",
+            Content = isReject ? reviewFeedbackText : request.AnswerText,
+            SuggestedDiagnosis = isReject ? null : request.StructuredDiagnosis,
+            DifferentialDiagnoses = isReject ? null : SerializeJsonArray(request.DifferentialDiagnoses),
+            KeyImagingFindings = isReject ? null : request.KeyImagingFindings,
+            ReflectiveQuestions = isReject ? null : request.ReflectiveQuestions,
+            CreatedAt = now,
+            TargetAssistantMessageId = session.RequestedReviewMessageId
+        };
 
         await using var resolutionTransaction = await _unitOfWork.Context.Database.BeginTransactionAsync();
         try

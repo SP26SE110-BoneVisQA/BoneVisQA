@@ -126,7 +126,8 @@ public class VisualQaCapabilitiesDto
     public bool IsReadOnly { get; set; }
     public bool CanRequestReview { get; set; }
     public int TurnsUsed { get; set; }
-    public int TurnLimit { get; set; }
+    /// <summary>Null when unlimited turns are allowed (production/demo default).</summary>
+    public int? TurnLimit { get; set; }
     [JsonIgnore]
     public string? Reason { get; set; }
 }
@@ -182,6 +183,10 @@ public class VisualQaTurnDto
     public string? ReviewState { get; set; }
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
+
+    /// <summary>1-based order within the session thread (Turn #1, #2, …).</summary>
+    [JsonPropertyName("turnIndex")]
+    public int TurnIndex { get; set; }
 
     [JsonPropertyName("target_assistant_message_id")]
     public Guid? TargetAssistantMessageId { get; set; }

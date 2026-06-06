@@ -43,7 +43,7 @@ public interface IStudentService
         Guid sessionId,
         VisualQARequestDto request,
         CancellationToken cancellationToken = default);
-    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
+    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int? maxUserQuestions = null);
 
     /// <summary>Throws <see cref="KeyNotFoundException"/> when the case is missing or not accessible to the student.</summary>
     Task ValidateVisualQaCaseAccessAsync(Guid studentId, Guid? caseId, CancellationToken cancellationToken = default);
@@ -70,7 +70,7 @@ public interface IStudentService
     Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
         Guid studentId,
         Guid sessionId,
-        int maxUserQuestions = 3,
+        int? maxUserQuestions = null,
         CancellationToken cancellationToken = default);
     Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
         Guid studentId,

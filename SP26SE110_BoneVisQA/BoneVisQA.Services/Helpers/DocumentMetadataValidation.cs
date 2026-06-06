@@ -6,20 +6,26 @@ namespace BoneVisQA.Services.Helpers;
 /// <summary>Validates document-level defaults for knowledge-base PDF uploads.</summary>
 public static class DocumentMetadataValidation
 {
-    public static string RequireModality(string? value)
+    public const string DefaultModality = "X-Ray";
+
+    /// <summary>Maps DICOM codes (e.g. DX) to canonical ontology literals; defaults to <see cref="DefaultModality"/>.</summary>
+    public static string ResolveModality(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException("Modality is required when uploading a document.");
+            return DefaultModality;
 
         var v = value.Trim();
-        if (!MedicalOntologyValidation.Modalities.Contains(v))
-        {
-            throw new InvalidOperationException(
-                $"Modality must be one of [{string.Join(", ", MedicalOntologyValidation.Modalities.OrderBy(x => x))}].");
-        }
+        if (DicomOntologyMappingHelper.TryMapModality(v, out var mapped))
+            return mapped;
 
-        return v;
+        if (MedicalOntologyValidation.Modalities.Contains(v))
+            return v;
+
+        throw new InvalidOperationException(
+            $"Modality must be one of [{string.Join(", ", MedicalOntologyValidation.Modalities.OrderBy(x => x))}] or a supported DICOM code (e.g. DX).");
     }
+
+    public static string RequireModality(string? value) => ResolveModality(value);
 
     public static string? NormalizeOptionalPathology(string? value)
     {
