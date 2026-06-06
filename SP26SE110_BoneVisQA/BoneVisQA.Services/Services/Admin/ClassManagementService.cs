@@ -98,20 +98,12 @@ namespace BoneVisQA.Services.Services.Admin
 
         public async Task<CreateClassManagementDTO> CreateAcademicClassAsync(CreateClassManagementDTO dto)
         {
-            if (dto.ClassSpecialtyId == Guid.Empty)
-                throw new InvalidOperationException("ClassSpecialtyId is required.");
-
-            var specialtyExists = await _unitOfWork.Context.BoneSpecialties
-                .AnyAsync(b => b.Id == dto.ClassSpecialtyId);
-            if (!specialtyExists)
-                throw new InvalidOperationException("Invalid ClassSpecialtyId.");
 
             var entity = new AcademicClass
             {
                 Id = Guid.NewGuid(),
                 ClassName = dto.ClassName,
                 Semester = dto.Semester,
-                ClassSpecialtyId = dto.ClassSpecialtyId,
                 CreatedAt = DateTime.UtcNow,
                 FocusLevel = dto.FocusLevel ?? "Basic",
                 TargetStudentLevel = dto.TargetStudentLevel ?? "Beginner"
@@ -132,17 +124,8 @@ namespace BoneVisQA.Services.Services.Admin
             if (entity == null)
                 throw new Exception("Academic class not found");
 
-            if (dto.ClassSpecialtyId == Guid.Empty)
-                throw new InvalidOperationException("ClassSpecialtyId is required.");
-
-            var specialtyExists = await _unitOfWork.Context.BoneSpecialties
-                .AnyAsync(b => b.Id == dto.ClassSpecialtyId);
-            if (!specialtyExists)
-                throw new InvalidOperationException("Invalid ClassSpecialtyId.");
-
             entity.ClassName = dto.ClassName;
             entity.Semester = dto.Semester;
-            entity.ClassSpecialtyId = dto.ClassSpecialtyId;
             entity.UpdatedAt = DateTime.UtcNow;
             entity.FocusLevel = dto.FocusLevel;
             entity.TargetStudentLevel = dto.TargetStudentLevel;
@@ -254,12 +237,13 @@ namespace BoneVisQA.Services.Services.Admin
                     throw new InvalidOperationException("User is not Expert.");
                 if (!classEntity.ClassSpecialtyId.HasValue)
                     throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
-                var expertMatchesClassFocus = await _unitOfWork.Context.Users
-                    .AnyAsync(u =>
-                        u.Id == dto.ExpertId.Value &&
-                        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
-                if (!expertMatchesClassFocus)
-                    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
+              
+                //var expertMatchesClassFocus = await _unitOfWork.Context.Users
+                //    .AnyAsync(u =>
+                //        u.Id == dto.ExpertId.Value &&
+                //        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                //if (!expertMatchesClassFocus)
+                //    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;
             }
 
