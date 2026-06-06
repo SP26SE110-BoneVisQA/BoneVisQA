@@ -61,9 +61,6 @@ namespace BoneVisQA.Services.Models.Admin
 
         public DateTime? CreatedAt { get; set; }
 
-        /// <summary>Required: class medical specialty for expert routing.</summary>
-        public Guid ClassSpecialtyId { get; set; }
-
         public string? FocusLevel { get; set; }
 
         public string? TargetStudentLevel { get; set; }
@@ -79,9 +76,6 @@ namespace BoneVisQA.Services.Models.Admin
         public string Semester { get; set; } = null!;
 
         public DateTime? UpdatedAt { get; set; }
-
-        /// <summary>Required: class medical specialty for expert routing.</summary>
-        public Guid ClassSpecialtyId { get; set; }
 
         public string? FocusLevel { get; set; }
 
