@@ -55,9 +55,11 @@ namespace BoneVisQA.Services.Services.Expert
 
             return imageUrl;
         }
-        public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex, int pageSize)
+        public async Task<PagedResult<GetMedicalCaseDTO>> GetAllMedicalCasesAsync(int pageIndex, int pageSize, Guid? expertId = null)
         {
             var query = _unitOfWork.MedicalCaseRepository.GetQueryable().AsNoTracking();
+            if (expertId.HasValue)
+                query = query.Where(x => x.CreatedByExpertId == expertId.Value);
 
             var totalCount = await query.CountAsync();
 
@@ -96,7 +98,7 @@ namespace BoneVisQA.Services.Services.Expert
                 .ToListAsync();
 
             foreach (var row in medicalCases)
-                ExpertMedicalCaseDisplayHelper.ApplyListDefaults(row);
+                ExpertMedicalCaseDisplayHelper.ApplyListDefaults(row, expertScoped: expertId.HasValue);
 
             return new PagedResult<GetMedicalCaseDTO>
             {
@@ -107,16 +109,21 @@ namespace BoneVisQA.Services.Services.Expert
             };
         }
 
-        public async Task<GetExpertMedicalCaseDetailDto?> GetMedicalCaseByIdAsync(Guid id)
+        public async Task<GetExpertMedicalCaseDetailDto?> GetMedicalCaseByIdAsync(Guid id, Guid? expertId = null)
         {
-            var entity = await _unitOfWork.MedicalCaseRepository.GetQueryable()
+            var query = _unitOfWork.MedicalCaseRepository.GetQueryable()
                 .AsNoTracking()
+                .Where(c => c.Id == id);
+            if (expertId.HasValue)
+                query = query.Where(c => c.CreatedByExpertId == expertId.Value);
+
+            var entity = await query
                 .Include(c => c.Category)
                 .Include(c => c.CreatedByExpert)
                 .Include(c => c.CaseTags)
                     .ThenInclude(ct => ct.Tag)
                 .Include(c => c.MedicalImages)
-                .FirstOrDefaultAsync(c => c.Id == id);
+                .FirstOrDefaultAsync();
 
             if (entity == null)
                 return null;
@@ -167,7 +174,7 @@ namespace BoneVisQA.Services.Services.Expert
                     ?? string.Empty
             };
 
-            ExpertMedicalCaseDisplayHelper.ApplyDetailDefaults(dto);
+            ExpertMedicalCaseDisplayHelper.ApplyDetailDefaults(dto, expertScoped: expertId.HasValue);
             return dto;
         }
         public async Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto)

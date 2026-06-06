@@ -67,6 +67,14 @@ public partial class Document
     [StringLength(64)]
     public string? ContentHash { get; set; }
 
+    /// <summary>Canonical modality for all chunks in this document (X-Ray, CT, MRI, Ultrasound).</summary>
+    [Column("default_modality")]
+    public string? DefaultModality { get; set; }
+
+    /// <summary>Optional document-wide pathology fallback when chunk inference is inconclusive.</summary>
+    [Column("default_pathology_group")]
+    public string? DefaultPathologyGroup { get; set; }
+
     [ForeignKey("CategoryId")]
     [InverseProperty("Documents")]
     public virtual Category? Category { get; set; }

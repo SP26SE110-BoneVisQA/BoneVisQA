@@ -42,21 +42,41 @@ public static class ExpertMedicalCaseDisplayHelper
         return "draft";
     }
 
-    public static void ApplyListDefaults(GetMedicalCaseDTO dto)
+    public static void ApplyListDefaults(GetMedicalCaseDTO dto, bool expertScoped = false)
     {
-        dto.Title ??= string.Empty;
+        dto.Title = ResolveDisplayTitle(dto);
         dto.Description ??= string.Empty;
         dto.CategoryName ??= DefaultCategory;
         dto.Difficulty ??= DefaultDifficulty;
-        dto.ExpertName ??= DefaultExpertName;
+        if (!expertScoped)
+            dto.ExpertName ??= DefaultExpertName;
+        else
+            dto.ExpertName = null;
         if (string.IsNullOrWhiteSpace(dto.BoneLocation))
             dto.BoneLocation = DefaultBoneLocation;
         dto.Status = ComputeStatus(dto.IsApproved, dto.IsActive);
         dto.CreatedAt ??= DateTime.UtcNow;
     }
 
-    public static void ApplyDetailDefaults(GetExpertMedicalCaseDetailDto dto)
+    private static string ResolveDisplayTitle(GetMedicalCaseDTO dto)
     {
-        ApplyListDefaults(dto);
+        var title = dto.Title?.Trim();
+        if (!string.IsNullOrWhiteSpace(title)
+            && !(Guid.TryParse(title, out var parsed) && parsed == dto.Id))
+            return title;
+
+        var description = dto.Description?.Trim();
+        if (!string.IsNullOrWhiteSpace(description))
+        {
+            const int maxLen = 80;
+            return description.Length <= maxLen ? description : description[..maxLen].TrimEnd() + "…";
+        }
+
+        return "Untitled case";
+    }
+
+    public static void ApplyDetailDefaults(GetExpertMedicalCaseDetailDto dto, bool expertScoped = false)
+    {
+        ApplyListDefaults(dto, expertScoped);
     }
 }

@@ -99,6 +99,7 @@ public class StudentRepository : IStudentRepository
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
                 .ThenInclude(mi => mi.CaseAnnotations)
+            .Include(c => c.CaseMedia)
             .FirstOrDefaultAsync();
     }
 

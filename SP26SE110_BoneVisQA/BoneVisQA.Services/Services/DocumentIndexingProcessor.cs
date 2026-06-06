@@ -35,6 +35,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
     private readonly IDocumentIndexingProgressNotifier _progressNotifier;
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IPythonAiConnectorService _pythonAi;
     private readonly ILogger<DocumentIndexingProcessor> _logger;
 
     public DocumentIndexingProcessor(
@@ -45,6 +46,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         IDocumentIndexingProgressNotifier progressNotifier,
         IMemoryCache memoryCache,
         IServiceScopeFactory scopeFactory,
+        IPythonAiConnectorService pythonAi,
         ILogger<DocumentIndexingProcessor> logger)
     {
         _unitOfWork = unitOfWork;
@@ -54,6 +56,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         _progressNotifier = progressNotifier;
         _memoryCache = memoryCache;
         _scopeFactory = scopeFactory;
+        _pythonAi = pythonAi;
         _logger = logger;
     }
 
@@ -336,6 +339,39 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 await _unitOfWork.DocumentRepository.UpdateAsync(finalDoc);
                 await _unitOfWork.SaveAsync();
                 await swapTransaction.CommitAsync(cancellationToken);
+
+                SetProgress(
+                    documentId,
+                    95,
+                    "Enriching metadata and embeddings...",
+                    finalDoc.TotalPages,
+                    finalDoc.TotalChunks,
+                    finalDoc.CurrentPageIndexing);
+                await _progressNotifier.NotifyProgressAsync(
+                    documentId,
+                    finalDoc.TotalPages,
+                    finalDoc.TotalChunks,
+                    finalDoc.CurrentPageIndexing,
+                    95,
+                    "Enriching metadata and embeddings...",
+                    cancellationToken);
+
+                var enrich = await _pythonAi.EnrichDocumentChunksAsync(documentId, onlyMissingEmbedding: false, cancellationToken);
+                if (!enrich.Success || enrich.NullEmbeddingRemaining > 0)
+                {
+                    var detail = enrich.ErrorMessage ?? $"null_embeddings={enrich.NullEmbeddingRemaining}";
+                    _logger.LogError(
+                        "[DocumentIndexing] Chunk enrichment failed for document {DocumentId}: {Detail}",
+                        documentId,
+                        detail);
+                    throw new InvalidOperationException(
+                        $"Chunk metadata/embedding enrichment failed: {detail}");
+                }
+
+                _logger.LogInformation(
+                    "[DocumentIndexing] Enriched {Count} chunks for document {DocumentId}.",
+                    enrich.ChunksProcessed,
+                    documentId);
 
                 var completedAt = finalDoc.UpdatedAt ?? DateTime.UtcNow;
                 await _progressNotifier.NotifyIndexingCompletedAsync(

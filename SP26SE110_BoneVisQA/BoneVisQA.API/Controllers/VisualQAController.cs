@@ -161,6 +161,47 @@ public class VisualQAController : ControllerBase
     }
 
     /// <summary>
+    /// Catalog case → Visual QA: validate access, resolve <c>case_media</c> preview + <c>dicomMetadata</c>, create session.
+    /// Use before <c>POST .../ask-json</c> when navigating from Case Library (Ask with AI).
+    /// </summary>
+    [HttpPost("cases/{caseId:guid}/session")]
+    [ProducesResponseType(typeof(StudentCatalogCaseSessionBootstrapResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<StudentCatalogCaseSessionBootstrapResponse>> StartCatalogCaseSession(
+        Guid caseId,
+        CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var studentId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        try
+        {
+            await _studentService.ValidateVisualQaCaseAccessAsync(studentId, caseId, cancellationToken);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+
+        try
+        {
+            var bootstrap = await _studentService.StartCatalogCaseVisualQaSessionAsync(studentId, caseId, cancellationToken);
+            return Ok(bootstrap);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Multipart Visual QA: optional personal raster in <c>CustomImage</c>, or follow-up via <c>sessionId</c>.
     /// Image context for catalog cases is resolved from <c>CaseId</c> / session on JSON endpoints. Response language uses <c>?locale=</c> and <c>Accept-Language</c> (default Vietnamese).
     /// Pipeline: BoneVisQA.AI hybrid RAG (<c>POST /api/v1/qa/ask</c>) then Gemini vision with normalized ROI when <c>Coordinates</c> are present.
@@ -403,7 +444,7 @@ public class VisualQAController : ControllerBase
         {
             try
             {
-                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId);
             }
             catch (KeyNotFoundException ex)
             {
@@ -479,7 +520,7 @@ public class VisualQAController : ControllerBase
             response.SessionId = sessionId;
             try
             {
-                await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+                await _studentService.ValidateSessionStateAsync(studentId, sessionId);
                 await _studentService.SaveVisualQAMessagesAsync(sessionId, request, response);
             }
             catch (KeyNotFoundException ex)
@@ -684,7 +725,7 @@ public class VisualQAController : ControllerBase
 
         try
         {
-            await _studentService.ValidateSessionStateAsync(studentId, sessionId, 3);
+            await _studentService.ValidateSessionStateAsync(studentId, sessionId);
         }
         catch (KeyNotFoundException ex)
         {
@@ -936,7 +977,7 @@ public class VisualQAController : ControllerBase
                 IsReadOnly = reason is "SESSION_READ_ONLY" or "SESSION_EXPIRED",
                 CanRequestReview = false,
                 TurnsUsed = 0,
-                TurnLimit = 3,
+                TurnLimit = null,
                 Reason = reason
             },
             latestTurn = new
@@ -964,7 +1005,7 @@ public class VisualQAController : ControllerBase
                 IsReadOnly = false,
                 CanRequestReview = false,
                 TurnsUsed = 0,
-                TurnLimit = 3,
+                TurnLimit = null,
                 Reason = null
             },
             latestTurn = new

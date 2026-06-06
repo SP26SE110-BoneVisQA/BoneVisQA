@@ -359,6 +359,7 @@ public class CreateQuizRequestDto
     public Guid ClassId { get; set; }
 
     /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    [JsonPropertyName("quizMode")]
     public int QuizMode { get; set; } = 1;
 }
 

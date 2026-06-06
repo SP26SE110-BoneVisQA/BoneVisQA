@@ -142,6 +142,7 @@ public class VisualQaAiService : IVisualQaAiService
         {
             predefinedCase = await _dbContext.MedicalCases
                 .AsNoTracking()
+                .Include(mc => mc.Category)
                 .Include(mc => mc.CaseTags)
                     .ThenInclude(ct => ct.Tag)
                 .FirstOrDefaultAsync(mc => mc.Id == request.CaseId.Value, cancellationToken);
@@ -161,6 +162,7 @@ public class VisualQaAiService : IVisualQaAiService
             caseMediaId,
             imageEmbedding: null,
             dicomClinicalContext,
+            dicomMetadata,
             cancellationToken);
 
         if (!rag.Success || string.IsNullOrWhiteSpace(rag.Prompt))
@@ -635,24 +637,21 @@ public class VisualQaAiService : IVisualQaAiService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .DefaultIfEmpty("N/A");
 
-            sb.AppendLine("You are a Medical Tutor.");
-            sb.AppendLine("Below is the OVERVIEW information for this case:");
+            sb.AppendLine("You are a Medical Tutor answering questions about a catalog teaching case.");
+            sb.AppendLine("Below is the case overview (use as ground truth when relevant):");
+            sb.AppendLine($"- Title: {(string.IsNullOrWhiteSpace(predefinedCase.Title) ? "N/A" : predefinedCase.Title)}");
             sb.AppendLine($"- Difficulty: {(string.IsNullOrWhiteSpace(predefinedCase.Difficulty) ? "N/A" : predefinedCase.Difficulty)}");
+            sb.AppendLine($"- Category: {(predefinedCase.Category?.Name ?? "N/A")}");
             sb.AppendLine($"- Tags: {string.Join(", ", tagText)}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.Description))
                 sb.AppendLine($"- Description: {predefinedCase.Description}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.SuggestedDiagnosis))
-                sb.AppendLine($"- Diagnosis: {predefinedCase.SuggestedDiagnosis}");
+                sb.AppendLine($"- Reference diagnosis: {predefinedCase.SuggestedDiagnosis}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.KeyFindings))
                 sb.AppendLine($"- Key findings: {predefinedCase.KeyFindings}");
-            if (!string.IsNullOrWhiteSpace(predefinedCase.ReflectiveQuestions))
-                sb.AppendLine($"- Reflective questions: {predefinedCase.ReflectiveQuestions}");
-            sb.AppendLine("CRITICAL NOTE: DO NOT provide the diagnosis directly to the student immediately.");
-            sb.AppendLine("Use the Socratic method; ask guiding questions based on 'ReflectiveQuestions' and 'KeyFindings' to lead the student to think independently.");
-            sb.AppendLine("Socratic / guiding questions MUST go in the JSON `reflective_questions` array — NEVER in `diagnosis`.");
-            sb.AppendLine("Even when withholding the full answer, `diagnosis` must still be a short declarative clinical impression for this turn (not a question).");
             sb.AppendLine($"Current student turn in this session: {currentTurnNumber}.");
-            sb.AppendLine("Only provide the final answer when the student reaches turn 3 or gets stuck.");
+            sb.AppendLine("Give concise, teaching-oriented answers. Follow-ups may build on prior turns in this session.");
+            sb.AppendLine("Structured JSON fields are welcome but keep answers shorter than a full personal DICOM workup when a brief explanation suffices.");
             sb.AppendLine();
         }
 

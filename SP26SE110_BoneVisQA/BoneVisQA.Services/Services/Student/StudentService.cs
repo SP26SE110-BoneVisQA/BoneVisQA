@@ -188,6 +188,40 @@ public class StudentService : IStudentService
 
         await _studentRepository.AddCaseViewLogAsync(viewLog);
 
+        var previewUrl = CaseMediaDicomMetadataHelper.ResolveFirstPreviewUrl(entity);
+        var signedPreview = await ResolveStudentVisibleVisualQaImageUrlAsync(previewUrl, CancellationToken.None);
+        var imageDtos = new List<MedicalImageDto>();
+        foreach (var i in entity.MedicalImages
+                     .OrderBy(img => img.CreatedAt ?? DateTime.MinValue)
+                     .ThenBy(img => img.Id))
+        {
+            var signedUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(i.ImageUrl, CancellationToken.None);
+            imageDtos.Add(new MedicalImageDto
+            {
+                Id = i.Id,
+                ImageUrl = signedUrl ?? i.ImageUrl,
+                Modality = i.Modality,
+                RoiBoundingBox = i.CaseAnnotations?
+                    .OrderBy(a => a.CreatedAt ?? DateTime.MinValue)
+                    .ThenBy(a => a.Id)
+                    .Select(a => a.Coordinates)
+                    .FirstOrDefault(coords => !string.IsNullOrWhiteSpace(coords))
+            });
+        }
+
+        if (imageDtos.Count == 0 && !string.IsNullOrWhiteSpace(previewUrl))
+        {
+            var firstMedia = CaseMediaDicomMetadataHelper.ResolveFirstMedia(entity);
+            imageDtos.Add(new MedicalImageDto
+            {
+                Id = CaseMediaDicomMetadataHelper.ResolveFirstCatalogImageId(entity)
+                     ?? firstMedia?.Id
+                     ?? Guid.Empty,
+                ImageUrl = signedPreview ?? previewUrl,
+                Modality = firstMedia?.Modality
+            });
+        }
+
         return new CaseDetailDto
         {
             Id = entity.Id,
@@ -197,27 +231,14 @@ public class StudentService : IStudentService
             CategoryName = entity.Category?.Name,
             ExpertSummary = entity.SuggestedDiagnosis,
             KeyFindings = entity.KeyFindings,
-            PrimaryImageUrl = entity.MedicalImages
-                .OrderBy(i => i.CreatedAt)
-                .Select(i => i.ImageUrl)
-                .FirstOrDefault(),
+            PrimaryImageUrl = signedPreview ?? previewUrl ?? imageDtos.FirstOrDefault()?.ImageUrl,
+            MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(entity),
+            CatalogImageId = CaseMediaDicomMetadataHelper.ResolveFirstCatalogImageId(entity),
+            DicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(entity),
             IsApproved = entity.IsApproved ?? false,
             CreatedAt = entity.CreatedAt,
             CaseOrigin = ResolveStudentCaseOrigin(entity),
-            Images = entity.MedicalImages
-                .OrderBy(i => i.CreatedAt)
-                .Select(i => new MedicalImageDto
-                {
-                    Id = i.Id,
-                    ImageUrl = i.ImageUrl,
-                    Modality = i.Modality,
-                    RoiBoundingBox = i.CaseAnnotations?
-                        .OrderBy(a => a.CreatedAt ?? DateTime.MinValue)
-                        .ThenBy(a => a.Id)
-                        .Select(a => a.Coordinates)
-                        .FirstOrDefault(coords => !string.IsNullOrWhiteSpace(coords))
-                })
-                .ToList()
+            Images = imageDtos
         };
     }
 
@@ -387,41 +408,14 @@ public class StudentService : IStudentService
         }
         else if (request.CaseId is { } catalogCaseId && catalogCaseId != Guid.Empty)
         {
-            if (string.IsNullOrWhiteSpace(request.ImageUrl))
-            {
-                if (request.ImageId is { } imgId && imgId != Guid.Empty)
-                {
-                    var mi = await _unitOfWork.Context.MedicalImages
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(m => m.Id == imgId && m.CaseId == catalogCaseId);
-                    if (mi != null)
-                        request.ImageUrl = mi.ImageUrl;
-                }
+            var catalogCase = await _unitOfWork.Context.MedicalCases
+                .AsNoTracking()
+                .Include(c => c.MedicalImages)
+                .Include(c => c.CaseMedia)
+                .FirstOrDefaultAsync(c => c.Id == catalogCaseId);
 
-                if (string.IsNullOrWhiteSpace(request.ImageUrl))
-                {
-                    request.ImageUrl = await _unitOfWork.Context.MedicalImages
-                        .AsNoTracking()
-                        .Where(m => m.CaseId == catalogCaseId)
-                        .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
-                        .ThenBy(m => m.Id)
-                        .Select(m => m.ImageUrl)
-                        .FirstOrDefaultAsync();
-                }
-
-                if (string.IsNullOrWhiteSpace(request.ImageUrl))
-                {
-                    var mediaUrl = await _unitOfWork.Context.CaseMedia
-                        .AsNoTracking()
-                        .Where(c => c.CaseId == catalogCaseId)
-                        .OrderBy(c => c.Id)
-                        .Select(c =>
-                            !string.IsNullOrWhiteSpace(c.MediaUrl) ? c.MediaUrl : c.StoragePath)
-                        .FirstOrDefaultAsync();
-                    if (!string.IsNullOrWhiteSpace(mediaUrl))
-                        request.ImageUrl = mediaUrl;
-                }
-            }
+            if (catalogCase != null)
+                CaseMediaDicomMetadataHelper.ApplyCatalogStudyContext(request, catalogCase);
 
             imageUrlToSave = request.ImageUrl;
         }
@@ -444,6 +438,40 @@ public class StudentService : IStudentService
         return session.Id;
     }
 
+    public async Task<StudentCatalogCaseSessionBootstrapResponse> StartCatalogCaseVisualQaSessionAsync(
+        Guid studentId,
+        Guid caseId,
+        CancellationToken cancellationToken = default)
+    {
+        await ValidateVisualQaCaseAccessAsync(studentId, caseId, cancellationToken);
+
+        var entity = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .Include(c => c.MedicalImages)
+            .Include(c => c.CaseMedia)
+            .FirstOrDefaultAsync(c => c.Id == caseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Medical case not found.");
+
+        var request = new VisualQARequestDto { CaseId = caseId };
+        CaseMediaDicomMetadataHelper.ApplyCatalogStudyContext(request, entity);
+
+        if (string.IsNullOrWhiteSpace(request.ImageUrl))
+            throw new InvalidOperationException("No study image could be resolved for this catalog case.");
+
+        var sessionId = await CreateOrGetVisualQaSessionAsync(studentId, request);
+        var previewUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(request.ImageUrl, cancellationToken);
+
+        return new StudentCatalogCaseSessionBootstrapResponse
+        {
+            SessionId = sessionId,
+            CaseId = caseId,
+            MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(entity),
+            CatalogImageId = request.ImageId,
+            PreviewImageUrl = previewUrl ?? request.ImageUrl,
+            DicomMetadata = request.DicomMetadata
+        };
+    }
+
     public async Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
@@ -463,7 +491,8 @@ public class StudentService : IStudentService
                 return;
         }
 
-        var coordJson = TryParseCoordinatesJson(request.Coordinates);
+        var coordJson = BoundingBoxParser.NormalizeCoordinatesJson(request.Coordinates)
+            ?? TryParseCoordinatesJson(request.Coordinates);
         if (string.IsNullOrWhiteSpace(coordJson))
         {
             coordJson = await _unitOfWork.Context.QaMessages
@@ -632,11 +661,19 @@ public class StudentService : IStudentService
         var session = await _unitOfWork.Context.VisualQaSessions
             .AsNoTracking()
             .Include(s => s.Image)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMedia)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken)
             ?? throw new KeyNotFoundException("Q&A session not found.");
 
         if (string.IsNullOrWhiteSpace(request.ImageUrl))
-            request.ImageUrl = session.CustomImageUrl ?? session.Image?.ImageUrl;
+        {
+            request.ImageUrl = session.CustomImageUrl
+                ?? session.Image?.ImageUrl
+                ?? CaseMediaDicomMetadataHelper.ResolveFirstPreviewUrl(session.Case);
+        }
 
         if (string.IsNullOrWhiteSpace(request.Coordinates))
         {
@@ -655,13 +692,24 @@ public class StudentService : IStudentService
         if (!request.CaseId.HasValue)
             request.CaseId = session.CaseId;
 
+        if (request.CaseId is { } hydrateCaseId && hydrateCaseId != Guid.Empty &&
+            request.DicomMetadata is not { ValueKind: not JsonValueKind.Null and not JsonValueKind.Undefined })
+        {
+            var catalogCase = await _unitOfWork.Context.MedicalCases
+                .AsNoTracking()
+                .Include(c => c.MedicalImages)
+                .Include(c => c.CaseMedia)
+                .FirstOrDefaultAsync(c => c.Id == hydrateCaseId, cancellationToken);
+            CaseMediaDicomMetadataHelper.ApplyCatalogStudyContext(request, catalogCase);
+        }
+
         return request;
     }
 
     public async Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
         Guid studentId,
         Guid sessionId,
-        int maxUserQuestions = 3,
+        int? maxUserQuestions = null,
         CancellationToken cancellationToken = default)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
@@ -671,13 +719,18 @@ public class StudentService : IStudentService
             throw new KeyNotFoundException("Q&A session not found.");
 
         var userTurnCount = await CountBillableUserTurnsAsync(sessionId, cancellationToken);
+        var effectiveLimit = maxUserQuestions ?? VisualQaSessionPolicy.MaxUserQuestions;
 
-        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
-        var isExpired = DateTime.UtcNow - lastActivity >= TimeSpan.FromHours(24);
-        var turnLimitExceeded = userTurnCount >= maxUserQuestions;
+        var turnLimitExceeded = effectiveLimit.HasValue && userTurnCount >= effectiveLimit.Value;
+        var isExpired = false;
+        if (VisualQaSessionPolicy.InactivityLockHours is { } lockHours)
+        {
+            var lastActivity = session.UpdatedAt ?? session.CreatedAt;
+            isExpired = DateTime.UtcNow - lastActivity >= TimeSpan.FromHours(lockHours);
+        }
+
         var isReadOnly = isExpired || turnLimitExceeded;
-
-        var reason = turnLimitExceeded
+        string? reason = turnLimitExceeded
             ? "TURN_LIMIT_EXCEEDED"
             : isExpired
                 ? "SESSION_EXPIRED"
@@ -690,9 +743,9 @@ public class StudentService : IStudentService
         return new VisualQaCapabilitiesDto
         {
             TurnsUsed = userTurnCount,
-            TurnLimit = maxUserQuestions,
+            TurnLimit = effectiveLimit,
             IsReadOnly = isReadOnly,
-            CanAskNext = !isReadOnly && !turnLimitExceeded,
+            CanAskNext = !isReadOnly,
             CanRequestReview = canRequestReview,
             Reason = reason
         };
@@ -767,7 +820,7 @@ public class StudentService : IStudentService
             throw new KeyNotFoundException("Medical case not found.");
     }
 
-    public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3)
+    public async Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int? maxUserQuestions = null)
     {
         var session = await _unitOfWork.Context.VisualQaSessions
             .AsNoTracking()
@@ -778,15 +831,20 @@ public class StudentService : IStudentService
         if (session.CaseId.HasValue)
             await ValidateVisualQaCaseAccessAsync(studentId, session.CaseId);
 
-        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
-        var inactiveTime = DateTime.UtcNow - lastActivity;
-        if (inactiveTime.TotalHours >= 24)
-            throw new InvalidOperationException("SESSION_EXPIRED");
+        var effectiveLimit = maxUserQuestions ?? VisualQaSessionPolicy.MaxUserQuestions;
+        if (VisualQaSessionPolicy.InactivityLockHours is { } lockHours)
+        {
+            var lastActivity = session.UpdatedAt ?? session.CreatedAt;
+            if (DateTime.UtcNow - lastActivity >= TimeSpan.FromHours(lockHours))
+                throw new InvalidOperationException("SESSION_EXPIRED");
+        }
 
-        var userTurnCount = await CountBillableUserTurnsAsync(sessionId);
-
-        if (userTurnCount >= maxUserQuestions)
-            throw new InvalidOperationException("TURN_LIMIT_EXCEEDED");
+        if (effectiveLimit.HasValue)
+        {
+            var userTurnCount = await CountBillableUserTurnsAsync(sessionId);
+            if (userTurnCount >= effectiveLimit.Value)
+                throw new InvalidOperationException("TURN_LIMIT_EXCEEDED");
+        }
     }
 
     public async Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null)
@@ -800,11 +858,6 @@ public class StudentService : IStudentService
             string.Equals(session.Status, "ExpertApproved", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(session.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Cannot request lecturer review for this session in its current state.");
-
-        var lastActivity = session.UpdatedAt ?? session.CreatedAt;
-        var inactiveTime = DateTime.UtcNow - lastActivity;
-        if (inactiveTime.TotalHours >= 24)
-            throw new InvalidOperationException("SESSION_EXPIRED");
 
         var targetAssistantMessage = assistantMessageId.HasValue
             ? session.Messages.FirstOrDefault(m => m.Id == assistantMessageId.Value && m.Role == "Assistant")
@@ -1146,6 +1199,8 @@ public class StudentService : IStudentService
             .Include(s => s.Image)
             .Include(s => s.Case!)
                 .ThenInclude(c => c.MedicalImages)
+            .Include(s => s.Case!)
+                .ThenInclude(c => c.CaseMedia)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
         if (session == null)
             return null;
@@ -1166,6 +1221,9 @@ public class StudentService : IStudentService
 
         var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
         var blockingNotice = BuildBlockingNotice(capabilities.Reason);
+
+        var hasEducatorFeedbackTurn = turns.Any(t =>
+            string.Equals(t.ResponseKind, "review_update", StringComparison.OrdinalIgnoreCase));
 
         var sessionImageRaw = ResolveVisualQaSessionRawImageUrl(session);
         var sessionImageUrl = await ResolveStudentVisibleVisualQaImageUrlAsync(sessionImageRaw, cancellationToken);
@@ -1203,6 +1261,9 @@ public class StudentService : IStudentService
             RoiBoundingBox = latestUserWithRoi?.Coordinates,
             CaseId = session.CaseId,
             ImageId = session.ImageId,
+            MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(session.Case),
+            CatalogImageId = session.ImageId ?? CaseMediaDicomMetadataHelper.ResolveFirstCatalogImageId(session.Case),
+            DicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case),
             Turns = turns,
             Capabilities = capabilities,
             ReviewState = reviewState,
@@ -1210,7 +1271,7 @@ public class StudentService : IStudentService
             BlockingNotice = blockingNotice,
             RejectionReason = rejectionReason,
             SessionStatus = session.Status,
-            ReviewFeedback = session.ReviewFeedback
+            ReviewFeedback = hasEducatorFeedbackTurn ? null : session.ReviewFeedback
         };
     }
 
@@ -1246,11 +1307,7 @@ public class StudentService : IStudentService
             return session.CustomImageUrl.Trim();
         if (!string.IsNullOrWhiteSpace(session.Image?.ImageUrl))
             return session.Image.ImageUrl.Trim();
-        return session.Case?.MedicalImages?
-            .OrderBy(m => m.CreatedAt ?? DateTime.MinValue)
-            .ThenBy(m => m.Id)
-            .Select(m => m.ImageUrl)
-            .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+        return CaseMediaDicomMetadataHelper.ResolveFirstPreviewUrl(session.Case);
     }
 
     private static IReadOnlyList<CitationItemDto> ResolveMessageCitations(QAMessage? message)

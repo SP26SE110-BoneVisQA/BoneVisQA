@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 
 using Microsoft.Extensions.Configuration;
@@ -231,6 +232,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
         Guid? caseMediaId = null,
         IReadOnlyList<float>? imageEmbedding = null,
         string? dicomClinicalContext = null,
+        JsonElement? dicomMetadata = null,
         CancellationToken cancellationToken = default)
 
     {
@@ -245,6 +247,42 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
         }
 
+        if (dicomMetadata is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
+        {
+            _logger.LogWarning(
+                "AskRagAsync: dicomMetadata is null for caseId={CaseId}, caseMediaId={CaseMediaId}. RAG routing may be less accurate.",
+                caseId,
+                caseMediaId);
+        }
+        else
+        {
+            var metaModality = CaseMediaDicomMetadataHelper.TryExtractModality(dicomMetadata);
+            var metaAnatomy = CaseMediaDicomMetadataHelper.TryExtractAnatomy(dicomMetadata);
+            var metaFindings = CaseMediaDicomMetadataHelper.TryExtractFindings(dicomMetadata);
+
+            if (string.IsNullOrWhiteSpace(modality) && !string.IsNullOrWhiteSpace(metaModality))
+                modality = metaModality;
+            if (string.IsNullOrWhiteSpace(anatomy) && !string.IsNullOrWhiteSpace(metaAnatomy))
+                anatomy = metaAnatomy;
+            if (string.IsNullOrWhiteSpace(pathologyGroup) && !string.IsNullOrWhiteSpace(metaFindings))
+                pathologyGroup = metaFindings;
+
+            if (string.IsNullOrWhiteSpace(dicomClinicalContext))
+                dicomClinicalContext = DicomClinicalContextHelper.BuildPromptBlock(dicomMetadata);
+
+            if (string.IsNullOrWhiteSpace(metaModality) || string.IsNullOrWhiteSpace(metaAnatomy))
+            {
+                _logger.LogWarning(
+                    "AskRagAsync: dicomMetadata missing Modality and/or Anatomy (modality={Modality}, anatomy={Anatomy}, caseId={CaseId}).",
+                    metaModality ?? "(null)",
+                    metaAnatomy ?? "(null)",
+                    caseId);
+            }
+        }
+
+        modality = string.IsNullOrWhiteSpace(modality) ? "X-Ray" : modality.Trim();
+        anatomy = string.IsNullOrWhiteSpace(anatomy) ? "Other" : anatomy.Trim();
+
 
 
         try
@@ -257,13 +295,16 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
                 new RagPayload(
                     question.Trim(),
-                    modality.Trim(),
-                    anatomy.Trim(),
+                    modality,
+                    anatomy,
                     NullIfWhiteSpace(pathologyGroup),
                     imageEmbedding,
                     caseId,
                     caseMediaId,
-                    NullIfWhiteSpace(dicomClinicalContext)),
+                    NullIfWhiteSpace(dicomClinicalContext),
+                    dicomMetadata is { ValueKind: not JsonValueKind.Null and not JsonValueKind.Undefined }
+                        ? dicomMetadata
+                        : null),
 
                 SerializerSnakeWrite,
 
@@ -405,6 +446,136 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
 
 
+    /// <inheritdoc />
+
+    public async Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
+
+        Guid documentId,
+
+        bool onlyMissingEmbedding = false,
+
+        CancellationToken cancellationToken = default)
+
+    {
+
+        if (documentId == Guid.Empty)
+
+            return EnrichFail(documentId, 400, "documentId is required.");
+
+
+
+        try
+
+        {
+
+            using var resp = await _httpClient.PostAsJsonAsync(
+
+                "api/v1/documents/enrich-chunks",
+
+                new EnrichChunksPayload(documentId, onlyMissingEmbedding),
+
+                SerializerSnakeWrite,
+
+                cancellationToken);
+
+
+
+            var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+
+
+
+            if (!resp.IsSuccessStatusCode)
+
+            {
+
+                _logger.LogWarning(
+
+                    "Python document enrich failed: {Status} {Body}",
+
+                    (int)resp.StatusCode,
+
+                    body.Length > 800 ? body[..800] + "…" : body);
+
+                return EnrichFail(documentId, (int)resp.StatusCode, $"HTTP {(int)resp.StatusCode}");
+
+            }
+
+
+
+            EnrichApiBody? parsed;
+
+            try
+
+            {
+
+                parsed = JsonSerializer.Deserialize<EnrichApiBody>(body, SerializerSnakeRead);
+
+            }
+
+            catch (JsonException jex)
+
+            {
+
+                _logger.LogWarning(jex, "Python document enrich JSON parse failed.");
+
+                return EnrichFail(documentId, (int)resp.StatusCode, "Invalid JSON from AI service.");
+
+            }
+
+
+
+            if (parsed == null)
+
+                return EnrichFail(documentId, (int)resp.StatusCode, "Empty enrich response.");
+
+
+
+            return new DocumentChunkEnrichmentResultDto(
+
+                Success: true,
+
+                StatusCode: (int)resp.StatusCode,
+
+                ErrorMessage: null,
+
+                DocumentId: documentId,
+
+                ChunksProcessed: parsed.ChunksProcessed,
+
+                EmbeddingModel: parsed.EmbeddingModel,
+
+                AnatomyDistribution: parsed.AnatomyDistribution,
+
+                PathologyDistribution: parsed.PathologyDistribution,
+
+                NullEmbeddingRemaining: parsed.NullEmbeddingRemaining);
+
+        }
+
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+
+        {
+
+            _logger.LogWarning(ex, "Python document enrich timed out.");
+
+            return EnrichFail(documentId, 0, "Request timed out.");
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            _logger.LogError(ex, "Python document enrich request failed.");
+
+            return EnrichFail(documentId, 0, ex.Message);
+
+        }
+
+    }
+
+
+
     private static string? NullIfWhiteSpace(string? s) =>
 
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -419,6 +590,36 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
     private RagResponseDto RagFail(int statusCode, string message) =>
 
         new(false, statusCode, message, string.Empty, Array.Empty<RagContextItemDto>(), 0);
+
+
+
+    private static DocumentChunkEnrichmentResultDto EnrichFail(Guid documentId, int statusCode, string message) =>
+
+        new(false, statusCode, message, documentId, 0, null, null, null, 0);
+
+
+
+    private sealed record EnrichChunksPayload(Guid DocId, bool OnlyMissingEmbedding);
+
+
+
+    private sealed class EnrichApiBody
+
+    {
+
+        public string? DocId { get; set; }
+
+        public int ChunksProcessed { get; set; }
+
+        public string? EmbeddingModel { get; set; }
+
+        public Dictionary<string, int>? AnatomyDistribution { get; set; }
+
+        public Dictionary<string, int>? PathologyDistribution { get; set; }
+
+        public int NullEmbeddingRemaining { get; set; }
+
+    }
 
 
 
@@ -442,7 +643,8 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
         IReadOnlyList<float>? ImageEmbedding,
         Guid? CaseId,
         Guid? CaseMediaId,
-        string? DicomClinicalContext);
+        string? DicomClinicalContext,
+        JsonElement? DicomMetadata);
 
 
 

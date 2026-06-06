@@ -126,7 +126,8 @@ public class VisualQaCapabilitiesDto
     public bool IsReadOnly { get; set; }
     public bool CanRequestReview { get; set; }
     public int TurnsUsed { get; set; }
-    public int TurnLimit { get; set; }
+    /// <summary>Null when unlimited turns are allowed (production/demo default).</summary>
+    public int? TurnLimit { get; set; }
     [JsonIgnore]
     public string? Reason { get; set; }
 }
@@ -183,6 +184,10 @@ public class VisualQaTurnDto
     public string? LastResponderRole { get; set; }
     public bool IsReviewTarget { get; set; }
 
+    /// <summary>1-based order within the session thread (Turn #1, #2, …).</summary>
+    [JsonPropertyName("turnIndex")]
+    public int TurnIndex { get; set; }
+
     [JsonPropertyName("target_assistant_message_id")]
     public Guid? TargetAssistantMessageId { get; set; }
 }
@@ -200,6 +205,17 @@ public class VisualQaThreadDto
     public string? RoiBoundingBox { get; set; }
     public Guid? CaseId { get; set; }
     public Guid? ImageId { get; set; }
+
+    [JsonPropertyName("mediaId")]
+    public Guid? MediaId { get; set; }
+
+    [JsonPropertyName("catalogImageId")]
+    public Guid? CatalogImageId { get; set; }
+
+    /// <summary>DICOM tags from the linked catalog case (<c>case_media.dicom_metadata</c>).</summary>
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
+
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
     public VisualQaCapabilitiesDto Capabilities { get; set; } = new();
     public string? ReviewState { get; set; }

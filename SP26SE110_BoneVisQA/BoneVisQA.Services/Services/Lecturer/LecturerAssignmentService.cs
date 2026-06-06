@@ -260,6 +260,8 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             await _unitOfWork.ClassQuizSessionRepository.AddAsync(session);
         }
 
+        session.QuizMode = quiz.QuizMode;
+
         // ============================================
         // TIME LIMIT & PASSING SCORE CLAMP LOGIC
         // ============================================
@@ -396,6 +398,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
             ReleaseAnswersAt = session.ReleaseAnswersAt,
             ReleasedById = session.ReleasedById,
             IsAnswersReleased = session.ReleaseAnswersAt.HasValue,
+            QuizMode = session.QuizMode,
             Warning = warnings.Count > 0 ? string.Join(" ", warnings) : null
         };
     }
@@ -1560,6 +1563,7 @@ public class LecturerAssignmentService : ILecturerAssignmentService
                         AllowRetake = request.AllowRetake,
                         AllowLate = request.AllowLate,
                         ShowResultsAfterSubmission = request.ShowResultsAfterSubmission,
+                        QuizMode = quiz.QuizMode,
                         CreatedAt = DateTime.UtcNow
                     };
 

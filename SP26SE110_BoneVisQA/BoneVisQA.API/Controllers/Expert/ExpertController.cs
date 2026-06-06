@@ -43,8 +43,18 @@ namespace BoneVisQA.API.Controllers.Expert
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
         {
-            var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize, expertId);
             return Ok(result);
+        }
+
+        private Guid ResolveCurrentExpertId()
+        {
+            var expertIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.TryParse(expertIdStr, out var expertId) ? expertId : Guid.Empty;
         }
 
         [HttpGet("cases/{id:guid}")]
@@ -52,7 +62,11 @@ namespace BoneVisQA.API.Controllers.Expert
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetMedicalCaseById([FromRoute] Guid id)
         {
-            var result = await _medicalcaseService.GetMedicalCaseByIdAsync(id);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.GetMedicalCaseByIdAsync(id, expertId);
             if (result == null)
             {
                 return NotFound(new ProblemDetails
@@ -160,10 +174,10 @@ namespace BoneVisQA.API.Controllers.Expert
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(ExpertDicomStudyUploadResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDicomStudyToLibrary(
-            IFormFile file,
-            [FromForm] string? diagnosisText,
+            [FromForm] ExpertDicomStudyUploadForm form,
             CancellationToken cancellationToken)
         {
+            var file = form.ResolveFile();
             var validationError = StudyArchiveIngestHelper.ValidateArchive(file);
             if (validationError != null)
                 return BadRequest(new { message = validationError });
@@ -177,7 +191,7 @@ namespace BoneVisQA.API.Controllers.Expert
                     stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,
-                    diagnosisText,
+                    form.DiagnosisText,
                     cancellationToken);
 
                 if (!ingest.Success || !ingest.CaseId.HasValue)
@@ -483,13 +497,28 @@ namespace BoneVisQA.API.Controllers.Expert
             });
         }
 
-        [HttpGet("tag")]
-        public async Task<IActionResult> GetAllTag(int pageIndex = 1, int pageSize = 10)
+        /// <summary>
+        /// Tag dropdown for expert case forms. FE should call <c>GET /api/expert/tags</c> (plural).
+        /// </summary>
+        [HttpGet("tags")]
+        [ProducesResponseType(typeof(PagedResult<GetTagDTO>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAllTags(
+            [FromQuery] int pageIndex = 1,
+            [FromQuery] int pageSize = 10)
         {
-            var result = await _tagCaseService.GetAllTagAsync(pageIndex, pageSize);
+            if (pageIndex < 1) pageIndex = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 500) pageSize = 500;
 
+            var result = await _tagCaseService.GetAllTagAsync(pageIndex, pageSize);
             return Ok(result);
         }
+
+        /// <summary>Backward-compatible alias for <see cref="GetAllTags"/>.</summary>
+        [HttpGet("tag")]
+        [ProducesResponseType(typeof(PagedResult<GetTagDTO>), StatusCodes.Status200OK)]
+        public Task<IActionResult> GetAllTag(int pageIndex = 1, int pageSize = 10) =>
+            GetAllTags(pageIndex, pageSize);
         [HttpPut("update-tag-case")]
 
         //public async Task<IActionResult> UpdateTagCase([FromBody] UpdateTagCaseDTO dto)
@@ -577,6 +606,23 @@ namespace BoneVisQA.API.Controllers.Expert
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// Canonical Modality / Anatomy / Pathology values plus DICOM tag mappings for metadata auto-fill.
+        /// </summary>
+        [HttpGet("metadata-ontology")]
+        [ProducesResponseType(typeof(ExpertMetadataOntologyResponse), StatusCodes.Status200OK)]
+        public IActionResult GetMetadataOntology()
+        {
+            return Ok(new ExpertMetadataOntologyResponse
+            {
+                Modalities = DicomOntologyMappingHelper.GetModalities(),
+                AnatomySites = DicomOntologyMappingHelper.GetAnatomySites(),
+                PathologyGroups = DicomOntologyMappingHelper.GetPathologyGroups(),
+                DicomModalityMap = DicomOntologyMappingHelper.GetDicomModalityMap(),
+                DicomBodyPartMap = DicomOntologyMappingHelper.GetDicomBodyPartMap(),
+            });
         }
 
         [HttpGet("assign")]

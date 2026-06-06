@@ -244,6 +244,8 @@ public class ClassQuizSessionDto
     public Guid? ReleasedById { get; set; }
     /// <summary>Trạng thái đáp án đã được release hay chưa.</summary>
     public bool IsAnswersReleased { get; set; }
+    /// <summary>Quiz mode: 1=Exam, 2=Practice, 3=Adaptive</summary>
+    public int QuizMode { get; set; } = 1;
     /// <summary>Cảnh báo nếu thời gian của Lecturer vượt khoảng thời gian của Expert.</summary>
     public string? Warning { get; set; }
 }

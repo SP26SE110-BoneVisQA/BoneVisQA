@@ -249,9 +249,9 @@ def hybrid_retrieve(
                    (dc.embedding <=> %(q)s::vector)::float8 AS text_dist
             FROM public.document_chunks AS dc
             WHERE dc.embedding IS NOT NULL
-              AND dc.modality = %(mod)s
-              AND dc.anatomy = %(ana)s
-              AND (%(pg)s::text IS NULL OR dc.pathology_group = %(pg)s)
+              AND (dc.modality = %(mod)s OR dc.modality = 'Other')
+              AND (dc.anatomy = %(ana)s OR dc.anatomy = 'Other')
+              AND (%(pg)s::text IS NULL OR dc.pathology_group = %(pg)s OR dc.pathology_group = 'Other')
             ORDER BY dc.embedding <=> %(q)s::vector
             LIMIT %(lim)s;
             """,

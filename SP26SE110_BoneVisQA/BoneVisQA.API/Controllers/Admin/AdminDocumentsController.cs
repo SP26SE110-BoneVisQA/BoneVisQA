@@ -1,7 +1,9 @@
 using BoneVisQA.Repositories.UnitOfWork;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Interfaces.Admin;
 using BoneVisQA.Services.Models.Admin;
+using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -300,11 +302,25 @@ public class AdminDocumentsController : ControllerBase
                 return BadRequest(new { message = $"Only PDF files are allowed ({file.FileName})." });
         }
 
+        string defaultModality;
+        string? defaultPathology;
+        try
+        {
+            defaultModality = DocumentMetadataValidation.ResolveModality(request.DefaultModality);
+            defaultPathology = DocumentMetadataValidation.NormalizeOptionalPathology(request.DefaultPathologyGroup);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var metadata = new DocumentUploadDto
         {
             Title = request.Title,
             CategoryId = request.CategoryId,
-            TagIds = request.TagIds
+            TagIds = request.TagIds,
+            DefaultModality = defaultModality,
+            DefaultPathologyGroup = defaultPathology
         };
 
         if (request.Files is { Count: > 0 } || batch.Count > 1)
@@ -430,6 +446,63 @@ public class AdminDocumentsController : ControllerBase
         return Ok(rows);
     }
 
+    /// <summary>
+    /// Canonical modality / anatomy / pathology values for admin document upload forms.
+    /// </summary>
+    [HttpGet("metadata-ontology")]
+    [ProducesResponseType(typeof(ExpertMetadataOntologyResponse), StatusCodes.Status200OK)]
+    public IActionResult GetMetadataOntology()
+    {
+        return Ok(new ExpertMetadataOntologyResponse
+        {
+            Modalities = DicomOntologyMappingHelper.GetModalities(),
+            AnatomySites = DicomOntologyMappingHelper.GetAnatomySites(),
+            PathologyGroups = DicomOntologyMappingHelper.GetPathologyGroups(),
+            DicomModalityMap = DicomOntologyMappingHelper.GetDicomModalityMap(),
+            DicomBodyPartMap = DicomOntologyMappingHelper.GetDicomBodyPartMap(),
+        });
+    }
+
+    /// <summary>
+    /// Re-run rule-based chunk metadata inference and text embedding backfill (no LLM).
+    /// </summary>
+    [HttpPost("reindex-metadata")]
+    [ProducesResponseType(typeof(DocumentChunkEnrichmentResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DocumentChunkEnrichmentResultDto>> ReindexMetadata(
+        [FromQuery] Guid? documentId = null,
+        [FromQuery] bool onlyMissingEmbedding = false,
+        CancellationToken cancellationToken = default)
+    {
+        return await ReindexMetadataForDocument(documentId, onlyMissingEmbedding, cancellationToken);
+    }
+
+    /// <summary>FE-compatible alias: <c>POST /api/admin/documents/{id}/reindex-metadata</c>.</summary>
+    [HttpPost("{id:guid}/reindex-metadata")]
+    [ProducesResponseType(typeof(DocumentChunkEnrichmentResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DocumentChunkEnrichmentResultDto>> ReindexMetadataById(
+        Guid id,
+        [FromQuery] bool onlyMissingEmbedding = false,
+        CancellationToken cancellationToken = default)
+    {
+        return await ReindexMetadataForDocument(id, onlyMissingEmbedding, cancellationToken);
+    }
+
+    private async Task<ActionResult<DocumentChunkEnrichmentResultDto>> ReindexMetadataForDocument(
+        Guid? documentId,
+        bool onlyMissingEmbedding,
+        CancellationToken cancellationToken)
+    {
+        var result = await _documentService.ReEnrichDocumentChunksAsync(
+            documentId,
+            onlyMissingEmbedding,
+            cancellationToken);
+
+        if (!result.Success)
+            return StatusCode(result.StatusCode > 0 ? result.StatusCode : 500, result);
+
+        return Ok(result);
+    }
+
     [HttpPatch("{id:guid}/status")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateStatusRequest request)
     {
@@ -465,6 +538,10 @@ public class DocumentUploadRequest
     public string Title { get; set; } = string.Empty;
     public Guid? CategoryId { get; set; }
     public List<Guid> TagIds { get; set; } = new();
+    /// <summary>Required: X-Ray, CT, MRI, or Ultrasound — inherited by all chunks. Omitted → X-Ray (DX).</summary>
+    public string? DefaultModality { get; set; }
+    /// <summary>Optional pathology fallback when chunk text inference is inconclusive.</summary>
+    public string? DefaultPathologyGroup { get; set; }
 }
 
 /// <summary>Multipart body for <c>PUT /api/admin/documents/{id}/file</c>.</summary>

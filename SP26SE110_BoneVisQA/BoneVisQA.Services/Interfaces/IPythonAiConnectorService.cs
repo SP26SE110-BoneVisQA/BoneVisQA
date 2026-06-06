@@ -29,6 +29,15 @@ public interface IPythonAiConnectorService
         Guid? caseMediaId = null,
         IReadOnlyList<float>? imageEmbedding = null,
         string? dicomClinicalContext = null,
+        JsonElement? dicomMetadata = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// POST <c>/api/v1/documents/enrich-chunks</c> — rule-based chunk metadata + text embeddings.
+    /// </summary>
+    Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
+        Guid documentId,
+        bool onlyMissingEmbedding = false,
         CancellationToken cancellationToken = default);
 }
 
@@ -60,3 +69,15 @@ public sealed record IngestResultDto(
     string? PreviewImageUrl,
     JsonElement? DicomMetadata,
     string? RawJson);
+
+/// <summary>Parsed response from Python <c>POST /api/v1/documents/enrich-chunks</c>.</summary>
+public sealed record DocumentChunkEnrichmentResultDto(
+    bool Success,
+    int StatusCode,
+    string? ErrorMessage,
+    Guid DocumentId,
+    int ChunksProcessed,
+    string? EmbeddingModel,
+    IReadOnlyDictionary<string, int>? AnatomyDistribution,
+    IReadOnlyDictionary<string, int>? PathologyDistribution,
+    int NullEmbeddingRemaining);

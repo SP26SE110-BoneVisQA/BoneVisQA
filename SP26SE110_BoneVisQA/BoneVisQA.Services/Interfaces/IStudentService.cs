@@ -26,6 +26,12 @@ public interface IStudentService
 
     Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
+    /// <summary>Creates a Visual QA session from a catalog case and returns study metadata for the RAG workspace.</summary>
+    Task<StudentCatalogCaseSessionBootstrapResponse> StartCatalogCaseVisualQaSessionAsync(
+        Guid studentId,
+        Guid caseId,
+        CancellationToken cancellationToken = default);
+
     Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
     Task<VisualQAResponseDto?> GetExistingVisualQaResponseAsync(
         Guid studentId,
@@ -37,7 +43,7 @@ public interface IStudentService
         Guid sessionId,
         VisualQARequestDto request,
         CancellationToken cancellationToken = default);
-    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int maxUserQuestions = 3);
+    Task ValidateSessionStateAsync(Guid studentId, Guid sessionId, int? maxUserQuestions = null);
 
     /// <summary>Throws <see cref="KeyNotFoundException"/> when the case is missing or not accessible to the student.</summary>
     Task ValidateVisualQaCaseAccessAsync(Guid studentId, Guid? caseId, CancellationToken cancellationToken = default);
@@ -64,7 +70,7 @@ public interface IStudentService
     Task<VisualQaCapabilitiesDto> GetVisualQaSessionCapabilitiesAsync(
         Guid studentId,
         Guid sessionId,
-        int maxUserQuestions = 3,
+        int? maxUserQuestions = null,
         CancellationToken cancellationToken = default);
     Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
         Guid studentId,

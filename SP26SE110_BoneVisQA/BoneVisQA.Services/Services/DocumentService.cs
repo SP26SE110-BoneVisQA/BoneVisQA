@@ -18,17 +18,20 @@ public class DocumentService : IDocumentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISupabaseStorageService _storageService;
     private readonly IMemoryCache _memoryCache;
+    private readonly IPythonAiConnectorService _pythonAi;
     private readonly ILogger<DocumentService> _logger;
 
     public DocumentService(
         IUnitOfWork unitOfWork,
         ISupabaseStorageService storageService,
         IMemoryCache memoryCache,
+        IPythonAiConnectorService pythonAi,
         ILogger<DocumentService> logger)
     {
         _unitOfWork = unitOfWork;
         _storageService = storageService;
         _memoryCache = memoryCache;
+        _pythonAi = pythonAi;
         _logger = logger;
     }
 
@@ -42,6 +45,8 @@ public class DocumentService : IDocumentService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var contentHash = await ComputeSha256HashAsync(file, cancellationToken);
+        var defaultModality = DocumentMetadataValidation.ResolveModality(metadata.DefaultModality);
+        var defaultPathology = DocumentMetadataValidation.NormalizeOptionalPathology(metadata.DefaultPathologyGroup);
 
         var documentId = Guid.NewGuid();
         var ext = Path.GetExtension(file.FileName);
@@ -76,7 +81,9 @@ public class DocumentService : IDocumentService
                 UpdatedAt = now,
                 TotalPages = 0,
                 TotalChunks = 0,
-                CurrentPageIndexing = 0
+                CurrentPageIndexing = 0,
+                DefaultModality = defaultModality,
+                DefaultPathologyGroup = defaultPathology
             };
 
             await _unitOfWork.DocumentRepository.AddAsync(document);
@@ -427,6 +434,70 @@ public class DocumentService : IDocumentService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<DocumentChunkEnrichmentResultDto> ReEnrichDocumentChunksAsync(
+        Guid? documentId = null,
+        bool onlyMissingEmbedding = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (documentId.HasValue && documentId.Value != Guid.Empty)
+        {
+            return await _pythonAi.EnrichDocumentChunksAsync(
+                documentId.Value,
+                onlyMissingEmbedding,
+                cancellationToken);
+        }
+
+        var docIds = await _unitOfWork.Context.Documents
+            .AsNoTracking()
+            .Where(d => d.IndexingStatus == DocumentIndexingStatuses.Completed)
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken);
+
+        var totalProcessed = 0;
+        var totalNullRemaining = 0;
+        string? lastModel = null;
+        var failures = new List<string>();
+
+        foreach (var id in docIds)
+        {
+            var result = await _pythonAi.EnrichDocumentChunksAsync(id, onlyMissingEmbedding, cancellationToken);
+            if (!result.Success)
+            {
+                failures.Add($"{id}: {result.ErrorMessage}");
+                continue;
+            }
+
+            totalProcessed += result.ChunksProcessed;
+            totalNullRemaining += result.NullEmbeddingRemaining;
+            lastModel = result.EmbeddingModel;
+        }
+
+        if (failures.Count > 0 && totalProcessed == 0)
+        {
+            return new DocumentChunkEnrichmentResultDto(
+                false,
+                500,
+                string.Join("; ", failures.Take(5)),
+                Guid.Empty,
+                0,
+                lastModel,
+                null,
+                null,
+                totalNullRemaining);
+        }
+
+        return new DocumentChunkEnrichmentResultDto(
+            true,
+            200,
+            failures.Count > 0 ? $"{failures.Count} document(s) failed enrichment." : null,
+            Guid.Empty,
+            totalProcessed,
+            lastModel,
+            null,
+            null,
+            totalNullRemaining);
+    }
+
     private static DocumentDto MapToDto(Document doc) => new()
     {
         Id = doc.Id,
@@ -443,7 +514,9 @@ public class DocumentService : IDocumentService
         UpdatedAt = FormatDocumentUtc(doc.UpdatedAt),
         TotalPages = doc.TotalPages,
         TotalChunks = doc.TotalChunks,
-        CurrentPageIndexing = doc.CurrentPageIndexing
+        CurrentPageIndexing = doc.CurrentPageIndexing,
+        DefaultModality = doc.DefaultModality,
+        DefaultPathologyGroup = doc.DefaultPathologyGroup
     };
 
     private static string? FormatDocumentUtc(DateTime? dt) =>

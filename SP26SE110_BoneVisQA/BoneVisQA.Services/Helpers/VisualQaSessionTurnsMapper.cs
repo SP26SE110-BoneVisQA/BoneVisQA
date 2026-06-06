@@ -61,6 +61,9 @@ public static class VisualQaSessionTurnsMapper
         if (pendingUser != null)
             turns.Add(MapTurn(sessionId, pendingUser, null, reviewState, requestedReviewMessageId));
 
+        for (var i = 0; i < turns.Count; i++)
+            turns[i].TurnIndex = i + 1;
+
         return turns;
     }
 
