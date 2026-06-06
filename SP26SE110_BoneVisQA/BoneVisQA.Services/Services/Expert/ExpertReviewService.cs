@@ -723,9 +723,11 @@ public class ExpertReviewService : IExpertReviewService
         if (el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return null;
 
-        return el.ValueKind == JsonValueKind.String
+        var raw = el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : el.GetRawText();
+
+        return BoundingBoxParser.NormalizeCoordinatesJson(raw) ?? raw;
     }
 
     private static string ResolvePromoteAnnotationLabel(string? label) =>

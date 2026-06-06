@@ -389,6 +389,8 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.IndexingProgress).HasDefaultValue(0);
             entity.Property(e => e.TotalPages).HasDefaultValue(0);
             entity.Property(e => e.CurrentPageIndexing).HasDefaultValue(0);
+            entity.Property(e => e.DefaultModality).HasColumnName("default_modality");
+            entity.Property(e => e.DefaultPathologyGroup).HasColumnName("default_pathology_group");
 
             entity.HasOne(d => d.Category).WithMany(p => p.Documents)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -418,6 +420,9 @@ public partial class BoneVisQADbContext : DbContext
             entity.HasKey(e => e.Id).HasName("document_chunks_pkey");
 
             entity.Property(e => e.Id).HasDefaultValueSql("uuid_generate_v4()");
+            entity.Property(e => e.Modality).HasDefaultValue("Other");
+            entity.Property(e => e.Anatomy).HasDefaultValue("Other");
+            entity.Property(e => e.PathologyGroup).HasDefaultValue("Other");
 
             entity.HasIndex(e => e.DocId).HasDatabaseName("ix_document_chunks_doc_id");
 

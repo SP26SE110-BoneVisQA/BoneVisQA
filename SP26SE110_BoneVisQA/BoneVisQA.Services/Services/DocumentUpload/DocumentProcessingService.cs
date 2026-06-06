@@ -46,7 +46,9 @@ public class DocumentProcessingService : IDocumentProcessingService
                 {
                     Title = title,
                     CategoryId = baseMetadata.CategoryId,
-                    TagIds = baseMetadata.TagIds
+                    TagIds = baseMetadata.TagIds,
+                    DefaultModality = baseMetadata.DefaultModality,
+                    DefaultPathologyGroup = baseMetadata.DefaultPathologyGroup
                 };
 
                 var doc = await _documentService.UploadDocumentAsync(file, meta, cancellationToken);

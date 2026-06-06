@@ -62,6 +62,64 @@ public static class CaseMediaDicomMetadataHelper
         return DicomClinicalContextHelper.TryParseJson(json);
     }
 
+    public static string? TryExtractModality(JsonElement? metadata) =>
+        ReadMetadataString(metadata, "modality", "Modality");
+
+    public static string? TryExtractAnatomy(JsonElement? metadata) =>
+        ReadMetadataString(metadata,
+            "anatomy_site", "anatomySite", "AnatomySite",
+            "body_part_examined", "bodyPartExamined", "BodyPartExamined",
+            "anatomy", "Anatomy");
+
+    public static string? TryExtractFindings(JsonElement? metadata) =>
+        ReadMetadataString(metadata,
+            "key_findings", "keyFindings", "KeyFindings",
+            "findings", "Findings",
+            "study_description", "studyDescription", "StudyDescription");
+
+    private static string? ReadMetadataString(JsonElement? metadata, params string[] propertyNames)
+    {
+        if (metadata is not { ValueKind: JsonValueKind.Object } root)
+            return null;
+
+        foreach (var name in propertyNames)
+        {
+            if (!TryGetProperty(root, name, out var el))
+                continue;
+
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(s))
+                    return s;
+            }
+            else if (el.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+            {
+                return el.ToString();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryGetProperty(JsonElement root, string name, out JsonElement value)
+    {
+        if (root.TryGetProperty(name, out value))
+            return true;
+
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
     public static void ApplyCatalogStudyContext(VisualQARequestDto request, MedicalCase? medicalCase)
     {
         if (medicalCase == null)
