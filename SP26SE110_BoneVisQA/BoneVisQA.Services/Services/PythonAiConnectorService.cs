@@ -496,7 +496,13 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
                     body.Length > 800 ? body[..800] + "…" : body);
 
-                return EnrichFail(documentId, (int)resp.StatusCode, $"HTTP {(int)resp.StatusCode}");
+                var detail = TryExtractFastApiErrorDetail(body);
+                return EnrichFail(
+                    documentId,
+                    (int)resp.StatusCode,
+                    string.IsNullOrWhiteSpace(detail)
+                        ? $"HTTP {(int)resp.StatusCode}"
+                        : detail);
 
             }
 
@@ -579,6 +585,50 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
     private static string? NullIfWhiteSpace(string? s) =>
 
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>Parse FastAPI <c>{"detail": "..."}</c> or validation error arrays from error bodies.</summary>
+    private static string? TryExtractFastApiErrorDetail(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("detail", out var detailEl))
+                return null;
+
+            if (detailEl.ValueKind == JsonValueKind.String)
+            {
+                var text = detailEl.GetString()?.Trim();
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            }
+
+            if (detailEl.ValueKind == JsonValueKind.Array)
+            {
+                var parts = new List<string>();
+                foreach (var item in detailEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                        continue;
+                    if (item.TryGetProperty("msg", out var msgEl) && msgEl.ValueKind == JsonValueKind.String)
+                    {
+                        var msg = msgEl.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(msg))
+                            parts.Add(msg);
+                    }
+                }
+
+                return parts.Count == 0 ? null : string.Join("; ", parts);
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
 
 
 

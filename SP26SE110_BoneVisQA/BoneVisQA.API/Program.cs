@@ -366,7 +366,9 @@ builder.Services.AddHttpClient<IPythonAiConnectorService, PythonAiConnectorServi
     if (string.IsNullOrWhiteSpace(baseUrl))
         baseUrl = "http://localhost:8000";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-    client.Timeout = TimeSpan.FromMinutes(5);
+    // Enrichment loads sentence-transformers + encodes all chunks on CPU; allow long cold starts.
+    var timeoutMinutes = Math.Clamp(cfg.GetValue("AiMicroservice:RequestTimeoutMinutes", 30), 5, 120);
+    client.Timeout = TimeSpan.FromMinutes(timeoutMinutes);
 });
 
 builder.Services.AddHttpClient("VisualQaImageFetch", client =>

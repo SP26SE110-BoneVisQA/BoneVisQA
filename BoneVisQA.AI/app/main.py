@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,14 +18,28 @@ if _hf_key := os.environ.get("HUGGINGFACE_API_KEY"):
     os.environ.setdefault("HF_TOKEN", _hf_key)
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ingest import router as ingest_router
 from app.api.v1.documents import router as documents_v1_router
 from app.api.v1.qa import router as qa_v1_router
+from app.core.db import check_database_connection
+from app.services.embeddings.text_encoder import warmup_text_model
 
-app = FastAPI(title="BoneVisQA AI", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() not in {"1", "true", "yes"}:
+        logger.info("Pre-loading text embedding model (all-mpnet-base-v2)...")
+        warmup_text_model()
+        logger.info("Text embedding model ready.")
+    yield
+
+
+app = FastAPI(title="BoneVisQA AI", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -41,6 +57,15 @@ app.include_router(documents_v1_router, prefix="/api/v1/documents")
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready() -> dict[str, str]:
+    try:
+        check_database_connection()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"status": "ready"}
 
 
 if __name__ == "__main__":

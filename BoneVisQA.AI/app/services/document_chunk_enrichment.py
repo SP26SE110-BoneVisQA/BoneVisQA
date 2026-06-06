@@ -16,7 +16,7 @@ from app.services.document_chunk_metadata import (
     resolve_chunk_metadata,
     section_metadata_from_heading,
 )
-from app.services.embeddings.text_encoder import encode_text, text_model_name
+from app.services.embeddings.text_encoder import encode_texts, text_model_name
 
 
 def _fit_pgvector(vec: np.ndarray, *, expected_dim: int = 768) -> np.ndarray:
@@ -94,27 +94,41 @@ def enrich_document_chunks(
     section_pathology: str | None = None
     anatomy_counts: Counter[str] = Counter()
     pathology_counts: Counter[str] = Counter()
+
+    chunk_rows: list[tuple[Any, str, int]] = []
+    metadata_by_id: dict[str, tuple[str, str, str]] = {}
+
+    for chunk_id, content, chunk_order in rows:
+        text = str(content or "")
+        heading = first_heading_in_chunk(text)
+        if heading:
+            sec_a, sec_p = section_metadata_from_heading(heading)
+            if sec_a:
+                section_anatomy = sec_a
+            if sec_p:
+                section_pathology = sec_p
+
+        modality, anatomy, pathology = resolve_chunk_metadata(
+            text,
+            section_anatomy=section_anatomy,
+            section_pathology=section_pathology,
+            default_modality=default_modality,
+            default_pathology=default_pathology,
+        )
+        chunk_id_s = str(chunk_id)
+        chunk_rows.append((chunk_id, text, chunk_order))
+        metadata_by_id[chunk_id_s] = (modality, anatomy, pathology)
+        anatomy_counts[anatomy] += 1
+        pathology_counts[pathology] += 1
+
+    texts = [text or " " for _, text, _ in chunk_rows]
+    vectors = encode_texts(texts)
+
     processed = 0
-
     with conn.cursor() as cur:
-        for chunk_id, content, _chunk_order in rows:
-            text = str(content or "")
-            heading = first_heading_in_chunk(text)
-            if heading:
-                sec_a, sec_p = section_metadata_from_heading(heading)
-                if sec_a:
-                    section_anatomy = sec_a
-                if sec_p:
-                    section_pathology = sec_p
-
-            modality, anatomy, pathology = resolve_chunk_metadata(
-                text,
-                section_anatomy=section_anatomy,
-                section_pathology=section_pathology,
-                default_modality=default_modality,
-                default_pathology=default_pathology,
-            )
-            vec = _fit_pgvector(encode_text(text))
+        for (chunk_id, text, _chunk_order), vec_raw in zip(chunk_rows, vectors, strict=True):
+            modality, anatomy, pathology = metadata_by_id[str(chunk_id)]
+            vec = _fit_pgvector(vec_raw)
 
             cur.execute(
                 """
@@ -127,8 +141,6 @@ def enrich_document_chunks(
                 """,
                 (modality, anatomy, pathology, vec, str(chunk_id)),
             )
-            anatomy_counts[anatomy] += 1
-            pathology_counts[pathology] += 1
             processed += 1
 
     with conn.cursor() as cur:

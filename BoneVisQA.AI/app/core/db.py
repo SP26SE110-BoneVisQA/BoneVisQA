@@ -19,11 +19,34 @@ from psycopg2.extensions import connection as PGConnection
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
+_PLACEHOLDER_MARKERS = (
+    "YOUR_POOLER_HOST",
+    "YOUR_PROJECT_REF",
+    "YOUR_PASSWORD",
+    "postgresql://postgres.YOUR",
+)
+
+
 def _database_url() -> str:
     url = (os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or "").strip()
     if not url:
         raise RuntimeError("Set DATABASE_URL or SUPABASE_DB_URL for Postgres.")
+    upper = url.upper()
+    for marker in _PLACEHOLDER_MARKERS:
+        if marker.upper() in upper:
+            raise RuntimeError(
+                "DATABASE_URL still contains template placeholders. "
+                "Set the Supabase pooler URI in Railway Variables (see BoneVisQA.AI/.env.example)."
+            )
     return url
+
+
+def check_database_connection() -> None:
+    """Verify Postgres is reachable (used by readiness probe)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            cur.fetchone()
 
 
 @contextmanager
