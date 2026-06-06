@@ -26,6 +26,12 @@ public interface IStudentService
 
     Task<Guid> CreateOrGetVisualQaSessionAsync(Guid studentId, VisualQARequestDto request);
 
+    /// <summary>Creates a Visual QA session from a catalog case and returns study metadata for the RAG workspace.</summary>
+    Task<StudentCatalogCaseSessionBootstrapResponse> StartCatalogCaseVisualQaSessionAsync(
+        Guid studentId,
+        Guid caseId,
+        CancellationToken cancellationToken = default);
+
     Task SaveVisualQAMessagesAsync(Guid sessionId, VisualQARequestDto request, VisualQAResponseDto response);
     Task<VisualQAResponseDto?> GetExistingVisualQaResponseAsync(
         Guid studentId,

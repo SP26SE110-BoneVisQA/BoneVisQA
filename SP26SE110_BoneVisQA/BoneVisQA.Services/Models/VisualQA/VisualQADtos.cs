@@ -200,6 +200,17 @@ public class VisualQaThreadDto
     public string? RoiBoundingBox { get; set; }
     public Guid? CaseId { get; set; }
     public Guid? ImageId { get; set; }
+
+    [JsonPropertyName("mediaId")]
+    public Guid? MediaId { get; set; }
+
+    [JsonPropertyName("catalogImageId")]
+    public Guid? CatalogImageId { get; set; }
+
+    /// <summary>DICOM tags from the linked catalog case (<c>case_media.dicom_metadata</c>).</summary>
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
+
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
     public VisualQaCapabilitiesDto Capabilities { get; set; } = new();
     public string? ReviewState { get; set; }

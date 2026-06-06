@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BoneVisQA.Services.Models.Student;
@@ -60,6 +61,18 @@ public class CaseDetailDto
 
     [JsonPropertyName("primaryImageUrl")]
     public string? PrimaryImageUrl { get; set; }
+
+    /// <summary>First ingested DICOM study row (<c>case_media.id</c>) when present.</summary>
+    [JsonPropertyName("mediaId")]
+    public Guid? MediaId { get; set; }
+
+    /// <summary>First catalog raster row (<c>medical_images.id</c>) when present.</summary>
+    [JsonPropertyName("catalogImageId")]
+    public Guid? CatalogImageId { get; set; }
+
+    /// <summary>DICOM tags from <c>case_media.dicom_metadata</c> for Visual QA workspace prefill.</summary>
+    [JsonPropertyName("dicomMetadata")]
+    public JsonElement? DicomMetadata { get; set; }
 
     public bool IsApproved { get; set; }
     public IReadOnlyList<MedicalImageDto> Images { get; set; } = Array.Empty<MedicalImageDto>();
