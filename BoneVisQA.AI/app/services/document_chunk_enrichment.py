@@ -19,7 +19,7 @@ from app.services.document_chunk_metadata import (
 )
 from app.services.embeddings.text_encoder import encode_texts, text_model_name
 
-_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "24"))
+_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "40"))
 
 
 def _fit_pgvector(vec: np.ndarray, *, expected_dim: int = 768) -> np.ndarray:

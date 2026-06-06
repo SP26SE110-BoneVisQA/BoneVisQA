@@ -7,7 +7,12 @@ from functools import lru_cache
 
 import numpy as np
 
-_TEXT_MODEL_NAME = os.environ.get("TEXT_EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
+# MiniLM: ~4-6x faster on CPU and ~5x less RAM than all-mpnet-base-v2 (768-d vectors are zero-padded).
+_TEXT_MODEL_NAME = os.environ.get(
+    "TEXT_EMBEDDING_MODEL",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
+_ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "16")))
 
 
 @lru_cache(maxsize=1)
@@ -33,7 +38,7 @@ def encode_texts(texts: list[str]) -> list[np.ndarray]:
         normalize_embeddings=True,
         convert_to_numpy=True,
         show_progress_bar=False,
-        batch_size=min(8, len(normalized)),
+        batch_size=min(_ENCODE_BATCH_SIZE, len(normalized)),
     )
     return [v.astype(np.float32) for v in vecs]
 
@@ -44,4 +49,12 @@ def text_model_name() -> str:
 
 def warmup_text_model() -> None:
     """Load weights at process start so the first enrich request does not cold-start."""
+    threads = int(os.environ.get("TORCH_NUM_THREADS", "0"))
+    if threads > 0:
+        try:
+            import torch
+
+            torch.set_num_threads(threads)
+        except Exception:
+            pass
     _load_model()

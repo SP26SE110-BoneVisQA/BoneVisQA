@@ -450,12 +450,13 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
     public async Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
         Guid documentId,
         bool onlyMissingEmbedding = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<int, int, CancellationToken, Task>? onBatchProgressAsync = null)
     {
         if (documentId == Guid.Empty)
             return EnrichFail(documentId, 400, "documentId is required.");
 
-        var batchSize = Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 24), 1, 64);
+        var batchSize = Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 40), 1, 64);
         var afterChunkOrder = -1;
         string? sectionAnatomy = null;
         string? sectionPathology = null;
@@ -507,6 +508,9 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
                     afterChunkOrder = batch.LastChunkOrder;
                 sectionAnatomy = batch.SectionAnatomy ?? sectionAnatomy;
                 sectionPathology = batch.SectionPathology ?? sectionPathology;
+
+                if (onBatchProgressAsync != null)
+                    await onBatchProgressAsync(totalProcessed, nullRemaining, cancellationToken);
 
                 if (!batch.HasMore)
                     break;

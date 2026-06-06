@@ -38,7 +38,8 @@ public interface IPythonAiConnectorService
     Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
         Guid documentId,
         bool onlyMissingEmbedding = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<int, int, CancellationToken, Task>? onBatchProgressAsync = null);
 }
 
 /// <summary>Parsed successful response from Python hybrid RAG; on failure <see cref="Success"/> is false.</summary>

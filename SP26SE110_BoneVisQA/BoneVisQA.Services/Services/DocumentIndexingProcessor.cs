@@ -5,6 +5,7 @@ using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UglyToad.PdfPig;
@@ -19,11 +20,11 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
     private sealed record PageTextSegment(int PageNumber, string Text);
     private sealed record ChunkWithPageRange(string Content, int StartPage, int EndPage);
 
-    private const int ChunkSize = 1000;
-    private const int ChunkOverlap = 200;
     private const int PendingChunkInsertBatchSize = 50;
     private const int SaveProgressEveryPages = 5;
     private const int MaxExtractedCharacters = 50_000_000;
+    private const int DefaultChunkSize = 2000;
+    private const int DefaultChunkOverlap = 250;
 
     private const string NoExtractableTextLog = "Uploaded PDF contains no extractable text-base content.";
     private const string ProgressCacheKeyPrefix = "document-ingestion-progress:";
@@ -37,6 +38,8 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IPythonAiConnectorService _pythonAi;
     private readonly ILogger<DocumentIndexingProcessor> _logger;
+    private readonly int _chunkSize;
+    private readonly int _chunkOverlap;
 
     public DocumentIndexingProcessor(
         IUnitOfWork unitOfWork,
@@ -47,6 +50,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         IMemoryCache memoryCache,
         IServiceScopeFactory scopeFactory,
         IPythonAiConnectorService pythonAi,
+        IConfiguration configuration,
         ILogger<DocumentIndexingProcessor> logger)
     {
         _unitOfWork = unitOfWork;
@@ -58,6 +62,10 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         _scopeFactory = scopeFactory;
         _pythonAi = pythonAi;
         _logger = logger;
+        _chunkSize = Math.Clamp(configuration.GetValue("DocumentIndexing:ChunkSize", DefaultChunkSize), 800, 4000);
+        _chunkOverlap = Math.Clamp(configuration.GetValue("DocumentIndexing:ChunkOverlap", DefaultChunkOverlap), 50, 800);
+        if (_chunkOverlap >= _chunkSize)
+            _chunkOverlap = Math.Max(50, _chunkSize / 5);
     }
 
     public async Task ProcessDocumentAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -181,7 +189,7 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
 
             computedContentHash = await ComputeSha256HashForFileAsync(tempPdfPath, cancellationToken);
 
-            var chunkPayload = SplitTextSlidingWindowWithPageRanges(pageSegments, ChunkSize, ChunkOverlap, MaxExtractedCharacters);
+            var chunkPayload = SplitTextSlidingWindowWithPageRanges(pageSegments, _chunkSize, _chunkOverlap, MaxExtractedCharacters);
             if (chunkPayload.Count == 0 || chunkPayload.Sum(c => c.Content.Length) == 0)
             {
                 _logger.LogError(NoExtractableTextLog);
@@ -357,7 +365,29 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     "Enriching metadata and embeddings...",
                     cancellationToken);
 
-                var enrich = await _pythonAi.EnrichDocumentChunksAsync(documentId, onlyMissingEmbedding: true, cancellationToken);
+                var enrichTotalChunks = finalDoc.TotalChunks;
+                var enrich = await _pythonAi.EnrichDocumentChunksAsync(
+                    documentId,
+                    onlyMissingEmbedding: true,
+                    cancellationToken,
+                    onBatchProgressAsync: async (processed, nullRemaining, ct) =>
+                    {
+                        var pct = enrichTotalChunks > 0
+                            ? Math.Clamp(95 + (int)Math.Round(processed * 5.0 / enrichTotalChunks), 95, 99)
+                            : 95;
+                        var op = enrichTotalChunks > 0
+                            ? $"Enriching embeddings ({processed}/{enrichTotalChunks})..."
+                            : "Enriching metadata and embeddings...";
+                        SetProgress(documentId, pct, op, finalDoc.TotalPages, enrichTotalChunks, finalDoc.CurrentPageIndexing);
+                        await _progressNotifier.NotifyProgressAsync(
+                            documentId,
+                            finalDoc.TotalPages,
+                            enrichTotalChunks,
+                            finalDoc.CurrentPageIndexing,
+                            pct,
+                            op,
+                            ct);
+                    });
                 if (!enrich.Success || enrich.NullEmbeddingRemaining > 0)
                 {
                     var detail = enrich.ErrorMessage ?? $"null_embeddings={enrich.NullEmbeddingRemaining}";
