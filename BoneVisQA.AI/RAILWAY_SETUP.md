@@ -152,7 +152,7 @@ Luồng: **FE (Vercel) → C# (Render) → Python (Railway) → Postgres/Supabas
 | `could not connect to server` (DB) | Kiểm tra `DATABASE_URL`, pooler host, password |
 | HF 401 / model download fail | Thêm `HUGGINGFACE_API_KEY` |
 | `Repo id must use alphanumeric chars` / ingest 502 / `Failed initial config/weights load from HF Hub` | **`IMAGE_EMBEDDING_MODEL` (hoặc `TEXT_EMBEDDING_MODEL`) đang bị set nhầm thành HF token.** Xóa biến đó hoặc set đúng repo id (`microsoft/BiomedCLIP-...`). Token chỉ đặt ở `HUGGINGFACE_API_KEY`. Redeploy Railway |
-| Deploy chậm 10+ phút lần đầu | Bình thường — tải model embedding |
+| Deploy healthcheck fails / service unavailable | Lifespan was blocking on model download (>10 min). Redeploy after fix: `/health` returns immediately; models load in background. Check `/health/ready` when `warmup=ready`. First DICOM ingest may wait until BiomedCLIP finishes loading |
 
 Dán **20–30 dòng cuối** tab Deploy Logs nếu cần hỗ trợ thêm.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -30,10 +31,13 @@ from app.services.embeddings.text_encoder import text_model_name, warmup_text_mo
 
 logger = logging.getLogger(__name__)
 
+_warmup_state = "skipped"  # pending | ready | failed | skipped
+_warmup_error: str | None = None
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    if os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() not in {"1", "true", "yes"}:
+
+def _run_embedding_warmup() -> None:
+    global _warmup_state, _warmup_error
+    try:
         logger.info("Pre-loading text embedding model (%s)...", text_model_name())
         warmup_text_model()
         logger.info("Text embedding model ready (%s).", text_model_name())
@@ -41,7 +45,34 @@ async def lifespan(_app: FastAPI):
         logger.info("Pre-loading image embedding model (%s)...", image_model_name())
         warmup_image_model()
         logger.info("Image embedding model ready (%s).", image_model_name())
+        _warmup_state = "ready"
+    except Exception as exc:
+        _warmup_state = "failed"
+        _warmup_error = str(exc)
+        logger.exception("Embedding warmup failed: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global _warmup_state
+    warmup_task: asyncio.Future | None = None
+    skip = os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() in {"1", "true", "yes"}
+
+    logger.info("BoneVisQA AI process starting (skip_warmup=%s).", skip)
+
+    # Yield immediately so /health responds while models download in the background.
+    if not skip:
+        _warmup_state = "pending"
+        loop = asyncio.get_running_loop()
+        warmup_task = loop.run_in_executor(None, _run_embedding_warmup)
+
     yield
+
+    if warmup_task is not None:
+        try:
+            await asyncio.wrap_future(warmup_task)
+        except Exception:
+            pass
 
 
 app = FastAPI(title="BoneVisQA AI", version="0.1.0", lifespan=lifespan)
@@ -61,7 +92,7 @@ app.include_router(documents_v1_router, prefix="/api/v1/documents")
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "warmup": _warmup_state}
 
 
 @app.get("/health/ready")
@@ -70,8 +101,21 @@ def health_ready() -> dict[str, str]:
         check_database_connection()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if _warmup_state == "pending":
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding models are still loading. Retry shortly.",
+        )
+    if _warmup_state == "failed":
+        raise HTTPException(
+            status_code=503,
+            detail=_warmup_error or "Embedding warmup failed.",
+        )
+
     return {
         "status": "ready",
+        "warmup": _warmup_state,
         "text_embedding_model": text_model_name(),
         "image_embedding_model": image_model_name(),
     }
