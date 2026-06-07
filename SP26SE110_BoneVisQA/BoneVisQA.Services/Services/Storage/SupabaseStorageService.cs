@@ -99,6 +99,47 @@ public class SupabaseStorageService : ISupabaseStorageService
         return $"{_supabaseUrl}/storage/v1/object/public/{bucket}/{normalizedPath}";
     }
 
+    public async Task<string> UploadLocalFileAsync(
+        string absoluteFilePath,
+        string bucket,
+        string objectPath,
+        string? contentType = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(absoluteFilePath) || !File.Exists(absoluteFilePath))
+            throw new FileNotFoundException("Local file not found for upload.", absoluteFilePath);
+
+        var normalizedPath = objectPath.Trim().Replace('\\', '/').TrimStart('/');
+        var uploadUrl = $"{_supabaseUrl}/storage/v1/object/{bucket}/{normalizedPath}";
+
+        await using var stream = new FileStream(
+            absoluteFilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            useAsync: true);
+        using var content = new StreamContent(stream);
+        content.Headers.ContentType = new MediaTypeHeaderValue(
+            string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseKey);
+        request.Headers.Add("x-upsert", "true");
+        request.Content = content;
+
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var message =
+                $"Supabase upload failed ({(int)response.StatusCode} {response.ReasonPhrase}): {errorBody}";
+            throw new HttpRequestException(message, inner: null, statusCode: response.StatusCode);
+        }
+
+        return $"{_supabaseUrl}/storage/v1/object/public/{bucket}/{normalizedPath}";
+    }
+
     public async Task<bool> DeleteFileAsync(string bucket, string filePath, CancellationToken cancellationToken = default)
     {
         var normalizedBucket = bucket.Trim();

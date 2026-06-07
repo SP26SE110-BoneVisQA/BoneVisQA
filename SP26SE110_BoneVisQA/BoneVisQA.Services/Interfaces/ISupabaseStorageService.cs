@@ -19,6 +19,16 @@ public interface ISupabaseStorageService
         string objectPath,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Uploads a file from disk to an exact object path (upsert). Returns the public object URL.
+    /// </summary>
+    Task<string> UploadLocalFileAsync(
+        string absoluteFilePath,
+        string bucket,
+        string objectPath,
+        string? contentType = null,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteFileAsync(string bucket, string filePath, CancellationToken cancellationToken = default);
 
     Task<bool> MoveFileAsync(

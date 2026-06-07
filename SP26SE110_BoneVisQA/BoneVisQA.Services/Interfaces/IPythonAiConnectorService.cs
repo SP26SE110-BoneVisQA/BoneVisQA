@@ -8,7 +8,7 @@ namespace BoneVisQA.Services.Interfaces;
 public interface IPythonAiConnectorService
 {
     /// <summary>
-    /// POST <c>/ingest</c>. <paramref name="mediaPath"/> is sent as <c>dicom_path</c> (local archive path).
+    /// POST <c>/ingest</c>. <paramref name="mediaPath"/> is sent as <c>dicom_path</c> (HTTPS archive URL or local path when co-located with AI).
     /// </summary>
     Task<IngestResultDto> TriggerIngestAsync(
         string mediaPath,

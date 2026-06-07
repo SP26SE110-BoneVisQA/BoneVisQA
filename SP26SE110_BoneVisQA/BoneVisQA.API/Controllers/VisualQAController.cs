@@ -100,6 +100,7 @@ public class VisualQAController : ControllerBase
             stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
             var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
                 _pythonAiConnector,
+                _storageService,
                 stagedPath,
                 ingestPurpose: "personal",
                 ownerUserId: studentId,

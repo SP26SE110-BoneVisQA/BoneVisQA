@@ -44,7 +44,8 @@ def is_remote_dicom_reference(dicom_path: str) -> bool:
 
 def is_archive_path(path: str | Path) -> bool:
     """True if the path looks like a study archive we extract in Python (``.zip`` / ``.rar``)."""
-    return Path(path).suffix.lower() in {".zip", ".rar"}
+    s = str(path).split("?", 1)[0].split("#", 1)[0]
+    return Path(s).suffix.lower() in {".zip", ".rar"}
 
 
 def _is_within_directory(candidate: Path, directory: Path) -> bool:

@@ -215,6 +215,7 @@ namespace BoneVisQA.API.Controllers.Expert
                 stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
                 var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
                     _pythonAiConnector,
+                    _storageService,
                     stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,

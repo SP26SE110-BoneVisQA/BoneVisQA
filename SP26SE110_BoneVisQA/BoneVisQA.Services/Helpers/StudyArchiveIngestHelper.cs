@@ -89,18 +89,71 @@ public static class StudyArchiveIngestHelper
 
     public static async Task<IngestResultDto> IngestStagedArchiveAsync(
         IPythonAiConnectorService pythonAi,
+        ISupabaseStorageService storage,
         string absoluteArchivePath,
         string ingestPurpose,
         Guid? ownerUserId,
         string? diagnosisText,
         CancellationToken cancellationToken)
     {
-        return await pythonAi.TriggerIngestAsync(
-            absoluteArchivePath,
-            diagnosis: diagnosisText ?? string.Empty,
-            ingestPurpose: ingestPurpose,
-            ownerUserId: ownerUserId,
-            cancellationToken: cancellationToken);
+        var purpose = string.IsNullOrWhiteSpace(ingestPurpose)
+            ? "library"
+            : ingestPurpose.Trim().ToLowerInvariant();
+        var extension = Path.GetExtension(absoluteArchivePath).ToLowerInvariant();
+        var archiveId = Guid.NewGuid().ToString("N");
+
+        var bucket = purpose == "personal" ? "student_uploads" : "medical-cases";
+        var objectPath = purpose == "personal" && ownerUserId.HasValue
+            ? $"ingest-staging/{ownerUserId.Value:N}/{archiveId}{extension}"
+            : $"ingest-staging/{archiveId}{extension}";
+
+        var contentType = extension switch
+        {
+            ".zip" => "application/zip",
+            ".rar" => "application/x-rar-compressed",
+            _ => "application/octet-stream",
+        };
+
+        string? stagingObjectPath = null;
+        try
+        {
+            var publicUrl = await storage.UploadLocalFileAsync(
+                absoluteArchivePath,
+                bucket,
+                objectPath,
+                contentType,
+                cancellationToken);
+            stagingObjectPath = objectPath;
+
+            // Python AI runs on a separate host (Railway); pass a downloadable URL, not a Render-local path.
+            var ingestReference = await storage.CreateSignedUrlAsync(
+                $"{bucket}/{objectPath}",
+                duration: 3600,
+                cancellationToken: cancellationToken);
+            if (string.IsNullOrWhiteSpace(ingestReference))
+                ingestReference = publicUrl;
+
+            return await pythonAi.TriggerIngestAsync(
+                ingestReference,
+                diagnosis: diagnosisText ?? string.Empty,
+                ingestPurpose: purpose,
+                ownerUserId: ownerUserId,
+                cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(stagingObjectPath))
+            {
+                try
+                {
+                    await storage.DeleteFileAsync(bucket, stagingObjectPath, cancellationToken);
+                }
+                catch
+                {
+                    // Best-effort cleanup; ingest outcome must not depend on delete success.
+                }
+            }
+        }
     }
 
     /// <summary>True when Python rejected the archive (client error, not gateway outage).</summary>
