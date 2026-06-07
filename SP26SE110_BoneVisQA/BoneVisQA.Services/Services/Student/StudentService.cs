@@ -1235,7 +1235,7 @@ public class StudentService : IStudentService
 
         var turns = VisualQaSessionTurnsMapper.BuildTurns(sessionId, messages, session.Status, session.RequestedReviewMessageId)
             .ToList();
-        var reviewState = MapReviewState(session.Status);
+        var reviewState = MapReviewState(session.Status, session.PromotedCaseId);
 
         var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId, cancellationToken: cancellationToken);
         var blockingNotice = BuildBlockingNotice(capabilities.Reason);
@@ -1288,7 +1288,8 @@ public class StudentService : IStudentService
             SessionStatus = session.Status,
             ReviewFeedback = VisualQaEducatorFeedbackHelper.IsAwaitingHumanReview(session.Status)
                 ? null
-                : VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(session.ReviewFeedback)
+                : VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(session.ReviewFeedback),
+            PromotedCaseId = session.PromotedCaseId
         };
     }
 
@@ -1399,8 +1400,14 @@ public class StudentService : IStudentService
             : MapResponderRole(last?.Role);
     }
 
-    private static string? MapReviewState(string? status)
+    private static string? MapReviewState(string? status, Guid? promotedCaseId = null)
     {
+        if (promotedCaseId.HasValue &&
+            string.Equals(status, CaseAnswerStatuses.ExpertApproved, StringComparison.OrdinalIgnoreCase))
+        {
+            return "published";
+        }
+
         return status switch
         {
             "PendingExpertReview" => "pending",

@@ -128,24 +128,70 @@ public class ExpertReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ApprovePost(Guid sessionId, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ApprovePost(Guid sessionId)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-        var request = await PromoteToLibraryRequestReader.ReadAsync(Request, cancellationToken)
-                      ?? new PromoteToLibraryRequestDto();
-
         try
         {
             await _expertReviewService.ApproveSessionAsync(expertId.Value, sessionId);
-            var caseId = await _expertReviewService.PromoteToLibraryAsync(expertId.Value, sessionId, request);
-            return Ok(new { caseId });
+            return Ok(new { status = "approved", sessionId });
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/approve-and-promote")]
+    [ProducesResponseType(typeof(PromoteToLibraryResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ApproveAndPromote(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var expertId = GetUserIdFromClaims();
+        if (expertId == null)
+            return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+        var request = await PromoteToLibraryRequestReader.ReadApproveAndPromoteAsync(Request, cancellationToken);
+        if (request == null)
+        {
+            return BadRequest(new
+            {
+                message = "Request body must be JSON with approve-and-promote fields.",
+                code = "MISSING_BODY",
+            });
+        }
+
+        try
+        {
+            var result = await _expertReviewService.ApproveAndPromoteToLibraryAsync(expertId.Value, sessionId, request);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (PromoteValidationException ex)
+        {
+            return ValidationProblem(ex.Errors);
         }
         catch (InvalidOperationException ex)
         {
@@ -193,7 +239,7 @@ public class ExpertReviewsController : ControllerBase
     }
 
     [HttpPost("{sessionId:guid}/promote")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PromoteToLibraryResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -216,12 +262,16 @@ public class ExpertReviewsController : ControllerBase
 
         try
         {
-            var caseId = await _expertReviewService.PromoteToLibraryAsync(expertId.Value, sessionId, request);
-            return Ok(new { caseId });
+            var result = await _expertReviewService.PromoteToLibraryAsync(expertId.Value, sessionId, request);
+            return Ok(result);
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (PromoteValidationException ex)
+        {
+            return ValidationProblem(ex.Errors);
         }
         catch (InvalidOperationException ex)
         {
@@ -263,6 +313,7 @@ public class ExpertReviewsController : ControllerBase
 
     [HttpPut("{sessionId:guid}/draft")]
     [ProducesResponseType(typeof(ExpertVisualSessionDraftResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -284,7 +335,9 @@ public class ExpertReviewsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return ex.Message.Contains("required", StringComparison.OrdinalIgnoreCase)
+                ? BadRequest(new { message = ex.Message })
+                : StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (ConflictException ex)
         {
@@ -321,6 +374,17 @@ public class ExpertReviewsController : ControllerBase
         {
             return Conflict(new { message = ex.Message });
         }
+    }
+
+    private IActionResult ValidationProblem(IReadOnlyDictionary<string, string[]> errors)
+    {
+        return BadRequest(new
+        {
+            type = "https://tools.ietf.org/html/rfc7807",
+            title = "Validation failed",
+            status = StatusCodes.Status400BadRequest,
+            errors
+        });
     }
 
     private Guid? GetUserIdFromClaims()

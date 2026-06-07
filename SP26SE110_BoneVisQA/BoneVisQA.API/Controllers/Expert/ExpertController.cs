@@ -44,11 +44,14 @@ namespace BoneVisQA.API.Controllers.Expert
         
         [HttpGet("cases")]
         [ProducesResponseType(typeof(PagedResult<GetMedicalCaseDTO>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1,int pageSize = 10)
+        public async Task<IActionResult> GetAllMedicalCases(int pageIndex = 1, int pageSize = 10)
         {
             var expertId = ResolveCurrentExpertId();
             if (expertId == Guid.Empty)
                 return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            pageIndex = Math.Max(1, pageIndex);
+            pageSize = Math.Clamp(pageSize, 1, 100);
 
             var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize, expertId);
             return Ok(result);

@@ -152,49 +152,14 @@ public class ExpertReviewService : IExpertReviewService
             var (userMessage, latestAssistant) = ResolveRequestedReviewPair(s, orderedMessages);
             var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(s.Case);
 
-            return new ExpertEscalatedAnswerDto
-            {
-                AnswerId = s.Id,
-                SessionId = s.Id,
-                QuestionId = userMessage?.Id ?? Guid.Empty,
-                StudentId = s.StudentId,
-                StudentName = s.Student?.FullName ?? string.Empty,
-                StudentEmail = s.Student?.Email ?? string.Empty,
-                CaseId = s.CaseId,
-                CaseTitle = s.Case?.Title ?? string.Empty,
-                CaseDescription = s.Case?.Description,
-                CaseSuggestedDiagnosis = s.Case?.SuggestedDiagnosis,
-                CaseKeyFindings = s.Case?.KeyFindings,
-                QuestionText = userMessage?.Content ?? string.Empty,
-                AnswerText = MapAssistantAnswerText(latestAssistant),
-                CurrentAnswerText = MapAssistantAnswerText(latestAssistant),
-                StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
-                DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses,
-                KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? null,
-                ReflectiveQuestions = latestAssistant?.ReflectiveQuestions ?? null,
-                Status = s.Status,
-                SessionStatus = s.Status,
-                ReviewFeedback = s.ReviewFeedback,
-                EscalatedById = s.LecturerId,
-                EscalatedAt = s.UpdatedAt ?? s.CreatedAt,
-                AiConfidenceScore = latestAssistant?.AiConfidenceScore,
-                ClassId = enrollment?.ClassId,
-                ClassName = enrollment?.Class?.ClassName ?? string.Empty,
-                ReviewNote = review?.ReviewNote,
-                PromotedCaseId = s.PromotedCaseId,
-                Citations = MergeCitationsFromAssistantMessages(orderedMessages),
-                ImageUrl = ResolveSessionImageUrl(s),
-                CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
-                    userMessage,
-                    s.RequestedReviewMessageId,
-                    turns),
-                ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
-                RequestedReviewMessageId = s.RequestedReviewMessageId,
-                SelectedUserMessageId = userMessage?.Id,
-                SelectedAssistantMessageId = latestAssistant?.Id,
-                Turns = turns,
-                DicomMetadata = dicomMetadata
-            };
+            return MapEscalatedAnswerDto(
+                s,
+                userMessage,
+                latestAssistant,
+                review,
+                enrollment,
+                turns,
+                dicomMetadata);
         }).ToList();
     }
 
@@ -239,53 +204,27 @@ public class ExpertReviewService : IExpertReviewService
         var (userMessage, latestAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
         var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
 
-        return new ExpertEscalatedAnswerDto
-        {
-            AnswerId = session.Id,
-            SessionId = session.Id,
-            QuestionId = userMessage?.Id ?? Guid.Empty,
-            StudentId = session.StudentId,
-            StudentName = session.Student?.FullName ?? string.Empty,
-            StudentEmail = session.Student?.Email ?? string.Empty,
-            CaseId = session.CaseId,
-            CaseTitle = session.Case?.Title ?? string.Empty,
-            CaseDescription = session.Case?.Description,
-            CaseSuggestedDiagnosis = session.Case?.SuggestedDiagnosis,
-            CaseKeyFindings = session.Case?.KeyFindings,
-            QuestionText = userMessage?.Content ?? string.Empty,
-            AnswerText = MapAssistantAnswerText(latestAssistant),
-            CurrentAnswerText = MapAssistantAnswerText(latestAssistant),
-            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis,
-            DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses,
-            KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? null,
-            ReflectiveQuestions = latestAssistant?.ReflectiveQuestions ?? null,
-            Status = session.Status,
-            SessionStatus = session.Status,
-            ReviewFeedback = session.ReviewFeedback,
-            EscalatedById = session.LecturerId,
-            EscalatedAt = session.UpdatedAt ?? session.CreatedAt,
-            AiConfidenceScore = latestAssistant?.AiConfidenceScore,
-            ClassId = enrollment?.ClassId,
-            ClassName = enrollment?.Class?.ClassName ?? string.Empty,
-            ReviewNote = review?.ReviewNote,
-            PromotedCaseId = session.PromotedCaseId,
-            Citations = MergeCitationsFromAssistantMessages(orderedMessages),
-            ImageUrl = ResolveSessionImageUrl(session),
-            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
-                userMessage,
-                session.RequestedReviewMessageId,
-                turns),
-            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
-            RequestedReviewMessageId = session.RequestedReviewMessageId,
-            SelectedUserMessageId = userMessage?.Id,
-            SelectedAssistantMessageId = latestAssistant?.Id,
-            Turns = turns,
-            DicomMetadata = dicomMetadata
-        };
+        return MapEscalatedAnswerDto(
+            session,
+            userMessage,
+            latestAssistant,
+            review,
+            enrollment,
+            turns,
+            dicomMetadata);
     }
 
     public async Task<ExpertVisualSessionDraftResponseDto> UpsertSessionReviewDraftAsync(Guid expertId, Guid sessionId, ExpertVisualSessionDraftRequestDto request)
     {
+        if (request == null)
+            throw new InvalidOperationException("Request body is required.");
+
+        if (string.IsNullOrWhiteSpace(request.ReviewNote)
+            && (request.CorrectedRoiBoundingBox == null || request.CorrectedRoiBoundingBox.Length == 0))
+        {
+            throw new InvalidOperationException("At least one of reviewNote or correctedRoiBoundingBox is required.");
+        }
+
         var session = await _unitOfWork.Context.VisualQaSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId)
             ?? throw new KeyNotFoundException("Q&A session not found.");
@@ -497,177 +436,145 @@ public class ExpertReviewService : IExpertReviewService
         if (!await ExpertMayActOnVisualSessionAsync(expertId, session.StudentId, session.ExpertId, session.TargetBoneSpecialtyId))
             throw new InvalidOperationException("The expert does not have permission to approve this Q&A session.");
 
+        if (session.PromotedCaseId.HasValue)
+            return;
+
         if (!CanTransitionFrom(session.Status, "ExpertApproved"))
             throw new ConflictException($"Cannot approve a session from status '{session.Status}'.");
 
-        session.Status = "ExpertApproved";
+        session.Status = CaseAnswerStatuses.ExpertApproved;
         session.ExpertId = expertId;
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
 
         await TryIngestGoldenChunkAfterSimpleApproveAsync(sessionId);
+
+        await _notificationService.SendNotificationToUserAsync(
+            session.StudentId,
+            "An expert approved your Visual QA session",
+            "Your session has been reviewed by an expert. Open Visual QA to read the feedback.",
+            "expert_review",
+            $"/student/qa/image?sessionId={session.Id}");
     }
 
-    public async Task<Guid> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request)
+    public async Task<PromoteToLibraryResponseDto> ApproveAndPromoteToLibraryAsync(
+        Guid expertId,
+        Guid sessionId,
+        ApproveAndPromoteToLibraryRequestDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.Description))
-            throw new InvalidOperationException("Description is required.");
-        if (string.IsNullOrWhiteSpace(request.SuggestedDiagnosis))
-            throw new InvalidOperationException("SuggestedDiagnosis is required.");
-        if (string.IsNullOrWhiteSpace(request.KeyFindings))
-            throw new InvalidOperationException("KeyFindings is required.");
-        if (string.IsNullOrWhiteSpace(request.ReflectiveQuestions))
-            throw new InvalidOperationException("ReflectiveQuestions is required.");
+        if (request == null)
+            throw new InvalidOperationException("Request body is required.");
+
+        var existingResponse = await TryBuildExistingPromoteResponseAsync(sessionId);
+        if (existingResponse != null)
+            return existingResponse;
 
         var now = DateTime.UtcNow;
-        var title = string.IsNullOrWhiteSpace(request.Title?.Trim())
-            ? "Clinical case from the community"
-            : request.Title.Trim();
-        var normalizedDifficulty = MedicalCaseDifficultyNormalizer.Normalize(request.Difficulty);
 
         await using var transaction =
             await _unitOfWork.Context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         try
         {
-            var session = await _unitOfWork.Context.VisualQaSessions
-                .Include(s => s.Case!).ThenInclude(c => c!.Category)
-                .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
-                .Include(s => s.Case!).ThenInclude(c => c!.CaseMedia)
-                .Include(s => s.Case!).ThenInclude(c => c!.CaseMetadata)
-                .Include(s => s.Image)
-                .Include(s => s.Messages)
-                .Include(s => s.ExpertReviews)
-                .FirstOrDefaultAsync(s => s.Id == sessionId)
-                ?? throw new KeyNotFoundException("Q&A session not found.");
+            var session = await LoadSessionForPromotionAsync(sessionId);
 
             if (!await ExpertMayActOnVisualSessionAsync(expertId, session.StudentId, session.ExpertId, session.TargetBoneSpecialtyId))
                 throw new InvalidOperationException("The expert does not have permission to move this Q&A session to the library.");
 
-            if (!string.Equals(session.Status, "ExpertApproved", StringComparison.Ordinal))
-                throw new InvalidOperationException("This session can be moved to the library only after expert approval.");
+            if (session.PromotedCaseId.HasValue)
+            {
+                await transaction.CommitAsync();
+                return await BuildPromoteResponseAsync(session.PromotedCaseId.Value);
+            }
+
+            if (!string.Equals(session.Status, CaseAnswerStatuses.EscalatedToExpert, StringComparison.Ordinal)
+                && !string.Equals(session.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.Ordinal))
+            {
+                throw new ConflictException(
+                    $"Cannot approve and promote a session from status '{session.Status}'.");
+            }
+
+            var expertReview = await UpsertExpertReviewForPromotionAsync(
+                session,
+                expertId,
+                request.ReviewNote,
+                request.CorrectedRoiBoundingBox,
+                now,
+                finalizeAction: true);
+
+            session.Status = CaseAnswerStatuses.ExpertApproved;
+            session.ExpertId = expertId;
+            if (!string.IsNullOrWhiteSpace(request.ReviewNote))
+                session.ReviewFeedback = VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(request.ReviewNote.Trim());
+            session.UpdatedAt = now;
+
+            var caseId = await CreatePromotedLibraryCaseAsync(
+                session,
+                expertId,
+                request,
+                expertReview,
+                now);
+
+            await _unitOfWork.SaveAsync();
+            await transaction.CommitAsync();
+
+            await SendPromoteSuccessNotificationsAsync(session, caseId);
+
+            try
+            {
+                await TryIngestGoldenChunkAfterPromoteAsync(session, request);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Golden chunk ingest failed after approve-and-promote for session {SessionId}.", sessionId);
+            }
+
+            return await BuildPromoteResponseAsync(caseId);
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<PromoteToLibraryResponseDto> PromoteToLibraryAsync(Guid expertId, Guid sessionId, PromoteToLibraryRequestDto request)
+    {
+        var existingResponse = await TryBuildExistingPromoteResponseAsync(sessionId);
+        if (existingResponse != null)
+            return existingResponse;
+
+        var now = DateTime.UtcNow;
+
+        await using var transaction =
+            await _unitOfWork.Context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        try
+        {
+            var session = await LoadSessionForPromotionAsync(sessionId);
+
+            if (!await ExpertMayActOnVisualSessionAsync(expertId, session.StudentId, session.ExpertId, session.TargetBoneSpecialtyId))
+                throw new InvalidOperationException("The expert does not have permission to move this Q&A session to the library.");
 
             if (session.PromotedCaseId.HasValue)
-                throw new InvalidOperationException("This case has already been added to the library.");
+            {
+                await transaction.CommitAsync();
+                return await BuildPromoteResponseAsync(session.PromotedCaseId.Value);
+            }
+
+            if (!string.Equals(session.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.Ordinal))
+                throw new InvalidOperationException("This session can be moved to the library only after expert approval.");
 
             if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
                 throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
 
-            var orderedMessages = session.Messages
-                .OrderBy(m => m.CreatedAt)
-                .ThenBy(m => m.Id)
-                .ToList();
-            var turns = VisualQaSessionTurnsMapper.BuildTurns(session.Id, orderedMessages, session.Status, session.RequestedReviewMessageId);
-            var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
-            var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
-            var sourceCaseMetadata = session.Case?.CaseMetadata;
-            request = PromoteToLibraryRequestHydrator.Merge(
-                request,
-                session,
-                orderedMessages,
-                targetUser,
-                targetAssistant,
-                turns,
-                dicomMetadata,
-                sourceCaseMetadata);
-
             var expertReview = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
-            LibraryPromotionQualityGate.ValidateOrThrow(request, session, orderedMessages, expertReview);
+            var caseId = await CreatePromotedLibraryCaseAsync(
+                session,
+                expertId,
+                request,
+                expertReview,
+                now);
 
-            var resolvedCategoryId = await ResolvePromoteCategoryIdAsync(request);
-
-            var newCase = new MedicalCase
-            {
-                Id = Guid.NewGuid(),
-                Title = title,
-                Description = request.Description.Trim(),
-                SuggestedDiagnosis = request.SuggestedDiagnosis.Trim(),
-                KeyFindings = request.KeyFindings.Trim(),
-                ReflectiveQuestions = request.ReflectiveQuestions.Trim(),
-                Difficulty = normalizedDifficulty,
-                CategoryId = resolvedCategoryId,
-                IsApproved = true,
-                IsActive = true,
-                CreatedByExpertId = expertId,
-                CreatedAt = now,
-                UpdatedAt = now,
-                IndexingStatus = DocumentIndexingStatuses.Pending,
-                Version = SemanticDocumentVersion.Initial,
-                ReviewVersion = "1.0.0",
-                ValidatedByUserId = expertId,
-                ValidatedAt = now
-            };
-
-            await _unitOfWork.Context.MedicalCases.AddAsync(newCase);
-
-            var image = new MedicalImage
-            {
-                Id = Guid.NewGuid(),
-                CaseId = newCase.Id,
-                ImageUrl = session.CustomImageUrl.Trim(),
-                Modality = MedicalImageModalityNormalizer.Normalize(request.Modality),
-                CreatedAt = now
-            };
-            await _unitOfWork.Context.MedicalImages.AddAsync(image);
-
-            var roiItems = (request.TurnAnnotations ?? request.ImageAnnotations ?? Enumerable.Empty<PromoteCaseAnnotationDto>())
-                .Where(a => a != null)
-                .ToList();
-            var annotationsCreated = 0;
-            foreach (var ann in roiItems)
-            {
-                var coords = SerializePromoteCoordinates(ann!.Coordinates);
-                var label = ResolvePromoteAnnotationLabel(ann.Label);
-                if (string.IsNullOrWhiteSpace(coords) && string.IsNullOrWhiteSpace(ann.Label?.Trim()))
-                    continue;
-
-                await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
-                {
-                    Id = Guid.NewGuid(),
-                    ImageId = image.Id,
-                    Label = label,
-                    Coordinates = coords,
-                    CreatedAt = now
-                });
-                annotationsCreated++;
-            }
-
-            if (annotationsCreated == 0)
-            {
-                var autoCoords = ResolvePromoteRoiCoordinates(session, orderedMessages, expertReview, turns, targetUser);
-                if (!string.IsNullOrWhiteSpace(autoCoords))
-                {
-                    await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
-                    {
-                        Id = Guid.NewGuid(),
-                        ImageId = image.Id,
-                        Label = "finding",
-                        Coordinates = autoCoords,
-                        CreatedAt = now
-                    });
-                }
-            }
-
-            await CopySourceCaseMediaAsync(session.Case, newCase.Id, request.Modality, now);
-
-            var sourceTagId = await GetOrCreateTagIdByNameAndTypeAsync("Student Q&A", "Source", now);
-            await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, now);
-
-            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Student Q&A" };
-            foreach (var raw in request.TagNames ?? Enumerable.Empty<string>())
-            {
-                var name = raw?.Trim();
-                if (string.IsNullOrWhiteSpace(name) || !seenNames.Add(name))
-                    continue;
-
-                var extraTagId = await GetOrCreateTagIdByNameAndTypeAsync(name, "Custom", now);
-                await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, now);
-            }
-
-            session.PromotedCaseId = newCase.Id;
             await _unitOfWork.SaveAsync();
-
-            await InsertCaseMetadataForPromotedLibraryCaseAsync(newCase.Id, request, session, now, normalizedDifficulty);
-
             await transaction.CommitAsync();
 
             try
@@ -679,13 +586,252 @@ public class ExpertReviewService : IExpertReviewService
                 _logger.LogWarning(ex, "Golden chunk ingest failed after promote-to-library for session {SessionId}.", sessionId);
             }
 
-            return newCase.Id;
+            return await BuildPromoteResponseAsync(caseId);
         }
         catch
         {
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    private async Task<VisualQASession> LoadSessionForPromotionAsync(Guid sessionId)
+    {
+        return await _unitOfWork.Context.VisualQaSessions
+                   .Include(s => s.Case!).ThenInclude(c => c!.Category)
+                   .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
+                   .Include(s => s.Case!).ThenInclude(c => c!.CaseMedia)
+                   .Include(s => s.Case!).ThenInclude(c => c!.CaseMetadata)
+                   .Include(s => s.Image)
+                   .Include(s => s.Messages)
+                   .Include(s => s.ExpertReviews)
+                   .FirstOrDefaultAsync(s => s.Id == sessionId)
+               ?? throw new KeyNotFoundException("Q&A session not found.");
+    }
+
+    private async Task<PromoteToLibraryResponseDto?> TryBuildExistingPromoteResponseAsync(Guid sessionId)
+    {
+        var promotedCaseId = await _unitOfWork.Context.VisualQaSessions
+            .AsNoTracking()
+            .Where(s => s.Id == sessionId && s.PromotedCaseId.HasValue)
+            .Select(s => s.PromotedCaseId)
+            .FirstOrDefaultAsync();
+
+        return promotedCaseId.HasValue
+            ? await BuildPromoteResponseAsync(promotedCaseId.Value)
+            : null;
+    }
+
+    private async Task<PromoteToLibraryResponseDto> BuildPromoteResponseAsync(Guid caseId)
+    {
+        var row = await _unitOfWork.Context.MedicalCases
+            .AsNoTracking()
+            .Where(c => c.Id == caseId)
+            .Select(c => new { c.Id, c.Title, c.IsApproved })
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Promoted medical case not found.");
+
+        return new PromoteToLibraryResponseDto
+        {
+            PromotedCaseId = row.Id,
+            CaseId = row.Id,
+            Title = row.Title,
+            Status = row.IsApproved == true ? "approved" : "pending"
+        };
+    }
+
+    private async Task<ExpertReview> UpsertExpertReviewForPromotionAsync(
+        VisualQASession session,
+        Guid expertId,
+        string? reviewNote,
+        double[]? correctedRoiBoundingBox,
+        DateTime nowUtc,
+        bool finalizeAction)
+    {
+        var review = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+        var roiJson = SerializeCorrectedRoi(correctedRoiBoundingBox);
+        var note = string.IsNullOrWhiteSpace(reviewNote) ? null : reviewNote.Trim();
+
+        if (review == null)
+        {
+            review = new ExpertReview
+            {
+                Id = Guid.NewGuid(),
+                ExpertId = expertId,
+                AnswerId = null,
+                SessionId = session.Id,
+                ReviewNote = note,
+                Action = finalizeAction ? "Approve" : null,
+                CorrectedRoi = roiJson,
+                CreatedAt = nowUtc
+            };
+            await _unitOfWork.Context.ExpertReviews.AddAsync(review);
+            session.ExpertReviews.Add(review);
+        }
+        else
+        {
+            if (finalizeAction && IsFinalizedExpertReviewAction(review.Action))
+                throw new ConflictException("This Q&A session has already been processed.");
+
+            if (!string.IsNullOrWhiteSpace(note))
+                review.ReviewNote = note;
+            if (correctedRoiBoundingBox != null)
+                review.CorrectedRoi = roiJson;
+            if (finalizeAction)
+                review.Action = "Approve";
+            _unitOfWork.Context.ExpertReviews.Update(review);
+        }
+
+        return review;
+    }
+
+    private async Task<Guid> CreatePromotedLibraryCaseAsync(
+        VisualQASession session,
+        Guid expertId,
+        PromoteToLibraryRequestDto request,
+        ExpertReview? expertReview,
+        DateTime nowUtc)
+    {
+        if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
+            throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
+
+        var title = string.IsNullOrWhiteSpace(request.Title?.Trim())
+            ? "Clinical case from the community"
+            : request.Title.Trim();
+        var normalizedDifficulty = MedicalCaseDifficultyNormalizer.Normalize(request.Difficulty);
+
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var turns = VisualQaSessionTurnsMapper.BuildTurns(session.Id, orderedMessages, session.Status, session.RequestedReviewMessageId);
+        var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
+        var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
+        var sourceCaseMetadata = session.Case?.CaseMetadata;
+        request = PromoteToLibraryRequestHydrator.Merge(
+            request,
+            session,
+            orderedMessages,
+            targetUser,
+            targetAssistant,
+            turns,
+            dicomMetadata,
+            sourceCaseMetadata);
+
+        var validationErrors = PromoteToLibraryValidation.ValidateRequiredFields(request);
+        if (validationErrors != null)
+            throw new PromoteValidationException(validationErrors);
+
+        LibraryPromotionQualityGate.ValidateOrThrow(request, session, orderedMessages, expertReview);
+
+        var resolvedCategoryId = await ResolvePromoteCategoryIdAsync(request);
+
+        var newCase = new MedicalCase
+        {
+            Id = Guid.NewGuid(),
+            Title = title,
+            Description = request.Description.Trim(),
+            SuggestedDiagnosis = request.SuggestedDiagnosis.Trim(),
+            KeyFindings = request.KeyFindings.Trim(),
+            ReflectiveQuestions = request.ReflectiveQuestions.Trim(),
+            Difficulty = normalizedDifficulty,
+            CategoryId = resolvedCategoryId,
+            IsApproved = true,
+            IsActive = true,
+            CreatedByExpertId = expertId,
+            CreatedAt = nowUtc,
+            UpdatedAt = nowUtc,
+            IndexingStatus = DocumentIndexingStatuses.Pending,
+            Version = SemanticDocumentVersion.Initial,
+            ReviewVersion = "1.0.0",
+            ValidatedByUserId = expertId,
+            ValidatedAt = nowUtc
+        };
+
+        await _unitOfWork.Context.MedicalCases.AddAsync(newCase);
+
+        var image = new MedicalImage
+        {
+            Id = Guid.NewGuid(),
+            CaseId = newCase.Id,
+            ImageUrl = session.CustomImageUrl.Trim(),
+            Modality = MedicalImageModalityNormalizer.Normalize(request.Modality),
+            CreatedAt = nowUtc
+        };
+        await _unitOfWork.Context.MedicalImages.AddAsync(image);
+
+        var roiItems = (request.TurnAnnotations ?? request.ImageAnnotations ?? Enumerable.Empty<PromoteCaseAnnotationDto>())
+            .Where(a => a != null)
+            .ToList();
+        var annotationsCreated = 0;
+        foreach (var ann in roiItems)
+        {
+            var coords = SerializePromoteCoordinates(ann!.Coordinates);
+            var label = ResolvePromoteAnnotationLabel(ann.Label);
+            if (string.IsNullOrWhiteSpace(coords) && string.IsNullOrWhiteSpace(ann.Label?.Trim()))
+                continue;
+
+            await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
+            {
+                Id = Guid.NewGuid(),
+                ImageId = image.Id,
+                Label = label,
+                Coordinates = coords,
+                CreatedAt = nowUtc
+            });
+            annotationsCreated++;
+        }
+
+        if (annotationsCreated == 0)
+        {
+            var autoCoords = ResolvePromoteRoiCoordinates(session, orderedMessages, expertReview, turns, targetUser);
+            if (!string.IsNullOrWhiteSpace(autoCoords))
+            {
+                await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
+                {
+                    Id = Guid.NewGuid(),
+                    ImageId = image.Id,
+                    Label = "finding",
+                    Coordinates = autoCoords,
+                    CreatedAt = nowUtc
+                });
+            }
+        }
+
+        await CopySourceCaseMediaAsync(session.Case, newCase.Id, request.Modality, nowUtc);
+
+        var sourceTagId = await GetOrCreateTagIdByNameAndTypeAsync("Student Q&A", "Source", nowUtc);
+        await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, nowUtc);
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Student Q&A" };
+        foreach (var raw in request.TagNames ?? Enumerable.Empty<string>())
+        {
+            var name = raw?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || !seenNames.Add(name))
+                continue;
+
+            var extraTagId = await GetOrCreateTagIdByNameAndTypeAsync(name, "Custom", nowUtc);
+            await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, nowUtc);
+        }
+
+        session.PromotedCaseId = newCase.Id;
+        session.Status = CaseAnswerStatuses.ExpertApproved;
+
+        await InsertCaseMetadataForPromotedLibraryCaseAsync(newCase.Id, request, session, nowUtc, normalizedDifficulty);
+
+        return newCase.Id;
+    }
+
+    private async Task SendPromoteSuccessNotificationsAsync(VisualQASession session, Guid caseId)
+    {
+        await _notificationService.SendNotificationToUserAsync(
+            session.StudentId,
+            "Your Visual QA case was published to the library",
+            "An expert approved your session and published it as a teaching case.",
+            "expert_review",
+            $"/student/qa/image?sessionId={session.Id}");
+
+        await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(session.Id);
     }
 
     private async Task InsertCaseMetadataForPromotedLibraryCaseAsync(
@@ -1146,6 +1292,73 @@ public class ExpertReviewService : IExpertReviewService
             .FirstOrDefault();
 
         return (user, assistant);
+    }
+
+    private static ExpertEscalatedAnswerDto MapEscalatedAnswerDto(
+        VisualQASession session,
+        QAMessage? userMessage,
+        QAMessage? latestAssistant,
+        ExpertReview? review,
+        ClassEnrollment? enrollment,
+        IReadOnlyList<VisualQaTurnDto> turns,
+        JsonElement? dicomMetadata)
+    {
+        var orderedMessages = session.Messages
+            .OrderBy(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+        var report = ExpertEscalatedReportBuilder.BuildFromAssistant(latestAssistant);
+
+        return new ExpertEscalatedAnswerDto
+        {
+            AnswerId = session.Id,
+            SessionId = session.Id,
+            QuestionId = userMessage?.Id ?? Guid.Empty,
+            StudentId = session.StudentId,
+            StudentName = session.Student?.FullName ?? string.Empty,
+            StudentEmail = session.Student?.Email ?? string.Empty,
+            CaseId = session.CaseId,
+            CaseTitle = session.Case?.Title ?? string.Empty,
+            CaseDescription = session.Case?.Description,
+            CaseSuggestedDiagnosis = session.Case?.SuggestedDiagnosis,
+            CaseKeyFindings = session.Case?.KeyFindings,
+            QuestionText = userMessage?.Content ?? string.Empty,
+            AnswerText = MapAssistantAnswerText(latestAssistant),
+            CurrentAnswerText = MapAssistantAnswerText(latestAssistant),
+            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis ?? report.Diagnosis,
+            DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses
+                                    ?? (report.DifferentialDiagnoses.Count > 0
+                                        ? JsonSerializer.Serialize(report.DifferentialDiagnoses)
+                                        : null),
+            KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? report.KeyImagingFindings,
+            ReflectiveQuestions = latestAssistant?.ReflectiveQuestions
+                                  ?? (report.ReflectiveQuestions.Count > 0
+                                      ? string.Join("\n", report.ReflectiveQuestions)
+                                      : null),
+            Status = session.Status,
+            SessionStatus = session.Status,
+            ReviewFeedback = session.ReviewFeedback,
+            EscalatedById = session.LecturerId,
+            EscalatedAt = session.UpdatedAt ?? session.CreatedAt,
+            AiConfidenceScore = latestAssistant?.AiConfidenceScore ?? report.AiConfidenceScore,
+            ClassId = enrollment?.ClassId,
+            ClassName = enrollment?.Class?.ClassName ?? string.Empty,
+            ReviewNote = review?.ReviewNote,
+            PromotedCaseId = session.PromotedCaseId,
+            Citations = MergeCitationsFromAssistantMessages(orderedMessages),
+            ImageUrl = ResolveSessionImageUrl(session),
+            CustomCoordinates = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+                userMessage,
+                session.RequestedReviewMessageId,
+                turns),
+            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
+            RequestedReviewMessageId = session.RequestedReviewMessageId,
+            SelectedUserMessageId = userMessage?.Id,
+            SelectedAssistantMessageId = latestAssistant?.Id,
+            Turns = turns,
+            Report = report,
+            DicomMetadata = dicomMetadata
+        };
     }
 
     private static string? MapAssistantAnswerText(QAMessage? assistant) =>

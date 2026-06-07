@@ -174,6 +174,37 @@ public class ExpertVisualSessionDraftResponseDto
     public double[]? ExpertCorrectedRoiBoundingBox { get; set; }
 }
 
+/// <summary>Structured AI answer for expert review prefill (<c>item.report</c> on FE).</summary>
+public class ExpertEscalatedReportDto
+{
+    public string? SuggestedDiagnosis { get; set; }
+    public string? Diagnosis { get; set; }
+    public string? AnswerText { get; set; }
+    public IReadOnlyList<string> DifferentialDiagnoses { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> KeyFindings { get; set; } = Array.Empty<string>();
+    public string? KeyImagingFindings { get; set; }
+    public IReadOnlyList<string> ReflectiveQuestions { get; set; } = Array.Empty<string>();
+    public double? AiConfidenceScore { get; set; }
+}
+
+public class ApproveAndPromoteToLibraryRequestDto : PromoteToLibraryRequestDto
+{
+    [StringLength(2000)]
+    public string? ReviewNote { get; set; }
+
+    [MinLength(4)]
+    [MaxLength(4)]
+    public double[]? CorrectedRoiBoundingBox { get; set; }
+}
+
+public class PromoteToLibraryResponseDto
+{
+    public Guid PromotedCaseId { get; set; }
+    public Guid CaseId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Status { get; set; } = "approved";
+}
+
 public class ExpertEscalatedAnswerDto
 {
     public Guid AnswerId { get; set; }
@@ -225,6 +256,9 @@ public class ExpertEscalatedAnswerDto
     public Guid? SelectedUserMessageId { get; set; }
     public Guid? SelectedAssistantMessageId { get; set; }
     public IReadOnlyList<VisualQaTurnDto> Turns { get; set; } = Array.Empty<VisualQaTurnDto>();
+
+    /// <summary>Structured AI report for <c>ReportWorkbench</c> prefill (detail always populated from assistant turn).</summary>
+    public ExpertEscalatedReportDto Report { get; set; } = new();
 
     [JsonPropertyName("dicomMetadata")]
     public JsonElement? DicomMetadata { get; set; }

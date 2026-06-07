@@ -247,6 +247,13 @@ public class VisualQaThreadDto
     /// <summary>Review note from lecturer/expert on <c>visual_qa_sessions.review_feedback</c>.</summary>
     [JsonPropertyName("reviewFeedback")]
     public string? ReviewFeedback { get; set; }
+
+    /// <summary>Teaching case created when expert promotes this session to the library.</summary>
+    [JsonPropertyName("promotedCaseId")]
+    public Guid? PromotedCaseId { get; set; }
+
+    [JsonPropertyName("publishedToLibrary")]
+    public bool PublishedToLibrary => PromotedCaseId.HasValue;
 }
 
 /// <summary>Session-level review summary for student/history/report views.</summary>

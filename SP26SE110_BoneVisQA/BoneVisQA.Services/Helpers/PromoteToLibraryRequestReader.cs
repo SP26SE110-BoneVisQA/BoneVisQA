@@ -16,11 +16,26 @@ public static class PromoteToLibraryRequestReader
         HttpRequest request,
         CancellationToken cancellationToken = default)
     {
+        return await ReadCoreAsync<PromoteToLibraryRequestDto>(request, cancellationToken);
+    }
+
+    public static async Task<ApproveAndPromoteToLibraryRequestDto?> ReadApproveAndPromoteAsync(
+        HttpRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await ReadCoreAsync<ApproveAndPromoteToLibraryRequestDto>(request, cancellationToken);
+    }
+
+    private static async Task<T?> ReadCoreAsync<T>(
+        HttpRequest request,
+        CancellationToken cancellationToken = default)
+        where T : PromoteToLibraryRequestDto, new()
+    {
         if (request.ContentLength is 0 or null)
             return null;
 
         if (request.HasFormContentType)
-            return ReadFromForm(request);
+            return ReadFromForm(request) as T;
 
         request.EnableBuffering();
         request.Body.Position = 0;
@@ -33,7 +48,7 @@ public static class PromoteToLibraryRequestReader
 
         try
         {
-            return JsonSerializer.Deserialize<PromoteToLibraryRequestDto>(text, JsonOptions);
+            return JsonSerializer.Deserialize<T>(text, JsonOptions);
         }
         catch (JsonException)
         {
