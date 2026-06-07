@@ -41,6 +41,15 @@ public class CaseListItemDto
 
     /// <summary><see cref="StudentCaseOriginValues"/> for FE (Ask AI lockout).</summary>
     public string CaseOrigin { get; set; } = StudentCaseOriginValues.ExpertCreated;
+
+    [JsonPropertyName("boneLocation")]
+    public string? BoneLocation { get; set; }
+
+    [JsonPropertyName("lesionType")]
+    public string? LesionType { get; set; }
+
+    [JsonPropertyName("expertName")]
+    public string? ExpertName { get; set; }
 }
 
 public class MedicalImageDto
@@ -103,6 +112,31 @@ public class CaseDetailDto
     public DateTime? CreatedAt { get; set; }
 
     public string CaseOrigin { get; set; } = StudentCaseOriginValues.ExpertCreated;
+
+    [JsonPropertyName("boneLocation")]
+    public string? BoneLocation { get; set; }
+
+    [JsonPropertyName("lesionType")]
+    public string? LesionType { get; set; }
+
+    [JsonPropertyName("expertName")]
+    public string? ExpertName { get; set; }
+
+    [JsonPropertyName("reflectiveQuestions")]
+    public string? ReflectiveQuestions { get; set; }
+
+    /// <summary>Populated for <see cref="StudentCaseOriginValues.CommunityPromoted"/> cases.</summary>
+    [JsonPropertyName("studentQuestion")]
+    public string? StudentQuestion { get; set; }
+
+    [JsonPropertyName("differentialDiagnoses")]
+    public IReadOnlyList<string>? DifferentialDiagnoses { get; set; }
+
+    [JsonPropertyName("referencesAndCitations")]
+    public IReadOnlyList<string>? ReferencesAndCitations { get; set; }
+
+    [JsonPropertyName("clinicalDescription")]
+    public string? ClinicalDescription => Description;
 }
 
 public class StudentCaseHistoryItemDto

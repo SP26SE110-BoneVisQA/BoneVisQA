@@ -626,9 +626,10 @@ public class ExpertReviewService : IExpertReviewService
     {
         var row = await _unitOfWork.Context.MedicalCases
             .AsNoTracking()
-            .Where(c => c.Id == caseId)
-            .Select(c => new { c.Id, c.Title, c.IsApproved })
-            .FirstOrDefaultAsync()
+            .Include(c => c.Category)
+            .Include(c => c.CaseTags)
+                .ThenInclude(ct => ct.Tag)
+            .FirstOrDefaultAsync(c => c.Id == caseId)
             ?? throw new KeyNotFoundException("Promoted medical case not found.");
 
         return new PromoteToLibraryResponseDto
@@ -636,8 +637,16 @@ public class ExpertReviewService : IExpertReviewService
             PromotedCaseId = row.Id,
             CaseId = row.Id,
             Title = row.Title,
-            Status = "approved",
-            CaseOrigin = ExpertCaseOriginValues.FromStudentRequest
+            Status = row.IsApproved == true ? "approved" : "pending",
+            CaseOrigin = ExpertCaseOriginValues.FromStudentRequest,
+            CategoryId = row.CategoryId,
+            CategoryName = row.Category?.Name,
+            Difficulty = row.Difficulty,
+            TagNames = row.CaseTags
+                .Where(ct => ct.Tag != null)
+                .Select(ct => ct.Tag!.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
         };
     }
 
@@ -805,6 +814,16 @@ public class ExpertReviewService : IExpertReviewService
         await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, nowUtc);
 
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Student Q&A" };
+        foreach (var tagId in request.TagIds ?? Enumerable.Empty<Guid>())
+        {
+            var tag = await _unitOfWork.Context.Tags.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tagId);
+            if (tag == null)
+                continue;
+
+            await AddCaseTagIfMissingAsync(newCase.Id, tag.Id, nowUtc);
+            seenNames.Add(tag.Name);
+        }
+
         foreach (var raw in request.TagNames ?? Enumerable.Empty<string>())
         {
             var name = raw?.Trim();
@@ -815,10 +834,29 @@ public class ExpertReviewService : IExpertReviewService
             await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, nowUtc);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.AnatomySite))
+        {
+            var locationTagId = await GetOrCreateTagIdByNameAndTypeAsync(request.AnatomySite.Trim(), "Location", nowUtc);
+            await AddCaseTagIfMissingAsync(newCase.Id, locationTagId, nowUtc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PathologyGroup))
+        {
+            var lesionTagId = await GetOrCreateTagIdByNameAndTypeAsync(request.PathologyGroup.Trim(), "Lesion Type", nowUtc);
+            await AddCaseTagIfMissingAsync(newCase.Id, lesionTagId, nowUtc);
+        }
+
         session.PromotedCaseId = newCase.Id;
         session.Status = CaseAnswerStatuses.ExpertApproved;
 
-        await InsertCaseMetadataForPromotedLibraryCaseAsync(newCase.Id, request, session, nowUtc, normalizedDifficulty);
+        await InsertCaseMetadataForPromotedLibraryCaseAsync(
+            newCase.Id,
+            request,
+            session,
+            targetUser,
+            targetAssistant,
+            nowUtc,
+            normalizedDifficulty);
 
         return newCase.Id;
     }
@@ -839,6 +877,8 @@ public class ExpertReviewService : IExpertReviewService
         Guid caseId,
         PromoteToLibraryRequestDto request,
         VisualQASession session,
+        QAMessage? targetUser,
+        QAMessage? targetAssistant,
         DateTime nowUtc,
         string normalizedDifficulty)
     {
@@ -846,15 +886,18 @@ public class ExpertReviewService : IExpertReviewService
         if (string.IsNullOrWhiteSpace(anatomyRegion))
             anatomyRegion = "Other";
 
+        var references = BuildReferencesAndCitationsFromAssistant(targetAssistant);
         var clinical = new Dictionary<string, object?>
         {
             ["source"] = "bonevisqa-promote",
             ["clinical_evidence"] = request.ClinicalEvidence.Trim(),
+            ["student_question"] = targetUser?.Content?.Trim(),
             ["differential_diagnoses"] = request.DifferentialDiagnoses
                 .Select(s => s?.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
+            ["references_and_citations"] = references,
             ["promoted_from_session_id"] = session.Id,
             ["validated_at_utc"] = nowUtc
         };
@@ -1331,11 +1374,15 @@ public class ExpertReviewService : IExpertReviewService
                                     ?? (report.DifferentialDiagnoses.Count > 0
                                         ? JsonSerializer.Serialize(report.DifferentialDiagnoses)
                                         : null),
+            DifferentialDiagnosesList = report.DifferentialDiagnoses.Count > 0
+                ? report.DifferentialDiagnoses
+                : ParseDifferentialDiagnosesList(latestAssistant?.DifferentialDiagnoses),
             KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? report.KeyImagingFindings,
             ReflectiveQuestions = latestAssistant?.ReflectiveQuestions
                                   ?? (report.ReflectiveQuestions.Count > 0
                                       ? string.Join("\n", report.ReflectiveQuestions)
                                       : null),
+            ReferencesAndCitations = BuildReferencesAndCitationsFromAssistant(latestAssistant),
             Status = session.Status,
             SessionStatus = session.Status,
             ReviewFeedback = session.ReviewFeedback,
@@ -1364,6 +1411,68 @@ public class ExpertReviewService : IExpertReviewService
 
     private static string? MapAssistantAnswerText(QAMessage? assistant) =>
         VisualQaAssistantAnswerFormatter.FormatDisplayText(assistant);
+
+    private static IReadOnlyList<string> ParseDifferentialDiagnosesList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return Array.Empty<string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<string>>(raw);
+            if (parsed is { Count: > 0 })
+            {
+                return parsed
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+        catch (JsonException)
+        {
+            // fall through
+        }
+
+        return raw
+            .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> BuildReferencesAndCitationsFromAssistant(QAMessage? assistant)
+    {
+        if (assistant == null)
+            return Array.Empty<string>();
+
+        var fromJson = VisualQaCitationMetadataBuilder.DeserializeMany(assistant.CitationsJson);
+        if (fromJson.Count > 0)
+        {
+            return fromJson
+                .Select(c =>
+                    !string.IsNullOrWhiteSpace(c.DisplayLabel) ? c.DisplayLabel :
+                    !string.IsNullOrWhiteSpace(c.Snippet) ? c.Snippet :
+                    c.SourceText)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList();
+        }
+
+        return assistant.Citations
+            .Select(c => VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk))
+            .Select(c =>
+                !string.IsNullOrWhiteSpace(c.DisplayLabel) ? c.DisplayLabel :
+                !string.IsNullOrWhiteSpace(c.Snippet) ? c.Snippet :
+                c.SourceText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .ToList();
+    }
 
     public async Task FlagChunkAsync(Guid expertId, Guid chunkId, FlagChunkRequestDto request)
     {

@@ -75,6 +75,9 @@ public class PromoteToLibraryRequestDto
     [MaxLength(20)]
     public List<string>? TagNames { get; set; }
 
+    [MaxLength(20)]
+    public List<Guid>? TagIds { get; set; }
+
     public List<PromoteCaseAnnotationDto>? TurnAnnotations { get; set; }
 
     public List<PromoteCaseAnnotationDto>? ImageAnnotations { get; set; }
@@ -204,6 +207,10 @@ public class PromoteToLibraryResponseDto
     public string Title { get; set; } = string.Empty;
     public string Status { get; set; } = "approved";
     public string CaseOrigin { get; set; } = ExpertCaseOriginValues.FromStudentRequest;
+    public Guid? CategoryId { get; set; }
+    public string? CategoryName { get; set; }
+    public string? Difficulty { get; set; }
+    public IReadOnlyList<string> TagNames { get; set; } = Array.Empty<string>();
 }
 
 public class ExpertEscalatedAnswerDto
@@ -227,7 +234,15 @@ public class ExpertEscalatedAnswerDto
 
     public string? CurrentAnswerText { get; set; }
     public string? StructuredDiagnosis { get; set; }
+
+    [JsonPropertyName("suggestedMainDiagnosis")]
+    public string? SuggestedMainDiagnosis => StructuredDiagnosis;
+
     public string? DifferentialDiagnoses { get; set; }
+
+    [JsonPropertyName("differentialDiagnosesList")]
+    public IReadOnlyList<string> DifferentialDiagnosesList { get; set; } = Array.Empty<string>();
+
     public string? KeyImagingFindings { get; set; }
     public string? ReflectiveQuestions { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -260,6 +275,9 @@ public class ExpertEscalatedAnswerDto
 
     /// <summary>Structured AI report for <c>ReportWorkbench</c> prefill (detail always populated from assistant turn).</summary>
     public ExpertEscalatedReportDto Report { get; set; } = new();
+
+    [JsonPropertyName("referencesAndCitations")]
+    public IReadOnlyList<string> ReferencesAndCitations { get; set; } = Array.Empty<string>();
 
     [JsonPropertyName("dicomMetadata")]
     public JsonElement? DicomMetadata { get; set; }

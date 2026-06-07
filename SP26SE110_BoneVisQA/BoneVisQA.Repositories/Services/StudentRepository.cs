@@ -24,6 +24,7 @@ public class StudentRepository : IStudentRepository
 
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
+            .Include(c => c.CreatedByExpert)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
@@ -37,6 +38,7 @@ public class StudentRepository : IStudentRepository
 
             .FindByCondition(c => c.IsApproved == true && c.IsActive == true && c.OwnerStudentId == null)
             .Include(c => c.Category)
+            .Include(c => c.CreatedByExpert)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)
@@ -95,6 +97,9 @@ public class StudentRepository : IStudentRepository
         return await _unitOfWork.MedicalCaseRepository
             .FindByCondition(c => c.Id == caseId)
             .Include(c => c.Category)
+            .Include(c => c.CreatedByExpert)
+            .Include(c => c.ValidatedByUser)
+            .Include(c => c.CaseMetadata)
             .Include(c => c.CaseTags)
                 .ThenInclude(ct => ct.Tag)
             .Include(c => c.MedicalImages)

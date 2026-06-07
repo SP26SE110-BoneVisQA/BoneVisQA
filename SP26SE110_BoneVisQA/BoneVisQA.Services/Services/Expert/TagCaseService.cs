@@ -32,7 +32,8 @@ namespace BoneVisQA.Services.Services.Expert
                 .Select(x => new GetTagDTO
                 {
                     Id = x.Id,
-                    Name = x.Name
+                    Name = x.Name,
+                    Type = x.Type
                 })
                 .ToListAsync();
 

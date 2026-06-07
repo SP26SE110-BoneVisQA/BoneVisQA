@@ -59,7 +59,11 @@ namespace BoneVisQA.Services.Services.Expert
         {
             var query = _unitOfWork.MedicalCaseRepository.GetQueryable().AsNoTracking();
             if (expertId.HasValue)
-                query = query.Where(x => x.CreatedByExpertId == expertId.Value);
+            {
+                query = query.Where(x =>
+                    x.CreatedByExpertId == expertId.Value ||
+                    x.ValidatedByUserId == expertId.Value);
+            }
 
             var totalCount = await query.CountAsync();
 
@@ -119,7 +123,11 @@ namespace BoneVisQA.Services.Services.Expert
                 .AsNoTracking()
                 .Where(c => c.Id == id);
             if (expertId.HasValue)
-                query = query.Where(c => c.CreatedByExpertId == expertId.Value);
+            {
+                query = query.Where(c =>
+                    c.CreatedByExpertId == expertId.Value ||
+                    c.ValidatedByUserId == expertId.Value);
+            }
 
             var entity = await query
                 .Include(c => c.Category)
@@ -233,6 +241,9 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = dto.CategoryId,
                 SuggestedDiagnosis = dto.SuggestedDiagnosis,
                 KeyFindings = dto.KeyFindings,
+                ReflectiveQuestions = dto.ReflectiveQuestions,
+                ValidatedByUserId = dto.CreatedByExpertId,
+                ValidatedAt = dto.CreatedByExpertId.HasValue ? DateTime.UtcNow : null,
                 IsApproved = dto.IsApproved ?? true,
                 IsActive = dto.IsActive ?? true,
                 CreatedAt = DateTime.UtcNow,
@@ -276,6 +287,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = request.CategoryId,
                 SuggestedDiagnosis = request.SuggestedDiagnosis,
                 KeyFindings = request.KeyFindings,
+                ReflectiveQuestions = request.ReflectiveQuestions,
                 CreatedByExpertId = expertUserId
             };
 
@@ -315,8 +327,76 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.SaveAsync();
 
             await ApplyCaseTagIdsAsync(caseId, request.TagIds, cancellationToken);
+            await EnsureDefaultLocationLesionTagsAsync(caseId, request.CategoryId, request.TagIds, cancellationToken);
 
             return created;
+        }
+
+        private async Task EnsureDefaultLocationLesionTagsAsync(
+            Guid caseId,
+            Guid? categoryId,
+            IEnumerable<Guid>? requestedTagIds,
+            CancellationToken cancellationToken)
+        {
+            var existingTagIds = requestedTagIds?.ToHashSet() ?? new HashSet<Guid>();
+            var caseTags = await _unitOfWork.CaseTagRepository
+                .FindByCondition(ct => ct.CaseId == caseId)
+                .Include(ct => ct.Tag)
+                .ToListAsync(cancellationToken);
+
+            var hasLocation = caseTags.Any(ct =>
+                ct.Tag != null &&
+                (string.Equals(ct.Tag.Type, "Location", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(ct.Tag.Type, "BoneLocation", StringComparison.OrdinalIgnoreCase)));
+            var hasLesion = caseTags.Any(ct =>
+                ct.Tag != null &&
+                (string.Equals(ct.Tag.Type, "Lesion Type", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(ct.Tag.Type, "Lesion", StringComparison.OrdinalIgnoreCase)));
+
+            if (hasLocation && hasLesion)
+                return;
+
+            var category = categoryId.HasValue
+                ? await _unitOfWork.CategoryRepository.GetByIdAsync(categoryId.Value)
+                : null;
+            var categoryName = category?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(categoryName))
+                return;
+
+            var now = DateTime.UtcNow;
+            if (!hasLocation)
+            {
+                var locationTagId = await GetOrCreateTagIdByNameAndTypeAsync(categoryName, "Location", now);
+                if (!existingTagIds.Contains(locationTagId))
+                    await ApplyCaseTagIdsAsync(caseId, new[] { locationTagId }, cancellationToken);
+            }
+
+            if (!hasLesion)
+            {
+                var lesionTagId = await GetOrCreateTagIdByNameAndTypeAsync(categoryName, "Lesion Type", now);
+                if (!existingTagIds.Contains(lesionTagId))
+                    await ApplyCaseTagIdsAsync(caseId, new[] { lesionTagId }, cancellationToken);
+            }
+        }
+
+        private async Task<Guid> GetOrCreateTagIdByNameAndTypeAsync(string name, string type, DateTime now)
+        {
+            var existing = await _unitOfWork.Context.Tags
+                .FirstOrDefaultAsync(t => t.Name == name && t.Type == type);
+            if (existing != null)
+                return existing.Id;
+
+            var tag = new Tag
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Type = type,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            await _unitOfWork.Context.Tags.AddAsync(tag);
+            await _unitOfWork.SaveAsync();
+            return tag.Id;
         }
 
         private async Task ApplyCaseTagIdsAsync(Guid caseId, IEnumerable<Guid>? tagIds, CancellationToken cancellationToken)

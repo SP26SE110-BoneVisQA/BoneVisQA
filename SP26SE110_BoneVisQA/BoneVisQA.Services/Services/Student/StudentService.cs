@@ -120,7 +120,10 @@ public class StudentService : IStudentService
                     .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
                 CreatedAt = c.CreatedAt,
-                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c)
+                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c),
+                BoneLocation = StudentCaseDisplayHelper.ResolveBoneLocation(c),
+                LesionType = StudentCaseDisplayHelper.ResolveLesionType(c),
+                ExpertName = StudentCaseDisplayHelper.ResolveExpertName(c),
             })
             .ToList();
     }
@@ -151,7 +154,10 @@ public class StudentService : IStudentService
                     .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
                 CreatedAt = c.CreatedAt,
-                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c)
+                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c),
+                BoneLocation = StudentCaseDisplayHelper.ResolveBoneLocation(c),
+                LesionType = StudentCaseDisplayHelper.ResolveLesionType(c),
+                ExpertName = StudentCaseDisplayHelper.ResolveExpertName(c),
             })
             .ToList();
     }
@@ -213,6 +219,8 @@ public class StudentService : IStudentService
             });
         }
 
+        var promotedContext = StudentCaseDisplayHelper.ParsePromotedContext(entity);
+
         return new CaseDetailDto
         {
             Id = entity.Id,
@@ -222,6 +230,17 @@ public class StudentService : IStudentService
             CategoryName = entity.Category?.Name,
             ExpertSummary = entity.SuggestedDiagnosis,
             KeyFindings = entity.KeyFindings,
+            ReflectiveQuestions = entity.ReflectiveQuestions,
+            BoneLocation = StudentCaseDisplayHelper.ResolveBoneLocation(entity),
+            LesionType = StudentCaseDisplayHelper.ResolveLesionType(entity),
+            ExpertName = StudentCaseDisplayHelper.ResolveExpertName(entity),
+            StudentQuestion = promotedContext.StudentQuestion,
+            DifferentialDiagnoses = promotedContext.DifferentialDiagnoses.Count > 0
+                ? promotedContext.DifferentialDiagnoses
+                : null,
+            ReferencesAndCitations = promotedContext.ReferencesAndCitations.Count > 0
+                ? promotedContext.ReferencesAndCitations
+                : null,
             PrimaryImageUrl = signedPreview ?? previewUrl ?? imageDtos.FirstOrDefault()?.ImageUrl,
             MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(entity),
             CatalogImageId = CaseMediaDicomMetadataHelper.ResolveFirstCatalogImageId(entity),

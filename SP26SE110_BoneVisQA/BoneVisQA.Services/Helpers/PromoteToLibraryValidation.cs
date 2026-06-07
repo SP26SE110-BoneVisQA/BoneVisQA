@@ -40,7 +40,8 @@ public static class PromoteToLibraryValidation
         if (request.TagNames == null || request.TagNames.Count == 0 ||
             request.TagNames.All(t => string.IsNullOrWhiteSpace(t)))
         {
-            errors["tagNames"] = ["At least one tag is required."];
+            if (request.TagIds == null || request.TagIds.Count == 0)
+                errors["tagNames"] = ["At least one tag is required (tagNames or tagIds)."];
         }
 
         return errors.Count == 0 ? null : errors;

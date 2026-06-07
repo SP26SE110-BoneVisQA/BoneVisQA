@@ -54,9 +54,21 @@ public class LecturerTriageRowDto
     public string TriageSource { get; set; } = "VisualQA";
 
     public string? StructuredDiagnosis { get; set; }
+
+    [JsonPropertyName("suggestedMainDiagnosis")]
+    public string? SuggestedMainDiagnosis => StructuredDiagnosis;
+
     public string? ReflectiveQuestions { get; set; }
     public string? KeyImagingFindings { get; set; }
+
+    /// <summary>Raw JSON string (legacy). Prefer <see cref="DifferentialDiagnosesList"/>.</summary>
     public string? DifferentialDiagnoses { get; set; }
+
+    [JsonPropertyName("differentialDiagnosesList")]
+    public IReadOnlyList<string> DifferentialDiagnosesList { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("referencesAndCitations")]
+    public IReadOnlyList<string> ReferencesAndCitations { get; set; } = Array.Empty<string>();
     public string? AnnotationLabel { get; set; }
     public string? AnnotationCoordinates { get; set; }
     public string? CustomCoordinates { get; set; }

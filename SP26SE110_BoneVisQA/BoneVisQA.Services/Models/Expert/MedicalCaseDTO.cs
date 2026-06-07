@@ -94,6 +94,7 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
         public string? KeyFindings { get; set; }
+        public string? ReflectiveQuestions { get; set; }
         public List<Guid>? TagIds { get; set; }
         public List<CreateExpertMedicalCaseImageJson>? MedicalImages { get; set; }
     }
@@ -117,6 +118,7 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
         public string? KeyFindings { get; set; }
+        public string? ReflectiveQuestions { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
     public class CreateMedicalCaseResponseDTO
@@ -210,7 +212,8 @@ namespace BoneVisQA.Services.Models.Expert
     public class GetTagDTO 
     { 
         public Guid Id { get; set; } 
-        public string Name { get; set; } = null!; 
+        public string Name { get; set; } = null!;
+        public string Type { get; set; } = string.Empty;
     }
     
     public class GetCategoryDTO 

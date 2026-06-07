@@ -1564,7 +1564,8 @@ public class LecturerService : ILecturerService
                         ThumbnailUrl = flatImageUrl,
                         ImageUrl = flatImageUrl,
                         QuestionText = userMessage?.Content ?? string.Empty,
-                        AnswerText = assistantMessage?.Content,
+                        AnswerText = VisualQaAssistantAnswerFormatter.FormatDisplayText(assistantMessage)
+                            ?? assistantMessage?.Content,
                         Status = s.Status,
                         SessionStatus = s.Status,
                         ReviewFeedback = s.ReviewFeedback,
@@ -1578,6 +1579,8 @@ public class LecturerService : ILecturerService
                         ReflectiveQuestions = assistantMessage?.ReflectiveQuestions,
                         KeyImagingFindings = assistantMessage?.KeyImagingFindings,
                         DifferentialDiagnoses = assistantMessage?.DifferentialDiagnoses,
+                        DifferentialDiagnosesList = ParseDifferentialDiagnosesList(assistantMessage?.DifferentialDiagnoses),
+                        ReferencesAndCitations = BuildReferencesAndCitations(ResolveLecturerCitations(assistantMessage)),
                         CustomCoordinates = roiJson,
                         AnnotationCoordinates = roiJson,
                         QuestionCoordinates = roiJson,
@@ -1646,6 +1649,7 @@ public class LecturerService : ILecturerService
                     ReflectiveQuestions = a.ReflectiveQuestions,
                     KeyImagingFindings = a.KeyImagingFindings,
                     DifferentialDiagnoses = a.DifferentialDiagnoses,
+                    DifferentialDiagnosesList = ParseDifferentialDiagnosesList(a.DifferentialDiagnoses),
                     AnnotationLabel = q.Annotation?.Label,
                     AnnotationCoordinates = q.Annotation?.Coordinates,
                     CustomCoordinates = q.CustomCoordinates,
@@ -1907,6 +1911,49 @@ public class LecturerService : ILecturerService
             .ThenBy(c => c.Id)
             .Select(c => VisualQaCitationMetadataBuilder.FromDocumentChunk(c.Chunk))
             .Take(5)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> ParseDifferentialDiagnosesList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return Array.Empty<string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<string>>(raw);
+            if (parsed is { Count: > 0 })
+            {
+                return parsed
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+        catch (JsonException)
+        {
+            // fall through to delimiter split
+        }
+
+        return raw
+            .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> BuildReferencesAndCitations(
+        IReadOnlyList<BoneVisQA.Services.Models.VisualQA.CitationItemDto> citations)
+    {
+        return citations
+            .Select(c =>
+                !string.IsNullOrWhiteSpace(c.DisplayLabel) ? c.DisplayLabel :
+                !string.IsNullOrWhiteSpace(c.Snippet) ? c.Snippet :
+                c.SourceText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
