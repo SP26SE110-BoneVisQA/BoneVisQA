@@ -4,10 +4,9 @@ namespace BoneVisQA.Services.Interfaces;
 
 public interface IStudyIngestJobService
 {
-    Task<Guid> QueueIngestAsync(
-        string ingestReferenceUrl,
-        string bucket,
-        string stagingObjectPath,
+    /// <summary>Queue ingest from a local staged archive (Supabase upload + Python run in background).</summary>
+    Task<Guid> QueueLocalArchiveAsync(
+        string localArchivePath,
         string ingestPurpose,
         Guid? ownerUserId,
         string? diagnosisText,

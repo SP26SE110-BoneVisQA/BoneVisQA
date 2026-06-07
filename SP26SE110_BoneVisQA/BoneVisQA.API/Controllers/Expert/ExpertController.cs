@@ -216,29 +216,21 @@ namespace BoneVisQA.API.Controllers.Expert
             try
             {
                 stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
-                var staged = await StudyArchiveIngestHelper.UploadStagedArchiveAsync(
-                    _storageService,
-                    stagedPath,
-                    ingestPurpose: "library",
-                    ownerUserId: null,
-                    cancellationToken);
 
-                var jobId = await _studyIngestJobs.QueueIngestAsync(
-                    staged.IngestReferenceUrl,
-                    staged.Bucket,
-                    staged.ObjectPath,
+                var jobId = await _studyIngestJobs.QueueLocalArchiveAsync(
+                    stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,
                     resolvedDiagnosisText,
                     StudyIngestJobKind.ExpertLibrary,
                     cancellationToken);
+                stagedPath = null;
 
-                return Accepted(new ExpertDicomStudyUploadResponse
+                return Ok(new ExpertDicomStudyUploadResponse
                 {
                     IngestOk = false,
                     IngestStatus = "processing",
                     IngestJobId = jobId,
-                    IngestError = null,
                 });
             }
             finally

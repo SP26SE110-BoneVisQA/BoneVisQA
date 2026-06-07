@@ -101,24 +101,17 @@ public class VisualQAController : ControllerBase
         try
         {
             stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
-            var staged = await StudyArchiveIngestHelper.UploadStagedArchiveAsync(
-                _storageService,
-                stagedPath,
-                ingestPurpose: "personal",
-                ownerUserId: studentId,
-                cancellationToken);
 
-            var jobId = await _studyIngestJobs.QueueIngestAsync(
-                staged.IngestReferenceUrl,
-                staged.Bucket,
-                staged.ObjectPath,
+            var jobId = await _studyIngestJobs.QueueLocalArchiveAsync(
+                stagedPath,
                 ingestPurpose: "personal",
                 ownerUserId: studentId,
                 diagnosisText,
                 StudyIngestJobKind.StudentPersonal,
                 cancellationToken);
+            stagedPath = null;
 
-            return Accepted(new StudentPersonalStudyUploadResponse
+            return Ok(new StudentPersonalStudyUploadResponse
             {
                 IngestOk = false,
                 IngestStatus = "processing",
