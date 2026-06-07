@@ -33,9 +33,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() not in {"1", "true", "yes"}:
-        logger.info("Pre-loading text embedding model (all-mpnet-base-v2)...")
+        from app.services.embeddings.text_encoder import text_model_name
+
+        logger.info("Pre-loading text embedding model (%s)...", text_model_name())
         warmup_text_model()
-        logger.info("Text embedding model ready.")
+        logger.info("Text embedding model ready (%s).", text_model_name())
     yield
 
 

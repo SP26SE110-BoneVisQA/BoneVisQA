@@ -466,7 +466,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
         var batchSize = phase == DocumentEnrichPhase.Metadata
             ? Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichMetadataBatchSize", 64), 1, 64)
-            : Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 40), 1, 64);
+            : Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 8), 1, 64);
 
         if (phase == DocumentEnrichPhase.Embeddings)
             onlyMissingEmbedding = true;
@@ -572,7 +572,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
         string? sectionPathology,
         CancellationToken cancellationToken)
     {
-        const int maxAttempts = 4;
+        const int maxAttempts = 6;
         static bool IsRetryable(int statusCode) =>
             statusCode is 502 or 503 or 504;
 
@@ -604,7 +604,15 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
                 if (attempt < maxAttempts && IsRetryable((int)resp.StatusCode))
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(4 * attempt), cancellationToken);
+                    // Railway may restart (~30–60s) after OOM; wait before retrying the same batch.
+                    var delaySeconds = 20 * attempt;
+                    _logger.LogInformation(
+                        "Retrying enrich batch for document {DocumentId} in {DelaySeconds}s (attempt {Attempt}/{MaxAttempts})",
+                        documentId,
+                        delaySeconds,
+                        attempt,
+                        maxAttempts);
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
                     continue;
                 }
 

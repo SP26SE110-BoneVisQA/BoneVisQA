@@ -12,7 +12,8 @@ _TEXT_MODEL_NAME = os.environ.get(
     "TEXT_EMBEDDING_MODEL",
     "sentence-transformers/all-MiniLM-L6-v2",
 )
-_ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "16")))
+# Small batches keep peak RAM low on Railway when using all-mpnet-base-v2.
+_ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "4")))
 
 
 @lru_cache(maxsize=1)
@@ -45,6 +46,20 @@ def encode_texts(texts: list[str]) -> list[np.ndarray]:
 
 def text_model_name() -> str:
     return _TEXT_MODEL_NAME
+
+
+def release_encode_memory() -> None:
+    """Drop transient tensors after each enrich batch to reduce OOM risk on small VMs."""
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 def warmup_text_model() -> None:

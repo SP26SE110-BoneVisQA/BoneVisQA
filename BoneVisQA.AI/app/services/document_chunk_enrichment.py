@@ -17,9 +17,10 @@ from app.services.document_chunk_metadata import (
     resolve_chunk_metadata,
     section_metadata_from_heading,
 )
-from app.services.embeddings.text_encoder import encode_texts, text_model_name
+from app.services.embeddings.text_encoder import encode_texts, release_encode_memory, text_model_name
 
-_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "40"))
+# Fewer chunks per HTTP request = lower peak RAM with mpnet on Railway (~8 GB).
+_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "8"))
 _DEFAULT_METADATA_BATCH_SIZE = int(os.environ.get("ENRICH_METADATA_BATCH_SIZE", "64"))
 
 EnrichPhase = Literal["metadata", "embeddings", "all"]
@@ -202,6 +203,7 @@ def enrich_document_chunks(
     if run_embeddings:
         texts = [text or " " for _, text, _ in chunk_rows]
         vectors = encode_texts(texts)
+        release_encode_memory()
 
     processed = 0
     with conn.cursor() as cur:
