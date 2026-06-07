@@ -235,8 +235,8 @@ namespace BoneVisQA.Services.Services.Admin
                     ?? throw new InvalidOperationException("Expert not found.");
                 if (!HasRole(expert, "Expert"))
                     throw new InvalidOperationException("User is not Expert.");
-                if (!classEntity.ClassSpecialtyId.HasValue)
-                    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
+                //if (!classEntity.ClassSpecialtyId.HasValue)
+                //    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
               
                 //var expertMatchesClassFocus = await _unitOfWork.Context.Users
                 //    .AnyAsync(u =>
@@ -337,14 +337,14 @@ namespace BoneVisQA.Services.Services.Admin
                     ?? throw new InvalidOperationException("Expert not found.");
                 if (!HasRole(expert, "Expert"))
                     throw new InvalidOperationException("User is not Expert.");
-                if (!classEntity.ClassSpecialtyId.HasValue)
-                    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
-                var expertMatchesClassFocus = await _unitOfWork.Context.Users
-                    .AnyAsync(u =>
-                        u.Id == dto.ExpertId.Value &&
-                        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
-                if (!expertMatchesClassFocus)
-                    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
+                //if (!classEntity.ClassSpecialtyId.HasValue)
+                //    throw new InvalidOperationException("Set the class medical specialty (ClassSpecialtyId) before assigning an expert.");
+                //var expertMatchesClassFocus = await _unitOfWork.Context.Users
+                //    .AnyAsync(u =>
+                //        u.Id == dto.ExpertId.Value &&
+                //        u.PrimaryBoneSpecialtyId == classEntity.ClassSpecialtyId.Value);
+                //if (!expertMatchesClassFocus)
+                //    throw new InvalidOperationException("This expert does not specialize in the class's focus area.");
                 classEntity.ExpertId = dto.ExpertId.Value;
             }
 
