@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -35,16 +36,31 @@ _warmup_state = "skipped"  # pending | ready | failed | skipped
 _warmup_error: str | None = None
 
 
-def _run_embedding_warmup() -> None:
+def _resolve_warmup_mode() -> str:
+    """Return none | text | image | all."""
+    if os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() in {"1", "true", "yes"}:
+        return "none"
+    raw = (os.environ.get("WARMUP_MODELS") or "none").strip().lower()
+    if raw in {"none", "text", "image", "all"}:
+        return raw
+    return "none"
+
+
+def _run_embedding_warmup(mode: str) -> None:
     global _warmup_state, _warmup_error
     try:
-        logger.info("Pre-loading text embedding model (%s)...", text_model_name())
-        warmup_text_model()
-        logger.info("Text embedding model ready (%s).", text_model_name())
+        if mode in {"text", "all"}:
+            logger.info("Pre-loading text embedding model (%s)...", text_model_name())
+            warmup_text_model()
+            logger.info("Text embedding model ready (%s).", text_model_name())
 
-        logger.info("Pre-loading image embedding model (%s)...", image_model_name())
-        warmup_image_model()
-        logger.info("Image embedding model ready (%s).", image_model_name())
+        if mode in {"image", "all"}:
+            if mode == "all":
+                gc.collect()
+            logger.info("Pre-loading image embedding model (%s)...", image_model_name())
+            warmup_image_model()
+            logger.info("Image embedding model ready (%s).", image_model_name())
+
         _warmup_state = "ready"
     except Exception as exc:
         _warmup_state = "failed"
@@ -56,15 +72,15 @@ def _run_embedding_warmup() -> None:
 async def lifespan(_app: FastAPI):
     global _warmup_state
     warmup_task: asyncio.Future | None = None
-    skip = os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() in {"1", "true", "yes"}
+    mode = _resolve_warmup_mode()
 
-    logger.info("BoneVisQA AI process starting (skip_warmup=%s).", skip)
+    logger.info("BoneVisQA AI process starting (warmup_models=%s).", mode)
 
-    # Yield immediately so /health responds while models download in the background.
-    if not skip:
+    # Yield immediately so /health responds; optional background warmup must stay off by default on Railway (OOM).
+    if mode != "none":
         _warmup_state = "pending"
         loop = asyncio.get_running_loop()
-        warmup_task = loop.run_in_executor(None, _run_embedding_warmup)
+        warmup_task = loop.run_in_executor(None, _run_embedding_warmup, mode)
 
     yield
 
@@ -113,14 +129,17 @@ def health_ready() -> dict[str, str]:
             detail=_warmup_error or "Embedding warmup failed.",
         )
 
-    return {
+    payload: dict[str, str] = {
         "status": "ready",
         "warmup": _warmup_state,
         "text_embedding_model": text_model_name(),
         "image_embedding_model": image_model_name(),
     }
+    if _warmup_state == "skipped":
+        payload["model_loading"] = "lazy"
+    return payload
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8000"))
+    port = int(os.environ.get("PORT", "8080"))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port)

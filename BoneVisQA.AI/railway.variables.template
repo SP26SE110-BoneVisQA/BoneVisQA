@@ -24,3 +24,7 @@ ENCODE_BATCH_SIZE=6
 TORCH_NUM_THREADS=2
 OMP_NUM_THREADS=2
 MKL_NUM_THREADS=2
+
+# Railway: keep startup warmup OFF (see railway.toml). Loading mpnet + BiomedCLIP at boot OOMs the container.
+SKIP_EMBEDDING_WARMUP=true
+WARMUP_MODELS=none
