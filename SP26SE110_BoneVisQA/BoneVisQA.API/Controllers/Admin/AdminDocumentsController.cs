@@ -354,6 +354,7 @@ public class AdminDocumentsController : ControllerBase
     /// Gets granular ingestion status/progress for a document.
     /// </summary>
     [HttpGet("{id:guid}/status")]
+    [HttpGet("{id:guid}/ingestion-status")]
     [ProducesResponseType(typeof(DocumentIngestionStatusDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DocumentIngestionStatusDto>> GetIngestionStatus(Guid id)
