@@ -1,8 +1,9 @@
 # Paste each line as Railway Variable (name = value). Fill from your local .env.
 # Do NOT commit this file after filling real secrets — keep placeholders only in git.
 #
-# Railway Hobby (~512 MB–2 GB): use MiniLM for text — mpnet + BiomedCLIP together OOM-kill on /ingest.
-# BiomedCLIP alone needs ~1 GB+ RAM; upgrade Railway memory to 2 GB if ingest still restarts after deploy.
+# Railway Hobby ($5/mo): set Replica Limits → Memory 2 GB, CPU 2 vCPU (Settings → Replica Limits).
+# Use MiniLM for text — mpnet + BiomedCLIP together OOM-kill on /ingest at 1 GB.
+# BiomedCLIP ingest is stable at 2 GB RAM with ae537c3+ (unload models between encode steps).
 # Railway ~8 GB: you may use all-mpnet-base-v2 instead for slightly better RAG quality.
 # If OOM/502: lower to ENRICH_BATCH_SIZE=8, ENCODE_BATCH_SIZE=4.
 # If stable for several runs: try ENRICH_BATCH_SIZE=16, ENCODE_BATCH_SIZE=8.
