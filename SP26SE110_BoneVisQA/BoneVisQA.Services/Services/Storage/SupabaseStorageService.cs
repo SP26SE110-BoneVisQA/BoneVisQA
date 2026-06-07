@@ -268,6 +268,8 @@ public class SupabaseStorageService : ISupabaseStorageService
             return signed;
 
         var normalized = signed.TrimStart('/');
+        if (normalized.StartsWith("object/", StringComparison.OrdinalIgnoreCase))
+            normalized = "storage/v1/" + normalized;
         return $"{_supabaseUrl.TrimEnd('/')}/{normalized}";
     }
 

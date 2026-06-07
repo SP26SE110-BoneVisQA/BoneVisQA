@@ -128,6 +128,13 @@ public class VisualQaCapabilitiesDto
     public int TurnsUsed { get; set; }
     /// <summary>Null when unlimited turns are allowed (production/demo default).</summary>
     public int? TurnLimit { get; set; }
+
+    /// <summary>Machine-readable block reason for FE (<c>SESSION_EXPIRED</c>, <c>TURN_LIMIT_EXCEEDED</c>, <c>NO_REVIEW_PATH</c>, …).</summary>
+    public string? BlockingReason { get; set; }
+
+    /// <summary>Always <c>lecturer</c> for enrolled students; expert queue is lecturer-driven only.</summary>
+    public string ReviewRoute { get; set; } = "none";
+
     [JsonIgnore]
     public string? Reason { get; set; }
 }

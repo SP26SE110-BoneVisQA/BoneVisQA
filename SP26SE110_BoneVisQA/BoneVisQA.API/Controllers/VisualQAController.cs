@@ -842,35 +842,43 @@ public class VisualQAController : ControllerBase
             {
                 sessionId,
                 reviewRequestedTurnId = turnId,
+                assistantMessageId = thread?.Turns
+                    .FirstOrDefault(t => t.AssistantMessageId.HasValue
+                        && (t.AssistantMessageId == turnId || t.UserMessageId == turnId))
+                    ?.AssistantMessageId
+                    ?? turnId,
+                reviewRoute = capabilities.ReviewRoute,
+                sessionStatus = thread?.SessionStatus,
                 capabilities,
                 reviewState = thread?.ReviewState ?? "pending",
-                systemNotice = BuildSystemNotice(capabilities.Reason)
+                systemNotice = BuildSystemNotice(capabilities.BlockingReason ?? capabilities.Reason)
             });
         }
         catch (KeyNotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(new { message = ex.Message, code = "TURN_NOT_FOUND" });
         }
         catch (InvalidOperationException ex)
         {
+            var code = VisualQaReviewRequestHelper.MapReviewErrorCode(ex.Message);
             if (string.Equals(ex.Message, "SESSION_EXPIRED", StringComparison.Ordinal))
             {
                 _logger.LogWarning("Visual QA RequestReview: SESSION_EXPIRED");
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                return StatusCode(StatusCodes.Status403Forbidden, new
                 {
-                    Title = "Session inactive",
-                    Detail = "This Visual QA session expired after 24 hours of inactivity.",
-                    Status = StatusCodes.Status403Forbidden,
-                    Instance = HttpContext.Request.Path.Value
+                    title = "Session inactive",
+                    detail = "This Visual QA session expired after 24 hours of inactivity.",
+                    code,
+                    status = StatusCodes.Status403Forbidden,
                 });
             }
 
-            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            return StatusCode(StatusCodes.Status403Forbidden, new
             {
-                Title = "Cannot request review",
-                Detail = ex.Message,
-                Status = StatusCodes.Status403Forbidden,
-                Instance = HttpContext.Request.Path.Value
+                title = "Cannot request review",
+                detail = MapReviewForbiddenDetail(ex.Message),
+                code,
+                status = StatusCodes.Status403Forbidden,
             });
         }
         catch (ConflictException ex)
@@ -1029,7 +1037,20 @@ public class VisualQAController : ControllerBase
             "TURN_LIMIT_EXCEEDED" => "You have used all question turns for this Visual QA session.",
             "SESSION_EXPIRED" => "This Visual QA session expired after 24 hours of inactivity.",
             "SESSION_READ_ONLY" => "This session is locked. You cannot send new questions.",
+            "NO_REVIEW_PATH" => "Your class does not have an assigned lecturer. Please contact your administrator.",
+            "REVIEW_ALREADY_REQUESTED" => "Expert support has already been requested for this session.",
+            "REVIEW_CLOSED" => "This session review is already completed and cannot be reopened.",
             _ => null
         };
     }
+
+    private static string MapReviewForbiddenDetail(string codeOrMessage) =>
+        codeOrMessage switch
+        {
+            "NO_REVIEW_PATH" => "Your class does not have an assigned lecturer. Please contact your administrator.",
+            "REVIEW_ALREADY_REQUESTED" => "Expert support has already been requested for this session.",
+            "REVIEW_CLOSED" => "This session review is already completed and cannot be reopened.",
+            "TURN_LIMIT_EXCEEDED" => "You have used all question turns for this Visual QA session.",
+            _ => codeOrMessage,
+        };
 }

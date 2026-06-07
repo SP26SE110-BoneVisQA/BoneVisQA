@@ -478,7 +478,8 @@ public class ExpertReviewService : IExpertReviewService
                 userMessage,
                 session.RequestedReviewMessageId,
                 turnsAfter),
-            ExpertCorrectedRoiBoundingBox = null,
+            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(
+                session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId)?.CorrectedRoi),
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = userMessage?.Id,
             SelectedAssistantMessageId = session.RequestedReviewMessageId,
@@ -532,6 +533,7 @@ public class ExpertReviewService : IExpertReviewService
                 .Include(s => s.Case!).ThenInclude(c => c!.Category)
                 .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
                 .Include(s => s.Case!).ThenInclude(c => c!.CaseMedia)
+                .Include(s => s.Case!).ThenInclude(c => c!.CaseMetadata)
                 .Include(s => s.Image)
                 .Include(s => s.Messages)
                 .Include(s => s.ExpertReviews)
@@ -554,6 +556,20 @@ public class ExpertReviewService : IExpertReviewService
                 .OrderBy(m => m.CreatedAt)
                 .ThenBy(m => m.Id)
                 .ToList();
+            var turns = VisualQaSessionTurnsMapper.BuildTurns(session.Id, orderedMessages, session.Status, session.RequestedReviewMessageId);
+            var (targetUser, targetAssistant) = ResolveRequestedReviewPair(session, orderedMessages);
+            var dicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(session.Case);
+            var sourceCaseMetadata = session.Case?.CaseMetadata;
+            request = PromoteToLibraryRequestHydrator.Merge(
+                request,
+                session,
+                orderedMessages,
+                targetUser,
+                targetAssistant,
+                turns,
+                dicomMetadata,
+                sourceCaseMetadata);
+
             var expertReview = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
             LibraryPromotionQualityGate.ValidateOrThrow(request, session, orderedMessages, expertReview);
 
@@ -596,6 +612,7 @@ public class ExpertReviewService : IExpertReviewService
             var roiItems = (request.TurnAnnotations ?? request.ImageAnnotations ?? Enumerable.Empty<PromoteCaseAnnotationDto>())
                 .Where(a => a != null)
                 .ToList();
+            var annotationsCreated = 0;
             foreach (var ann in roiItems)
             {
                 var coords = SerializePromoteCoordinates(ann!.Coordinates);
@@ -611,7 +628,26 @@ public class ExpertReviewService : IExpertReviewService
                     Coordinates = coords,
                     CreatedAt = now
                 });
+                annotationsCreated++;
             }
+
+            if (annotationsCreated == 0)
+            {
+                var autoCoords = ResolvePromoteRoiCoordinates(session, orderedMessages, expertReview, turns, targetUser);
+                if (!string.IsNullOrWhiteSpace(autoCoords))
+                {
+                    await _unitOfWork.Context.CaseAnnotations.AddAsync(new CaseAnnotation
+                    {
+                        Id = Guid.NewGuid(),
+                        ImageId = image.Id,
+                        Label = "finding",
+                        Coordinates = autoCoords,
+                        CreatedAt = now
+                    });
+                }
+            }
+
+            await CopySourceCaseMediaAsync(session.Case, newCase.Id, request.Modality, now);
 
             var sourceTagId = await GetOrCreateTagIdByNameAndTypeAsync("Student Q&A", "Source", now);
             await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, now);
@@ -732,6 +768,63 @@ public class ExpertReviewService : IExpertReviewService
 
     private static string ResolvePromoteAnnotationLabel(string? label) =>
         string.IsNullOrWhiteSpace(label) ? "finding" : label.Trim();
+
+    private static string? ResolvePromoteRoiCoordinates(
+        VisualQASession session,
+        IReadOnlyList<QAMessage> orderedMessages,
+        ExpertReview? expertReview,
+        IReadOnlyList<VisualQaTurnDto> turns,
+        QAMessage? targetUser)
+    {
+        if (!string.IsNullOrWhiteSpace(expertReview?.CorrectedRoi))
+        {
+            try
+            {
+                var arr = JsonSerializer.Deserialize<double[]>(expertReview.CorrectedRoi);
+                if (arr is { Length: >= 4 })
+                {
+                    var fake = $"{{\"x\":{arr[0]},\"y\":{arr[1]},\"width\":{arr[2]},\"height\":{arr[3]}}}";
+                    var normalized = BoundingBoxParser.NormalizeCoordinatesJson(fake);
+                    if (normalized != null)
+                        return normalized;
+                }
+            }
+            catch
+            {
+                // Fall through to user ROI.
+            }
+        }
+
+        var roiJson = VisualQaRoiResolutionHelper.ResolvePreferredUserRoiJson(
+            targetUser,
+            session.RequestedReviewMessageId,
+            turns);
+        return BoundingBoxParser.NormalizeCoordinatesJson(roiJson) ?? roiJson;
+    }
+
+    private async Task CopySourceCaseMediaAsync(MedicalCase? sourceCase, Guid targetCaseId, string modality, DateTime nowUtc)
+    {
+        if (sourceCase?.CaseMedia == null || sourceCase.CaseMedia.Count == 0)
+            return;
+
+        foreach (var sourceMedia in sourceCase.CaseMedia.OrderBy(m => m.CreatedAt).ThenBy(m => m.Id))
+        {
+            await _unitOfWork.Context.CaseMedia.AddAsync(new CaseMedia
+            {
+                Id = Guid.NewGuid(),
+                CaseId = targetCaseId,
+                MediaUrl = sourceMedia.MediaUrl,
+                StoragePath = sourceMedia.StoragePath,
+                MediaType = sourceMedia.MediaType,
+                Modality = string.IsNullOrWhiteSpace(sourceMedia.Modality)
+                    ? MedicalImageModalityNormalizer.Normalize(modality)
+                    : sourceMedia.Modality,
+                Anatomy = sourceMedia.Anatomy,
+                DicomMetadata = sourceMedia.DicomMetadata,
+                CreatedAt = nowUtc,
+            });
+        }
+    }
 
     private async Task<Guid> GetOrCreateTagIdByNameAndTypeAsync(string name, string type, DateTime now)
     {

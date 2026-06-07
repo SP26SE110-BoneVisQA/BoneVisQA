@@ -72,6 +72,22 @@ public static class BoundingBoxParser
             if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(w.Value) || double.IsNaN(h.Value))
                 return null;
 
+            // Accept 0–100 percentage boxes from some FE clients.
+            if (x > 1d || y > 1d || w.Value > 1d || h.Value > 1d)
+            {
+                if (x <= 100d && y <= 100d && w.Value <= 100d && h.Value <= 100d)
+                {
+                    x /= 100d;
+                    y /= 100d;
+                    w = w.Value / 100d;
+                    h = h.Value / 100d;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+
             x = Math.Clamp(x, 0d, 1d);
             y = Math.Clamp(y, 0d, 1d);
             var width = Math.Clamp(w.Value, 0d, 1d);
@@ -92,4 +108,8 @@ public static class BoundingBoxParser
             return null;
         }
     }
+
+    /// <summary>Returns canonical normalized JSON when parseable; otherwise the original string.</summary>
+    public static string? CanonicalizeOrOriginal(string? json) =>
+        NormalizeCoordinatesJson(json) ?? json;
 }

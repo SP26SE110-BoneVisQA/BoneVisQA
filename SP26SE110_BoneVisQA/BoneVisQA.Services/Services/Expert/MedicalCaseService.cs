@@ -123,6 +123,9 @@ namespace BoneVisQA.Services.Services.Expert
                 .Include(c => c.CaseTags)
                     .ThenInclude(ct => ct.Tag)
                 .Include(c => c.MedicalImages)
+                    .ThenInclude(m => m.CaseAnnotations)
+                .Include(c => c.CaseMedia)
+                .Include(c => c.CaseMetadata)
                 .FirstOrDefaultAsync();
 
             if (entity == null)
@@ -145,6 +148,7 @@ namespace BoneVisQA.Services.Services.Expert
                 IsActive = entity.IsActive,
                 SuggestedDiagnosis = entity.SuggestedDiagnosis,
                 KeyFindings = entity.KeyFindings,
+                ReflectiveQuestions = entity.ReflectiveQuestions,
                 CreatedAt = entity.CreatedAt,
                 UpdatedAt = entity.UpdatedAt,
                 MedicalImages = entity.MedicalImages
@@ -154,7 +158,16 @@ namespace BoneVisQA.Services.Services.Expert
                         Id = m.Id,
                         ImageUrl = m.ImageUrl,
                         Modality = m.Modality,
-                        CreatedAt = m.CreatedAt
+                        CreatedAt = m.CreatedAt,
+                        Annotations = m.CaseAnnotations
+                            .OrderBy(a => a.CreatedAt ?? DateTime.MinValue)
+                            .Select(a => new ExpertCaseAnnotationSummaryDto
+                            {
+                                Id = a.Id,
+                                Label = a.Label,
+                                Coordinates = BoundingBoxParser.CanonicalizeOrOriginal(a.Coordinates),
+                            })
+                            .ToList(),
                     })
                     .ToList(),
                 Tags = entity.CaseTags
@@ -171,7 +184,24 @@ namespace BoneVisQA.Services.Services.Expert
                     .ThenBy(m => m.Id)
                     .Select(m => m.ImageUrl)
                     .FirstOrDefault()
-                    ?? string.Empty
+                    ?? CaseMediaDicomMetadataHelper.ResolveFirstPreviewUrl(entity)
+                    ?? string.Empty,
+                DicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(entity),
+                Metadata = entity.CaseMetadata == null
+                    ? null
+                    : new ExpertCaseMetadataSummaryDto
+                    {
+                        Modality = entity.CaseMetadata.Modality,
+                        Anatomy = entity.CaseMetadata.Anatomy,
+                        AnatomySite = entity.CaseMetadata.AnatomySite,
+                        PathologyGroup = entity.CaseMetadata.PathologyGroup,
+                        Laterality = entity.CaseMetadata.Laterality,
+                        ViewPosition = entity.CaseMetadata.ViewPosition,
+                        Difficulty = entity.CaseMetadata.Difficulty,
+                        SourceType = entity.CaseMetadata.SourceType,
+                        QualityScore = entity.CaseMetadata.QualityScore,
+                        SuggestedDiagnosis = entity.CaseMetadata.SuggestedDiagnosis,
+                    },
             };
 
             ExpertMedicalCaseDisplayHelper.ApplyDetailDefaults(dto, expertScoped: expertId.HasValue);

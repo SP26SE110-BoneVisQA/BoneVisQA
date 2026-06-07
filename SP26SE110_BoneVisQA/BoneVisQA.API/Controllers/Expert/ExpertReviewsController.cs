@@ -1,6 +1,7 @@
 using System;
 using System.Security.Claims;
 using BoneVisQA.Services.Exceptions;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces.Expert;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Authorization;
@@ -127,14 +128,14 @@ public class ExpertReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ApprovePost(Guid sessionId, [FromBody] PromoteToLibraryRequestDto request)
+    public async Task<IActionResult> ApprovePost(Guid sessionId, CancellationToken cancellationToken)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-        if (!ModelState.IsValid)
-            return ValidationProblem(ModelState);
+        var request = await PromoteToLibraryRequestReader.ReadAsync(Request, cancellationToken)
+                      ?? new PromoteToLibraryRequestDto();
 
         try
         {
@@ -197,14 +198,21 @@ public class ExpertReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Promote(Guid sessionId, [FromBody] PromoteToLibraryRequestDto request)
+    public async Task<IActionResult> Promote(Guid sessionId, CancellationToken cancellationToken)
     {
         var expertId = GetUserIdFromClaims();
         if (expertId == null)
             return Unauthorized(new { message = "Token does not contain a valid user id." });
 
-        if (!ModelState.IsValid)
-            return ValidationProblem(ModelState);
+        var request = await PromoteToLibraryRequestReader.ReadAsync(Request, cancellationToken);
+        if (request == null)
+        {
+            return BadRequest(new
+            {
+                message = "Request body must be JSON (Content-Type: application/json) with promote-to-library fields.",
+                code = "MISSING_BODY",
+            });
+        }
 
         try
         {

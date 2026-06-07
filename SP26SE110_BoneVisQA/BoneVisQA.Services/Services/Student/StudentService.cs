@@ -739,6 +739,7 @@ public class StudentService : IStudentService
         var canRequestReview = !isReadOnly
             && !BlocksStudentReviewRequest(session.Status)
             && await HasVisualQaReviewPathAsync(studentId, session.CaseId, cancellationToken);
+        var reviewRoute = await ResolveStudentReviewRouteAsync(studentId, session.CaseId, cancellationToken);
 
         return new VisualQaCapabilitiesDto
         {
@@ -747,7 +748,9 @@ public class StudentService : IStudentService
             IsReadOnly = isReadOnly,
             CanAskNext = !isReadOnly,
             CanRequestReview = canRequestReview,
-            Reason = reason
+            Reason = reason,
+            BlockingReason = reason,
+            ReviewRoute = canRequestReview ? reviewRoute : "none",
         };
     }
 
@@ -793,6 +796,13 @@ public class StudentService : IStudentService
 
         return enrolledWithLecturer.Any(classIdsForCase.Contains);
     }
+
+    /// <summary>Students always route through lecturer triage first; never direct expert escalation.</summary>
+    private static Task<string> ResolveStudentReviewRouteAsync(
+        Guid studentId,
+        Guid? caseId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult("lecturer");
 
     public async Task ValidateVisualQaCaseAccessAsync(
         Guid studentId,
@@ -849,36 +859,38 @@ public class StudentService : IStudentService
 
     public async Task RequestVisualQaReviewAsync(Guid studentId, Guid sessionId, Guid? assistantMessageId = null)
     {
+        await ValidateSessionStateAsync(studentId, sessionId);
+
         var session = await _unitOfWork.Context.VisualQaSessions
             .Include(s => s.Messages)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId)
             ?? throw new KeyNotFoundException("Q&A session not found.");
 
-        if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(session.Status, "ExpertApproved", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(session.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Cannot request lecturer review for this session in its current state.");
+        if (VisualQaReviewRequestHelper.IsReviewClosedStatus(session.Status))
+            throw new InvalidOperationException("REVIEW_CLOSED");
 
-        var targetAssistantMessage = assistantMessageId.HasValue
-            ? session.Messages.FirstOrDefault(m => m.Id == assistantMessageId.Value && m.Role == "Assistant")
-            : session.Messages
-                .Where(m => m.Role == "Assistant")
-                .OrderByDescending(m => m.CreatedAt)
-                .ThenByDescending(m => m.Id)
-                .FirstOrDefault();
-        if (targetAssistantMessage == null)
-            throw new KeyNotFoundException("Assistant turn not found for review request.");
+        var capabilities = await GetVisualQaSessionCapabilitiesAsync(studentId, sessionId);
+        if (!capabilities.CanRequestReview)
+        {
+            var code = capabilities.BlockingReason ?? "NO_REVIEW_PATH";
+            throw new InvalidOperationException(code);
+        }
+
+        var targetAssistantMessage = VisualQaReviewRequestHelper.ResolveAssistantMessageForReview(session, assistantMessageId)
+            ?? throw new KeyNotFoundException("Assistant turn not found for review request.");
+
+        if (VisualQaReviewRequestHelper.IsReviewInProgressStatus(session.Status)
+            && session.RequestedReviewMessageId == targetAssistantMessage.Id)
+            return;
+
+        if (string.Equals(session.Status, "EscalatedToExpert", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(session.Status, "PendingExpertReview", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("REVIEW_ALREADY_REQUESTED");
 
         session.RequestedReviewMessageId = targetAssistantMessage.Id;
         session.Status = "PendingExpertReview";
         session.UpdatedAt = DateTime.UtcNow;
         await _unitOfWork.SaveAsync();
-
-        var enrollments = await _unitOfWork.Context.ClassEnrollments
-            .AsNoTracking()
-            .Include(e => e.Class)
-            .Where(e => e.StudentId == studentId && e.Class != null && e.Class.LecturerId != null)
-            .ToListAsync();
 
         var student = await _unitOfWork.Context.Users
             .AsNoTracking()
@@ -893,6 +905,12 @@ public class StudentService : IStudentService
         if (snippet.Length > 200)
             snippet = snippet[..200].TrimEnd() + "…";
 
+        var enrollments = await _unitOfWork.Context.ClassEnrollments
+            .AsNoTracking()
+            .Include(e => e.Class)
+            .Where(e => e.StudentId == studentId && e.Class != null && e.Class.LecturerId != null)
+            .ToListAsync();
+
         foreach (var e in enrollments)
         {
             var lecturerId = e.Class!.LecturerId!.Value;
@@ -905,7 +923,7 @@ public class StudentService : IStudentService
                 "Student requested Visual QA review",
                 body.Trim(),
                 "visual_qa_review_request",
-                $"/lecturer/triage?classId={e.ClassId}");
+                $"/lecturer/qa-triage?classId={e.ClassId}");
         }
     }
 
@@ -1255,7 +1273,7 @@ public class StudentService : IStudentService
             SessionImageUrl = sessionImageUrl,
             ImageUrl = sessionImageUrl,
             StudyImageUrl = sessionImageUrl,
-            RoiBoundingBox = latestUserWithRoi?.Coordinates,
+            RoiBoundingBox = BoundingBoxParser.CanonicalizeOrOriginal(latestUserWithRoi?.Coordinates),
             CaseId = session.CaseId,
             ImageId = session.ImageId,
             MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(session.Case),

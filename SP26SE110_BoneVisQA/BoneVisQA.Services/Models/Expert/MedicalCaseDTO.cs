@@ -39,6 +39,9 @@ namespace BoneVisQA.Services.Models.Expert
     {
         public IReadOnlyList<ExpertMedicalCaseImageSummaryDto> MedicalImages { get; set; } = Array.Empty<ExpertMedicalCaseImageSummaryDto>();
         public IReadOnlyList<ExpertCaseTagSummaryDto> Tags { get; set; } = Array.Empty<ExpertCaseTagSummaryDto>();
+        public System.Text.Json.JsonElement? DicomMetadata { get; set; }
+        public ExpertCaseMetadataSummaryDto? Metadata { get; set; }
+        public string? ReflectiveQuestions { get; set; }
     }
 
     public class ExpertMedicalCaseImageSummaryDto
@@ -47,6 +50,29 @@ namespace BoneVisQA.Services.Models.Expert
         public string ImageUrl { get; set; } = string.Empty;
         public string? Modality { get; set; }
         public DateTime? CreatedAt { get; set; }
+        public IReadOnlyList<ExpertCaseAnnotationSummaryDto> Annotations { get; set; } =
+            Array.Empty<ExpertCaseAnnotationSummaryDto>();
+    }
+
+    public class ExpertCaseAnnotationSummaryDto
+    {
+        public Guid Id { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public string? Coordinates { get; set; }
+    }
+
+    public class ExpertCaseMetadataSummaryDto
+    {
+        public string Modality { get; set; } = string.Empty;
+        public string Anatomy { get; set; } = string.Empty;
+        public string? AnatomySite { get; set; }
+        public string PathologyGroup { get; set; } = string.Empty;
+        public string? Laterality { get; set; }
+        public string? ViewPosition { get; set; }
+        public string? Difficulty { get; set; }
+        public string? SourceType { get; set; }
+        public double? QualityScore { get; set; }
+        public string? SuggestedDiagnosis { get; set; }
     }
 
     public class ExpertCaseTagSummaryDto

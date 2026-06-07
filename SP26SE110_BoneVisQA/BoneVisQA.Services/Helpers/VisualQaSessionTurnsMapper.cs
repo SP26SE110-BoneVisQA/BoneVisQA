@@ -116,7 +116,7 @@ public static class VisualQaSessionTurnsMapper
             UserMessageId = userMessage.Id,
             AssistantMessageId = assistantMessage?.Id,
             UserMessage = userMessage.Content,
-            QuestionCoordinates = userMessage.Coordinates,
+            QuestionCoordinates = BoundingBoxParser.CanonicalizeOrOriginal(userMessage.Coordinates),
             QuestionText = userMessage.Content,
             MessageText = assistantPlain,
             AnswerText = assistantPlain,

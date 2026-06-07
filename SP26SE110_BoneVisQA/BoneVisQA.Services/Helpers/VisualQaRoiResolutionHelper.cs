@@ -15,7 +15,7 @@ public static class VisualQaRoiResolutionHelper
     {
         var direct = primaryUserMessage?.Coordinates;
         if (!string.IsNullOrWhiteSpace(direct))
-            return direct;
+            return BoundingBoxParser.CanonicalizeOrOriginal(direct);
 
         if (requestedReviewAssistantMessageId.HasValue)
         {
@@ -23,14 +23,14 @@ public static class VisualQaRoiResolutionHelper
                 t.AssistantMessageId.HasValue &&
                 t.AssistantMessageId.Value == requestedReviewAssistantMessageId.Value);
             if (!string.IsNullOrWhiteSpace(targeted?.QuestionCoordinates))
-                return targeted.QuestionCoordinates;
+                return BoundingBoxParser.CanonicalizeOrOriginal(targeted.QuestionCoordinates);
         }
 
         for (var i = turns.Count - 1; i >= 0; i--)
         {
             var q = turns[i].QuestionCoordinates;
             if (!string.IsNullOrWhiteSpace(q))
-                return q;
+                return BoundingBoxParser.CanonicalizeOrOriginal(q);
         }
 
         return null;
