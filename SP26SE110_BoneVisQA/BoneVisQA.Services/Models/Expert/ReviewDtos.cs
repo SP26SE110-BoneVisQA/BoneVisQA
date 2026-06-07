@@ -203,6 +203,7 @@ public class PromoteToLibraryResponseDto
     public Guid CaseId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Status { get; set; } = "approved";
+    public string CaseOrigin { get; set; } = ExpertCaseOriginValues.FromStudentRequest;
 }
 
 public class ExpertEscalatedAnswerDto
@@ -292,7 +293,7 @@ public class ExpertDashboardRecentCaseDto
     public string BoneLocation { get; set; } = string.Empty;
     public string LesionType { get; set; } = string.Empty;
     public string Difficulty { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
+    public string CaseOrigin { get; set; } = ExpertCaseOriginValues.ExpertCreated;
     public string AddedBy { get; set; } = string.Empty;
     public DateTime AddedDate { get; set; }
     public int ViewCount { get; set; }

@@ -1,6 +1,8 @@
+using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -141,6 +143,13 @@ public sealed class StudyIngestJobService : IStudyIngestJobService
                         DicomMetadata = ingest.DicomMetadata,
                     });
             }
+            else if (kind == StudyIngestJobKind.ExpertLibrary && ownerUserId.HasValue && ingest.CaseId.HasValue)
+            {
+                await FinalizeExpertLibraryIngestCaseAsync(
+                    scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
+                    ingest.CaseId.Value,
+                    ownerUserId.Value);
+            }
 
             _logger.LogInformation(
                 "Study ingest job {JobId} completed. CaseId={CaseId} SessionId={SessionId}",
@@ -199,6 +208,24 @@ public sealed class StudyIngestJobService : IStudyIngestJobService
 
         mutate(job);
         _cache.Set(CacheKey(jobId), job, JobTtl);
+    }
+
+    private static async Task FinalizeExpertLibraryIngestCaseAsync(
+        IUnitOfWork unitOfWork,
+        Guid caseId,
+        Guid expertUserId)
+    {
+        var medicalCase = await unitOfWork.MedicalCaseRepository.GetQueryable()
+            .FirstOrDefaultAsync(c => c.Id == caseId);
+        if (medicalCase == null)
+            return;
+
+        medicalCase.CreatedByExpertId = expertUserId;
+        medicalCase.IsApproved = true;
+        medicalCase.IsActive = true;
+        medicalCase.UpdatedAt = DateTime.UtcNow;
+        unitOfWork.MedicalCaseRepository.Update(medicalCase);
+        await unitOfWork.SaveAsync();
     }
 
     private static string CacheKey(Guid jobId) => $"{CachePrefix}{jobId:N}";

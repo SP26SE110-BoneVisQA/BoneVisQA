@@ -54,7 +54,11 @@ namespace BoneVisQA.API.Controllers.Expert
             pageSize = Math.Clamp(pageSize, 1, 100);
 
             var result = await _medicalcaseService.GetAllMedicalCasesAsync(pageIndex, pageSize, expertId);
-            return Ok(result);
+            return Ok(new
+            {
+                message = "OK",
+                data = result
+            });
         }
 
         private Guid ResolveCurrentExpertId()
@@ -114,7 +118,11 @@ namespace BoneVisQA.API.Controllers.Expert
             if (request == null)
                 return BadRequest(new { message = "Request body is required." });
 
-            var result = await _medicalcaseService.UpdateMedicalCaseAsync(id, request);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.UpdateMedicalCaseAsync(id, request, expertId);
 
             if (result == null)
             {
@@ -133,7 +141,11 @@ namespace BoneVisQA.API.Controllers.Expert
         [HttpDelete("cases/{id}")]
         public async Task<IActionResult> DeleteMedicalCase(Guid id)
         {
-            var result = await _medicalcaseService.DeleteMedicalCaseAsync(id);
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
+            var result = await _medicalcaseService.DeleteMedicalCaseAsync(id, expertId);
 
             if (!result)
             {
@@ -199,6 +211,10 @@ namespace BoneVisQA.API.Controllers.Expert
                 });
             }
 
+            var expertId = ResolveCurrentExpertId();
+            if (expertId == Guid.Empty)
+                return Unauthorized(new { message = "Token does not contain a valid user id." });
+
             var uploadFile = StudyArchiveIngestHelper.ResolveStudyArchive(
                 file, dicomFile, archive, dicomArchive, studyArchive, form);
             var validationError = StudyArchiveIngestHelper.ValidateArchive(uploadFile);
@@ -223,7 +239,7 @@ namespace BoneVisQA.API.Controllers.Expert
                 var jobId = await _studyIngestJobs.QueueLocalArchiveAsync(
                     stagedPath,
                     ingestPurpose: "library",
-                    ownerUserId: null,
+                    ownerUserId: expertId,
                     resolvedDiagnosisText,
                     StudyIngestJobKind.ExpertLibrary,
                     cancellationToken);

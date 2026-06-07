@@ -636,7 +636,8 @@ public class ExpertReviewService : IExpertReviewService
             PromotedCaseId = row.Id,
             CaseId = row.Id,
             Title = row.Title,
-            Status = row.IsApproved == true ? "approved" : "pending"
+            Status = "approved",
+            CaseOrigin = ExpertCaseOriginValues.FromStudentRequest
         };
     }
 

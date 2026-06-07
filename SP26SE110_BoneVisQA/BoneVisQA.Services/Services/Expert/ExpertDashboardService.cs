@@ -154,9 +154,7 @@ public class ExpertDashboardService : IExpertDashboardService
     {
         return await _unitOfWork.Context.MedicalCases
             .AsNoTracking()
-            .Where(c =>
-                c.ClassCases.Any(cc => cc.Class.ExpertId == expertId) ||
-                c.CreatedByExpertId == expertId)
+            .Where(c => c.CreatedByExpertId == expertId)
             .OrderByDescending(c => c.CreatedAt)
             .Take(4)
             .Select(c => new ExpertDashboardRecentCaseDto
@@ -170,9 +168,10 @@ public class ExpertDashboardService : IExpertDashboardService
                     .FirstOrDefault() ?? ExpertMedicalCaseDisplayHelper.DefaultBoneLocation,
                 LesionType = c.Category != null ? c.Category.Name : ExpertMedicalCaseDisplayHelper.DefaultCategory,
                 Difficulty = c.Difficulty ?? ExpertMedicalCaseDisplayHelper.DefaultDifficulty,
-                Status = c.IsApproved == true
-                    ? "approved"
-                    : (c.IsActive == true ? "pending" : "draft"),
+                CaseOrigin = c.CaseTags.Any(ct =>
+                    ct.Tag != null && ct.Tag.Name == CaseOriginHelper.StudentQaSourceTagName)
+                    ? ExpertCaseOriginValues.FromStudentRequest
+                    : ExpertCaseOriginValues.ExpertCreated,
                 AddedBy = c.CreatedByExpert != null ? c.CreatedByExpert.FullName : "Unknown",
                 AddedDate = c.CreatedAt ?? DateTime.UtcNow,
                 ViewCount = c.CaseViewLogs.Count(),

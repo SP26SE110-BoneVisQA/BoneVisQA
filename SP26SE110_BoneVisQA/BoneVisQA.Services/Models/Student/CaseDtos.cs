@@ -7,7 +7,16 @@ namespace BoneVisQA.Services.Models.Student;
 
 public static class StudentCaseOriginValues
 {
+    /// <summary>Promoted from an escalated student Visual QA / Q&amp;A session.</summary>
+    public const string CommunityPromoted = "communityPromoted";
+
+    /// <summary>Created directly by an expert (New case or DICOM ingest).</summary>
+    public const string ExpertCreated = "expertCreated";
+
+    /// <summary>Legacy display label — kept for backward-compatible clients.</summary>
     public const string FromCommunityRequest = "From Community Request";
+
+    /// <summary>Legacy display label — kept for backward-compatible clients.</summary>
     public const string CreatedByExpert = "Created by Expert";
 }
 
@@ -31,7 +40,7 @@ public class CaseListItemDto
     public DateTime? CreatedAt { get; set; }
 
     /// <summary><see cref="StudentCaseOriginValues"/> for FE (Ask AI lockout).</summary>
-    public string CaseOrigin { get; set; } = StudentCaseOriginValues.CreatedByExpert;
+    public string CaseOrigin { get; set; } = StudentCaseOriginValues.ExpertCreated;
 }
 
 public class MedicalImageDto
@@ -93,7 +102,7 @@ public class CaseDetailDto
 
     public DateTime? CreatedAt { get; set; }
 
-    public string CaseOrigin { get; set; } = StudentCaseOriginValues.CreatedByExpert;
+    public string CaseOrigin { get; set; } = StudentCaseOriginValues.ExpertCreated;
 }
 
 public class StudentCaseHistoryItemDto

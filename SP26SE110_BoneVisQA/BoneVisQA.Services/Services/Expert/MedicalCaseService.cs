@@ -82,6 +82,10 @@ namespace BoneVisQA.Services.Services.Expert
                             (ct.Tag.Type == "Location" || ct.Tag.Type == "BoneLocation"))
                         .Select(ct => ct.Tag!.Name)
                         .FirstOrDefault() ?? string.Empty,
+                    CaseOrigin = x.CaseTags.Any(ct =>
+                        ct.Tag != null && ct.Tag.Name == CaseOriginHelper.StudentQaSourceTagName)
+                        ? ExpertCaseOriginValues.FromStudentRequest
+                        : ExpertCaseOriginValues.ExpertCreated,
                     IsApproved = x.IsApproved,
                     IsActive = x.IsActive,
                     SuggestedDiagnosis = x.SuggestedDiagnosis,
@@ -144,6 +148,7 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = entity.CategoryId,
                 CategoryName = entity.Category?.Name,
                 BoneLocation = boneLocation,
+                CaseOrigin = CaseOriginHelper.ResolveExpertCaseOrigin(entity.CaseTags),
                 IsApproved = entity.IsApproved,
                 IsActive = entity.IsActive,
                 SuggestedDiagnosis = entity.SuggestedDiagnosis,
@@ -228,8 +233,8 @@ namespace BoneVisQA.Services.Services.Expert
                 CategoryId = dto.CategoryId,
                 SuggestedDiagnosis = dto.SuggestedDiagnosis,
                 KeyFindings = dto.KeyFindings,
-                IsApproved = false,
-                IsActive = true,
+                IsApproved = dto.IsApproved ?? true,
+                IsActive = dto.IsActive ?? true,
                 CreatedAt = DateTime.UtcNow,
                 IndexingStatus = DocumentIndexingStatuses.Pending,
                 Version = SemanticDocumentVersion.Initial
@@ -241,6 +246,8 @@ namespace BoneVisQA.Services.Services.Expert
             return new CreateMedicalCaseResponseDTO
             {
                 Id = medicalCase.Id,
+                CreatedByExpertId = medicalCase.CreatedByExpertId,
+                CaseOrigin = ExpertCaseOriginValues.ExpertCreated,
                 ExpertName = expert?.FullName,
                 Title = medicalCase.Title,
                 Description = medicalCase.Description,
@@ -337,12 +344,24 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.SaveAsync();
         }
 
-        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id, UpdateMedicalCaseDTORequest request)
+        public async Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(
+            Guid id,
+            UpdateMedicalCaseDTORequest request,
+            Guid? ownerExpertId = null)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
 
             if (medicalCase == null)
                 return null;
+
+            if (ownerExpertId.HasValue)
+            {
+                if (medicalCase.CreatedByExpertId != ownerExpertId)
+                    return null;
+                request.CreatedByExpertId = ownerExpertId;
+                request.IsApproved = true;
+                request.IsActive = true;
+            }
 
             var contentChanged =
                 !string.Equals(medicalCase.Title, request.Title, StringComparison.Ordinal) ||
@@ -426,12 +445,15 @@ namespace BoneVisQA.Services.Services.Expert
 
             return $"{major}.{minor}.{patch + 1}";
         }
-        public async Task<bool> DeleteMedicalCaseAsync(Guid id)
+        public async Task<bool> DeleteMedicalCaseAsync(Guid id, Guid? ownerExpertId = null)
         {
             var medicalCase = await _unitOfWork.MedicalCaseRepository
                 .GetByIdAsync(id);
 
             if (medicalCase == null)
+                return false;
+
+            if (ownerExpertId.HasValue && medicalCase.CreatedByExpertId != ownerExpertId)
                 return false;
 
             _ = _unitOfWork.MedicalCaseRepository.RemoveAsync(medicalCase);

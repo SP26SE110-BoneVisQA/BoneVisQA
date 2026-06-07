@@ -15,8 +15,8 @@ namespace BoneVisQA.Services.Interfaces.Expert
         Task<GetExpertMedicalCaseDetailDto?> GetMedicalCaseByIdAsync(Guid id, Guid? expertId = null);
         Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseAsync(CreateMedicalCaseRequestDTO dto);
         Task<CreateMedicalCaseResponseDTO> CreateMedicalCaseWithImagesJsonAsync(CreateExpertMedicalCaseJsonRequest request,Guid expertUserId,CancellationToken cancellationToken = default);
-        Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id,UpdateMedicalCaseDTORequest request);
-        Task<bool>DeleteMedicalCaseAsync(Guid medicalCaseId);
+        Task<UpdateMedicalCaseResponseDTO?> UpdateMedicalCaseAsync(Guid id, UpdateMedicalCaseDTORequest request, Guid? ownerExpertId = null);
+        Task<bool> DeleteMedicalCaseAsync(Guid medicalCaseId, Guid? ownerExpertId = null);
 
         //============================================================================================
 

@@ -54,7 +54,9 @@ public static class ExpertMedicalCaseDisplayHelper
             dto.ExpertName = null;
         if (string.IsNullOrWhiteSpace(dto.BoneLocation))
             dto.BoneLocation = DefaultBoneLocation;
-        dto.Status = ComputeStatus(dto.IsApproved, dto.IsActive);
+        if (string.IsNullOrWhiteSpace(dto.CaseOrigin))
+            dto.CaseOrigin = ExpertCaseOriginValues.ExpertCreated;
+        dto.Status = expertScoped ? string.Empty : ComputeStatus(dto.IsApproved, dto.IsActive);
         dto.CreatedAt ??= DateTime.UtcNow;
     }
 
@@ -77,6 +79,8 @@ public static class ExpertMedicalCaseDisplayHelper
 
     public static void ApplyDetailDefaults(GetExpertMedicalCaseDetailDto dto, bool expertScoped = false)
     {
+        if (expertScoped && dto.Tags.Count > 0)
+            dto.CaseOrigin = CaseOriginHelper.ResolveExpertCaseOrigin(dto.Tags);
         ApplyListDefaults(dto, expertScoped);
     }
 }

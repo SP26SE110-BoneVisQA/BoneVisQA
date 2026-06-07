@@ -23,7 +23,10 @@ namespace BoneVisQA.Services.Models.Expert
         public string? CategoryName { get; set; }
         /// <summary>From tags with type Location / BoneLocation (comma-separated if multiple).</summary>
         public string BoneLocation { get; set; } = string.Empty;
-        /// <summary>Derived: approved / pending / draft (expert dashboard).</summary>
+        /// <summary><see cref="ExpertCaseOriginValues"/> — expertCreated or fromStudentRequest.</summary>
+        public string CaseOrigin { get; set; } = ExpertCaseOriginValues.ExpertCreated;
+
+        /// <summary>Deprecated workflow field; not used by expert/admin UI.</summary>
         public string Status { get; set; } = string.Empty;
         public bool? IsApproved { get; set; }
         public bool? IsActive { get; set; }
@@ -119,6 +122,8 @@ namespace BoneVisQA.Services.Models.Expert
     public class CreateMedicalCaseResponseDTO
     {
         public Guid Id { get; set; }
+        public Guid? CreatedByExpertId { get; set; }
+        public string CaseOrigin { get; set; } = ExpertCaseOriginValues.ExpertCreated;
         public string? ExpertName { get; set; }
         public string Title { get; set; } = null!;
         public string Description { get; set; } = null!;

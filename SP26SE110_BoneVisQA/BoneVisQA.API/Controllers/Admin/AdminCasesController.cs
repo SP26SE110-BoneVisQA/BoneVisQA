@@ -86,46 +86,20 @@ public class AdminCasesController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Consumes("application/json")]
-    public async Task<IActionResult> UpdateCase([FromRoute] Guid id, [FromBody] UpdateMedicalCaseDTORequest request)
-    {
-        if (request == null)
-            return BadRequest(new { message = "Request body is required." });
-
-        var updated = await _medicalCaseService.UpdateMedicalCaseAsync(id, request);
-        if (updated == null)
+    [Obsolete("Admin case management is read-only; experts own CRUD via /api/expert/cases.")]
+    public IActionResult UpdateCase([FromRoute] Guid id, [FromBody] UpdateMedicalCaseDTORequest request) =>
+        StatusCode(StatusCodes.Status403Forbidden, new
         {
-            return NotFound(new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Not Found",
-                Detail = "The requested medical case was not found.",
-                Instance = HttpContext.Request.Path.Value
-            });
-        }
-
-        return Ok(new
-        {
-            message = "Medical case updated successfully.",
-            data = updated,
-            result = updated
+            message = "Admin cannot modify medical cases. Case library is expert-owned.",
+            code = "ADMIN_CASES_READ_ONLY"
         });
-    }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> DeleteCase([FromRoute] Guid id)
-    {
-        var ok = await _medicalCaseService.DeleteMedicalCaseAsync(id);
-        if (!ok)
+    [Obsolete("Admin case management is read-only; experts delete via DELETE /api/expert/cases/{id}.")]
+    public IActionResult DeleteCase([FromRoute] Guid id) =>
+        StatusCode(StatusCodes.Status403Forbidden, new
         {
-            return NotFound(new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Not Found",
-                Detail = "The requested medical case was not found.",
-                Instance = HttpContext.Request.Path.Value
-            });
-        }
-
-        return Ok(new { message = "Medical case deleted successfully." });
-    }
+            message = "Admin cannot delete medical cases. Case library is expert-owned.",
+            code = "ADMIN_CASES_READ_ONLY"
+        });
 }

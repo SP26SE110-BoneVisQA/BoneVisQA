@@ -120,18 +120,9 @@ public class StudentService : IStudentService
                     .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
                 CreatedAt = c.CreatedAt,
-                CaseOrigin = ResolveStudentCaseOrigin(c)
+                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c)
             })
             .ToList();
-    }
-
-    private static string ResolveStudentCaseOrigin(MedicalCase c)
-    {
-        var hasCommunityTag = c.CaseTags?.Any(ct =>
-            string.Equals(ct.Tag?.Name, "Student Q&A", StringComparison.Ordinal)) == true;
-        return hasCommunityTag
-            ? StudentCaseOriginValues.FromCommunityRequest
-            : StudentCaseOriginValues.CreatedByExpert;
     }
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter)
@@ -160,7 +151,7 @@ public class StudentService : IStudentService
                     .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)),
                 Tags = c.CaseTags?.Select(ct => ct.Tag.Name).ToList(),
                 CreatedAt = c.CreatedAt,
-                CaseOrigin = ResolveStudentCaseOrigin(c)
+                CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(c)
             })
             .ToList();
     }
@@ -237,7 +228,7 @@ public class StudentService : IStudentService
             DicomMetadata = CaseMediaDicomMetadataHelper.ResolveFirstMetadata(entity),
             IsApproved = entity.IsApproved ?? false,
             CreatedAt = entity.CreatedAt,
-            CaseOrigin = ResolveStudentCaseOrigin(entity),
+            CaseOrigin = CaseOriginHelper.ResolveStudentCatalogOrigin(entity),
             Images = imageDtos
         };
     }
