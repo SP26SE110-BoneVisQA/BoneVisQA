@@ -416,6 +416,7 @@ builder.Services.AddScoped<ILecturerProfileService, LecturerProfileService>();
 builder.Services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
 builder.Services.AddScoped<ILecturerReportService, LecturerReportService>();
 builder.Services.AddScoped<ILecturerGradeBookService, LecturerGradeBookService>();
+builder.Services.AddSingleton<IStudyIngestJobService, StudyIngestJobService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISearchService, SearchService>();

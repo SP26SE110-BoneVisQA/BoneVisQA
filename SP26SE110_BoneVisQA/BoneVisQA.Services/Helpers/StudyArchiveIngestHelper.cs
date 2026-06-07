@@ -87,13 +87,11 @@ public static class StudyArchiveIngestHelper
         }
     }
 
-    public static async Task<IngestResultDto> IngestStagedArchiveAsync(
-        IPythonAiConnectorService pythonAi,
+    public static async Task<StagedStudyArchiveUpload> UploadStagedArchiveAsync(
         ISupabaseStorageService storage,
         string absoluteArchivePath,
         string ingestPurpose,
         Guid? ownerUserId,
-        string? diagnosisText,
         CancellationToken cancellationToken)
     {
         var purpose = string.IsNullOrWhiteSpace(ingestPurpose)
@@ -114,27 +112,50 @@ public static class StudyArchiveIngestHelper
             _ => "application/octet-stream",
         };
 
+        var publicUrl = await storage.UploadLocalFileAsync(
+            absoluteArchivePath,
+            bucket,
+            objectPath,
+            contentType,
+            cancellationToken);
+
+        var ingestReference = await storage.CreateSignedUrlAsync(
+            $"{bucket}/{objectPath}",
+            duration: 3600,
+            cancellationToken: cancellationToken);
+        if (string.IsNullOrWhiteSpace(ingestReference))
+            ingestReference = publicUrl;
+
+        return new StagedStudyArchiveUpload(bucket, objectPath, ingestReference);
+    }
+
+    public static async Task<IngestResultDto> IngestStagedArchiveAsync(
+        IPythonAiConnectorService pythonAi,
+        ISupabaseStorageService storage,
+        string absoluteArchivePath,
+        string ingestPurpose,
+        Guid? ownerUserId,
+        string? diagnosisText,
+        CancellationToken cancellationToken)
+    {
+        var purpose = string.IsNullOrWhiteSpace(ingestPurpose)
+            ? "library"
+            : ingestPurpose.Trim().ToLowerInvariant();
+
         string? stagingObjectPath = null;
+        var bucket = purpose == "personal" ? "student_uploads" : "medical-cases";
         try
         {
-            var publicUrl = await storage.UploadLocalFileAsync(
+            var staged = await UploadStagedArchiveAsync(
+                storage,
                 absoluteArchivePath,
-                bucket,
-                objectPath,
-                contentType,
+                ingestPurpose,
+                ownerUserId,
                 cancellationToken);
-            stagingObjectPath = objectPath;
-
-            // Python AI runs on a separate host (Railway); pass a downloadable URL, not a Render-local path.
-            var ingestReference = await storage.CreateSignedUrlAsync(
-                $"{bucket}/{objectPath}",
-                duration: 3600,
-                cancellationToken: cancellationToken);
-            if (string.IsNullOrWhiteSpace(ingestReference))
-                ingestReference = publicUrl;
+            stagingObjectPath = staged.ObjectPath;
 
             return await pythonAi.TriggerIngestAsync(
-                ingestReference,
+                staged.IngestReferenceUrl,
                 diagnosis: diagnosisText ?? string.Empty,
                 ingestPurpose: purpose,
                 ownerUserId: ownerUserId,
@@ -216,4 +237,19 @@ public static class StudyArchiveIngestHelper
             return "Study archive could not be read after upload.";
         return detail;
     }
+
+    public static StudyIngestJobStatusResponse MapJobStatus(StudyIngestJobStatusDto job) =>
+        new()
+        {
+            JobId = job.JobId,
+            Status = job.Status,
+            IngestOk = job.IngestOk,
+            IngestError = job.IngestError,
+            CaseId = job.CaseId,
+            SessionId = job.SessionId,
+            MediaId = job.MediaId,
+            CatalogImageId = job.CatalogImageId,
+            PreviewImageUrl = job.PreviewImageUrl,
+            DicomMetadata = job.DicomMetadata,
+        };
 }

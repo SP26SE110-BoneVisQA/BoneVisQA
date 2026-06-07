@@ -50,6 +50,7 @@ public class VisualQAController : ControllerBase
     private readonly IVisualQaAiService _visualQaAiService;
     private readonly ISupabaseStorageService _storageService;
     private readonly IPythonAiConnectorService _pythonAiConnector;
+    private readonly IStudyIngestJobService _studyIngestJobs;
     private readonly IMemoryCache _cache;
     private readonly IVisualQaSessionConcurrencyGate _sessionGate;
     private readonly ILogger<VisualQAController> _logger;
@@ -59,6 +60,7 @@ public class VisualQAController : ControllerBase
         IVisualQaAiService visualQaAiService,
         ISupabaseStorageService storageService,
         IPythonAiConnectorService pythonAiConnector,
+        IStudyIngestJobService studyIngestJobs,
         IMemoryCache cache,
         IVisualQaSessionConcurrencyGate sessionGate,
         ILogger<VisualQAController> logger)
@@ -67,6 +69,7 @@ public class VisualQAController : ControllerBase
         _visualQaAiService = visualQaAiService;
         _storageService = storageService;
         _pythonAiConnector = pythonAiConnector;
+        _studyIngestJobs = studyIngestJobs;
         _cache = cache;
         _sessionGate = sessionGate;
         _logger = logger;
@@ -98,67 +101,46 @@ public class VisualQAController : ControllerBase
         try
         {
             stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
-            var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
-                _pythonAiConnector,
+            var staged = await StudyArchiveIngestHelper.UploadStagedArchiveAsync(
                 _storageService,
                 stagedPath,
                 ingestPurpose: "personal",
                 ownerUserId: studentId,
-                diagnosisText,
                 cancellationToken);
 
-            if (!ingest.Success || !ingest.CaseId.HasValue)
-            {
-                var message = StudyArchiveIngestHelper.ResolveIngestErrorMessage(ingest);
-                if (StudyArchiveIngestHelper.IsClientIngestFailure(ingest))
-                {
-                    return BadRequest(new StudentPersonalStudyUploadResponse
-                    {
-                        IngestOk = false,
-                        IngestError = message,
-                    });
-                }
+            var jobId = await _studyIngestJobs.QueueIngestAsync(
+                staged.IngestReferenceUrl,
+                staged.Bucket,
+                staged.ObjectPath,
+                ingestPurpose: "personal",
+                ownerUserId: studentId,
+                diagnosisText,
+                StudyIngestJobKind.StudentPersonal,
+                cancellationToken);
 
-                return StatusCode(StatusCodes.Status502BadGateway, new StudentPersonalStudyUploadResponse
-                {
-                    IngestOk = false,
-                    IngestError = message,
-                });
-            }
-
-            var sessionRequest = new VisualQARequestDto
+            return Accepted(new StudentPersonalStudyUploadResponse
             {
-                CaseId = ingest.CaseId,
-                ImageUrl = ingest.PreviewImageUrl,
-                ImageId = ingest.CatalogImageId,
-                DicomMetadata = ingest.DicomMetadata,
-            };
-
-            Guid sessionId;
-            try
-            {
-                sessionId = await _studentService.CreateOrGetVisualQaSessionAsync(studentId, sessionRequest);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-
-            return Ok(new StudentPersonalStudyUploadResponse
-            {
-                SessionId = sessionId,
-                CaseId = ingest.CaseId.Value,
-                MediaId = ingest.MediaId,
-                CatalogImageId = ingest.CatalogImageId,
-                PreviewImageUrl = ingest.PreviewImageUrl ?? string.Empty,
-                DicomMetadata = ingest.DicomMetadata,
-                IngestOk = true,
+                IngestOk = false,
+                IngestStatus = "processing",
+                IngestJobId = jobId,
             });
         }
         finally
         {
             StudyArchiveIngestHelper.TryDeleteStagedFile(stagedPath);
         }
+    }
+
+    [HttpGet("upload-personal/jobs/{jobId:guid}")]
+    [ProducesResponseType(typeof(StudyIngestJobStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetPersonalUploadJobStatus(Guid jobId)
+    {
+        var job = _studyIngestJobs.GetJob(jobId);
+        if (job == null)
+            return NotFound(new { message = "Ingest job not found." });
+
+        return Ok(StudyArchiveIngestHelper.MapJobStatus(job));
     }
 
     /// <summary>

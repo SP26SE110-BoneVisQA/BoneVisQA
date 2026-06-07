@@ -39,6 +39,8 @@ public sealed class ExpertDicomStudyUploadResponse
     public JsonElement? DicomMetadata { get; set; }
     public bool IngestOk { get; set; }
     public string? IngestError { get; set; }
+    public Guid? IngestJobId { get; set; }
+    public string? IngestStatus { get; set; }
 }
 
 public sealed class StudentPersonalStudyUploadResponse
@@ -52,7 +54,11 @@ public sealed class StudentPersonalStudyUploadResponse
     public JsonElement? DicomMetadata { get; set; }
     public bool IngestOk { get; set; }
     public string? IngestError { get; set; }
+    public Guid? IngestJobId { get; set; }
+    public string? IngestStatus { get; set; }
 }
+
+public sealed record StagedStudyArchiveUpload(string Bucket, string ObjectPath, string IngestReferenceUrl);
 
 /// <summary>Bootstrap payload when opening Visual QA from the published case catalog (Ask with AI).</summary>
 public sealed class StudentCatalogCaseSessionBootstrapResponse

@@ -24,19 +24,22 @@ namespace BoneVisQA.API.Controllers.Expert
         private readonly ITagCaseService _tagCaseService;
         private readonly ISupabaseStorageService _storageService;
         private readonly IPythonAiConnectorService _pythonAiConnector;
+        private readonly IStudyIngestJobService _studyIngestJobs;
 
         public ExpertController(
             IMedicalCaseService medicalService,
             IQuizsService quizService,
             ITagCaseService tagCaseService,
             ISupabaseStorageService storageService,
-            IPythonAiConnectorService pythonAiConnector)
+            IPythonAiConnectorService pythonAiConnector,
+            IStudyIngestJobService studyIngestJobs)
         {
             _medicalcaseService = medicalService;
             _quizService = quizService;
             _tagCaseService = tagCaseService;
             _storageService = storageService;
             _pythonAiConnector = pythonAiConnector;
+            _studyIngestJobs = studyIngestJobs;
         }
         
         [HttpGet("cases")]
@@ -213,50 +216,47 @@ namespace BoneVisQA.API.Controllers.Expert
             try
             {
                 stagedPath = await StudyArchiveIngestHelper.StageArchiveAsync(file!, cancellationToken);
-                var ingest = await StudyArchiveIngestHelper.IngestStagedArchiveAsync(
-                    _pythonAiConnector,
+                var staged = await StudyArchiveIngestHelper.UploadStagedArchiveAsync(
                     _storageService,
                     stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,
-                    resolvedDiagnosisText,
                     cancellationToken);
 
-                if (!ingest.Success || !ingest.CaseId.HasValue)
-                {
-                    var message = StudyArchiveIngestHelper.ResolveIngestErrorMessage(ingest);
-                    if (StudyArchiveIngestHelper.IsClientIngestFailure(ingest))
-                    {
-                        return BadRequest(new ExpertDicomStudyUploadResponse
-                        {
-                            IngestOk = false,
-                            IngestError = message,
-                        });
-                    }
+                var jobId = await _studyIngestJobs.QueueIngestAsync(
+                    staged.IngestReferenceUrl,
+                    staged.Bucket,
+                    staged.ObjectPath,
+                    ingestPurpose: "library",
+                    ownerUserId: null,
+                    resolvedDiagnosisText,
+                    StudyIngestJobKind.ExpertLibrary,
+                    cancellationToken);
 
-                    return StatusCode(
-                        StatusCodes.Status502BadGateway,
-                        new ExpertDicomStudyUploadResponse
-                        {
-                            IngestOk = false,
-                            IngestError = message,
-                        });
-                }
-
-                return Ok(new ExpertDicomStudyUploadResponse
+                return Accepted(new ExpertDicomStudyUploadResponse
                 {
-                    CaseId = ingest.CaseId.Value,
-                    MediaId = ingest.MediaId,
-                    CatalogImageId = ingest.CatalogImageId,
-                    PreviewImageUrl = ingest.PreviewImageUrl ?? string.Empty,
-                    DicomMetadata = ingest.DicomMetadata,
-                    IngestOk = true,
+                    IngestOk = false,
+                    IngestStatus = "processing",
+                    IngestJobId = jobId,
+                    IngestError = null,
                 });
             }
             finally
             {
                 StudyArchiveIngestHelper.TryDeleteStagedFile(stagedPath);
             }
+        }
+
+        [HttpGet("cases/upload-dicom/jobs/{jobId:guid}")]
+        [ProducesResponseType(typeof(StudyIngestJobStatusResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult GetDicomUploadJobStatus(Guid jobId)
+        {
+            var job = _studyIngestJobs.GetJob(jobId);
+            if (job == null)
+                return NotFound(new { message = "Ingest job not found." });
+
+            return Ok(StudyArchiveIngestHelper.MapJobStatus(job));
         }
 
         [HttpDelete("images/{imageId:guid}")]
