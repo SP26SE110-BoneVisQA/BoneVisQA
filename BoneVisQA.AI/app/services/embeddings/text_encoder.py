@@ -12,8 +12,8 @@ _TEXT_MODEL_NAME = os.environ.get(
     "TEXT_EMBEDDING_MODEL",
     "sentence-transformers/all-MiniLM-L6-v2",
 )
-# Small batches keep peak RAM low on Railway when using all-mpnet-base-v2.
-_ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "4")))
+# Balanced encode batch — pair with ENRICH_BATCH_SIZE=12 on Railway (~8 GB RAM).
+_ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "6")))
 
 
 @lru_cache(maxsize=1)

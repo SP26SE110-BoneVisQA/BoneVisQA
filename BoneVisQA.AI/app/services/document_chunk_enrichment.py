@@ -19,8 +19,8 @@ from app.services.document_chunk_metadata import (
 )
 from app.services.embeddings.text_encoder import encode_texts, release_encode_memory, text_model_name
 
-# Fewer chunks per HTTP request = lower peak RAM with mpnet on Railway (~8 GB).
-_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "8"))
+# Balanced batch size: stable on Railway ~8 GB with mpnet; override via ENRICH_BATCH_SIZE.
+_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "12"))
 _DEFAULT_METADATA_BATCH_SIZE = int(os.environ.get("ENRICH_METADATA_BATCH_SIZE", "64"))
 
 EnrichPhase = Literal["metadata", "embeddings", "all"]

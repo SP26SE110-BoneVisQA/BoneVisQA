@@ -16,7 +16,7 @@ from app.services.document_chunk_enrichment import enrich_document_chunks_by_id
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "8"))
+_DEFAULT_BATCH_SIZE = int(os.environ.get("ENRICH_BATCH_SIZE", "12"))
 _DEFAULT_METADATA_BATCH_SIZE = int(os.environ.get("ENRICH_METADATA_BATCH_SIZE", "64"))
 
 

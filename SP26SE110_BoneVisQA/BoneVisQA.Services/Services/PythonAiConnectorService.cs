@@ -466,7 +466,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
         var batchSize = phase == DocumentEnrichPhase.Metadata
             ? Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichMetadataBatchSize", 64), 1, 64)
-            : Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 8), 1, 64);
+            : Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 12), 1, 64);
 
         if (phase == DocumentEnrichPhase.Embeddings)
             onlyMissingEmbedding = true;

@@ -65,20 +65,24 @@ Mẫu tên biến (xem `railway.variables.template`):
 | `HUGGINGFACE_API_KEY` | Khuyến nghị | Token HF (Settings → Access Tokens) |
 | `IMAGE_EMBEDDING_MODEL` | Không | Mặc định BiomedCLIP trong code |
 | `TEXT_EMBEDDING_MODEL` | Không | `sentence-transformers/all-mpnet-base-v2` (giữ chất lượng embedding) |
-| `ENRICH_BATCH_SIZE` | Khuyến nghị | **`8`** — chunks/request ở phase embeddings (tránh OOM) |
+| `ENRICH_BATCH_SIZE` | Khuyến nghị | **`12`** — balanced (ổn định + nhanh hơn batch 8) |
 | `ENRICH_METADATA_BATCH_SIZE` | Không | `64` — metadata rule-based, không load ML |
-| `ENCODE_BATCH_SIZE` | Khuyến nghị | **`4`** — batch nội bộ khi `encode_texts()` |
+| `ENCODE_BATCH_SIZE` | Khuyến nghị | **`6`** — batch nội bộ khi `encode_texts()` |
 | `TORCH_NUM_THREADS` | Khuyến nghị | `2` — giảm spike RAM |
 | `OMP_NUM_THREADS` | Không | `2` |
 | `MKL_NUM_THREADS` | Không | `2` |
 
 **Không** tạo biến `PORT` — Railway tự inject.
 
-### Profile ổn định cho document indexing (mpnet, chậm nhưng không 502)
+### Profile balanced cho document indexing (mpnet, mặc định 12/6)
 
-Copy từ `railway.variables.template`. **Không tăng** `ENRICH_BATCH_SIZE` / `ENCODE_BATCH_SIZE` nếu RAM ~8 GB — log `Started server process [1]` + reload `MPNetModel` giữa các batch = OOM/restart → C# nhận **HTTP 502**.
+Copy từ `railway.variables.template`. Log `Started server process [1]` + reload `MPNetModel` giữa batch = OOM → hạ về **8/4**. Ổn định nhiều lần có thể thử **16/8**.
 
-Ưu tiên **batch nhỏ** hơn là tốc độ. Với ~500 chunks: ~60 request × ~30s vẫn hoàn thành (như đêm qua).
+| Mức | ENRICH / ENCODE | Ghi chú |
+|-----|-----------------|---------|
+| An toàn | 8 / 4 | Khi vẫn 502 |
+| **Balanced** | **12 / 6** | Mặc định khuyến nghị |
+| Nhanh hơn | 16 / 8 | Chỉ sau khi 12/6 ổn |
 
 Sau khi thêm Variables → **Redeploy** (Deployments → ⋮ → Redeploy).
 
@@ -111,7 +115,7 @@ Trên **Render** → Web Service **BoneVisQA.API** → **Environment**:
 | Key (Render) | Value |
 |--------------|--------|
 | `AiMicroservice__BaseUrl` | `https://bonevisqa-production.up.railway.app` (không có `/` cuối) |
-| `AiMicroservice__EnrichBatchSize` | `8` (khớp Railway `ENRICH_BATCH_SIZE`) |
+| `AiMicroservice__EnrichBatchSize` | `12` (khớp Railway `ENRICH_BATCH_SIZE`) |
 | `AiMicroservice__EnrichMetadataBatchSize` | `64` |
 | `AiMicroservice__RequestTimeoutMinutes` | `30` (giữ nguyên — indexing lớn cần thời gian) |
 
@@ -143,8 +147,8 @@ Luồng: **FE (Vercel) → C# (Render) → Python (Railway) → Postgres/Supabas
 |-------------------|------------|
 | `ModuleNotFoundError: app` | Sai **Root Directory** — phải là `BoneVisQA.AI` |
 | Build/startup OOM (CUDA / 1GB) | `requirements.txt` dùng `--extra-index-url` PyTorch **CPU-only**; nạp Billing Developer (~$5) để RAM tới ~8GB |
-| `HTTP 502` khi enrich embeddings | Log Railway: `Started server process` + reload `all-mpnet-base-v2` giữa batch → OOM. Set `ENRICH_BATCH_SIZE=8`, `ENCODE_BATCH_SIZE=4`, thread limits; redeploy Railway **và** Render (`AiMicroservice__EnrichBatchSize=8`). C# đã retry 6 lần, chờ 20s×attempt khi 502 |
-| Indexing chậm nhưng OK | Bình thường với mpnet + batch 8 — không tăng batch để “nhanh hơn” |
+| `HTTP 502` khi enrich embeddings | Log Railway: `Started server process` + reload `all-mpnet-base-v2` giữa batch → OOM. Hạ `ENRICH_BATCH_SIZE=8`, `ENCODE_BATCH_SIZE=4`; redeploy Railway **và** Render. C# retry 6 lần, chờ 20s×attempt khi 502 |
+| Indexing chậm nhưng OK | Bình thường với mpnet — balanced 12/6 ~14–17 phút cho 335 chunks (bước 5) |
 | `could not connect to server` (DB) | Kiểm tra `DATABASE_URL`, pooler host, password |
 | HF 401 / model download fail | Thêm `HUGGINGFACE_API_KEY` |
 | Deploy chậm 10+ phút lần đầu | Bình thường — tải model embedding |

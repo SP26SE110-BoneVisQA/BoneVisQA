@@ -1,8 +1,9 @@
 # Paste each line as Railway Variable (name = value). Fill from your local .env.
 # Do NOT commit this file after filling real secrets — keep placeholders only in git.
 #
-# Stable profile for document indexing with all-mpnet-base-v2 (slower, avoids OOM/502).
-# Requires Railway Developer plan (~8 GB RAM). Do not raise batch sizes unless you upgrade RAM.
+# Balanced profile: all-mpnet-base-v2 on Railway ~8 GB — stable, moderately fast.
+# If OOM/502: lower to ENRICH_BATCH_SIZE=8, ENCODE_BATCH_SIZE=4.
+# If stable for several runs: try ENRICH_BATCH_SIZE=16, ENCODE_BATCH_SIZE=8.
 
 DATABASE_URL=
 SUPABASE_URL=
@@ -12,11 +13,11 @@ HUGGINGFACE_API_KEY=
 IMAGE_EMBEDDING_MODEL=microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
 TEXT_EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2
 
-# Chunks per enrich-chunks HTTP call (embeddings phase). 8 is safe for mpnet on ~8 GB.
-ENRICH_BATCH_SIZE=8
+# Chunks per enrich-chunks HTTP call (embeddings phase).
+ENRICH_BATCH_SIZE=12
 ENRICH_METADATA_BATCH_SIZE=64
 # Internal torch forward-pass size per encode_texts() call.
-ENCODE_BATCH_SIZE=4
+ENCODE_BATCH_SIZE=6
 
 # Limit CPU thread pools — reduces memory spikes during inference.
 TORCH_NUM_THREADS=2
