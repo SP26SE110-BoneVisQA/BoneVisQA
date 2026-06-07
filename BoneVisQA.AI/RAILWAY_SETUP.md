@@ -62,9 +62,9 @@ Mẫu tên biến (xem `railway.variables.template`):
 | `DATABASE_URL` | Có | Chuỗi Postgres Supabase (`?sslmode=require`) |
 | `SUPABASE_URL` | Có | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Có | Service role key (Settings → API trong Supabase) |
-| `HUGGINGFACE_API_KEY` | Khuyến nghị | Token HF (Settings → Access Tokens) |
-| `IMAGE_EMBEDDING_MODEL` | Không | Mặc định BiomedCLIP trong code |
-| `TEXT_EMBEDDING_MODEL` | Không | `sentence-transformers/all-mpnet-base-v2` (giữ chất lượng embedding) |
+| `HUGGINGFACE_API_KEY` | Khuyến nghị | Token HF (Settings → Access Tokens) — **chỉ dùng cho auth download** |
+| `IMAGE_EMBEDDING_MODEL` | Không | Repo HF dạng `org/model`, ví dụ `microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224`. **Không** dán token vào đây |
+| `TEXT_EMBEDDING_MODEL` | Không | `sentence-transformers/all-mpnet-base-v2` (giữ chất lượng embedding). **Không** dán token vào đây |
 | `ENRICH_BATCH_SIZE` | Khuyến nghị | **`12`** — balanced (ổn định + nhanh hơn batch 8) |
 | `ENRICH_METADATA_BATCH_SIZE` | Không | `64` — metadata rule-based, không load ML |
 | `ENCODE_BATCH_SIZE` | Khuyến nghị | **`6`** — batch nội bộ khi `encode_texts()` |
@@ -151,6 +151,7 @@ Luồng: **FE (Vercel) → C# (Render) → Python (Railway) → Postgres/Supabas
 | Indexing chậm nhưng OK | Bình thường với mpnet — balanced 12/6 ~14–17 phút cho 335 chunks (bước 5) |
 | `could not connect to server` (DB) | Kiểm tra `DATABASE_URL`, pooler host, password |
 | HF 401 / model download fail | Thêm `HUGGINGFACE_API_KEY` |
+| `Repo id must use alphanumeric chars` / ingest 502 / `Failed initial config/weights load from HF Hub` | **`IMAGE_EMBEDDING_MODEL` (hoặc `TEXT_EMBEDDING_MODEL`) đang bị set nhầm thành HF token.** Xóa biến đó hoặc set đúng repo id (`microsoft/BiomedCLIP-...`). Token chỉ đặt ở `HUGGINGFACE_API_KEY`. Redeploy Railway |
 | Deploy chậm 10+ phút lần đầu | Bình thường — tải model embedding |
 
 Dán **20–30 dòng cuối** tab Deploy Logs nếu cần hỗ trợ thêm.

@@ -7,11 +7,11 @@ from functools import lru_cache
 
 import numpy as np
 
+from app.services.embeddings.model_config import resolve_hf_model_id
+
 # MiniLM: ~4-6x faster on CPU and ~5x less RAM than all-mpnet-base-v2 (768-d vectors are zero-padded).
-_TEXT_MODEL_NAME = os.environ.get(
-    "TEXT_EMBEDDING_MODEL",
-    "sentence-transformers/all-MiniLM-L6-v2",
-)
+_DEFAULT_TEXT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+_TEXT_MODEL_NAME = resolve_hf_model_id("TEXT_EMBEDDING_MODEL", _DEFAULT_TEXT_MODEL)
 # Balanced encode batch — pair with ENRICH_BATCH_SIZE=12 on Railway (~8 GB RAM).
 _ENCODE_BATCH_SIZE = max(1, int(os.environ.get("ENCODE_BATCH_SIZE", "6")))
 

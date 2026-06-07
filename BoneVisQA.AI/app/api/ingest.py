@@ -57,10 +57,14 @@ router = APIRouter(tags=["ingest"])
 
 def _raise_ingest_error(context: str, exc: Exception) -> None:
     traceback.print_exc()
-    raise HTTPException(
-        status_code=500,
-        detail=f"{context}: {type(exc).__name__}: {exc}",
-    ) from exc
+    detail = f"{context}: {type(exc).__name__}: {exc}"
+    if "Repo id must use alphanumeric" in str(exc) or "Failed initial config/weights load from HF Hub" in str(exc):
+        detail = (
+            "Image embedding model misconfigured on the AI service. "
+            "Set IMAGE_EMBEDDING_MODEL to a Hugging Face repo id (org/model) or remove it; "
+            "put your API token in HUGGINGFACE_API_KEY only."
+        )
+    raise HTTPException(status_code=500, detail=detail) from exc
 
 
 class IngestBody(BaseModel):

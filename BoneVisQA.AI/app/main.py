@@ -25,7 +25,8 @@ from app.api.ingest import router as ingest_router
 from app.api.v1.documents import router as documents_v1_router
 from app.api.v1.qa import router as qa_v1_router
 from app.core.db import check_database_connection
-from app.services.embeddings.text_encoder import warmup_text_model
+from app.services.embeddings.image_encoder import image_model_name, warmup_image_model
+from app.services.embeddings.text_encoder import text_model_name, warmup_text_model
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,13 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if os.environ.get("SKIP_EMBEDDING_WARMUP", "").strip().lower() not in {"1", "true", "yes"}:
-        from app.services.embeddings.text_encoder import text_model_name
-
         logger.info("Pre-loading text embedding model (%s)...", text_model_name())
         warmup_text_model()
         logger.info("Text embedding model ready (%s).", text_model_name())
+
+        logger.info("Pre-loading image embedding model (%s)...", image_model_name())
+        warmup_image_model()
+        logger.info("Image embedding model ready (%s).", image_model_name())
     yield
 
 
@@ -67,7 +70,11 @@ def health_ready() -> dict[str, str]:
         check_database_connection()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"status": "ready"}
+    return {
+        "status": "ready",
+        "text_embedding_model": text_model_name(),
+        "image_embedding_model": image_model_name(),
+    }
 
 
 if __name__ == "__main__":

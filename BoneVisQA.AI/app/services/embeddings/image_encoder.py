@@ -2,26 +2,17 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
 import numpy as np
 import torch
 from PIL import Image
 
+from app.services.embeddings.model_config import resolve_hf_model_id
+
 _DEFAULT_HF_ID = "microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
-
-
-def _resolve_model_id() -> str:
-    raw = (os.environ.get("IMAGE_EMBEDDING_MODEL") or _DEFAULT_HF_ID).strip()
-    if raw.startswith("hf-hub:"):
-        return raw
-    if "/" in raw:
-        return f"hf-hub:{raw}"
-    return f"hf-hub:{_DEFAULT_HF_ID}"
-
-
-_IMAGE_MODEL_ID = _resolve_model_id()
+_IMAGE_REPO_ID = resolve_hf_model_id("IMAGE_EMBEDDING_MODEL", _DEFAULT_HF_ID)
+_IMAGE_MODEL_ID = f"hf-hub:{_IMAGE_REPO_ID}"
 
 
 @lru_cache(maxsize=1)
@@ -36,9 +27,9 @@ def _load_model() -> tuple[torch.nn.Module, object]:
 @lru_cache(maxsize=1)
 def image_embedding_dim() -> int:
     """Projection dimension for stored vectors (512 for BiomedCLIP ViT-B/16)."""
-    model, preprocess = _load_model()
+    model, _preprocess = _load_model()
     probe = Image.new("RGB", (224, 224))
-    tensor = preprocess(probe).unsqueeze(0)
+    tensor = _preprocess(probe).unsqueeze(0)
     with torch.no_grad():
         features = model.encode_image(tensor)
     return int(features.shape[-1])
@@ -60,4 +51,9 @@ def encode_image(image: Image.Image) -> np.ndarray:
 
 
 def image_model_name() -> str:
-    return _IMAGE_MODEL_ID.removeprefix("hf-hub:")
+    return _IMAGE_REPO_ID
+
+
+def warmup_image_model() -> None:
+    """Load BiomedCLIP at process start so ingest does not fail on first upload."""
+    _load_model()

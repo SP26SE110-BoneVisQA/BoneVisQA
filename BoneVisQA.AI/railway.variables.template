@@ -10,6 +10,7 @@ SUPABASE_URL=
 SUPABASE_SERVICE_KEY=
 HUGGINGFACE_API_KEY=
 
+# Repo ids (org/model) — do NOT paste HUGGINGFACE_API_KEY here
 IMAGE_EMBEDDING_MODEL=microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
 TEXT_EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2
 
