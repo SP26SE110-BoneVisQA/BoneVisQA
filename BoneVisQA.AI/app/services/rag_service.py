@@ -9,7 +9,7 @@ from uuid import UUID
 import numpy as np
 from psycopg2.extensions import connection as PGConnection
 
-from app.core.db import modality_for_db
+from app.core.db import _fit_pgvector, modality_for_db
 from app.services.embeddings.text_encoder import encode_text
 
 ALPHA_FUSION = 0.45
@@ -384,8 +384,9 @@ def rag_answer_prepare(
     final_top_k: int = 5,
 ) -> dict[str, Any]:
     """Embed question, late-fusion hybrid retrieve, build prompt JSON for upstream LLM gateway."""
-    q_vec = encode_text(user_question)
-    img_vec = image_vector
+    # Stored embeddings are zero-padded to vector(768); query vectors must match (MiniLM is 384-d).
+    q_vec = _fit_pgvector(encode_text(user_question))
+    img_vec = _fit_pgvector(image_vector) if image_vector is not None else None
     if img_vec is None and case_id is not None:
         img_vec = fetch_case_image_vector(conn, case_id=case_id, media_id=case_media_id)
 
