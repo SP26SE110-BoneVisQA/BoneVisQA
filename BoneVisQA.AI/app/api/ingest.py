@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -28,11 +29,16 @@ from app.services.dicom_reader import (
     read_dicom_tags,
     select_representative_dicom,
 )
-from app.services.embeddings import (
+from app.services.embeddings.image_encoder import (
     encode_image,
-    encode_text,
     image_model_name,
+    unload_image_model,
+)
+from app.services.embeddings.text_encoder import (
+    encode_text,
+    release_encode_memory,
     text_model_name,
+    unload_text_model,
 )
 from app.services.ontology import (
     infer_anatomy_from_text,
@@ -53,6 +59,7 @@ from app.services.ontology.medical_metadata import (
 from app.services.supabase_storage import storage_target_for_ingest, upload_png_file
 
 router = APIRouter(tags=["ingest"])
+logger = logging.getLogger(__name__)
 
 
 def _raise_ingest_error(context: str, exc: Exception) -> None:
@@ -201,9 +208,16 @@ def _ingest_from_file(body: IngestBody, store_path: str, dicom_file: Path) -> di
     )
 
     text_for_embedding = diagnosis or f"Case {patient_id or 'unknown'} {tier1} {tier2} {tier3}"
+
+    logger.info("Ingest: encoding text (%s).", text_model_name())
     txt_vec = encode_text(text_for_embedding)
+    unload_text_model()
+
+    logger.info("Ingest: extracting raster + encoding image (%s).", image_model_name())
     image = extract_dicom_image(dicom_file)
     img_vec = encode_image(image)
+    unload_image_model()
+    release_encode_memory()
 
     case_id = uuid4()
     media_id = uuid4()
@@ -355,6 +369,7 @@ def _ingest_remote_archive(body: IngestBody, url: str) -> dict:
 @router.post("/ingest")
 def ingest(body: IngestBody) -> dict:
     raw_path = body.dicom_path.strip()
+    logger.info("POST /ingest purpose=%s path=%s", body.ingest_purpose, raw_path[:120])
     store_path = (
         raw_path if is_remote_dicom_reference(raw_path) else str(Path(raw_path).resolve())
     )

@@ -57,3 +57,17 @@ def image_model_name() -> str:
 def warmup_image_model() -> None:
     """Load BiomedCLIP at process start so ingest does not fail on first upload."""
     _load_model()
+
+
+def unload_image_model() -> None:
+    """Release the cached OpenCLIP model to free RAM after ingest encode."""
+    image_embedding_dim.cache_clear()
+    _load_model.cache_clear()
+    import gc
+
+    gc.collect()
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass

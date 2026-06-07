@@ -19,6 +19,8 @@ load_dotenv()
 if _hf_key := os.environ.get("HUGGINGFACE_API_KEY"):
     os.environ.setdefault("HF_TOKEN", _hf_key)
 
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

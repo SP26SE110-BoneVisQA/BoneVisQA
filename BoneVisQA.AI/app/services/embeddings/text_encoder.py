@@ -62,6 +62,12 @@ def release_encode_memory() -> None:
         pass
 
 
+def unload_text_model() -> None:
+    """Release the cached SentenceTransformer so a subsequent image model load fits in RAM."""
+    _load_model.cache_clear()
+    release_encode_memory()
+
+
 def warmup_text_model() -> None:
     """Load weights at process start so the first enrich request does not cold-start."""
     threads = int(os.environ.get("TORCH_NUM_THREADS", "0"))
