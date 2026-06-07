@@ -109,14 +109,32 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
 
             _logger.LogInformation("[DocumentIndexing] Cleared document_chunks for doc {DocumentId} before rebuild.", documentId);
 
-            SetProgress(documentId, 5, "Downloading PDF (stream to disk)...", document.TotalPages, document.TotalChunks, document.CurrentPageIndexing);
+            SetProgress(
+                documentId,
+                DocumentIndexingPhases.OverallProgress(DocumentIndexingPhases.DownloadPdf, 0),
+                "Downloading PDF (stream to disk)...",
+                document.TotalPages,
+                document.TotalChunks,
+                document.CurrentPageIndexing,
+                DocumentIndexingPhases.DownloadPdf);
             tempPdfPath = await _pdfProcessing.DownloadPdfToTempFileAsync(sourceFilePath, cancellationToken);
+
+            await ReportProgressAsync(
+                documentId,
+                DocumentIndexingPhases.DownloadPdf,
+                1,
+                "PDF downloaded.",
+                document.TotalPages,
+                document.TotalChunks,
+                document.CurrentPageIndexing,
+                cancellationToken);
 
             var pageSegments = new List<PageTextSegment>();
             var pagesSinceSave = 0;
 
             var docTracked = await _unitOfWork.Context.Documents
                 .FirstAsync(d => d.Id == documentId, cancellationToken);
+            await EnsureDocumentDefaultsAsync(docTracked, cancellationToken);
 
             using (var pdfDocument = PdfDocument.Open(tempPdfPath))
             {
@@ -126,13 +144,14 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 docTracked.CurrentPageIndexing = 0;
                 docTracked.IndexingProgress = 0;
                 await _unitOfWork.SaveAsync();
-                await _progressNotifier.NotifyProgressAsync(
+                await ReportProgressAsync(
                     documentId,
+                    DocumentIndexingPhases.ExtractPages,
+                    0,
+                    "PDF parsed. Extracting text...",
                     docTracked.TotalPages,
                     docTracked.TotalChunks,
                     docTracked.CurrentPageIndexing,
-                    docTracked.IndexingProgress,
-                    "PDF parsed. Waiting for chunking...",
                     cancellationToken);
 
                 var pageIndex = 0;
@@ -147,32 +166,23 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
 
                     docTracked.CurrentPageIndexing = pageIndex;
                     docTracked.TotalPages = totalPages;
-                    docTracked.IndexingProgress = totalPages > 0
-                        ? Math.Clamp((int)(pageIndex * 50.0 / totalPages), 0, 50)
-                        : 0;
+                    docTracked.IndexingProgress = DocumentIndexingPhases.OverallProgress(
+                        DocumentIndexingPhases.ExtractPages,
+                        totalPages > 0 ? pageIndex / (double)totalPages : 0);
 
                     pagesSinceSave++;
                     if (pagesSinceSave >= SaveProgressEveryPages || pageIndex == totalPages)
                     {
                         await _unitOfWork.SaveAsync();
                         pagesSinceSave = 0;
-                        var displayPct = totalPages > 0
-                            ? (int)(pageIndex * 100.0 / totalPages)
-                            : 0;
-                        SetProgress(
+                        await ReportProgressAsync(
                             documentId,
-                            Math.Clamp(displayPct, 0, 99),
-                            $"Indexing pages: {pageIndex}/{totalPages}...",
-                            docTracked.TotalPages,
-                            docTracked.TotalChunks,
-                            docTracked.CurrentPageIndexing);
-                        await _progressNotifier.NotifyProgressAsync(
-                            documentId,
+                            DocumentIndexingPhases.ExtractPages,
+                            totalPages > 0 ? pageIndex / (double)totalPages : 1,
+                            $"Extracting text: page {pageIndex}/{totalPages}...",
                             docTracked.TotalPages,
                             docTracked.TotalChunks,
                             docTracked.CurrentPageIndexing,
-                            docTracked.IndexingProgress,
-                            $"Indexing pages: {pageIndex}/{totalPages}...",
                             cancellationToken);
                     }
                 }
@@ -204,13 +214,14 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 documentId);
             docTracked.TotalChunks = chunkPayload.Count;
             await _unitOfWork.SaveAsync();
-            await _progressNotifier.NotifyProgressAsync(
+            await ReportProgressAsync(
                 documentId,
+                DocumentIndexingPhases.PersistChunks,
+                0,
+                "Chunking completed. Persisting chunks...",
                 docTracked.TotalPages,
                 docTracked.TotalChunks,
                 docTracked.CurrentPageIndexing,
-                docTracked.IndexingProgress,
-                "Chunking completed. Persisting chunks...",
                 cancellationToken);
 
             var processedChunks = 0;
@@ -241,7 +252,8 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 await _unitOfWork.SaveAsync();
 
                 processedChunks += take;
-                var progress = Math.Clamp((int)Math.Round(processedChunks * 100d / chunkPayload.Count), 0, 100);
+                var phaseFraction = chunkPayload.Count > 0 ? processedChunks / (double)chunkPayload.Count : 1;
+                var progress = DocumentIndexingPhases.OverallProgress(DocumentIndexingPhases.PersistChunks, phaseFraction);
                 var currentIndexedPage = docTracked.TotalPages > 0
                     ? Math.Clamp((int)Math.Ceiling(processedChunks * docTracked.TotalPages / (double)chunkPayload.Count), 0, docTracked.TotalPages)
                     : docTracked.CurrentPageIndexing;
@@ -249,21 +261,16 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 docTracked.CurrentPageIndexing = currentIndexedPage;
 
                 await _unitOfWork.SaveAsync();
-                SetProgress(
+                await ReportProgressAsync(
                     documentId,
-                    progress,
-                    $"Saving chunk {processedChunks} of {chunkPayload.Count}...",
-                    docTracked.TotalPages,
-                    docTracked.TotalChunks,
-                    docTracked.CurrentPageIndexing);
-                await _progressNotifier.NotifyProgressAsync(
-                    documentId,
+                    DocumentIndexingPhases.PersistChunks,
+                    phaseFraction,
+                    $"Saving chunks: {processedChunks}/{chunkPayload.Count}...",
                     docTracked.TotalPages,
                     docTracked.TotalChunks,
                     docTracked.CurrentPageIndexing,
-                    progress,
-                    $"Saving chunk {processedChunks} of {chunkPayload.Count}...",
-                    cancellationToken);
+                    cancellationToken,
+                    processedChunks);
             }
             await using var swapTransaction = await _unitOfWork.Context.Database.BeginTransactionAsync(cancellationToken);
             try
@@ -339,71 +346,108 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                 }
 
                 finalDoc.IndexingStatus = DocumentIndexingStatuses.Processing;
-                finalDoc.IndexingProgress = 95;
+                finalDoc.IndexingProgress = DocumentIndexingPhases.OverallProgress(DocumentIndexingPhases.EnrichMetadata, 0);
                 finalDoc.IndexingErrorMessage = null;
                 finalDoc.IsOutdated = false;
                 finalDoc.UpdatedAt = DateTime.UtcNow;
                 if (finalDoc.TotalPages > 0)
                     finalDoc.CurrentPageIndexing = finalDoc.TotalPages;
+                await EnsureDocumentDefaultsAsync(finalDoc, cancellationToken);
                 await _unitOfWork.DocumentRepository.UpdateAsync(finalDoc);
                 await _unitOfWork.SaveAsync();
                 await swapTransaction.CommitAsync(cancellationToken);
 
-                SetProgress(
+                var enrichTotalChunks = finalDoc.TotalChunks;
+
+                await ReportProgressAsync(
                     documentId,
-                    95,
-                    "Enriching metadata and embeddings...",
+                    DocumentIndexingPhases.EnrichMetadata,
+                    0,
+                    "Enriching chunk metadata...",
                     finalDoc.TotalPages,
-                    finalDoc.TotalChunks,
-                    finalDoc.CurrentPageIndexing);
-                await _progressNotifier.NotifyProgressAsync(
-                    documentId,
-                    finalDoc.TotalPages,
-                    finalDoc.TotalChunks,
+                    enrichTotalChunks,
                     finalDoc.CurrentPageIndexing,
-                    95,
-                    "Enriching metadata and embeddings...",
                     cancellationToken);
 
-                var enrichTotalChunks = finalDoc.TotalChunks;
-                var enrich = await _pythonAi.EnrichDocumentChunksAsync(
+                var metadataEnrich = await _pythonAi.EnrichDocumentChunksAsync(
                     documentId,
-                    onlyMissingEmbedding: true,
-                    cancellationToken,
-                    onBatchProgressAsync: async (processed, nullRemaining, ct) =>
+                    DocumentEnrichPhase.Metadata,
+                    cancellationToken: cancellationToken,
+                    onBatchProgressAsync: async (processed, _, ct) =>
                     {
-                        var pct = enrichTotalChunks > 0
-                            ? Math.Clamp(95 + (int)Math.Round(processed * 5.0 / enrichTotalChunks), 95, 99)
-                            : 95;
-                        var op = enrichTotalChunks > 0
-                            ? $"Enriching embeddings ({processed}/{enrichTotalChunks})..."
-                            : "Enriching metadata and embeddings...";
-                        SetProgress(documentId, pct, op, finalDoc.TotalPages, enrichTotalChunks, finalDoc.CurrentPageIndexing);
-                        await _progressNotifier.NotifyProgressAsync(
+                        var fraction = enrichTotalChunks > 0 ? processed / (double)enrichTotalChunks : 1;
+                        await ReportProgressAsync(
                             documentId,
+                            DocumentIndexingPhases.EnrichMetadata,
+                            fraction,
+                            $"Enriching metadata ({processed}/{enrichTotalChunks})...",
                             finalDoc.TotalPages,
                             enrichTotalChunks,
                             finalDoc.CurrentPageIndexing,
-                            pct,
-                            op,
-                            ct);
+                            ct,
+                            processed);
                     });
-                if (!enrich.Success || enrich.NullEmbeddingRemaining > 0)
+
+                if (!metadataEnrich.Success)
                 {
-                    var detail = enrich.ErrorMessage ?? $"null_embeddings={enrich.NullEmbeddingRemaining}";
+                    var detail = metadataEnrich.ErrorMessage ?? "metadata enrichment failed";
                     _logger.LogError(
-                        "[DocumentIndexing] Chunk enrichment failed for document {DocumentId}. Provider response: {Detail}",
+                        "[DocumentIndexing] Metadata enrichment failed for document {DocumentId}. Detail: {Detail}",
                         documentId,
                         detail);
-                    await MarkFailedAsync(documentId, $"Chunk metadata/embedding enrichment failed: {detail}", cancellationToken);
+                    await MarkFailedAsync(documentId, $"Chunk metadata enrichment failed: {detail}", cancellationToken);
+                    completed = true;
+                    failoverMarked = true;
+                    return;
+                }
+
+                await ReportProgressAsync(
+                    documentId,
+                    DocumentIndexingPhases.GenerateEmbeddings,
+                    0,
+                    "Generating embeddings...",
+                    finalDoc.TotalPages,
+                    enrichTotalChunks,
+                    finalDoc.CurrentPageIndexing,
+                    cancellationToken);
+
+                var embeddingEnrich = await _pythonAi.EnrichDocumentChunksAsync(
+                    documentId,
+                    DocumentEnrichPhase.Embeddings,
+                    onlyMissingEmbedding: true,
+                    cancellationToken: cancellationToken,
+                    onBatchProgressAsync: async (processed, nullRemaining, ct) =>
+                    {
+                        var fraction = enrichTotalChunks > 0 ? processed / (double)enrichTotalChunks : 1;
+                        await ReportProgressAsync(
+                            documentId,
+                            DocumentIndexingPhases.GenerateEmbeddings,
+                            fraction,
+                            $"Generating embeddings ({processed}/{enrichTotalChunks})...",
+                            finalDoc.TotalPages,
+                            enrichTotalChunks,
+                            finalDoc.CurrentPageIndexing,
+                            ct,
+                            processed);
+                    });
+
+                if (!embeddingEnrich.Success || embeddingEnrich.NullEmbeddingRemaining > 0)
+                {
+                    var detail = embeddingEnrich.ErrorMessage ?? $"null_embeddings={embeddingEnrich.NullEmbeddingRemaining}";
+                    _logger.LogError(
+                        "[DocumentIndexing] Embedding enrichment failed for document {DocumentId}. Provider response: {Detail}",
+                        documentId,
+                        detail);
+                    await MarkFailedAsync(documentId, $"Chunk embedding enrichment failed: {detail}", cancellationToken);
                     completed = true;
                     failoverMarked = true;
                     return;
                 }
 
                 _logger.LogInformation(
-                    "[DocumentIndexing] Enriched {Count} chunks for document {DocumentId}.",
-                    enrich.ChunksProcessed,
+                    "[DocumentIndexing] Enriched {MetadataCount} metadata + {EmbeddingCount} embeddings for document {DocumentId}.",
+                    metadataEnrich.ChunksProcessed,
+                    embeddingEnrich.ChunksProcessed,
                     documentId);
 
                 var completedDoc = await _unitOfWork.DocumentRepository.GetByIdAsync(documentId);
@@ -432,7 +476,9 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     "Completed.",
                     finalDoc.TotalPages,
                     finalDoc.TotalChunks,
-                    finalDoc.CurrentPageIndexing);
+                    finalDoc.CurrentPageIndexing,
+                    DocumentIndexingPhases.GenerateEmbeddings,
+                    enrichTotalChunks);
                 await _progressNotifier.NotifyProgressAsync(
                     documentId,
                     finalDoc.TotalPages,
@@ -440,7 +486,10 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
                     finalDoc.CurrentPageIndexing,
                     100,
                     "Completed.",
-                    cancellationToken);
+                    cancellationToken,
+                    DocumentIndexingPhases.GenerateEmbeddings,
+                    enrichTotalChunks,
+                    DocumentIndexingPhases.Label(DocumentIndexingPhases.GenerateEmbeddings));
             }
             catch (Exception swapEx)
             {
@@ -626,13 +675,71 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
         return !string.IsNullOrEmpty(bucket) && !string.IsNullOrEmpty(filePath);
     }
 
+    private async Task EnsureDocumentDefaultsAsync(Document document, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(document.DefaultModality))
+            return;
+
+        document.DefaultModality = DocumentMetadataValidation.DefaultModality;
+        document.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.DocumentRepository.UpdateAsync(document);
+        await _unitOfWork.SaveAsync();
+        _logger.LogInformation(
+            "[DocumentIndexing] Backfilled default_modality={Modality} for legacy document {DocumentId}.",
+            document.DefaultModality,
+            document.Id);
+    }
+
+    private async Task ReportProgressAsync(
+        Guid documentId,
+        int indexingPhase,
+        double phaseFraction,
+        string operation,
+        int totalPages,
+        int totalChunks,
+        int currentPageIndexing,
+        CancellationToken cancellationToken,
+        int chunksProcessed = 0)
+    {
+        var progress = indexingPhase >= DocumentIndexingPhases.MaxPhase && phaseFraction >= 1
+            ? 100
+            : DocumentIndexingPhases.OverallProgress(indexingPhase, phaseFraction);
+        var phaseLabel = DocumentIndexingPhases.Label(indexingPhase);
+
+        SetProgress(
+            documentId,
+            progress,
+            operation,
+            totalPages,
+            totalChunks,
+            currentPageIndexing,
+            indexingPhase,
+            chunksProcessed,
+            phaseLabel);
+
+        await _progressNotifier.NotifyProgressAsync(
+            documentId,
+            totalPages,
+            totalChunks,
+            currentPageIndexing,
+            progress,
+            operation,
+            cancellationToken,
+            indexingPhase,
+            chunksProcessed,
+            phaseLabel);
+    }
+
     private void SetProgress(
         Guid documentId,
         int percentage,
         string operation,
         int totalPages = 0,
         int totalChunks = 0,
-        int currentPageIndexing = 0)
+        int currentPageIndexing = 0,
+        int indexingPhase = 0,
+        int chunksProcessed = 0,
+        string? phaseLabel = null)
     {
         var statusLabel = DocumentIndexingStatuses.Processing;
         if (percentage >= 100 && string.Equals(operation, "Completed.", StringComparison.OrdinalIgnoreCase))
@@ -652,7 +759,12 @@ public sealed class DocumentIndexingProcessor : IDocumentIndexingProcessor
             CurrentPageIndexing = currentPageIndexing,
             ErrorMessage = string.Equals(statusLabel, DocumentIndexingStatuses.Failed, StringComparison.OrdinalIgnoreCase)
                 ? operation
-                : null
+                : null,
+            IndexingPhase = indexingPhase,
+            PhaseLabel = string.IsNullOrWhiteSpace(phaseLabel) && indexingPhase > 0
+                ? DocumentIndexingPhases.Label(indexingPhase)
+                : phaseLabel,
+            ChunksProcessed = chunksProcessed
         };
         _memoryCache.Set(GetProgressCacheKey(documentId), value, TimeSpan.FromHours(4));
     }

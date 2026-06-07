@@ -56,6 +56,12 @@ public class DocumentIngestionStatusDto
     public int TotalChunks { get; set; }
     public int CurrentPageIndexing { get; set; }
     public string? ErrorMessage { get; set; }
+    /// <summary>Pipeline step 1–5 (see <see cref="Helpers.DocumentIndexingPhases"/>).</summary>
+    public int IndexingPhase { get; set; }
+    /// <summary>Human-readable label for <see cref="IndexingPhase"/>.</summary>
+    public string? PhaseLabel { get; set; }
+    /// <summary>Chunks completed in the current phase (metadata or embeddings).</summary>
+    public int ChunksProcessed { get; set; }
 }
 
 /// <summary>One row from a batch admin document upload.</summary>

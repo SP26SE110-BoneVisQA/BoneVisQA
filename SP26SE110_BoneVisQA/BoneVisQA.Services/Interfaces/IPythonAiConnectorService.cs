@@ -37,6 +37,7 @@ public interface IPythonAiConnectorService
     /// </summary>
     Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
         Guid documentId,
+        DocumentEnrichPhase phase = DocumentEnrichPhase.All,
         bool onlyMissingEmbedding = false,
         CancellationToken cancellationToken = default,
         Func<int, int, CancellationToken, Task>? onBatchProgressAsync = null);

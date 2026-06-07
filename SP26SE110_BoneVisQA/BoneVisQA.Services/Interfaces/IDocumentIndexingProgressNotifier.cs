@@ -9,7 +9,10 @@ public interface IDocumentIndexingProgressNotifier
         int currentPageIndexing,
         int progressPercentage,
         string operation,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int indexingPhase = 0,
+        int chunksProcessed = 0,
+        string? phaseLabel = null);
 
     /// <summary>Emitted after a successful atomic swap so clients can refresh without polling.</summary>
     Task NotifyIndexingCompletedAsync(

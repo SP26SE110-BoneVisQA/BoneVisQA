@@ -385,7 +385,10 @@ public class DocumentService : IDocumentService
             TotalPages = progress.TotalPages > 0 ? progress.TotalPages : document.TotalPages,
             TotalChunks = progress.TotalChunks > 0 ? progress.TotalChunks : document.TotalChunks,
             CurrentPageIndexing = progress.CurrentPageIndexing > 0 ? progress.CurrentPageIndexing : document.CurrentPageIndexing,
-            ErrorMessage = progress.ErrorMessage
+            ErrorMessage = progress.ErrorMessage,
+            IndexingPhase = progress.IndexingPhase,
+            PhaseLabel = progress.PhaseLabel,
+            ChunksProcessed = progress.ChunksProcessed
         };
     }
 
@@ -458,6 +461,7 @@ public class DocumentService : IDocumentService
         {
             return await _pythonAi.EnrichDocumentChunksAsync(
                 documentId.Value,
+                DocumentEnrichPhase.All,
                 onlyMissingEmbedding,
                 cancellationToken);
         }
@@ -475,7 +479,11 @@ public class DocumentService : IDocumentService
 
         foreach (var id in docIds)
         {
-            var result = await _pythonAi.EnrichDocumentChunksAsync(id, onlyMissingEmbedding, cancellationToken);
+            var result = await _pythonAi.EnrichDocumentChunksAsync(
+                id,
+                DocumentEnrichPhase.All,
+                onlyMissingEmbedding,
+                cancellationToken);
             if (!result.Success)
             {
                 failures.Add($"{id}: {result.ErrorMessage}");

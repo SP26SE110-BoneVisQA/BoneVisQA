@@ -20,7 +20,10 @@ public sealed class SignalRDocumentIndexingProgressNotifier : IDocumentIndexingP
         int currentPageIndexing,
         int progressPercentage,
         string operation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int indexingPhase = 0,
+        int chunksProcessed = 0,
+        string? phaseLabel = null)
     {
         return _hubContext.Clients.All.SendAsync(
             "DocumentIndexingProgressUpdated",
@@ -31,7 +34,10 @@ public sealed class SignalRDocumentIndexingProgressNotifier : IDocumentIndexingP
                 totalChunks,
                 currentPageIndexing,
                 progressPercentage,
-                operation
+                operation,
+                indexingPhase,
+                chunksProcessed,
+                phaseLabel
             },
             cancellationToken);
     }

@@ -449,6 +449,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
     /// <inheritdoc />
     public async Task<DocumentChunkEnrichmentResultDto> EnrichDocumentChunksAsync(
         Guid documentId,
+        DocumentEnrichPhase phase = DocumentEnrichPhase.All,
         bool onlyMissingEmbedding = false,
         CancellationToken cancellationToken = default,
         Func<int, int, CancellationToken, Task>? onBatchProgressAsync = null)
@@ -456,7 +457,20 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
         if (documentId == Guid.Empty)
             return EnrichFail(documentId, 400, "documentId is required.");
 
-        var batchSize = Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 40), 1, 64);
+        var enrichPhase = phase switch
+        {
+            DocumentEnrichPhase.Metadata => "metadata",
+            DocumentEnrichPhase.Embeddings => "embeddings",
+            _ => "all"
+        };
+
+        var batchSize = phase == DocumentEnrichPhase.Metadata
+            ? Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichMetadataBatchSize", 64), 1, 64)
+            : Math.Clamp(_configuration.GetValue("AiMicroservice:EnrichBatchSize", 40), 1, 64);
+
+        if (phase == DocumentEnrichPhase.Embeddings)
+            onlyMissingEmbedding = true;
+
         var afterChunkOrder = -1;
         string? sectionAnatomy = null;
         string? sectionPathology = null;
@@ -472,6 +486,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
             {
                 var batch = await PostEnrichBatchAsync(
                     documentId,
+                    enrichPhase,
                     onlyMissingEmbedding,
                     batchSize,
                     afterChunkOrder,
@@ -516,7 +531,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
                     break;
             }
 
-            if (nullRemaining > 0)
+            if (phase is DocumentEnrichPhase.Embeddings or DocumentEnrichPhase.All && nullRemaining > 0)
             {
                 return EnrichFail(
                     documentId,
@@ -549,6 +564,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
     private async Task<DocumentChunkEnrichmentResultDto> PostEnrichBatchAsync(
         Guid documentId,
+        string enrichPhase,
         bool onlyMissingEmbedding,
         int batchSize,
         int afterChunkOrder,
@@ -566,6 +582,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
                 "api/v1/documents/enrich-chunks",
                 new EnrichChunksPayload(
                     documentId,
+                    enrichPhase,
                     onlyMissingEmbedding,
                     batchSize,
                     afterChunkOrder,
@@ -719,6 +736,7 @@ public sealed class PythonAiConnectorService : IPythonAiConnectorService
 
     private sealed record EnrichChunksPayload(
         Guid DocId,
+        string EnrichPhase,
         bool OnlyMissingEmbedding,
         int BatchSize,
         int AfterChunkOrder,
