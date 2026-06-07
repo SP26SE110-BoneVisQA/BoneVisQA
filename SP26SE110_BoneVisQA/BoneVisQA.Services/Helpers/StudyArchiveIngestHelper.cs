@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BoneVisQA.Services.Interfaces;
+using BoneVisQA.Services.Models.VisualQA;
 using Microsoft.AspNetCore.Http;
 
 namespace BoneVisQA.Services.Helpers;
@@ -11,10 +12,15 @@ public static class StudyArchiveIngestHelper
 
     private static readonly string[] AllowedExtensions = [".zip", ".rar"];
 
+    public const string MissingArchiveMessage =
+        "DICOM study archive is required. Send multipart/form-data with field "
+        + "\"file\" (preferred), or \"dicomFile\", \"archive\", \"dicomArchive\", or \"studyArchive\" "
+        + "containing a .zip or .rar file.";
+
     public static string? ValidateArchive(IFormFile? file)
     {
         if (file == null || file.Length == 0)
-            return "File is required.";
+            return MissingArchiveMessage;
 
         if (file.Length > StudyArchiveMaxBytes)
             return $"File size exceeds {StudyArchiveMaxBytes / 1048576} MB limit.";
@@ -24,6 +30,30 @@ public static class StudyArchiveIngestHelper
             return "Only .zip or .rar study archives are allowed.";
 
         return null;
+    }
+
+    /// <summary>Resolve archive from direct action parameters or nested form model.</summary>
+    public static IFormFile? ResolveStudyArchive(
+        IFormFile? file,
+        IFormFile? dicomFile,
+        IFormFile? archive,
+        IFormFile? dicomArchive,
+        IFormFile? studyArchive,
+        ExpertDicomStudyUploadForm? form)
+    {
+        IFormFile? FirstNonEmpty(params IFormFile?[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (candidate is { Length: > 0 })
+                    return candidate;
+            }
+
+            return null;
+        }
+
+        return FirstNonEmpty(file, dicomFile, archive, dicomArchive, studyArchive)
+               ?? form?.ResolveFile();
     }
 
     public static async Task<string> StageArchiveAsync(IFormFile file, CancellationToken cancellationToken)

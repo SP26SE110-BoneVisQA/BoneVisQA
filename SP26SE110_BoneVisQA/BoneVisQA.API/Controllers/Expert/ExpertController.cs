@@ -173,14 +173,41 @@ namespace BoneVisQA.API.Controllers.Expert
         [RequestFormLimits(MultipartBodyLengthLimit = StudyArchiveIngestHelper.StudyArchiveMaxBytes)]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(ExpertDicomStudyUploadResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ExpertDicomStudyUploadResponse), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadDicomStudyToLibrary(
-            [FromForm] ExpertDicomStudyUploadForm form,
+            IFormFile? file,
+            IFormFile? dicomFile,
+            IFormFile? archive,
+            IFormFile? dicomArchive,
+            IFormFile? studyArchive,
+            [FromForm] string? diagnosisText,
+            [FromForm] ExpertDicomStudyUploadForm? form,
             CancellationToken cancellationToken)
         {
-            var file = form.ResolveFile();
-            var validationError = StudyArchiveIngestHelper.ValidateArchive(file);
+            if (!Request.HasFormContentType)
+            {
+                return BadRequest(new
+                {
+                    message = "Content-Type must be multipart/form-data. Do not set the Content-Type header manually; let the client add the boundary.",
+                    code = "INVALID_CONTENT_TYPE",
+                });
+            }
+
+            var uploadFile = StudyArchiveIngestHelper.ResolveStudyArchive(
+                file, dicomFile, archive, dicomArchive, studyArchive, form);
+            var validationError = StudyArchiveIngestHelper.ValidateArchive(uploadFile);
             if (validationError != null)
-                return BadRequest(new { message = validationError });
+            {
+                return BadRequest(new
+                {
+                    message = validationError,
+                    code = uploadFile == null ? "MISSING_FILE" : "INVALID_ARCHIVE",
+                    ingestOk = false,
+                });
+            }
+
+            var resolvedDiagnosisText = diagnosisText ?? form?.DiagnosisText;
+            file = uploadFile;
 
             string? stagedPath = null;
             try
@@ -191,7 +218,7 @@ namespace BoneVisQA.API.Controllers.Expert
                     stagedPath,
                     ingestPurpose: "library",
                     ownerUserId: null,
-                    form.DiagnosisText,
+                    resolvedDiagnosisText,
                     cancellationToken);
 
                 if (!ingest.Success || !ingest.CaseId.HasValue)

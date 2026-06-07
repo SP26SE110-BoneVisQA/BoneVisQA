@@ -9,9 +9,24 @@ public sealed class ExpertDicomStudyUploadForm
     public IFormFile? File { get; set; }
     public IFormFile? DicomFile { get; set; }
     public IFormFile? Archive { get; set; }
+    public IFormFile? DicomArchive { get; set; }
+    public IFormFile? StudyArchive { get; set; }
     public string? DiagnosisText { get; set; }
 
-    public IFormFile? ResolveFile() => File ?? DicomFile ?? Archive;
+    /// <summary>First non-empty archive part (any supported field name).</summary>
+    public IFormFile? ResolveFile() =>
+        FirstNonEmpty(File, DicomFile, Archive, DicomArchive, StudyArchive);
+
+    private static IFormFile? FirstNonEmpty(params IFormFile?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (candidate is { Length: > 0 })
+                return candidate;
+        }
+
+        return null;
+    }
 }
 
 public sealed class ExpertDicomStudyUploadResponse
