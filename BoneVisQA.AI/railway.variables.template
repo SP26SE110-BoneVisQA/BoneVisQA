@@ -1,7 +1,8 @@
 # Paste each line as Railway Variable (name = value). Fill from your local .env.
 # Do NOT commit this file after filling real secrets — keep placeholders only in git.
 #
-# Balanced profile: all-mpnet-base-v2 on Railway ~8 GB — stable, moderately fast.
+# Railway Hobby (~512 MB–2 GB): use MiniLM for text — mpnet + BiomedCLIP together OOM-kill on /ingest.
+# Railway ~8 GB: you may use all-mpnet-base-v2 instead for slightly better RAG quality.
 # If OOM/502: lower to ENRICH_BATCH_SIZE=8, ENCODE_BATCH_SIZE=4.
 # If stable for several runs: try ENRICH_BATCH_SIZE=16, ENCODE_BATCH_SIZE=8.
 
@@ -12,7 +13,7 @@ HUGGINGFACE_API_KEY=
 
 # Repo ids (org/model) — do NOT paste HUGGINGFACE_API_KEY here
 IMAGE_EMBEDDING_MODEL=microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
-TEXT_EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2
+TEXT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
 # Chunks per enrich-chunks HTTP call (embeddings phase).
 ENRICH_BATCH_SIZE=12
