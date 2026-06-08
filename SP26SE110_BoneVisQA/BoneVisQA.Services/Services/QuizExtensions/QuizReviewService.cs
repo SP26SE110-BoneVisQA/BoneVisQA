@@ -53,6 +53,10 @@ public class QuizReviewService
         public string? ReferenceAnswer { get; set; }
         public string? ImageUrl { get; set; }
         public string? CaseTitle { get; set; }
+        public string? OptionA { get; set; }
+        public string? OptionB { get; set; }
+        public string? OptionC { get; set; }
+        public string? OptionD { get; set; }
     }
 
     public class RelatedCaseDto
@@ -119,7 +123,11 @@ public class QuizReviewService
                 LecturerFeedback = answer.LecturerFeedback,
                 ReferenceAnswer = question.ReferenceAnswer,
                 ImageUrl = question.ImageUrl,
-                CaseTitle = question.Case?.Title
+                CaseTitle = question.Case?.Title,
+                OptionA = question.OptionA,
+                OptionB = question.OptionB,
+                OptionC = question.OptionC,
+                OptionD = question.OptionD
             });
         }
 
