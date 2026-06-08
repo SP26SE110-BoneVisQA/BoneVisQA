@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BoneVisQA.Services.Models.Expert;
 using Microsoft.AspNetCore.Http;
 
@@ -10,6 +11,8 @@ public static class PromoteToLibraryRequestReader
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new NullableGuidLenientJsonConverter() },
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
     public static async Task<PromoteToLibraryRequestDto?> ReadAsync(
