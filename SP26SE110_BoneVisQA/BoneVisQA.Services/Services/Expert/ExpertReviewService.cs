@@ -219,11 +219,8 @@ public class ExpertReviewService : IExpertReviewService
         if (request == null)
             throw new InvalidOperationException("Request body is required.");
 
-        if (string.IsNullOrWhiteSpace(request.ReviewNote)
-            && (request.CorrectedRoiBoundingBox == null || request.CorrectedRoiBoundingBox.Length == 0))
-        {
-            throw new InvalidOperationException("At least one of reviewNote or correctedRoiBoundingBox is required.");
-        }
+        if (!ExpertReviewDraftStorage.HasAnyContent(request))
+            throw new InvalidOperationException("At least one draft field is required.");
 
         var session = await _unitOfWork.Context.VisualQaSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId)
@@ -242,6 +239,7 @@ public class ExpertReviewService : IExpertReviewService
             throw new ConflictException("This session review has already been submitted.");
 
         var roiJson = SerializeCorrectedRoi(request.CorrectedRoiBoundingBox);
+        var storedNote = ExpertReviewDraftStorage.Serialize(request);
         var now = DateTime.UtcNow;
 
         if (review == null)
@@ -252,7 +250,7 @@ public class ExpertReviewService : IExpertReviewService
                 ExpertId = expertId,
                 AnswerId = null,
                 SessionId = sessionId,
-                ReviewNote = string.IsNullOrWhiteSpace(request.ReviewNote) ? null : request.ReviewNote.Trim(),
+                ReviewNote = storedNote,
                 Action = null,
                 CorrectedRoi = roiJson,
                 CreatedAt = now
@@ -261,20 +259,15 @@ public class ExpertReviewService : IExpertReviewService
         }
         else
         {
-            review.ReviewNote = string.IsNullOrWhiteSpace(request.ReviewNote) ? null : request.ReviewNote.Trim();
-            review.CorrectedRoi = roiJson;
+            review.ReviewNote = storedNote;
+            if (request.CorrectedRoiBoundingBox != null)
+                review.CorrectedRoi = roiJson;
             _unitOfWork.Context.ExpertReviews.Update(review);
         }
 
         await _unitOfWork.SaveAsync();
 
-        return new ExpertVisualSessionDraftResponseDto
-        {
-            SessionId = sessionId,
-            ReviewRowId = review.Id,
-            ReviewNote = review.ReviewNote,
-            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review.CorrectedRoi)
-        };
+        return BuildDraftResponse(sessionId, review);
     }
 
     public async Task DeleteSessionReviewDraftAsync(Guid expertId, Guid sessionId)
@@ -454,7 +447,7 @@ public class ExpertReviewService : IExpertReviewService
             "An expert approved your Visual QA session",
             "Your session has been reviewed by an expert. Open Visual QA to read the feedback.",
             "expert_review",
-            $"/student/qa/image?sessionId={session.Id}");
+            AppRoutes.StudentVisualQaWorkspace(session.Id));
     }
 
     public async Task<PromoteToLibraryResponseDto> ApproveAndPromoteToLibraryAsync(
@@ -493,11 +486,16 @@ public class ExpertReviewService : IExpertReviewService
                     $"Cannot approve and promote a session from status '{session.Status}'.");
             }
 
+            var draft = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
+            var draftPayload = TryResolveDraftOverlay(draft);
+            var reviewNote = request.ReviewNote ?? draftPayload?.ReviewNote;
+            var correctedRoi = request.CorrectedRoiBoundingBox ?? draftPayload?.CorrectedRoiBoundingBox;
+
             var expertReview = await UpsertExpertReviewForPromotionAsync(
                 session,
                 expertId,
-                request.ReviewNote,
-                request.CorrectedRoiBoundingBox,
+                reviewNote,
+                correctedRoi,
                 now,
                 finalizeAction: true);
 
@@ -868,7 +866,7 @@ public class ExpertReviewService : IExpertReviewService
             "Your Visual QA case was published to the library",
             "An expert approved your session and published it as a teaching case.",
             "expert_review",
-            $"/student/qa/image?sessionId={session.Id}");
+            AppRoutes.StudentVisualQaWorkspace(session.Id));
 
         await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(session.Id);
     }
@@ -1195,7 +1193,7 @@ public class ExpertReviewService : IExpertReviewService
                 "Your Visual QA escalation was declined",
                 reviewFeedbackText,
                 "expert_review",
-                $"/student/qa/image?sessionId={session.Id}");
+                AppRoutes.StudentVisualQaWorkspace(session.Id));
         }
         else
         {
@@ -1204,7 +1202,7 @@ public class ExpertReviewService : IExpertReviewService
                 "An expert replied to your Visual QA session",
                 "Your session has been updated by an expert. Open Visual QA to read the full response.",
                 "expert_review",
-                $"/student/qa/image?sessionId={session.Id}");
+                AppRoutes.StudentVisualQaWorkspace(session.Id));
 
             await _ragExpertAnswerIndexingSignal.NotifyExpertApprovedForFutureIndexingAsync(session.Id);
         }
@@ -1352,6 +1350,21 @@ public class ExpertReviewService : IExpertReviewService
             .ThenBy(m => m.Id)
             .ToList();
         var report = ExpertEscalatedReportBuilder.BuildFromAssistant(latestAssistant);
+        var draft = TryResolveDraftOverlay(review);
+        var answerText = draft?.AnswerText ?? MapAssistantAnswerText(latestAssistant);
+        var structuredDiagnosis = draft?.StructuredDiagnosis ?? latestAssistant?.SuggestedDiagnosis ?? report.Diagnosis;
+        var differentialList = draft?.DifferentialDiagnoses is { Count: > 0 }
+            ? draft.DifferentialDiagnoses
+            : report.DifferentialDiagnoses.Count > 0
+                ? report.DifferentialDiagnoses
+                : ParseDifferentialDiagnosesList(latestAssistant?.DifferentialDiagnoses).ToList();
+        var keyFindings = draft?.KeyImagingFindings ?? latestAssistant?.KeyImagingFindings ?? report.KeyImagingFindings;
+        var reflectiveQuestions = draft?.ReflectiveQuestions
+                                  ?? latestAssistant?.ReflectiveQuestions
+                                  ?? (report.ReflectiveQuestions.Count > 0
+                                      ? string.Join("\n", report.ReflectiveQuestions)
+                                      : null);
+        var correctedRoi = draft?.CorrectedRoiBoundingBox ?? DeserializeCorrectedRoi(review?.CorrectedRoi);
 
         return new ExpertEscalatedAnswerDto
         {
@@ -1367,21 +1380,15 @@ public class ExpertReviewService : IExpertReviewService
             CaseSuggestedDiagnosis = session.Case?.SuggestedDiagnosis,
             CaseKeyFindings = session.Case?.KeyFindings,
             QuestionText = userMessage?.Content ?? string.Empty,
-            AnswerText = MapAssistantAnswerText(latestAssistant),
-            CurrentAnswerText = MapAssistantAnswerText(latestAssistant),
-            StructuredDiagnosis = latestAssistant?.SuggestedDiagnosis ?? report.Diagnosis,
-            DifferentialDiagnoses = latestAssistant?.DifferentialDiagnoses
-                                    ?? (report.DifferentialDiagnoses.Count > 0
-                                        ? JsonSerializer.Serialize(report.DifferentialDiagnoses)
-                                        : null),
-            DifferentialDiagnosesList = report.DifferentialDiagnoses.Count > 0
-                ? report.DifferentialDiagnoses
-                : ParseDifferentialDiagnosesList(latestAssistant?.DifferentialDiagnoses),
-            KeyImagingFindings = latestAssistant?.KeyImagingFindings ?? report.KeyImagingFindings,
-            ReflectiveQuestions = latestAssistant?.ReflectiveQuestions
-                                  ?? (report.ReflectiveQuestions.Count > 0
-                                      ? string.Join("\n", report.ReflectiveQuestions)
-                                      : null),
+            AnswerText = answerText,
+            CurrentAnswerText = answerText,
+            StructuredDiagnosis = structuredDiagnosis,
+            DifferentialDiagnoses = differentialList.Count > 0
+                ? JsonSerializer.Serialize(differentialList)
+                : latestAssistant?.DifferentialDiagnoses,
+            DifferentialDiagnosesList = differentialList,
+            KeyImagingFindings = keyFindings,
+            ReflectiveQuestions = reflectiveQuestions,
             ReferencesAndCitations = BuildReferencesAndCitationsFromAssistant(latestAssistant),
             Status = session.Status,
             SessionStatus = session.Status,
@@ -1391,7 +1398,7 @@ public class ExpertReviewService : IExpertReviewService
             AiConfidenceScore = latestAssistant?.AiConfidenceScore ?? report.AiConfidenceScore,
             ClassId = enrollment?.ClassId,
             ClassName = enrollment?.Class?.ClassName ?? string.Empty,
-            ReviewNote = review?.ReviewNote,
+            ReviewNote = draft?.ReviewNote ?? ExpertReviewDraftStorage.ExtractHumanReviewNote(review?.ReviewNote),
             PromotedCaseId = session.PromotedCaseId,
             Citations = MergeCitationsFromAssistantMessages(orderedMessages),
             ImageUrl = ResolveSessionImageUrl(session),
@@ -1399,13 +1406,51 @@ public class ExpertReviewService : IExpertReviewService
                 userMessage,
                 session.RequestedReviewMessageId,
                 turns),
-            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review?.CorrectedRoi),
+            ExpertCorrectedRoiBoundingBox = correctedRoi,
             RequestedReviewMessageId = session.RequestedReviewMessageId,
             SelectedUserMessageId = userMessage?.Id,
             SelectedAssistantMessageId = latestAssistant?.Id,
             Turns = turns,
             Report = report,
             DicomMetadata = dicomMetadata
+        };
+    }
+
+    private static ExpertReviewDraftStorage.DraftPayload? TryResolveDraftOverlay(ExpertReview? review)
+    {
+        if (review == null || IsFinalizedExpertReviewAction(review.Action))
+            return null;
+
+        return ExpertReviewDraftStorage.TryDeserialize(review.ReviewNote, out var payload)
+            ? payload
+            : null;
+    }
+
+    private static ExpertVisualSessionDraftResponseDto BuildDraftResponse(Guid sessionId, ExpertReview review)
+    {
+        if (ExpertReviewDraftStorage.TryDeserialize(review.ReviewNote, out var payload))
+        {
+            return new ExpertVisualSessionDraftResponseDto
+            {
+                SessionId = sessionId,
+                ReviewRowId = review.Id,
+                ReviewNote = payload.ReviewNote,
+                AnswerText = payload.AnswerText,
+                StructuredDiagnosis = payload.StructuredDiagnosis,
+                DifferentialDiagnoses = payload.DifferentialDiagnoses ?? new List<string>(),
+                KeyImagingFindings = payload.KeyImagingFindings,
+                ReflectiveQuestions = payload.ReflectiveQuestions,
+                ExpertCorrectedRoiBoundingBox = payload.CorrectedRoiBoundingBox
+                    ?? DeserializeCorrectedRoi(review.CorrectedRoi)
+            };
+        }
+
+        return new ExpertVisualSessionDraftResponseDto
+        {
+            SessionId = sessionId,
+            ReviewRowId = review.Id,
+            ReviewNote = review.ReviewNote,
+            ExpertCorrectedRoiBoundingBox = DeserializeCorrectedRoi(review.CorrectedRoi)
         };
     }
 

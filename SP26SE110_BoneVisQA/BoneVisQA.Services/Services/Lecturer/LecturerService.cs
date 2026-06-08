@@ -1829,7 +1829,7 @@ public class LecturerService : ILecturerService
             "Lecturer replied to your Visual QA session",
             preview,
             "visual_qa_lecturer_reply",
-            $"/student/qa/image?sessionId={session.Id}");
+            AppRoutes.StudentVisualQaWorkspace(session.Id));
 
         return new LecturerAnswerDto
         {

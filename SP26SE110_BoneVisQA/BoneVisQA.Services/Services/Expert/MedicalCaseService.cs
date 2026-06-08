@@ -67,29 +67,37 @@ namespace BoneVisQA.Services.Services.Expert
 
             var totalCount = await query.CountAsync();
 
-            var medicalCases = await query
+            var entities = await query
+                .Include(x => x.Category)
+                .Include(x => x.CreatedByExpert)
+                .Include(x => x.ValidatedByUser)
+                .Include(x => x.CaseTags)
+                    .ThenInclude(ct => ct.Tag)
+                .Include(x => x.CaseMetadata)
+                .Include(x => x.MedicalImages)
                 .OrderByDescending(x => x.CreatedAt)
                 .Skip((pageIndex - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new GetMedicalCaseDTO
+                .ToListAsync();
+
+            var medicalCases = entities.Select(x =>
+            {
+                var anatomySite = ExpertMedicalCaseDisplayHelper.ResolveAnatomySite(x);
+                var pathologyGroup = ExpertMedicalCaseDisplayHelper.ResolvePathologyGroup(x);
+                return new GetMedicalCaseDTO
                 {
                     Id = x.Id,
                     Title = x.Title,
                     CreatedByExpertId = x.CreatedByExpertId,
-                    ExpertName = x.CreatedByExpert != null ? x.CreatedByExpert.FullName : null,
+                    ExpertName = x.CreatedByExpert?.FullName ?? x.ValidatedByUser?.FullName,
                     Description = x.Description,
                     Difficulty = x.Difficulty,
                     CategoryId = x.CategoryId,
-                    CategoryName = x.Category != null ? x.Category.Name : null,
-                    BoneLocation = x.CaseTags
-                        .Where(ct => ct.Tag != null &&
-                            (ct.Tag.Type == "Location" || ct.Tag.Type == "BoneLocation"))
-                        .Select(ct => ct.Tag!.Name)
-                        .FirstOrDefault() ?? string.Empty,
-                    CaseOrigin = x.CaseTags.Any(ct =>
-                        ct.Tag != null && ct.Tag.Name == CaseOriginHelper.StudentQaSourceTagName)
-                        ? ExpertCaseOriginValues.FromStudentRequest
-                        : ExpertCaseOriginValues.ExpertCreated,
+                    CategoryName = x.Category?.Name,
+                    AnatomySite = anatomySite,
+                    PathologyGroup = pathologyGroup,
+                    BoneLocation = anatomySite,
+                    CaseOrigin = CaseOriginHelper.ResolveExpertCaseOrigin(x.CaseTags),
                     IsApproved = x.IsApproved,
                     IsActive = x.IsActive,
                     SuggestedDiagnosis = x.SuggestedDiagnosis,
@@ -102,8 +110,8 @@ namespace BoneVisQA.Services.Services.Expert
                         .Select(m => m.ImageUrl)
                         .FirstOrDefault()
                         ?? string.Empty
-                })
-                .ToListAsync();
+                };
+            }).ToList();
 
             foreach (var row in medicalCases)
                 ExpertMedicalCaseDisplayHelper.ApplyListDefaults(row, expertScoped: expertId.HasValue);
@@ -132,6 +140,7 @@ namespace BoneVisQA.Services.Services.Expert
             var entity = await query
                 .Include(c => c.Category)
                 .Include(c => c.CreatedByExpert)
+                .Include(c => c.ValidatedByUser)
                 .Include(c => c.CaseTags)
                     .ThenInclude(ct => ct.Tag)
                 .Include(c => c.MedicalImages)
@@ -143,19 +152,22 @@ namespace BoneVisQA.Services.Services.Expert
             if (entity == null)
                 return null;
 
-            var boneLocation = ExpertMedicalCaseDisplayHelper.ResolveBoneLocationFromTags(entity.CaseTags);
+            var anatomySite = ExpertMedicalCaseDisplayHelper.ResolveAnatomySite(entity);
+            var pathologyGroup = ExpertMedicalCaseDisplayHelper.ResolvePathologyGroup(entity);
 
             var dto = new GetExpertMedicalCaseDetailDto
             {
                 Id = entity.Id,
                 Title = entity.Title,
                 CreatedByExpertId = entity.CreatedByExpertId,
-                ExpertName = entity.CreatedByExpert?.FullName,
+                ExpertName = entity.CreatedByExpert?.FullName ?? entity.ValidatedByUser?.FullName,
                 Description = entity.Description,
                 Difficulty = entity.Difficulty,
                 CategoryId = entity.CategoryId,
                 CategoryName = entity.Category?.Name,
-                BoneLocation = boneLocation,
+                AnatomySite = anatomySite,
+                PathologyGroup = pathologyGroup,
+                BoneLocation = anatomySite,
                 CaseOrigin = CaseOriginHelper.ResolveExpertCaseOrigin(entity.CaseTags),
                 IsApproved = entity.IsApproved,
                 IsActive = entity.IsActive,
@@ -327,9 +339,74 @@ namespace BoneVisQA.Services.Services.Expert
             await _unitOfWork.SaveAsync();
 
             await ApplyCaseTagIdsAsync(caseId, request.TagIds, cancellationToken);
+            await ApplyCaseOntologyAsync(
+                caseId,
+                request.AnatomySite,
+                request.PathologyGroup,
+                request.Modality,
+                request.Difficulty ?? created.Difficulty,
+                request.TagIds,
+                cancellationToken);
             await EnsureDefaultLocationLesionTagsAsync(caseId, request.CategoryId, request.TagIds, cancellationToken);
 
             return created;
+        }
+
+        private async Task ApplyCaseOntologyAsync(
+            Guid caseId,
+            string? anatomySite,
+            string? pathologyGroup,
+            string? modality,
+            string? difficulty,
+            IEnumerable<Guid>? requestedTagIds,
+            CancellationToken cancellationToken)
+        {
+            var normalizedAnatomy = NormalizeOntologyValue(anatomySite, MedicalOntologyValidation.AnatomySites, ExpertMedicalCaseDisplayHelper.DefaultAnatomySite);
+            var normalizedPathology = NormalizeOntologyValue(pathologyGroup, MedicalOntologyValidation.PathologyGroups, ExpertMedicalCaseDisplayHelper.DefaultPathologyGroup);
+            var normalizedModality = string.IsNullOrWhiteSpace(modality)
+                ? "X-Ray"
+                : MedicalImageModalityNormalizer.Normalize(modality);
+            var normalizedDifficulty = MedicalCaseDifficultyNormalizer.Normalize(difficulty);
+            var now = DateTime.UtcNow;
+
+            var metadata = await _unitOfWork.Context.CaseMetadata.FirstOrDefaultAsync(m => m.CaseId == caseId, cancellationToken);
+            if (metadata == null)
+            {
+                metadata = new CaseMetadata
+                {
+                    CaseId = caseId,
+                    CreatedAt = now
+                };
+                await _unitOfWork.Context.CaseMetadata.AddAsync(metadata, cancellationToken);
+            }
+
+            metadata.Modality = normalizedModality;
+            metadata.Anatomy = normalizedAnatomy;
+            metadata.AnatomySite = normalizedAnatomy;
+            metadata.PathologyGroup = normalizedPathology;
+            metadata.Difficulty = normalizedDifficulty;
+            metadata.SourceType = "Clinical";
+            metadata.QualityScore ??= 0.85d;
+
+            var existingTagIds = requestedTagIds?.ToHashSet() ?? new HashSet<Guid>();
+            var locationTagId = await GetOrCreateTagIdByNameAndTypeAsync(normalizedAnatomy, "Location", now);
+            if (!existingTagIds.Contains(locationTagId))
+                await ApplyCaseTagIdsAsync(caseId, new[] { locationTagId }, cancellationToken);
+
+            var lesionTagId = await GetOrCreateTagIdByNameAndTypeAsync(normalizedPathology, "Lesion Type", now);
+            if (!existingTagIds.Contains(lesionTagId))
+                await ApplyCaseTagIdsAsync(caseId, new[] { lesionTagId }, cancellationToken);
+
+            await _unitOfWork.SaveAsync();
+        }
+
+        private static string NormalizeOntologyValue(string? raw, IReadOnlySet<string> allowed, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return fallback;
+
+            var trimmed = raw.Trim();
+            return allowed.Contains(trimmed) ? trimmed : fallback;
         }
 
         private async Task EnsureDefaultLocationLesionTagsAsync(
@@ -465,6 +542,7 @@ namespace BoneVisQA.Services.Services.Expert
             medicalCase.IsActive = request.IsActive;
             medicalCase.SuggestedDiagnosis = request.SuggestedDiagnosis;
             medicalCase.KeyFindings = request.KeyFindings;
+            medicalCase.ReflectiveQuestions = request.ReflectiveQuestions ?? medicalCase.ReflectiveQuestions;
             medicalCase.CreatedByExpertId = request.CreatedByExpertId;
             medicalCase.UpdatedAt = DateTime.UtcNow;
             if (contentChanged)
@@ -481,6 +559,23 @@ namespace BoneVisQA.Services.Services.Expert
 
             _unitOfWork.MedicalCaseRepository.Update(medicalCase);
             await _unitOfWork.SaveAsync();
+
+            if (!string.IsNullOrWhiteSpace(request.AnatomySite)
+                || !string.IsNullOrWhiteSpace(request.PathologyGroup)
+                || !string.IsNullOrWhiteSpace(request.Modality))
+            {
+                await ApplyCaseOntologyAsync(
+                    medicalCase.Id,
+                    request.AnatomySite,
+                    request.PathologyGroup,
+                    request.Modality,
+                    medicalCase.Difficulty,
+                    request.TagIds,
+                    CancellationToken.None);
+            }
+
+            if (request.TagIds != null)
+                await ApplyCaseTagIdsAsync(medicalCase.Id, request.TagIds, CancellationToken.None);
 
             // load related data
             var expert = await _unitOfWork.UserRepository

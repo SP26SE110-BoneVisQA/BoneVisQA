@@ -13,12 +13,14 @@ public static class ExpertMedicalCaseDisplayHelper
     public const string DefaultDifficulty = "Medium";
     public const string DefaultExpertName = "Unknown";
     public const string DefaultBoneLocation = "General";
+    public const string DefaultAnatomySite = "Other";
+    public const string DefaultPathologyGroup = "Trauma";
 
     /// <summary>Resolves bone / anatomy location from case tags (<c>Tag.Type</c> Location or BoneLocation).</summary>
     public static string ResolveBoneLocationFromTags(IEnumerable<CaseTag>? caseTags)
     {
         if (caseTags == null)
-            return DefaultBoneLocation;
+            return string.Empty;
 
         var names = caseTags
             .Where(ct => ct.Tag != null)
@@ -30,7 +32,42 @@ public static class ExpertMedicalCaseDisplayHelper
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return names.Count > 0 ? string.Join(", ", names) : DefaultBoneLocation;
+        return names.Count > 0 ? string.Join(", ", names) : string.Empty;
+    }
+
+    public static string ResolveAnatomySite(MedicalCase entity)
+    {
+        var fromTags = ResolveBoneLocationFromTags(entity.CaseTags);
+        if (!string.IsNullOrWhiteSpace(fromTags))
+            return fromTags;
+
+        var anatomySite = entity.CaseMetadata?.AnatomySite?.Trim();
+        if (!string.IsNullOrWhiteSpace(anatomySite))
+            return anatomySite;
+
+        return DefaultAnatomySite;
+    }
+
+    public static string ResolvePathologyGroup(MedicalCase entity)
+    {
+        var fromTags = entity.CaseTags?
+            .Where(ct => ct.Tag != null)
+            .Where(ct =>
+                string.Equals(ct.Tag!.Type, "Lesion Type", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(ct.Tag.Type, "Lesion", StringComparison.OrdinalIgnoreCase))
+            .Select(ct => ct.Tag!.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(fromTags))
+            return fromTags;
+
+        var pathology = entity.CaseMetadata?.PathologyGroup?.Trim();
+        if (!string.IsNullOrWhiteSpace(pathology))
+            return pathology;
+
+        return DefaultPathologyGroup;
     }
 
     public static string ComputeStatus(bool? isApproved, bool? isActive)
@@ -48,16 +85,17 @@ public static class ExpertMedicalCaseDisplayHelper
         dto.Description ??= string.Empty;
         dto.CategoryName ??= DefaultCategory;
         dto.Difficulty ??= DefaultDifficulty;
-        if (!expertScoped)
-            dto.ExpertName ??= DefaultExpertName;
-        else
-            dto.ExpertName = null;
-        if (string.IsNullOrWhiteSpace(dto.BoneLocation))
-            dto.BoneLocation = DefaultBoneLocation;
+        dto.ExpertName ??= DefaultExpertName;
+        if (string.IsNullOrWhiteSpace(dto.AnatomySite))
+            dto.AnatomySite = string.IsNullOrWhiteSpace(dto.BoneLocation) ? DefaultAnatomySite : dto.BoneLocation;
+        if (string.IsNullOrWhiteSpace(dto.PathologyGroup))
+            dto.PathologyGroup = DefaultPathologyGroup;
+        dto.BoneLocation = dto.AnatomySite;
         if (string.IsNullOrWhiteSpace(dto.CaseOrigin))
             dto.CaseOrigin = ExpertCaseOriginValues.ExpertCreated;
         dto.Status = expertScoped ? string.Empty : ComputeStatus(dto.IsApproved, dto.IsActive);
         dto.CreatedAt ??= DateTime.UtcNow;
+        _ = expertScoped;
     }
 
     private static string ResolveDisplayTitle(GetMedicalCaseDTO dto)

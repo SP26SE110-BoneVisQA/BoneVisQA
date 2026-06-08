@@ -253,10 +253,21 @@ public class AdminDocumentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}/version")]
-    public async Task<IActionResult> UploadNewVersion(Guid id)
+    public async Task<IActionResult> UploadNewVersion(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _documentManagementService.UploadNewVersionAsync(id);
-        return Ok(new { Message = "Upload document version successfully.", result });
+        try
+        {
+            var document = await _documentService.UpdateDocumentVersionAsync(id, file: null, isNewFile: false, cancellationToken);
+            return Ok(new { message = "Document version bumped and re-indexing queued.", document });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Document not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id:guid}/outdated")]
@@ -406,7 +417,27 @@ public class AdminDocumentsController : ControllerBase
         try
         {
             var document = await _documentService.UpdateDocumentVersionAsync(id, request.File, isNewFile: true, cancellationToken);
-            return Ok(new { message = "Document updated.", document });
+
+            if (!string.IsNullOrWhiteSpace(request.Title) || request.CategoryId.HasValue || request.TagIds is { Count: > 0 })
+            {
+                var entity = await _unitOfWork.DocumentRepository.GetByIdAsync(id);
+                if (entity != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(request.Title))
+                        entity.Title = request.Title.Trim();
+                    if (request.CategoryId.HasValue)
+                        entity.CategoryId = request.CategoryId.Value;
+                    entity.UpdatedAt = DateTime.UtcNow;
+                    await _unitOfWork.DocumentRepository.UpdateAsync(entity);
+                    await _unitOfWork.SaveAsync();
+                }
+
+                if (request.TagIds is { Count: > 0 })
+                    await _documentManagementService.UpdateTagsAsync(id, request.TagIds);
+            }
+
+            document = await _documentService.GetDocumentByIdAsync(id) ?? document;
+            return Ok(new { message = "Document updated and queued for re-indexing.", document });
         }
         catch (InvalidOperationException ex)
         {

@@ -126,7 +126,7 @@ public class LecturerTriageService : ILecturerTriageService
             "Your Visual QA session was escalated to an expert",
             "A lecturer escalated your session for expert review. You will be notified when the expert responds.",
             "visual_qa",
-            $"/student/qa/image?sessionId={session.Id}");
+            AppRoutes.StudentVisualQaWorkspace(session.Id));
 
         var orderedMessages = session.Messages
             .OrderBy(m => m.CreatedAt)
@@ -224,7 +224,7 @@ public class LecturerTriageService : ILecturerTriageService
             "Lecturer updated your Visual QA session",
             preview,
             "visual_qa_lecturer_reply",
-            $"/student/qa/image?sessionId={session.Id}");
+            AppRoutes.StudentVisualQaWorkspace(session.Id));
     }
 
     private static List<string>? DeserializeJsonArray(string? json)

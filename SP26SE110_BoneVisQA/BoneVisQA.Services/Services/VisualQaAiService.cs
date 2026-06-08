@@ -145,8 +145,15 @@ public class VisualQaAiService : IVisualQaAiService
                 .Include(mc => mc.Category)
                 .Include(mc => mc.CaseTags)
                     .ThenInclude(ct => ct.Tag)
+                .Include(mc => mc.CaseMetadata)
+                .Include(mc => mc.MedicalImages)
+                    .ThenInclude(mi => mi.CaseAnnotations)
                 .FirstOrDefaultAsync(mc => mc.Id == request.CaseId.Value, cancellationToken);
         }
+
+        var isCatalogCaseStudy = predefinedCase != null
+            && predefinedCase.IsApproved == true
+            && predefinedCase.OwnerStudentId == null;
 
         var hybrid = await ResolveHybridCaseContextAsync(request, cancellationToken);
         var dicomMetadata = await ResolveDicomMetadataAsync(request, cancellationToken);
@@ -205,7 +212,8 @@ public class VisualQaAiService : IVisualQaAiService
             predefinedCase,
             currentTurnNumber,
             hybrid.Ontology,
-            dicomClinicalContext);
+            dicomClinicalContext,
+            isCatalogCaseStudy);
 
         return (null, new PreparedGeminiPipeline(
             prompt,
@@ -607,7 +615,8 @@ public class VisualQaAiService : IVisualQaAiService
         MedicalCase? predefinedCase,
         int currentTurnNumber,
         CaseOntologyPrompt? caseOntology,
-        string? dicomClinicalContext)
+        string? dicomClinicalContext,
+        bool isCatalogCaseStudy = false)
     {
         var sb = new StringBuilder();
 
@@ -636,22 +645,38 @@ public class VisualQaAiService : IVisualQaAiService
                 .Select(ct => ct.Tag.Name.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .DefaultIfEmpty("N/A");
+            var annotationCount = predefinedCase.MedicalImages?
+                .SelectMany(mi => mi.CaseAnnotations ?? Enumerable.Empty<CaseAnnotation>())
+                .Count(a => !string.IsNullOrWhiteSpace(a.Coordinates)) ?? 0;
 
-            sb.AppendLine("You are a Medical Tutor answering questions about a catalog teaching case.");
-            sb.AppendLine("Below is the case overview (use as ground truth when relevant):");
+            sb.AppendLine(isCatalogCaseStudy
+                ? "You are a Medical Tutor helping a student understand an approved teaching case from the case library."
+                : "You are a Medical Tutor answering questions about a catalog teaching case.");
+            sb.AppendLine("Below is the case overview (treat as primary ground truth):");
             sb.AppendLine($"- Title: {(string.IsNullOrWhiteSpace(predefinedCase.Title) ? "N/A" : predefinedCase.Title)}");
             sb.AppendLine($"- Difficulty: {(string.IsNullOrWhiteSpace(predefinedCase.Difficulty) ? "N/A" : predefinedCase.Difficulty)}");
-            sb.AppendLine($"- Category: {(predefinedCase.Category?.Name ?? "N/A")}");
+            sb.AppendLine($"- Anatomy site: {(predefinedCase.CaseMetadata?.AnatomySite ?? ExpertMedicalCaseDisplayHelper.ResolveAnatomySite(predefinedCase))}");
+            sb.AppendLine($"- Pathology group: {(predefinedCase.CaseMetadata?.PathologyGroup ?? ExpertMedicalCaseDisplayHelper.ResolvePathologyGroup(predefinedCase))}");
+            sb.AppendLine($"- Modality: {(predefinedCase.CaseMetadata?.Modality ?? "N/A")}");
             sb.AppendLine($"- Tags: {string.Join(", ", tagText)}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.Description))
-                sb.AppendLine($"- Description: {predefinedCase.Description}");
+                sb.AppendLine($"- Clinical description: {predefinedCase.Description}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.SuggestedDiagnosis))
-                sb.AppendLine($"- Reference diagnosis: {predefinedCase.SuggestedDiagnosis}");
+                sb.AppendLine($"- Suggested diagnosis: {predefinedCase.SuggestedDiagnosis}");
             if (!string.IsNullOrWhiteSpace(predefinedCase.KeyFindings))
                 sb.AppendLine($"- Key findings: {predefinedCase.KeyFindings}");
+            if (!string.IsNullOrWhiteSpace(predefinedCase.ReflectiveQuestions))
+                sb.AppendLine($"- Reflective questions: {predefinedCase.ReflectiveQuestions}");
+            if (annotationCount > 0)
+                sb.AppendLine($"- Expert annotations on images: {annotationCount} ROI region(s) are available on the case images.");
             sb.AppendLine($"Current student turn in this session: {currentTurnNumber}.");
+            sb.AppendLine("Focus on clarifying the case content for the student. Do not ask them to upload new images.");
+            if (isCatalogCaseStudy)
+            {
+                sb.AppendLine("Knowledge-base retrieval is supplemental only — use it to reinforce teaching points, not to replace the case record.");
+                sb.AppendLine("Do not route this conversation to lecturer triage or expert review workflows.");
+            }
             sb.AppendLine("Give concise, teaching-oriented answers. Follow-ups may build on prior turns in this session.");
-            sb.AppendLine("Structured JSON fields are welcome but keep answers shorter than a full personal DICOM workup when a brief explanation suffices.");
             sb.AppendLine();
         }
 

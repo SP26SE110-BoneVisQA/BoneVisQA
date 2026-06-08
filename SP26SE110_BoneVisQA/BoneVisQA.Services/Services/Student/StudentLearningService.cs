@@ -3,6 +3,7 @@ using System.Linq;
 using BoneVisQA.Repositories.Models;
 using BoneVisQA.Repositories.UnitOfWork;
 using BoneVisQA.Services.Constants;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models;
 using BoneVisQA.Services.Models.Lecturer;
@@ -1365,7 +1366,7 @@ public class StudentLearningService : IStudentLearningService
                             : "Personal Upload",
                         OccurredAt = m.CreatedAt,
                         SessionId = m.SessionId,
-                        TargetUrl = "/student/qa/image?sessionId=" + m.SessionId.ToString()
+                        TargetUrl = AppRoutes.StudentVisualQaWorkspace(m.SessionId)
                     };
                 })
                 .ToList();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BoneVisQA.Services.Helpers;
 using System.Threading.Tasks;
 
 namespace BoneVisQA.Services.Models.VisualQA;
@@ -134,6 +135,9 @@ public class VisualQaCapabilitiesDto
 
     /// <summary>Always <c>lecturer</c> for enrolled students; expert queue is lecturer-driven only.</summary>
     public string ReviewRoute { get; set; } = "none";
+
+    /// <summary><c>personal_dicom</c> or <c>catalog_case_study</c> — separates secondary case-library Q&amp;A from upload flow.</summary>
+    public string StudyMode { get; set; } = VisualQaSessionFlowHelper.PersonalDicom;
 
     [JsonIgnore]
     public string? Reason { get; set; }
@@ -291,6 +295,9 @@ public class VisualQaSessionHistoryItemDto
 
     [JsonPropertyName("reviewFeedback")]
     public string? ReviewFeedback { get; set; }
+
+    /// <summary><c>personal_dicom</c> or <c>catalog_case_study</c>.</summary>
+    public string StudyMode { get; set; } = VisualQaSessionFlowHelper.PersonalDicom;
 }
 
 public class PagedResultDto<T>

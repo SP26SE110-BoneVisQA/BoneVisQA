@@ -728,6 +728,17 @@ public class StudentService : IStudentService
         if (session == null)
             throw new KeyNotFoundException("Q&A session not found.");
 
+        MedicalCase? linkedCase = null;
+        if (session.CaseId is { } linkedCaseId && linkedCaseId != Guid.Empty)
+        {
+            linkedCase = await _unitOfWork.Context.MedicalCases
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == linkedCaseId, cancellationToken);
+        }
+
+        var studyMode = VisualQaSessionFlowHelper.ResolveStudyMode(session, linkedCase);
+        var isCatalogCaseStudy = studyMode == VisualQaSessionFlowHelper.CatalogCaseStudy;
+
         var userTurnCount = await CountBillableUserTurnsAsync(sessionId, cancellationToken);
         var effectiveLimit = maxUserQuestions ?? VisualQaSessionPolicy.MaxUserQuestions;
 
@@ -746,10 +757,13 @@ public class StudentService : IStudentService
                 ? "SESSION_EXPIRED"
                 : null;
 
-        var canRequestReview = !isReadOnly
+        var canRequestReview = !isCatalogCaseStudy
+            && !isReadOnly
             && !BlocksStudentReviewRequest(session.Status)
             && await HasVisualQaReviewPathAsync(studentId, session.CaseId, cancellationToken);
-        var reviewRoute = await ResolveStudentReviewRouteAsync(studentId, session.CaseId, cancellationToken);
+        var reviewRoute = isCatalogCaseStudy
+            ? "none"
+            : await ResolveStudentReviewRouteAsync(studentId, session.CaseId, cancellationToken);
 
         return new VisualQaCapabilitiesDto
         {
@@ -759,8 +773,9 @@ public class StudentService : IStudentService
             CanAskNext = !isReadOnly,
             CanRequestReview = canRequestReview,
             Reason = reason,
-            BlockingReason = reason,
+            BlockingReason = isCatalogCaseStudy ? "CATALOG_CASE_STUDY" : reason,
             ReviewRoute = canRequestReview ? reviewRoute : "none",
+            StudyMode = studyMode,
         };
     }
 
@@ -1022,7 +1037,7 @@ public class StudentService : IStudentService
                 title,
                 body.Trim(),
                 "case_qa_triage",
-                $"/lecturer/triage?classId={e.ClassId}");
+                AppRoutes.LecturerQaTriage(e.ClassId));
         }
     }
 
@@ -1206,7 +1221,8 @@ public class StudentService : IStudentService
                 RejectionReason = string.Equals(s.Status, "Rejected", StringComparison.Ordinal)
                     ? (s.ReviewFeedback?.Trim()
                        ?? (rejectionReasonBySession.TryGetValue(s.Id, out var rr) ? rr : null))
-                    : null
+                    : null,
+                StudyMode = VisualQaSessionFlowHelper.ResolveStudyMode(s, s.Case)
             });
         }
 

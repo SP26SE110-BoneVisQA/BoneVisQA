@@ -164,6 +164,20 @@ public class ExpertVisualSessionDraftRequestDto
     [StringLength(2000)]
     public string? ReviewNote { get; set; }
 
+    [StringLength(8000)]
+    public string? AnswerText { get; set; }
+
+    [StringLength(2000)]
+    public string? StructuredDiagnosis { get; set; }
+
+    public JsonElement? DifferentialDiagnoses { get; set; }
+
+    [StringLength(4000)]
+    public string? KeyImagingFindings { get; set; }
+
+    [StringLength(4000)]
+    public string? ReflectiveQuestions { get; set; }
+
     [MinLength(4)]
     [MaxLength(4)]
     public double[]? CorrectedRoiBoundingBox { get; set; }
@@ -174,6 +188,11 @@ public class ExpertVisualSessionDraftResponseDto
     public Guid SessionId { get; set; }
     public Guid ReviewRowId { get; set; }
     public string? ReviewNote { get; set; }
+    public string? AnswerText { get; set; }
+    public string? StructuredDiagnosis { get; set; }
+    public IReadOnlyList<string> DifferentialDiagnoses { get; set; } = Array.Empty<string>();
+    public string? KeyImagingFindings { get; set; }
+    public string? ReflectiveQuestions { get; set; }
     public double[]? ExpertCorrectedRoiBoundingBox { get; set; }
 }
 

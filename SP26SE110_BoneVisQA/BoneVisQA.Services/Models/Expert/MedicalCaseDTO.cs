@@ -21,7 +21,11 @@ namespace BoneVisQA.Services.Models.Expert
         public string? Difficulty { get; set; }
         public Guid? CategoryId { get; set; }
         public string? CategoryName { get; set; }
-        /// <summary>From tags with type Location / BoneLocation (comma-separated if multiple).</summary>
+        /// <summary>Fine-grained anatomy site for list/detail (Spine, Knee, …).</summary>
+        public string AnatomySite { get; set; } = string.Empty;
+        /// <summary>Pathology group for list/detail (Trauma, Tumor, …).</summary>
+        public string PathologyGroup { get; set; } = string.Empty;
+        /// <summary>Alias of <see cref="AnatomySite"/> for legacy clients.</summary>
         public string BoneLocation { get; set; } = string.Empty;
         /// <summary><see cref="ExpertCaseOriginValues"/> — expertCreated or fromStudentRequest.</summary>
         public string CaseOrigin { get; set; } = ExpertCaseOriginValues.ExpertCreated;
@@ -97,6 +101,12 @@ namespace BoneVisQA.Services.Models.Expert
         public string? ReflectiveQuestions { get; set; }
         public List<Guid>? TagIds { get; set; }
         public List<CreateExpertMedicalCaseImageJson>? MedicalImages { get; set; }
+        /// <summary>Canonical ontology site (Spine, Knee, …). Persisted to <c>case_metadata</c> and Location tag.</summary>
+        public string? AnatomySite { get; set; }
+        /// <summary>Canonical pathology group (Trauma, Tumor, …). Persisted to <c>case_metadata</c> and Lesion Type tag.</summary>
+        public string? PathologyGroup { get; set; }
+        /// <summary>Optional; normalized to DB modality check. Omitted → <c>X-Ray</c>.</summary>
+        public string? Modality { get; set; }
     }
 
     public class CreateExpertMedicalCaseImageJson
@@ -148,6 +158,11 @@ namespace BoneVisQA.Services.Models.Expert
         public Guid? CategoryId { get; set; }
         public string? SuggestedDiagnosis { get; set; }
         public string? KeyFindings { get; set; }
+        public string? ReflectiveQuestions { get; set; }
+        public string? AnatomySite { get; set; }
+        public string? PathologyGroup { get; set; }
+        public string? Modality { get; set; }
+        public List<Guid>? TagIds { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
     public class UpdateMedicalCaseResponseDTO

@@ -893,7 +893,7 @@ public class VisualQAController : ControllerBase
             ? parsedAssistantMessageId
             : (Guid?)null;
         var userMessage = response.UserQuestionText?.Trim() ?? string.Empty;
-        return new VisualQaApiResponseDto
+        var apiResponse = new VisualQaApiResponseDto
         {
             SessionId = response.SessionId,
             CaseId = response.CaseId,
@@ -934,6 +934,14 @@ public class VisualQAController : ControllerBase
                 IsReviewTarget = false
             }
         };
+
+        if (!string.Equals(response.ResponseKind, "refusal", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(response.ResponseKind, "error", StringComparison.OrdinalIgnoreCase))
+        {
+            VisualQaStructuredAnswerDefaults.ApplyToApiResponse(apiResponse);
+        }
+
+        return apiResponse;
     }
 
     private static IReadOnlyList<string> SplitMultilineField(string? raw)
