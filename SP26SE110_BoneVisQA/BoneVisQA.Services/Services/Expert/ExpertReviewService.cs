@@ -837,17 +837,20 @@ public class ExpertReviewService : IExpertReviewService
 
         await CopySourceCaseMediaAsync(session.Case, newCase.Id, request.Modality, nowUtc);
 
+        var attachedTagIds = new HashSet<Guid>();
+        var requestedTagIds = (request.TagIds ?? Enumerable.Empty<Guid>()).ToHashSet();
+
         var sourceTagId = await GetOrCreateTagIdByNameAndTypeAsync("Student Q&A", "Source", nowUtc);
-        await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, nowUtc);
+        await AddCaseTagIfMissingAsync(newCase.Id, sourceTagId, nowUtc, attachedTagIds);
 
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Student Q&A" };
-        foreach (var tagId in request.TagIds ?? Enumerable.Empty<Guid>())
+        foreach (var tagId in requestedTagIds)
         {
             var tag = await _unitOfWork.Context.Tags.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tagId);
             if (tag == null)
                 continue;
 
-            await AddCaseTagIfMissingAsync(newCase.Id, tag.Id, nowUtc);
+            await AddCaseTagIfMissingAsync(newCase.Id, tag.Id, nowUtc, attachedTagIds);
             seenNames.Add(tag.Name);
         }
 
@@ -858,19 +861,21 @@ public class ExpertReviewService : IExpertReviewService
                 continue;
 
             var extraTagId = await GetOrCreateTagIdByNameAndTypeAsync(name, "Custom", nowUtc);
-            await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, nowUtc);
+            await AddCaseTagIfMissingAsync(newCase.Id, extraTagId, nowUtc, attachedTagIds);
         }
 
         if (!string.IsNullOrWhiteSpace(request.AnatomySite))
         {
             var locationTagId = await GetOrCreateTagIdByNameAndTypeAsync(request.AnatomySite.Trim(), "Location", nowUtc);
-            await AddCaseTagIfMissingAsync(newCase.Id, locationTagId, nowUtc);
+            if (!requestedTagIds.Contains(locationTagId))
+                await AddCaseTagIfMissingAsync(newCase.Id, locationTagId, nowUtc, attachedTagIds);
         }
 
         if (!string.IsNullOrWhiteSpace(request.PathologyGroup))
         {
             var lesionTagId = await GetOrCreateTagIdByNameAndTypeAsync(request.PathologyGroup.Trim(), "Lesion Type", nowUtc);
-            await AddCaseTagIfMissingAsync(newCase.Id, lesionTagId, nowUtc);
+            if (!requestedTagIds.Contains(lesionTagId))
+                await AddCaseTagIfMissingAsync(newCase.Id, lesionTagId, nowUtc, attachedTagIds);
         }
 
         session.PromotedCaseId = newCase.Id;
@@ -1062,10 +1067,17 @@ public class ExpertReviewService : IExpertReviewService
         return tag.Id;
     }
 
-    private async Task AddCaseTagIfMissingAsync(Guid caseId, Guid tagId, DateTime now)
+    private async Task AddCaseTagIfMissingAsync(
+        Guid caseId,
+        Guid tagId,
+        DateTime now,
+        HashSet<Guid> attachedTagIds)
     {
-        var exists = await _unitOfWork.Context.CaseTags.AnyAsync(ct => ct.CaseId == caseId && ct.TagId == tagId);
-        if (exists)
+        if (!attachedTagIds.Add(tagId))
+            return;
+
+        var existsInDb = await _unitOfWork.Context.CaseTags.AnyAsync(ct => ct.CaseId == caseId && ct.TagId == tagId);
+        if (existsInDb)
             return;
 
         await _unitOfWork.Context.CaseTags.AddAsync(new CaseTag
