@@ -226,6 +226,9 @@ public class VisualQaThreadDto
     public Guid? CaseId { get; set; }
     public Guid? ImageId { get; set; }
 
+    /// <summary>Catalog teaching case was deleted; session history is read-only context.</summary>
+    public bool CaseRemoved { get; set; }
+
     [JsonPropertyName("mediaId")]
     public Guid? MediaId { get; set; }
 
@@ -258,6 +261,13 @@ public class VisualQaThreadDto
 
     [JsonPropertyName("publishedToLibrary")]
     public bool PublishedToLibrary => PromotedCaseId.HasValue;
+
+    /// <summary>
+    /// False when <see cref="SessionId"/> is not an active Visual QA row for this student
+    /// (deleted, never created, or stale URL). FE should show empty workspace, not treat as HTTP error.
+    /// </summary>
+    [JsonPropertyName("sessionExists")]
+    public bool SessionExists { get; set; } = true;
 }
 
 /// <summary>Session-level review summary for student/history/report views.</summary>
@@ -298,6 +308,9 @@ public class VisualQaSessionHistoryItemDto
 
     /// <summary><c>personal_dicom</c> or <c>catalog_case_study</c>.</summary>
     public string StudyMode { get; set; } = VisualQaSessionFlowHelper.PersonalDicom;
+
+    /// <summary>True when a catalog case-study session no longer has a linked <see cref="CaseId"/>.</summary>
+    public bool CaseRemoved { get; set; }
 }
 
 public class PagedResultDto<T>

@@ -147,18 +147,40 @@ namespace BoneVisQA.API.Controllers.Expert
 
             var result = await _medicalcaseService.DeleteMedicalCaseAsync(id, expertId);
 
-            if (!result)
+            if (!result.Success)
             {
-                return NotFound(new ProblemDetails
+                return result.ErrorCode switch
                 {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = "The requested medical case was not found.",
-                    Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
-                });
+                    "FORBIDDEN" => StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                    {
+                        Status = StatusCodes.Status403Forbidden,
+                        Title = "Forbidden",
+                        Detail = result.Message,
+                        Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
+                    }),
+                    "DELETE_BLOCKED" => Conflict(new ProblemDetails
+                    {
+                        Status = StatusCodes.Status409Conflict,
+                        Title = "Conflict",
+                        Detail = result.Message,
+                        Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString(),
+                        Extensions = { ["code"] = result.ErrorCode }
+                    }),
+                    _ => NotFound(new ProblemDetails
+                    {
+                        Status = StatusCodes.Status404NotFound,
+                        Title = "Not Found",
+                        Detail = result.Message ?? "The requested medical case was not found.",
+                        Instance = HttpContext.Request.Path.Value ?? HttpContext.Request.Path.ToString()
+                    })
+                };
             }
 
-            return Ok(new { message = "Medical case deleted successfully." });
+            return Ok(new
+            {
+                message = "Medical case deleted successfully.",
+                unlinkedSessionCount = result.UnlinkedSessionCount
+            });
         }
 
         //=====================================================   IMAGE & ANNOTATION  ==========================================================

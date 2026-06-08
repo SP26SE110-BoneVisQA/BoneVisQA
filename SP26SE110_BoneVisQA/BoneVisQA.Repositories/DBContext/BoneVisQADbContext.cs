@@ -834,8 +834,10 @@ public partial class BoneVisQADbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Status).HasMaxLength(40).HasDefaultValue("Active");
+            entity.Property(e => e.StudyMode).HasMaxLength(32).HasDefaultValue("personal_dicom");
 
             entity.HasIndex(e => e.TargetBoneSpecialtyId, "idx_visual_qa_sessions_target_bone_specialty");
+            entity.HasIndex(e => e.StudyMode, "idx_visual_qa_sessions_study_mode");
 
             entity.HasOne(d => d.Student).WithMany(p => p.VisualQASessions)
                 .HasForeignKey(d => d.StudentId)
@@ -846,6 +848,11 @@ public partial class BoneVisQADbContext : DbContext
                 .HasForeignKey(d => d.CaseId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("visual_qa_sessions_case_id_fkey");
+
+            entity.HasOne(d => d.PromotedCase).WithMany(p => p.PromotedFromSessions)
+                .HasForeignKey(d => d.PromotedCaseId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_visual_qa_sessions_medical_cases_promoted_case_id");
 
             entity.HasOne(d => d.TargetBoneSpecialty).WithMany(p => p.TargetVisualQaSessions)
                 .HasForeignKey(d => d.TargetBoneSpecialtyId)

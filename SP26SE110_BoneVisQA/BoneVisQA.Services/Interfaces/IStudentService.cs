@@ -72,7 +72,7 @@ public interface IStudentService
         Guid sessionId,
         int? maxUserQuestions = null,
         CancellationToken cancellationToken = default);
-    Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
+    Task<VisualQaThreadDto> GetVisualQaThreadAsync(
         Guid studentId,
         Guid sessionId,
         CancellationToken cancellationToken = default);

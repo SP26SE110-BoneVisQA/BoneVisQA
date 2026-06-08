@@ -30,7 +30,8 @@ public static class MedicalCaseDifficultyNormalizer
             || t.Equals("Moderate", StringComparison.OrdinalIgnoreCase))
             return "Medium";
 
-        if (t.Equals("Beginner", StringComparison.OrdinalIgnoreCase))
+        if (t.Equals("Beginner", StringComparison.OrdinalIgnoreCase)
+            || t.Equals("Basic", StringComparison.OrdinalIgnoreCase))
             return "Easy";
         if (t.Equals("Advanced", StringComparison.OrdinalIgnoreCase))
             return "Hard";

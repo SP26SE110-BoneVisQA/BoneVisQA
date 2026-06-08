@@ -51,7 +51,8 @@ public class StudentRepository : IStudentRepository
 
         if (!string.IsNullOrEmpty(filter.Difficulty))
         {
-            query = query.Where(c => c.Difficulty == filter.Difficulty);
+            var normalized = filter.Difficulty.Trim();
+            query = query.Where(c => c.Difficulty == normalized);
         }
 
         var lesionType = filter.LesionType ?? filter.LessonType;

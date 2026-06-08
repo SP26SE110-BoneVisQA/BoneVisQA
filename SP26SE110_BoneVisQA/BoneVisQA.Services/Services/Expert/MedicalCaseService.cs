@@ -620,22 +620,44 @@ namespace BoneVisQA.Services.Services.Expert
 
             return $"{major}.{minor}.{patch + 1}";
         }
-        public async Task<bool> DeleteMedicalCaseAsync(Guid id, Guid? ownerExpertId = null)
+        public async Task<MedicalCaseDeleteResult> DeleteMedicalCaseAsync(Guid id, Guid? ownerExpertId = null)
         {
-            var medicalCase = await _unitOfWork.MedicalCaseRepository
-                .GetByIdAsync(id);
-
+            var medicalCase = await _unitOfWork.MedicalCaseRepository.GetByIdAsync(id);
             if (medicalCase == null)
-                return false;
+                return MedicalCaseDeleteResult.NotFound();
 
             if (ownerExpertId.HasValue && medicalCase.CreatedByExpertId != ownerExpertId)
-                return false;
+                return MedicalCaseDeleteResult.Forbidden();
 
-            _ = _unitOfWork.MedicalCaseRepository.RemoveAsync(medicalCase);
+            var linkedSessions = await _unitOfWork.Context.VisualQaSessions
+                .Where(s => s.CaseId == id || s.PromotedCaseId == id)
+                .ToListAsync();
 
-            await _unitOfWork.SaveAsync();
+            foreach (var session in linkedSessions)
+            {
+                if (session.CaseId == id)
+                    session.CaseId = null;
+                if (session.PromotedCaseId == id)
+                    session.PromotedCaseId = null;
+            }
 
-            return true;
+            if (linkedSessions.Count > 0)
+                await _unitOfWork.Context.SaveChangesAsync();
+
+            _unitOfWork.MedicalCaseRepository.Remove(medicalCase);
+
+            try
+            {
+                await _unitOfWork.SaveAsync();
+                return MedicalCaseDeleteResult.Deleted(linkedSessions.Count);
+            }
+            catch (DbUpdateException ex)
+            {
+                return MedicalCaseDeleteResult.Blocked(
+                    "Medical case cannot be deleted because other records still reference it. " +
+                    "Remove class assignments, quiz links, or related data first. " +
+                    $"Detail: {ex.InnerException?.Message ?? ex.Message}");
+            }
         }
 
         // Get all images for case

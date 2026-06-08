@@ -90,6 +90,8 @@ public class StudentService : IStudentService
     public async Task<IReadOnlyList<CaseListItemDto>> GetCaseCatalogAsync(CaseFilterRequestDto? filter = null)
     {
         filter ??= new CaseFilterRequestDto();
+        if (!string.IsNullOrWhiteSpace(filter.Difficulty))
+            filter.Difficulty = MedicalCaseDifficultyNormalizer.Normalize(filter.Difficulty);
         var repoFilter = new CaseFilter
         {
             CategoryId = filter.CategoryId,
@@ -130,6 +132,8 @@ public class StudentService : IStudentService
 
     public async Task<IReadOnlyList<CaseListItemDto>> GetFilteredCasesAsync(Guid studentId, CaseFilterRequestDto filter)
     {
+        if (!string.IsNullOrWhiteSpace(filter.Difficulty))
+            filter.Difficulty = MedicalCaseDifficultyNormalizer.Normalize(filter.Difficulty);
         var repoFilter = new CaseFilter
         {
             CategoryId = filter.CategoryId,
@@ -388,6 +392,7 @@ public class StudentService : IStudentService
             ? BoundingBoxParser.Serialize(b)
             : TryParseCoordinatesJson(request.Coordinates);
         string? imageUrlToSave = request.ImageUrl;
+        MedicalCase? linkedCaseForMode = null;
 
         if (request.AnnotationId.HasValue && !isPersonalUpload)
         {
@@ -428,6 +433,20 @@ public class StudentService : IStudentService
                 CaseMediaDicomMetadataHelper.ApplyCatalogStudyContext(request, catalogCase);
 
             imageUrlToSave = request.ImageUrl;
+            linkedCaseForMode = catalogCase;
+        }
+        else if (request.CaseId is { } personalCaseId && personalCaseId != Guid.Empty)
+        {
+            linkedCaseForMode = await _unitOfWork.Context.MedicalCases
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == personalCaseId);
+        }
+
+        if (linkedCaseForMode == null && request.CaseId is { } fallbackCaseId && fallbackCaseId != Guid.Empty)
+        {
+            linkedCaseForMode = await _unitOfWork.Context.MedicalCases
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == fallbackCaseId);
         }
 
         var session = new VisualQASession
@@ -437,6 +456,7 @@ public class StudentService : IStudentService
             CaseId = request.CaseId,
             ImageId = request.ImageId,
             CustomImageUrl = imageUrlToSave,
+            StudyMode = VisualQaSessionFlowHelper.ResolveStudyModeForNewSession(linkedCaseForMode, request.CaseId),
             Status = "Active",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -1117,16 +1137,18 @@ public class StudentService : IStudentService
             if (hasCaseSession.Value)
             {
                 baseQuery = baseQuery.Where(s =>
-                    s.CaseId != null &&
-                    _unitOfWork.Context.MedicalCases.Any(mc =>
-                        mc.Id == s.CaseId && mc.IsApproved == true && mc.OwnerStudentId == null));
+                    s.StudyMode == VisualQaSessionFlowHelper.CatalogCaseStudy
+                    || (s.CaseId != null &&
+                        _unitOfWork.Context.MedicalCases.Any(mc =>
+                            mc.Id == s.CaseId && mc.IsApproved == true && mc.OwnerStudentId == null)));
             }
             else
             {
                 baseQuery = baseQuery.Where(s =>
-                    s.CaseId != null &&
-                    _unitOfWork.Context.MedicalCases.Any(mc =>
-                        mc.Id == s.CaseId && mc.OwnerStudentId == studentId));
+                    s.StudyMode == VisualQaSessionFlowHelper.PersonalDicom
+                    || (s.CaseId != null &&
+                        _unitOfWork.Context.MedicalCases.Any(mc =>
+                            mc.Id == s.CaseId && mc.OwnerStudentId == studentId)));
             }
         }
 
@@ -1222,7 +1244,8 @@ public class StudentService : IStudentService
                     ? (s.ReviewFeedback?.Trim()
                        ?? (rejectionReasonBySession.TryGetValue(s.Id, out var rr) ? rr : null))
                     : null,
-                StudyMode = VisualQaSessionFlowHelper.ResolveStudyMode(s, s.Case)
+                StudyMode = VisualQaSessionFlowHelper.ResolveStudyMode(s, s.Case),
+                CaseRemoved = VisualQaSessionFlowHelper.IsCaseRemoved(s, s.Case)
             });
         }
 
@@ -1233,7 +1256,7 @@ public class StudentService : IStudentService
         };
     }
 
-    public async Task<VisualQaThreadDto?> GetVisualQaThreadAsync(
+    public async Task<VisualQaThreadDto> GetVisualQaThreadAsync(
         Guid studentId,
         Guid sessionId,
         CancellationToken cancellationToken = default)
@@ -1247,7 +1270,7 @@ public class StudentService : IStudentService
                 .ThenInclude(c => c.CaseMedia)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.StudentId == studentId, cancellationToken);
         if (session == null)
-            return null;
+            return BuildEmptyVisualQaThread(sessionId);
 
         var messages = await _unitOfWork.Context.QaMessages
             .AsNoTracking()
@@ -1293,6 +1316,8 @@ public class StudentService : IStudentService
                 rejectionReason = null;
         }
 
+        var caseRemoved = VisualQaSessionFlowHelper.IsCaseRemoved(session, session.Case);
+
         return new VisualQaThreadDto
         {
             SessionId = sessionId,
@@ -1301,6 +1326,7 @@ public class StudentService : IStudentService
             StudyImageUrl = sessionImageUrl,
             RoiBoundingBox = BoundingBoxParser.CanonicalizeOrOriginal(latestUserWithRoi?.Coordinates),
             CaseId = session.CaseId,
+            CaseRemoved = caseRemoved,
             ImageId = session.ImageId,
             MediaId = CaseMediaDicomMetadataHelper.ResolveFirstMediaId(session.Case),
             CatalogImageId = session.ImageId ?? CaseMediaDicomMetadataHelper.ResolveFirstCatalogImageId(session.Case),
@@ -1309,15 +1335,36 @@ public class StudentService : IStudentService
             Capabilities = capabilities,
             ReviewState = reviewState,
             LastResponderRole = ResolveLastResponderRole(messages, capabilities.Reason),
-            BlockingNotice = blockingNotice,
+            BlockingNotice = caseRemoved
+                ? "The linked teaching case was removed from the library. Chat history is preserved; you can review prior answers but cannot start a new case from this session."
+                : blockingNotice,
             RejectionReason = rejectionReason,
             SessionStatus = session.Status,
             ReviewFeedback = VisualQaEducatorFeedbackHelper.IsAwaitingHumanReview(session.Status)
                 ? null
                 : VisualQaEducatorFeedbackHelper.SanitizeHumanFeedback(session.ReviewFeedback),
-            PromotedCaseId = session.PromotedCaseId
+            PromotedCaseId = session.PromotedCaseId,
+            SessionExists = true
         };
     }
+
+    private static VisualQaThreadDto BuildEmptyVisualQaThread(Guid sessionId) =>
+        new()
+        {
+            SessionId = sessionId,
+            SessionExists = false,
+            Turns = Array.Empty<VisualQaTurnDto>(),
+            Capabilities = new VisualQaCapabilitiesDto
+            {
+                CanAskNext = true,
+                CanRequestReview = false,
+                IsReadOnly = false,
+                TurnsUsed = 0,
+                TurnLimit = VisualQaSessionPolicy.MaxUserQuestions,
+                ReviewRoute = "none",
+                StudyMode = VisualQaSessionFlowHelper.PersonalDicom
+            }
+        };
 
     private async Task<string?> ResolveStudentVisibleVisualQaImageUrlAsync(string? rawImagePathOrUrl, CancellationToken cancellationToken)
     {

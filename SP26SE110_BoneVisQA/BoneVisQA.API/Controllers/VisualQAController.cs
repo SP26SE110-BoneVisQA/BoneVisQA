@@ -361,7 +361,6 @@ public class VisualQAController : ControllerBase
     [HttpGet("history/{sessionId:guid}")]
     [ProducesResponseType(typeof(VisualQaThreadDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<VisualQaThreadDto>> GetHistoryThread(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -369,9 +368,6 @@ public class VisualQAController : ControllerBase
             return Unauthorized(new { message = "Invalid token." });
 
         var thread = await _studentService.GetVisualQaThreadAsync(studentId, sessionId, cancellationToken);
-        if (thread == null)
-            return NotFound(new { message = "Q&A session not found." });
-
         return Ok(thread);
     }
 
@@ -817,15 +813,15 @@ public class VisualQAController : ControllerBase
             {
                 sessionId,
                 reviewRequestedTurnId = turnId,
-                assistantMessageId = thread?.Turns
+                assistantMessageId = thread.Turns
                     .FirstOrDefault(t => t.AssistantMessageId.HasValue
                         && (t.AssistantMessageId == turnId || t.UserMessageId == turnId))
                     ?.AssistantMessageId
                     ?? turnId,
                 reviewRoute = capabilities.ReviewRoute,
-                sessionStatus = thread?.SessionStatus,
+                sessionStatus = thread.SessionExists ? thread.SessionStatus : null,
                 capabilities,
-                reviewState = thread?.ReviewState ?? "pending",
+                reviewState = thread.SessionExists ? (thread.ReviewState ?? "pending") : null,
                 systemNotice = BuildSystemNotice(capabilities.BlockingReason ?? capabilities.Reason)
             });
         }

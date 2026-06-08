@@ -45,6 +45,11 @@ public partial class VisualQASession
     [Column("promoted_case_id")]
     public Guid? PromotedCaseId { get; set; }
 
+    /// <summary>Persisted flow type: <c>personal_dicom</c> or <c>catalog_case_study</c>.</summary>
+    [Column("study_mode")]
+    [MaxLength(32)]
+    public string StudyMode { get; set; } = "personal_dicom";
+
     [Column("requested_review_message_id")]
     public Guid? RequestedReviewMessageId { get; set; }
 
