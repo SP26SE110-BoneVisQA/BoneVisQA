@@ -611,6 +611,7 @@ public class ExpertReviewService : IExpertReviewService
                    .Include(s => s.Case!).ThenInclude(c => c!.MedicalImages)
                    .Include(s => s.Case!).ThenInclude(c => c!.CaseMedia)
                    .Include(s => s.Case!).ThenInclude(c => c!.CaseMetadata)
+                   .Include(s => s.TargetBoneSpecialty)
                    .Include(s => s.Image)
                    .Include(s => s.Messages)
                    .Include(s => s.ExpertReviews)

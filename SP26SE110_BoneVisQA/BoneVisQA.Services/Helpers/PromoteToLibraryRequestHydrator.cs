@@ -113,10 +113,61 @@ public static class PromoteToLibraryRequestHydrator
             }
         }
 
-        if (string.IsNullOrWhiteSpace(request.CategoryName) && session.Case?.Category != null)
-            request.CategoryName = session.Case.Category.Name;
+        HydrateCategory(request, session);
+
+        HydrateTagNamesIfMissing(request);
 
         return request;
+    }
+
+    private static void HydrateCategory(PromoteToLibraryRequestDto request, VisualQASession session)
+    {
+        if (request.CategoryId is null || request.CategoryId == Guid.Empty)
+        {
+            if (session.Case?.CategoryId is { } caseCategoryId && caseCategoryId != Guid.Empty)
+                request.CategoryId = caseCategoryId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CategoryName))
+            return;
+
+        request.CategoryName = FirstNonEmpty(
+            session.Case?.Category?.Name,
+            request.AnatomySite,
+            session.TargetBoneSpecialty?.Name,
+            request.PathologyGroup,
+            ExpertMedicalCaseDisplayHelper.DefaultCategory)!;
+    }
+
+    private static void HydrateTagNamesIfMissing(PromoteToLibraryRequestDto request)
+    {
+        var hasTagNames = request.TagNames is { Count: > 0 } names &&
+                          names.Any(t => !string.IsNullOrWhiteSpace(t));
+        var hasTagIds = request.TagIds is { Count: > 0 };
+
+        if (hasTagNames || hasTagIds)
+            return;
+
+        var autoTags = new List<string>();
+        foreach (var candidate in new[]
+                 {
+                     request.AnatomySite,
+                     request.PathologyGroup,
+                     request.SuggestedDiagnosis,
+                     ExpertMedicalCaseDisplayHelper.DefaultCategory,
+                 })
+        {
+            var trimmed = candidate?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed) ||
+                autoTags.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            autoTags.Add(trimmed);
+            break;
+        }
+
+        if (autoTags.Count > 0)
+            request.TagNames = autoTags;
     }
 
     private static string? FirstNonEmpty(params string?[] values)
