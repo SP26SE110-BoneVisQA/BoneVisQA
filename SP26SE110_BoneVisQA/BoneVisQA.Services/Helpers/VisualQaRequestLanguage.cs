@@ -38,11 +38,51 @@ public static class VisualQaRequestLanguage
         return string.IsNullOrEmpty(fromHeader) ? DefaultPrimaryTag : fromHeader;
     }
 
+    /// <summary>
+    /// Resolves response language for Visual QA: explicit <c>?locale=</c> wins; otherwise infer from question text (Vietnamese vs English); else header/default.
+    /// </summary>
+    public static string ResolveResponseLanguage(HttpRequest request, string? questionText, string? queryLocale)
+    {
+        var fromQuery = NormalizePrimaryTag(queryLocale);
+        if (fromQuery != null)
+            return fromQuery;
+
+        if (QuestionTextLooksVietnamese(questionText))
+            return "vi";
+
+        if (QuestionTextLooksEnglish(questionText))
+            return "en";
+
+        return Resolve(request, null, queryLocale);
+    }
+
+    /// <summary>Backward-compatible alias; prefer <see cref="ResolveResponseLanguage"/>.</summary>
     public static string ApplyVietnameseQuestionHeuristic(string? questionText, string? queryLocale, string resolvedPrimaryTag)
     {
         if (NormalizePrimaryTag(queryLocale) != null)
             return resolvedPrimaryTag;
-        return QuestionTextLooksVietnamese(questionText) ? "vi" : resolvedPrimaryTag;
+        if (QuestionTextLooksVietnamese(questionText))
+            return "vi";
+        if (QuestionTextLooksEnglish(questionText))
+            return "en";
+        return resolvedPrimaryTag;
+    }
+
+    private static bool QuestionTextLooksEnglish(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var hasLatin = false;
+        foreach (var ch in text)
+        {
+            if (VietnameseDiacriticChars.Contains(ch))
+                return false;
+            if (ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z')
+                hasLatin = true;
+        }
+
+        return hasLatin;
     }
 
     private static readonly HashSet<char> VietnameseDiacriticChars = new(

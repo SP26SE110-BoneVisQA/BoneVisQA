@@ -221,7 +221,7 @@ public class FlashcardGeneratorService : IFlashcardGeneratorService
                 "",
                 null,
                 false,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             var generatedCards = ParseGeneratedFlashcards(response?.AnswerText ?? "", deck.Id, studentId);
 

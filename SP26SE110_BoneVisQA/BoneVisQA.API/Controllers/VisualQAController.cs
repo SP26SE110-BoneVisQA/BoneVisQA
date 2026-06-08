@@ -448,10 +448,10 @@ public class VisualQAController : ControllerBase
                     "MISSING_IMAGE_CONTEXT",
                     "No study image could be resolved for this request. Provide caseId (catalog) or use POST upload-personal first, or continue an existing session."));
 
-            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ResolveResponseLanguage(
+                Request,
                 request.QuestionText,
-                locale,
-                VisualQaRequestLanguage.Resolve(Request, null, locale));
+                locale);
 
             VisualQAResponseDto response;
             if (!string.IsNullOrWhiteSpace(request.ClientRequestId))
@@ -683,10 +683,10 @@ public class VisualQAController : ControllerBase
             CaseId = null,
             AnnotationId = null,
             ClientRequestId = formRequest.ClientRequestId,
-            ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+            ResolvedResponseLanguage = VisualQaRequestLanguage.ResolveResponseLanguage(
+                Request,
                 formRequest.QuestionText,
-                locale,
-                VisualQaRequestLanguage.Resolve(Request, null, locale))
+                locale)
         };
 
         Guid sessionId;
@@ -730,10 +730,10 @@ public class VisualQAController : ControllerBase
         if (isFollowUpTurn)
         {
             request = await _studentService.HydrateVisualQaFollowUpContextAsync(studentId, sessionId, request, cancellationToken);
-            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ApplyVietnameseQuestionHeuristic(
+            request.ResolvedResponseLanguage = VisualQaRequestLanguage.ResolveResponseLanguage(
+                Request,
                 formRequest.QuestionText,
-                locale,
-                VisualQaRequestLanguage.Resolve(Request, null, locale));
+                locale);
         }
 
         return (new VisualQaMultipartPrepared(sessionId, request, uploadedBucket, uploadedFilePath), null);

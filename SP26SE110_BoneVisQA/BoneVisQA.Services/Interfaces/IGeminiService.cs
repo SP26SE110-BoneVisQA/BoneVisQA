@@ -19,6 +19,7 @@ public interface IGeminiService
         string imageUrl,
         string? conversationHistory = null,
         bool ragContextAdequate = true,
+        string? responseLanguage = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Same preconditions as <see cref="GenerateMedicalAnswerAsync"/> when the API cannot be called (missing keys, model, base URL).</summary>
@@ -32,5 +33,6 @@ public interface IGeminiService
         string imageUrl,
         string? conversationHistory = null,
         bool ragContextAdequate = true,
+        string? responseLanguage = null,
         CancellationToken cancellationToken = default);
 }

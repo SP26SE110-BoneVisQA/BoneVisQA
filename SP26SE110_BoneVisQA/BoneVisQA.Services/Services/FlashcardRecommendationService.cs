@@ -273,7 +273,7 @@ Format: Return ONLY the study tip in Vietnamese.";
                 string.Empty,
                 null,
                 false,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Extract the diagnosis field which contains our text
             return response?.SuggestedDiagnosis ?? response?.AnswerText;
@@ -431,7 +431,7 @@ Return response as JSON with fields: studyTips, suggestedTopics.";
                 string.Empty,
                 null,
                 false,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Parse response
             var text = response?.SuggestedDiagnosis ?? response?.AnswerText ?? string.Empty;

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BoneVisQA.Domain.Settings;
 using BoneVisQA.Services.Exceptions;
+using BoneVisQA.Services.Helpers;
 using BoneVisQA.Services.Interfaces;
 using BoneVisQA.Services.Models.VisualQA;
 using Microsoft.Extensions.Logging;
@@ -26,17 +27,25 @@ public class GeminiService : IGeminiService
         "The current medical data does not contain enough information to answer this question.";
 
     /// <param name="ragContextAdequate">False when vector retrieval found no/weak chunks — model may use general knowledge and must append the disclaimer (see implementation).</param>
-    private static string BuildSystemPrompt(bool ragContextAdequate)
+    private static string BuildSystemPrompt(bool ragContextAdequate, string? responseLanguage)
     {
+        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(responseLanguage);
+        var weakRagDisclaimer = string.Equals(responseLanguage, "vi", StringComparison.OrdinalIgnoreCase)
+            ? "explicitly state in Vietnamese that no sufficiently similar cases or documents were found in the BoneVisQA library for this question"
+            : $"explicitly state in {instructionLang} that no sufficiently similar cases or documents were found in the BoneVisQA library for this question";
+        var plainDiagnosisLang = string.Equals(responseLanguage, "vi", StringComparison.OrdinalIgnoreCase)
+            ? "plain short Vietnamese"
+            : $"plain short {instructionLang}";
+
         var ragPolicy = ragContextAdequate
             ? "Only when the image (if any) is valid medical data, the question is related to musculoskeletal medicine, and context is sufficient should you fill diagnosis, differential_diagnoses, findings, reflective_questions, and citations.\n" +
               "Always prioritize RAG context. The `diagnosis` field MUST be a declarative clinical statement — never a question. Put all student-facing questions in `reflective_questions` only.\n" +
               "When library retrieval context is provided, you MUST populate `citations` with Doc/Case UUIDs from that context that you relied on. Do not return an empty citations array when supporting UUIDs were supplied.\n" +
               "If context is insufficient, set diagnosis exactly to: '" + NoContextAnswer + "' and set differential_diagnoses, findings, reflective_questions, and citations ([]) to null or empty.\n"
-            : "The document library (RAG context) may be weak or empty — explicitly state in Vietnamese that no sufficiently similar cases or documents were found in the BoneVisQA library for this question.\n" +
+            : "The document library (RAG context) may be weak or empty — " + weakRagDisclaimer + ".\n" +
               "You may still answer using the provided image and base musculoskeletal medical knowledge. The `diagnosis` field MUST be a declarative clinical statement — never a question; put questions in `reflective_questions` only.\n" +
               "citations MUST remain [] unless real library chunk/case UUIDs were supplied in the retrieval context.\n" +
-              "If there are NO clear radiographic signs (e.g. no definite fracture in the ROI), say so in plain short Vietnamese in the diagnosis field only — do NOT paste long template disclaimers and do NOT invent citations.\n" +
+              "If there are NO clear radiographic signs (e.g. no definite fracture in the ROI), say so in " + plainDiagnosisLang + " in the diagnosis field only — do NOT paste long template disclaimers and do NOT invent citations.\n" +
               "Do not fill findings/differential/citations with boilerplate or restate the prompt; use null or empty arrays when there is nothing meaningful to add.\n";
 
         return
@@ -53,12 +62,13 @@ public class GeminiService : IGeminiService
             "You MUST output a JSON object with EXACTLY these keys: 'diagnosis', 'findings', 'differential_diagnoses', 'reflective_questions', 'citations' (array of objects { \"kind\": \"Doc\"|\"Case\", \"id\": \"uuid\" }).\n" +
             "If the question is explicitly binary and the evidence is decisive, diagnosis may begin with a concise yes/no conclusion. If the evidence is incomplete, state uncertainty instead of forcing a yes/no answer.\n" +
             "Never flip left/right laterality unless the image, ROI, retrieved references, or prior conversation explicitly supports the change. If laterality is uncertain, say so instead of guessing.\n" +
+            "For follow-up questions that challenge or contradict prior answers, preserve earlier conclusions unless new image/ROI/context evidence clearly justifies a revision — explain any change explicitly.\n" +
             "In diagnosis/findings, when citing the library, use [Doc:UUID] for document chunks and [Case:UUID] for medical cases, matching the citations array.\n" +
             "\n" +
             "Start the answer immediately. NO greetings. NO introduction.\n" +
             "DO NOT output content outside the listed JSON fields.\n" +
             "You must return a raw JSON object without any markdown wrapping like ```json.\n" +
-            "When answering valid domain questions, respond in accurate professional medical Vietnamese.\n" +
+            "When answering valid domain questions, respond in accurate professional medical " + instructionLang + ".\n" +
             "\n" +
             ragPolicy +
             "\n" +
@@ -129,6 +139,7 @@ public class GeminiService : IGeminiService
         string imageUrl,
         string? conversationHistory = null,
         bool ragContextAdequate = true,
+        string? responseLanguage = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -186,7 +197,7 @@ public class GeminiService : IGeminiService
 
                 try
                 {
-                    var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate);
+                    var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate, responseLanguage);
 
                     using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
                     req.Content = new StringContent(
@@ -315,6 +326,7 @@ public class GeminiService : IGeminiService
         string imageUrl,
         string? conversationHistory = null,
         bool ragContextAdequate = true,
+        string? responseLanguage = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -359,7 +371,7 @@ public class GeminiService : IGeminiService
                     keyIndex + 1,
                     modelId);
 
-                var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate);
+                var payload = BuildVisionPayload(prompt, conversationHistory, base64Image, mimeType ?? MimeTypeJpeg, ragContextAdequate, responseLanguage);
 
                 using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 req.Content = new StringContent(
@@ -529,12 +541,13 @@ public class GeminiService : IGeminiService
         string? conversationHistory,
         string? base64Image,
         string mimeType,
-        bool ragContextAdequate)
+        bool ragContextAdequate,
+        string? responseLanguage = null)
     {
         // Required Gemini multimodal structure for v1:
         // { "contents": [ { "parts": [ { "text": "..." }, { "inlineData": { "mimeType": "image/jpeg", "data": "..." } } ] } ] }
         // For prompt persona enforcement in v1, we inline the system prompt into the text portion.
-        var systemPrompt = BuildSystemPrompt(ragContextAdequate);
+        var systemPrompt = BuildSystemPrompt(ragContextAdequate, responseLanguage);
         var parts = new List<object>
         {
             new Dictionary<string, object>

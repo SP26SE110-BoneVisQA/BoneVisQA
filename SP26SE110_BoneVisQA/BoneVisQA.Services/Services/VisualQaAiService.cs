@@ -35,6 +35,7 @@ public class VisualQaAiService : IVisualQaAiService
         List<CitationItemDto> CitationsFromRag);
 
     private const double MinimumRelevantSimilarity = 0.72d;
+    private const int ConversationHistoryMessageLimit = 10;
     private const string InvalidImageNotXrayToken = "INVALID_IMAGE_NOT_XRAY";
     private const string InvalidBoneXrayUserMessage =
         "The system detected that this is not a valid human bone X-ray image. Please upload a proper medical X-ray image for analysis support.";
@@ -77,6 +78,7 @@ public class VisualQaAiService : IVisualQaAiService
                 prepared.GeminiImagePayload,
                 prepared.ConversationHistory,
                 prepared.RagContextAdequate,
+                request.ResolvedResponseLanguage,
                 cancellationToken);
         }
         catch (AiResponseFormatException)
@@ -135,7 +137,8 @@ public class VisualQaAiService : IVisualQaAiService
         if (!string.IsNullOrWhiteSpace(request.ImageUrl))
             imageB64 = await TryDownloadImageAsBase64Async(request.ImageUrl, cancellationToken);
 
-        var ragQueryText = BuildRagEmbeddingQuery(request);
+        var (conversationHistory, existingUserTurns) = await BuildConversationHistoryAsync(request.SessionId, cancellationToken);
+        var ragQueryText = EnrichRagQueryWithConversation(BuildRagEmbeddingQuery(request), conversationHistory);
 
         MedicalCase? predefinedCase = null;
         if (request.CaseId.HasValue && request.CaseId.Value != Guid.Empty)
@@ -198,12 +201,11 @@ public class VisualQaAiService : IVisualQaAiService
         }
 
         var maxSimilarity = similarities.Count > 0 ? similarities.Max() : 0d;
-        var calculatedScore = similarities.Count > 0 ? similarities.Average() : 0.5d;
+        var calculatedScore = ComputeRagConfidenceScore(similarities, isCatalogCaseStudy);
         var ragContextAdequate = retrievalCount > 0 && maxSimilarity >= MinimumRelevantSimilarity;
 
         var citationsFromRag = await BuildCitationsFromRagContextAsync(rag.Context, cancellationToken);
 
-        var (conversationHistory, existingUserTurns) = await BuildConversationHistoryAsync(request.SessionId, cancellationToken);
         var currentTurnNumber = existingUserTurns + 1;
         var prompt = BuildGeminiPrompt(
             request,
@@ -491,6 +493,7 @@ public class VisualQaAiService : IVisualQaAiService
                                prepared.GeminiImagePayload,
                                prepared.ConversationHistory,
                                prepared.RagContextAdequate,
+                               request.ResolvedResponseLanguage,
                                cancellationToken))
             {
                 sb.Append(delta);
@@ -725,12 +728,14 @@ public class VisualQaAiService : IVisualQaAiService
             : pythonHybridRagPrompt);
         sb.AppendLine();
 
+        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(request.ResolvedResponseLanguage);
+
         if (!ragContextAdequate)
         {
             sb.AppendLine("## Library retrieval status");
             sb.AppendLine(
                 "No sufficiently similar approved cases or knowledge-base documents were retrieved from the BoneVisQA library for this question. " +
-                "State this clearly to the student in Vietnamese, then answer using the image (if any) and general musculoskeletal reasoning. " +
+                $"State this clearly to the student in {instructionLang}, then answer using the image (if any) and general musculoskeletal reasoning. " +
                 "Do not invent [Doc:...] or [Case:...] citations; return \"citations\": [] only when no real UUIDs appear in the hybrid RAG block above.");
             sb.AppendLine();
         }
@@ -750,9 +755,9 @@ public class VisualQaAiService : IVisualQaAiService
         sb.AppendLine("If the question is explicitly binary and the evidence is decisive, you may begin with a concise yes/no conclusion. Otherwise explain the uncertainty instead of forcing a yes/no answer.");
         sb.AppendLine("Never change left/right laterality unless the image, ROI, retrieved context, or previous conversation explicitly justifies the change.");
         sb.AppendLine("For follow-up questions that verify/compare with previous answers, preserve prior conclusions unless new evidence in image/ROI/context clearly contradicts them.");
+        sb.AppendLine("When the student challenges, contradicts, or asks you to reconsider a prior answer, read the Previous Conversation Context carefully and respond consistently — only revise if new evidence warrants it and explain why.");
         sb.AppendLine("If the user question is social/off-topic and not medical, do not analyze image content and return a refusal according to system policy.");
 
-        var instructionLang = VisualQaPromptLanguage.GetInstructionLanguageName(request.ResolvedResponseLanguage);
         AppendResponseLanguageInstruction(sb, instructionLang);
 
         sb.AppendLine();
@@ -817,7 +822,7 @@ public class VisualQaAiService : IVisualQaAiService
         var userTurns = messages.Count(m => string.Equals(m.Role, "User", StringComparison.OrdinalIgnoreCase));
 
         var recentMessages = messages
-            .TakeLast(6)
+            .TakeLast(ConversationHistoryMessageLimit)
             .ToList();
 
         var sb = new StringBuilder();
@@ -902,6 +907,47 @@ public class VisualQaAiService : IVisualQaAiService
         {
             return NormalizeMultiline(value);
         }
+    }
+
+    /// <summary>
+    /// Weighted RAG confidence: favors the best-matching chunk while reflecting top-k retrieval quality.
+    /// Catalog case-study sessions receive a modest floor when case metadata is the primary ground truth.
+    /// </summary>
+    private static double ComputeRagConfidenceScore(IReadOnlyList<double> similarities, bool isCatalogCaseStudy)
+    {
+        if (similarities.Count == 0)
+            return isCatalogCaseStudy ? 0.55d : 0.5d;
+
+        var maxSim = similarities.Max();
+        var top3Avg = similarities
+            .OrderByDescending(s => s)
+            .Take(3)
+            .Average();
+
+        var weighted = Math.Clamp(0.65d * maxSim + 0.35d * top3Avg, 0d, 1d);
+        if (isCatalogCaseStudy)
+            weighted = Math.Max(weighted, 0.55d);
+
+        return weighted;
+    }
+
+    private static string EnrichRagQueryWithConversation(string ragQueryText, string? conversationHistory)
+    {
+        if (string.IsNullOrWhiteSpace(conversationHistory))
+            return ragQueryText;
+
+        var lastUserLine = conversationHistory
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault(line => line.StartsWith("User:", StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(lastUserLine))
+            return ragQueryText;
+
+        var priorQuestion = lastUserLine["User:".Length..].Trim();
+        if (string.IsNullOrWhiteSpace(priorQuestion))
+            return ragQueryText;
+
+        return $"{ragQueryText}\n\n[Prior turn context: {priorQuestion}]";
     }
 
 }

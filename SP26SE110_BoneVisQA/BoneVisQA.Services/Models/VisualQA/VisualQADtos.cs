@@ -96,9 +96,9 @@ public class VisualQAResponseDto
     /// <summary>Reflective questions for student self-assessment (SEPS).</summary>
     public string? ReflectiveQuestions { get; set; }
     /// <summary>
-    /// Best cosine similarity (0–1) between the query embedding and retrieved chunks before generation.
+    /// Weighted RAG confidence (0–1): 65% best-chunk similarity + 35% top-3 average; catalog case-study floor 0.55 when metadata is primary ground truth.
     /// Null when unavailable (e.g. embedding failure or generation failure — should be reviewed when possible).
-    /// Persisted on <c>case_answers.ai_confidence_score</c>.
+    /// Persisted on <c>qa_messages.ai_confidence_score</c> / <c>case_answers.ai_confidence_score</c>.
     /// </summary>
     public double? AiConfidenceScore { get; set; }
 

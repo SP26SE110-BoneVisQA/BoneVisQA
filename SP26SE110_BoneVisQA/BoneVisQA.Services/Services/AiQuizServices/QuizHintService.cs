@@ -246,7 +246,7 @@ Return ONLY the hint text (max 70 words) in Vietnamese.";
                 string.Empty,
                 null,
                 false,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             var hint = response?.SuggestedDiagnosis ?? response?.AnswerText ?? string.Empty;
 
