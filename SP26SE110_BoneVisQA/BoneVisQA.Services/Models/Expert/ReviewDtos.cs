@@ -61,6 +61,16 @@ public class PromoteCaseAnnotationDto
 
 public class PromoteToLibraryRequestDto
 {
+    /// <summary>FE flag: promote from student review queue (allows session DICOM / case media).</summary>
+    public bool FromStudentRequest { get; set; }
+
+    /// <summary><see cref="ExpertCaseOriginValues"/> — e.g. <c>fromStudentRequest</c>.</summary>
+    [StringLength(64)]
+    public string? CaseOrigin { get; set; }
+
+    /// <summary>Optional catalog image id from the escalated session (informational).</summary>
+    public Guid? ImageId { get; set; }
+
     /// <summary>Optional; when empty a default community title is used.</summary>
     [StringLength(256)]
     public string? Title { get; set; }

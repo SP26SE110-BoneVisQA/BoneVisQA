@@ -558,11 +558,20 @@ public class ExpertReviewService : IExpertReviewService
                 return await BuildPromoteResponseAsync(session.PromotedCaseId.Value);
             }
 
-            if (!string.Equals(session.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.Ordinal))
+            var isStudentRequest = VisualQaPromotionHelper.IsStudentRequestPromotion(session, request);
+            if (isStudentRequest)
+            {
+                if (!string.Equals(session.Status, CaseAnswerStatuses.EscalatedToExpert, StringComparison.Ordinal)
+                    && !string.Equals(session.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"This student session cannot be promoted from status '{session.Status}'.");
+                }
+            }
+            else if (!string.Equals(session.Status, CaseAnswerStatuses.ExpertApproved, StringComparison.Ordinal))
+            {
                 throw new InvalidOperationException("This session can be moved to the library only after expert approval.");
-
-            if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
-                throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
+            }
 
             var expertReview = session.ExpertReviews.FirstOrDefault(r => r.ExpertId == expertId);
             var caseId = await CreatePromotedLibraryCaseAsync(
@@ -574,6 +583,8 @@ public class ExpertReviewService : IExpertReviewService
 
             await _unitOfWork.SaveAsync();
             await transaction.CommitAsync();
+
+            await SendPromoteSuccessNotificationsAsync(session, caseId);
 
             try
             {
@@ -700,8 +711,26 @@ public class ExpertReviewService : IExpertReviewService
         ExpertReview? expertReview,
         DateTime nowUtc)
     {
-        if (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue)
+        var isStudentRequest = VisualQaPromotionHelper.IsStudentRequestPromotion(session, request);
+        if (!isStudentRequest
+            && (string.IsNullOrWhiteSpace(session.CustomImageUrl) || session.ImageId.HasValue))
+        {
             throw new InvalidOperationException("Only self-uploaded images can be added to the library.");
+        }
+
+        var imageUrl = VisualQaPromotionHelper.ResolvePromotableImageUrl(session);
+        if (isStudentRequest)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl) && !VisualQaPromotionHelper.HasCopyableCaseMedia(session))
+            {
+                throw new InvalidOperationException(
+                    "Student session has no resolvable study image or case media for library promotion.");
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(imageUrl))
+        {
+            throw new InvalidOperationException("No study image could be resolved for library promotion.");
+        }
 
         var title = string.IsNullOrWhiteSpace(request.Title?.Trim())
             ? "Clinical case from the community"
@@ -762,7 +791,7 @@ public class ExpertReviewService : IExpertReviewService
         {
             Id = Guid.NewGuid(),
             CaseId = newCase.Id,
-            ImageUrl = session.CustomImageUrl.Trim(),
+            ImageUrl = imageUrl!.Trim(),
             Modality = MedicalImageModalityNormalizer.Normalize(request.Modality),
             CreatedAt = nowUtc
         };
